@@ -1,5 +1,144 @@
 @import "tailwindcss";
 
-:root {
-  --primary: #0052CC;
+/* ─────────────────────────────────────────────
+   Design System Tokens — Health Watchers
+   All tokens live here; never use raw hex/px
+   values outside this file.
+───────────────────────────────────────────── */
+@theme {
+  /* ── Colors ── */
+
+  /* Primary */
+  --color-primary-50:  #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #0F6FEC;
+  --color-primary-600: #0d5fcc;
+  --color-primary-700: #0a4fac;
+  --color-primary-800: #083f8c;
+  --color-primary-900: #062f6c;
+
+  /* Success */
+  --color-success-50:  #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-500: #16A34A;
+  --color-success-600: #15803d;
+  --color-success-700: #166534;
+
+  /* Warning */
+  --color-warning-50:  #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #D97706;
+  --color-warning-600: #b45309;
+  --color-warning-700: #92400e;
+
+  /* Danger */
+  --color-danger-50:  #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #DC2626;
+  --color-danger-600: #b91c1c;
+  --color-danger-700: #991b1b;
+
+  /* Neutral */
+  --color-neutral-0:   #ffffff;
+  --color-neutral-50:  #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d1d5db;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1f2937;
+  --color-neutral-900: #111827;
+
+  /* ── Typography ── */
+  --font-family-sans: var(--font-inter, 'Inter'), ui-sans-serif, system-ui, sans-serif;
+
+  --font-size-xs:   0.75rem;   /* 12px */
+  --font-size-sm:   0.875rem;  /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg:   1.125rem;  /* 18px */
+  --font-size-xl:   1.25rem;   /* 20px */
+  --font-size-2xl:  1.5rem;    /* 24px */
+  --font-size-3xl:  1.875rem;  /* 30px */
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --line-height-tight:  1.25;
+  --line-height-snug:   1.375;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+
+  /* ── Spacing (4px base unit) ── */
+  --spacing-0:  0px;
+  --spacing-1:  0.25rem;  /* 4px  */
+  --spacing-2:  0.5rem;   /* 8px  */
+  --spacing-3:  0.75rem;  /* 12px */
+  --spacing-4:  1rem;     /* 16px */
+  --spacing-5:  1.25rem;  /* 20px */
+  --spacing-6:  1.5rem;   /* 24px */
+  --spacing-8:  2rem;     /* 32px */
+  --spacing-10: 2.5rem;   /* 40px */
+  --spacing-12: 3rem;     /* 48px */
+  --spacing-16: 4rem;     /* 64px */
+  --spacing-20: 5rem;     /* 80px */
+  --spacing-24: 6rem;     /* 96px */
+
+  /* ── Border Radius ── */
+  --radius-sm:   0.25rem;    /* 4px   */
+  --radius-md:   0.5rem;     /* 8px   */
+  --radius-lg:   0.75rem;    /* 12px  */
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* ── Layout ── */
+  --sidebar-width: 15rem;   /* 240px */
+  --topbar-height: 3.5rem;  /* 56px  */
+}
+
+/* ── Base styles ── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    color: var(--color-neutral-900);
+    background-color: var(--color-neutral-50);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1 { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold);     line-height: var(--line-height-tight); }
+  h2 { font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); line-height: var(--line-height-tight); }
+  h3 { font-size: var(--font-size-xl);  font-weight: var(--font-weight-semibold); line-height: var(--line-height-snug);  }
+  h4 { font-size: var(--font-size-lg);  font-weight: var(--font-weight-medium);   line-height: var(--line-height-snug);  }
+  h5 { font-size: var(--font-size-base); font-weight: var(--font-weight-medium);  line-height: var(--line-height-normal); }
+  h6 { font-size: var(--font-size-sm);  font-weight: var(--font-weight-medium);   line-height: var(--line-height-normal); }
+
+  a {
+    color: var(--color-primary-500);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+  }
 }

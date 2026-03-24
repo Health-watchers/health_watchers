@@ -15,13 +15,13 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
   };
 
   return (
-    <header className="flex items-center justify-between h-14 px-4 bg-white border-b border-gray-200 shrink-0">
+    <header className="flex items-center justify-between h-14 px-4 bg-neutral-0 border-b border-neutral-200 shrink-0">
       {/* Left: hamburger (mobile) */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onMenuClick}
-          className="md:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0052CC]"
+          className="md:hidden p-2 rounded-md text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
           aria-label="Open navigation menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -30,18 +30,18 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         </button>
 
         {/* App logo (visible on mobile since sidebar is hidden) */}
-        <span className="md:hidden font-bold text-[#0052CC] text-base">HealthWatchers</span>
+        <span className="md:hidden font-bold text-primary-500 text-base">HealthWatchers</span>
       </div>
 
       {/* Center: clinic name */}
-      <span className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-gray-700 hidden sm:block">
+      <span className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-neutral-700 hidden sm:block">
         {user?.clinicName ?? 'Health Watchers Clinic'}
       </span>
 
       {/* Right: avatar + logout */}
       <div className="flex items-center gap-3">
         <div
-          className="w-8 h-8 rounded-full bg-[#0052CC] text-white text-xs font-bold flex items-center justify-center select-none"
+          className="w-8 h-8 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center select-none"
           aria-label={`Logged in as ${user?.name}`}
           title={user?.name}
         >
@@ -50,7 +50,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <button
           type="button"
           onClick={handleLogout}
-          className="text-sm text-gray-500 hover:text-gray-800 focus:outline-none focus:underline"
+          className="text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus:underline"
           aria-label="Log out"
         >
           Logout
