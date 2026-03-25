@@ -1,5 +1,5 @@
 import { RequestHandler } from 'express';
-import { verifyAccessToken } from '../modules/auth/token.service';
+import { verifyAccessToken } from '@api/modules/auth/token.service';
 
 export enum Roles {
   SUPER_ADMIN  = 'SUPER_ADMIN',

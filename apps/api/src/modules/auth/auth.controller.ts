@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { Request, Response, Router } from 'express';
-import { validateRequest } from '../../middlewares/validate.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import { LoginDto, RefreshDto, loginSchema, refreshSchema } from './auth.validation';
 import { UserModel } from './models/user.model';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './token.service';

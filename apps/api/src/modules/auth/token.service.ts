@@ -1,6 +1,6 @@
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { config } from '@health-watchers/config';
-import { AppRole, AuthenticatedUser } from '../../types/express';
+import { AppRole, AuthenticatedUser } from '@api/types/express';
 
 export interface TokenUser { userId: string; role: AppRole; clinicId: string; }
 

@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { authenticate } from '@api/middlewares/auth.middleware';
 import { EncounterModel } from './encounter.model';
 
 const router = Router();

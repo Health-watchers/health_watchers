@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { Schema, Types, model, models } from 'mongoose';
-import { AppRole } from '../../../types/express';
+import { AppRole } from '@api/types/express';
 
 const ROLES: AppRole[] = ['SUPER_ADMIN','CLINIC_ADMIN','DOCTOR','NURSE','ASSISTANT','READ_ONLY'];
 

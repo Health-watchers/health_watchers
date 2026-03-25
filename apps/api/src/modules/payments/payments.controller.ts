@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { authenticate } from '@api/middlewares/auth.middleware';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { config } from '@health-watchers/config';
 import crypto from 'crypto';
