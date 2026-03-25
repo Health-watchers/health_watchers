@@ -1,0 +1,41 @@
+Responsive UX & Engineering Logic
+===================================
+
+
+### The Mobile Problem Space
+
+Clinical staff use tablets and phones at the point of care. A simple "responsive resize"
+often fails because medical data requires high density but also high legibility. My solution
+focused on refactoring the layout hierarchy rather than just scaling elements.
+
+
+### Key Architecture Decisions
+
+1. Navigation Pivot:
+   Updated AppLayout.tsx to dynamically switch between a persistent Sidebar (Desktop)
+   and a custom BottomNav.tsx (Mobile). This ensures the most frequent actions
+   (Dashboard, Patients, Encounters) are always within the "natural thumb zone."
+
+2. The "Encounter" Flow:
+   Worked on the New Encounter full-screen modal to create a "focus mode." By moving
+   from a centered desktop modal to a full-screen mobile portal, I maximized the real
+   estate for the "Encounter Notes" text area and improved the "Create Encounter"
+   CTA visibility.
+
+3. Component-Level Responsiveness:
+   Implemented a logic layer that allows Table components to automatically render as
+   Card Lists on mobile. This prevents horizontal scrolling and keeps patient IDs and
+   status badges (e.g., Stable, Pre-op) clearly aligned.
+
+4. Security Micro-copy:
+   Recognizing the sensitivity of medical data, I integrated encrypted-session banners
+   within the UI to reassure providers that data is saved directly to the patient's
+   longitudinal record in real-time.
+
+
+### Technical Acceptance Criteria
+
+   [x] Bottom navigation bar implemented (4 icons + 'More' overflow).
+   [x] Touch targets >= 44x44px for all interactive nodes.
+   [x] Single-column form layout for all data entry portals.
+   [x] Dynamic viewport detection for layout switching in AppLayout.tsx.

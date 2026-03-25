@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "patients": "Patients",
+    "encounters": "Encounters",
+    "payments": "Payments"
+  },
+  "home": {
+    "title": "Health Watchers",
+    "subtitle": "AI-assisted EMR powered by Stellar blockchain."
+  },
+  "patients": {
+    "title": "Patients",
+    "loading": "Loading patients...",
+    "empty": "No patients found.",
+    "id": "System ID",
+    "name": "Full Name",
+    "dob": "Date of Birth",
+    "sex": "Sex",
+    "contact": "Contact"
+  },
+  "encounters": {
+    "title": "Encounters",
+    "loading": "Loading encounters...",
+    "empty": "No encounters found.",
+    "id": "ID",
+    "patient": "Patient",
+    "date": "Date",
+    "notes": "Notes"
+  },
+  "payments": {
+    "title": "Payments (Stellar)",
+    "loading": "Loading payments...",
+    "empty": "No payments found.",
+    "id": "ID",
+    "patient": "Patient",
+    "amount": "Amount",
+    "status": "Status",
+    "view": "view"
+  }
+}

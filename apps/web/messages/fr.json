@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "patients": "Patients",
+    "encounters": "Consultations",
+    "payments": "Paiements"
+  },
+  "home": {
+    "title": "Health Watchers",
+    "subtitle": "Dossier médical électronique assisté par IA, propulsé par la blockchain Stellar."
+  },
+  "patients": {
+    "title": "Patients",
+    "loading": "Chargement des patients...",
+    "empty": "Aucun patient trouvé.",
+    "id": "ID Système",
+    "name": "Nom complet",
+    "dob": "Date de naissance",
+    "sex": "Sexe",
+    "contact": "Contact"
+  },
+  "encounters": {
+    "title": "Consultations",
+    "loading": "Chargement des consultations...",
+    "empty": "Aucune consultation trouvée.",
+    "id": "ID",
+    "patient": "Patient",
+    "date": "Date",
+    "notes": "Notes"
+  },
+  "payments": {
+    "title": "Paiements (Stellar)",
+    "loading": "Chargement des paiements...",
+    "empty": "Aucun paiement trouvé.",
+    "id": "ID",
+    "patient": "Patient",
+    "amount": "Montant",
+    "status": "Statut",
+    "view": "voir"
+  }
+}

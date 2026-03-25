@@ -1,0 +1,23 @@
+{
+  "name": "health-watchers",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "eslint": "^8.57.1",
+    "tailwindcss": "^3.4.19",
+    "turbo": "2.8.20",
+    "typescript": "^5.4.5",
+    "@types/node": "25.5.0"
+  }
+}
