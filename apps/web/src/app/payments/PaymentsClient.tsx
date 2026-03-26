@@ -7,7 +7,7 @@ import { CreatePaymentIntentForm, type CreatePaymentData } from "@/components/fo
 import { getStellarExplorerUrl } from "@/lib/stellar";
 import { queryKeys } from "@/lib/queryKeys";
 
-const API = "http://localhost:3001/api/v1";
+import { apiFetch } from "@/lib/api";
 
 interface Payment { id: string; patientId: string; amount: string; status: string; txHash?: string; }
 
@@ -24,23 +24,16 @@ export default function PaymentsClient({ labels }: { labels: Labels }) {
   const { data: payments = [], isLoading, error } = useQuery({
     queryKey: queryKeys.payments.list(),
     queryFn: async () => {
-      const res = await fetch(`${API}/payments`);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data || data || [];
+      const data = await apiFetch('/api/v1/payments') as { data?: Payment[] };
+      return data.data || [];
     },
   });
 
   const handleCreate = async (data: CreatePaymentData) => {
-    const res = await fetch(`${API}/payments/intent`, {
+    await apiFetch('/api/v1/payments/intent', {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `Error ${res.status}`);
-    }
     setShowForm(false);
     setToast({ message: "Payment intent created.", type: "success" });
     queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() });

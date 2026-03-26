@@ -5,10 +5,12 @@ const withNextIntl = createNextIntlPlugin("./i18n.ts");
 const path = require('path');
 const { withSentryConfig } = require('@sentry/nextjs');
 
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
-    value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:3001 https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none';"
+    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none';`
   },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },

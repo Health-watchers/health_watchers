@@ -6,13 +6,11 @@ import { PageWrapper, PageHeader, Button } from '@/components/ui'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { RecentTable } from '@/components/dashboard/RecentTable'
 
-const API = 'http://localhost:3001/api/v1'
+import { apiFetch } from '@/lib/api'
 
 async function fetchDashboard() {
-  const res = await fetch(`${API}/dashboard`)
-  if (!res.ok) throw new Error('Failed to load dashboard')
-  const json = await res.json()
-  return json.data
+  const json = await apiFetch('/api/v1/dashboard') as { data: unknown }
+  return (json as { data: unknown }).data
 }
 
 export default function DashboardPage() {

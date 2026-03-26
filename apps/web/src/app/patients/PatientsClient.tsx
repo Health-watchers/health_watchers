@@ -20,7 +20,7 @@ interface Labels {
   view: string;
 }
 
-const API_BASE_URL = 'http://localhost:3001/api/v1'
+import { apiFetch } from "@/lib/api";
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,11 +30,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
     queryKey: queryKeys.patients.list(searchQuery || undefined),
     queryFn: async () => {
       const url = searchQuery
-        ? `http://localhost:3001/api/v1/patients/search?q=${encodeURIComponent(searchQuery)}`
-        : "http://localhost:3001/api/v1/patients";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
+        ? `/api/v1/patients/search?q=${encodeURIComponent(searchQuery)}`
+        : "/api/v1/patients";
+      const data = await apiFetch(url) as { data?: unknown[] };
       return data.data || [];
     },
   });

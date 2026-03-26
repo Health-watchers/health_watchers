@@ -6,7 +6,7 @@ import { ErrorMessage, Toast } from "@/components/ui";
 import { CreateEncounterForm, type CreateEncounterData } from "@/components/forms/CreateEncounterForm";
 import { queryKeys } from "@/lib/queryKeys";
 
-const API = "http://localhost:3001/api/v1";
+import { apiFetch } from "@/lib/api";
 
 interface Encounter { id: string; patientId: string; date: string; notes: string; }
 
@@ -23,23 +23,16 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
   const { data: encounters = [], isLoading, error } = useQuery({
     queryKey: queryKeys.encounters.list(),
     queryFn: async () => {
-      const res = await fetch(`${API}/encounters`);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data || data || [];
+      const data = await apiFetch('/api/v1/encounters') as { data?: Encounter[] };
+      return data.data || [];
     },
   });
 
   const handleCreate = async (data: CreateEncounterData) => {
-    const res = await fetch(`${API}/encounters`, {
+    await apiFetch('/api/v1/encounters', {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `Error ${res.status}`);
-    }
     setShowForm(false);
     setToast({ message: "Encounter created successfully.", type: "success" });
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });

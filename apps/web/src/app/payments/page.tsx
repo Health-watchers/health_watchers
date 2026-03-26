@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/api';
 import { PageWrapper, PageHeader, Card, CardContent } from '@/components/ui';
 import { getStellarExplorerUrl } from '@/lib/stellar';
 
@@ -17,9 +18,8 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/v1/payments')
-      .then(res => res.json())
-      .then(data => { setPayments(data || []); setLoading(false); })
+    apiFetch('/api/v1/payments')
+      .then(data => { setPayments((data as Payment[]) || []); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
   }, []);
 
