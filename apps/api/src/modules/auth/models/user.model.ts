@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Schema, Types, model, models } from 'mongoose';
 import { AppRole } from '@api/types/express';
+import { sanitizeText } from '@api/utils/sanitize';
 
 const ROLES: AppRole[] = ['SUPER_ADMIN','CLINIC_ADMIN','DOCTOR','NURSE','ASSISTANT','READ_ONLY'];
 
@@ -28,6 +29,7 @@ const userSchema = new Schema({
 }, { timestamps: true, versionKey: false });
 
 userSchema.pre('save', async function () {
+  if (this.isModified('fullName')) this.fullName = sanitizeText(this.fullName);
   if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 12);
 });

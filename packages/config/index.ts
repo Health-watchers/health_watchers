@@ -42,6 +42,9 @@ export const config = {
 
   // AI/LLM Configuration
   geminiApiKey: process.env.GEMINI_API_KEY || "",
+
+  // PHI Field-Level Encryption
+  fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || "",
 };
 
 if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {
