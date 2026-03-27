@@ -1,39 +1,52 @@
-import { z } from "zod";
+import dotenv from "dotenv";
+import path from "path";
+import { validateStartupSecrets, logSecretsStatus } from "./secrets-validator";
 
-const envSchema = z.object({
-  API_PORT: z.string().default("4000"),
-  MONGO_URI: z.string().min(1, "MONGO_URI is required"),
-  STELLAR_NETWORK: z.enum(["mainnet", "testnet"]).default("testnet"),
-  STELLAR_SECRET_KEY: z.string().min(1, "STELLAR_SECRET_KEY is required"),
-  STELLAR_PUBLIC_KEY: z.string().optional(),
-  GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
-});
-
-const parsed = envSchema.safeParse(process.env);
-
-if (!parsed.success) {
-  console.error("❌ Invalid environment variables:");
-  console.error(parsed.error.flatten().fieldErrors);
-  process.exit(1);
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 }
 
-const env = parsed.data;
+validateStartupSecrets();
 
-const horizonUrl =
-  env.STELLAR_NETWORK === "mainnet"
-    ? "https://horizon.stellar.org"
-    : "https://horizon-testnet.stellar.org";
+const network = process.env.STELLAR_NETWORK || "testnet";
+const horizonUrl = network === "mainnet"
+  ? "https://horizon.stellar.org"
+  : "https://horizon-testnet.stellar.org";
 
 export const config = {
-  apiPort: env.API_PORT,
-  mongoUri: env.MONGO_URI,
-  stellarNetwork: env.STELLAR_NETWORK,
+  // Server Configuration
+  apiPort:        process.env.API_PORT || "3001",
+  nodeEnv:        process.env.NODE_ENV || "development",
+
+  // Database Configuration
+  mongoUri:       process.env.MONGO_URI || "",
+
+  // JWT Authentication
+  jwt: {
+    accessTokenSecret:  process.env.JWT_ACCESS_TOKEN_SECRET  || "",
+    refreshTokenSecret: process.env.JWT_REFRESH_TOKEN_SECRET || "",
+    issuer:             process.env.JWT_ISSUER               || "health-watchers-api",
+    audience:           process.env.JWT_AUDIENCE             || "health-watchers-client",
+  },
+
+  // Blockchain Configuration (flat aliases kept for backward compat)
+  stellarNetwork:    network,
   stellarHorizonUrl: horizonUrl,
-  stellarSecretKey: env.STELLAR_SECRET_KEY,
-  stellarPublicKey: env.STELLAR_PUBLIC_KEY,
-  geminiApiKey: env.GEMINI_API_KEY,
-  jwtSecret: env.JWT_SECRET,
+  stellarSecretKey:  process.env.STELLAR_SECRET_KEY || "",
+  stellar: {
+    network,
+    horizonUrl,
+    secretKey:         process.env.STELLAR_SECRET_KEY           || "",
+    platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY  || "",
+  },
+
+  // AI/LLM Configuration
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
+
+  // PHI Field-Level Encryption
+  fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || "",
 };
 
-export type Config = typeof config;
+if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {
+  logSecretsStatus();
+}

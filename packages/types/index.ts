@@ -1,29 +1,21 @@
 export interface Patient {
-  id: string;
-  fullName: string;
+  _id: string;
+  systemId: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
-  gender: "male" | "female" | "other";
-  phone: string;
-  createdAt: string;
+  sex: 'M' | 'F' | 'O';
+  contactNumber?: string;
+  address?: string;
+  gender?: string;
+  phone?: string;
 }
 
-export interface Encounter {
-  id: string;
-  patientId: string;
-  notes: string;
-  diagnosis: string;
-  createdAt: string;
-}
-
-export interface PaymentIntent {
-  patientId: string;
-  amount: number;
-  asset: string;
-  memo?: string;
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
+export function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return 'N/A';
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }

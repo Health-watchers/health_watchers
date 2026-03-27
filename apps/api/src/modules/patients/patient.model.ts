@@ -1,24 +1,55 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import { Schema, model, models } from "mongoose";
+import { encrypt, decrypt } from "@api/lib/encrypt";
+import { sanitizeText } from "@api/utils/sanitize";
 
-export interface IPatient extends Document {
-  clinicId: mongoose.Types.ObjectId;
+const PHI_FIELDS = ["contactNumber", "address", "dateOfBirth"] as const;
+
+export interface Patient {
+  systemId: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: Date;
-  gender: 'male' | 'female' | 'other';
-  phone?: string;
+  dateOfBirth: string;
+  sex: "M" | "F" | "O";
+  contactNumber?: string;
+  address?: string;
+  clinicId: Schema.Types.ObjectId;
 }
 
-const PatientSchema = new Schema<IPatient>(
+const patientSchema = new Schema<Patient>(
   {
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    dateOfBirth: { type: Date, required: true },
-    gender: { type: String, enum: ['male', 'female', 'other'], required: true },
-    phone: { type: String },
+    systemId:      { type: String, required: true, unique: true },
+    firstName:     { type: String, required: true, trim: true },
+    lastName:      { type: String, required: true, trim: true },
+    dateOfBirth:   { type: String, required: true },   // stored encrypted
+    sex:           { type: String, enum: ["M", "F", "O"], required: true },
+    contactNumber: { type: String },                   // stored encrypted
+    address:       { type: String },                   // stored encrypted
+    clinicId:      { type: Schema.Types.ObjectId, ref: "Clinic", required: true, index: true },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
-export const PatientModel = mongoose.model<IPatient>('Patient', PatientSchema);
+// Sanitize free-text fields, then encrypt PHI before every save
+patientSchema.pre("save", function () {
+  if (this.address) this.address = sanitizeText(this.address);
+  for (const field of PHI_FIELDS) {
+    const val = this[field] as string | undefined;
+    if (val) (this as Record<string, unknown>)[field] = encrypt(val);
+  }
+});
+
+// Decrypt PHI after fetch (find / findOne / findById)
+function decryptDoc(doc: Record<string, unknown> | null) {
+  if (!doc) return;
+  for (const field of PHI_FIELDS) {
+    const val = doc[field] as string | undefined;
+    if (val) doc[field] = decrypt(val);
+  }
+}
+
+patientSchema.post("save", function () { decryptDoc(this as unknown as Record<string, unknown>); });
+patientSchema.post("find", function (docs: Record<string, unknown>[]) { docs.forEach(decryptDoc); });
+patientSchema.post("findOne", decryptDoc);
+patientSchema.post("findOneAndUpdate", decryptDoc);
+
+export const PatientModel = models.Patient || model<Patient>("Patient", patientSchema);

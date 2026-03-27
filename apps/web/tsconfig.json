@@ -9,13 +9,19 @@
     ],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "rootDir": "./src",
+    "rootDir": ".",
     "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
     "allowJs": true,
     "noEmit": true,
     "incremental": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "skipLibCheck": true,
     "plugins": [
       {
         "name": "next"

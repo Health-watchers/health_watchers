@@ -2,16 +2,34 @@
   "name": "health-watchers",
   "private": true,
   "packageManager": "npm@10.9.2",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev":   "turbo run dev",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "start": "turbo run start",
-    "lint":  "turbo run lint"
+    "lint": "turbo run lint",
+    "seed": "ts-node -r tsconfig-paths/register --project scripts/tsconfig.seed.json scripts/seed.ts",
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only",
+    "release": "changeset publish"
   },
   "devDependencies": {
-    "turbo": "latest",
-    "typescript": "latest",
-    "@types/node": "latest"
+    "@changesets/cli": "^2.27.1",
+    "@types/node": "25.5.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "turbo": "2.8.20",
+    "typescript": "6.0.2"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.0.0",
+    "mongoose": "^8.0.0",
+    "react-hook-form": "^7.72.0",
+    "zod": "^4.3.6"
   }
 }

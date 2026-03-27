@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: health_watchers
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: health-watchers-api
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      API_PORT: 3001
+      MONGO_URI: mongodb://admin:password123@mongodb:27017/health_watchers?authSource=admin
+      JWT_ACCESS_TOKEN_SECRET: dev-access-token-secret-change-in-production
+      JWT_REFRESH_TOKEN_SECRET: dev-refresh-token-secret-change-in-production
+      STELLAR_NETWORK: testnet
+      STELLAR_SECRET_KEY: ${STELLAR_SECRET_KEY:-}
+      STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LOG_LEVEL: info
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: npm run dev --workspace=api
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: health-watchers-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_STELLAR_NETWORK: testnet
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    command: npm run dev --workspace=web
+
+  stellar-service:
+    build:
+      context: .
+      dockerfile: apps/stellar-service/Dockerfile
+    container_name: health-watchers-stellar
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      STELLAR_NETWORK: testnet
+      STELLAR_SECRET_KEY: ${STELLAR_SECRET_KEY:-}
+      STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
+      LOG_LEVEL: info
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./apps/stellar-service:/app/apps/stellar-service
+      - /app/node_modules
+      - /app/apps/stellar-service/node_modules
+    command: npm run dev --workspace=stellar-service
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  default:
+    name: health-watchers-network

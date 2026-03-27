@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../dist-seed",
+    "baseUrl": "..",
+    "paths": {
+      "@api/*": ["apps/api/src/*"],
+      "@health-watchers/config": ["packages/config/index.ts"],
+      "@health-watchers/types": ["packages/types/index.ts"]
+    }
+  },
+  "include": [
+    "../scripts/**/*",
+    "../apps/api/src/**/*",
+    "../packages/**/*"
+  ]
+}
