@@ -6,6 +6,7 @@ import { objectIdSchema } from '@api/middlewares/objectid.schema';
 import { createPaymentIntentSchema } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toPaymentResponse } from './payments.transformer';
+import { config } from '@health-watchers/config';
 
 const router = Router();
 
