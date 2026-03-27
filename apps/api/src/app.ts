@@ -7,6 +7,7 @@ import { paymentRoutes } from "./modules/payments/payments.controller";
 import aiRoutes from "./modules/ai/ai.routes";
 import { setupSwagger } from "./docs/swagger";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
+import { startEmailWorker } from "./utils/email-queue";
 
 const app = express();
 app.use(express.json());
@@ -26,6 +27,7 @@ setupSwagger(app);
 
 app.listen(config.apiPort, () => {
   console.log(`Health Watchers API running on port ${config.apiPort}`);
+  startEmailWorker();
 });
 
 export default app;
