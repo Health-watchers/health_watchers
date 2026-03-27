@@ -19,3 +19,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid token' });
   }
 }
+
+export function requireRoles(...roles: AppRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+    return next();
+  };
+}

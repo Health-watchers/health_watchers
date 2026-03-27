@@ -6,7 +6,10 @@ export interface Encounter {
   clinicId: Schema.Types.ObjectId;
   chiefComplaint: string;
   notes?: string;
+  diagnosis?: string;
   treatmentPlan?: string;
+  aiSummary?: string;
+  isActive: boolean;
 }
 
 const encounterSchema = new Schema<Encounter>(
@@ -15,12 +18,15 @@ const encounterSchema = new Schema<Encounter>(
     clinicId:       { type: Schema.Types.ObjectId, ref: "Clinic",  required: true, index: true },
     chiefComplaint: { type: String, required: true },
     notes:          { type: String },
+    diagnosis:      { type: String },
     treatmentPlan:  { type: String },
+    aiSummary:      { type: String },
+    isActive:       { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );
 
-const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan"] as const;
+const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "diagnosis", "treatmentPlan", "aiSummary"] as const;
 
 encounterSchema.pre("save", function () {
   for (const field of FREE_TEXT_FIELDS) {
