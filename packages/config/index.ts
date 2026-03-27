@@ -45,6 +45,16 @@ export const config = {
 
   // PHI Field-Level Encryption
   fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || "",
+
+  // Document Storage (AWS S3 or local disk)
+  storage: {
+    driver:         (process.env.STORAGE_DRIVER || "local") as "local" | "s3",
+    localUploadDir: process.env.LOCAL_UPLOAD_DIR     || "uploads",
+    s3Bucket:       process.env.S3_BUCKET            || "",
+    s3Region:       process.env.S3_REGION            || "us-east-1",
+    s3AccessKey:    process.env.S3_ACCESS_KEY_ID     || "",
+    s3SecretKey:    process.env.S3_SECRET_ACCESS_KEY || "",
+  },
 };
 
 if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {

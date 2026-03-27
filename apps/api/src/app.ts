@@ -7,6 +7,7 @@ import { paymentRoutes } from "./modules/payments/payments.controller";
 import aiRoutes from "./modules/ai/ai.routes";
 import { setupSwagger } from "./docs/swagger";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
+import { documentRoutes } from "./modules/documents/documents.controller";
 
 const app = express();
 app.use(express.json());
@@ -21,6 +22,7 @@ app.use("/api/v1/encounters", encounterRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/documents", documentRoutes);
 
 setupSwagger(app);
 

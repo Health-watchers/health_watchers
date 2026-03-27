@@ -11,6 +11,8 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/s3-request-presigner": "^3.1018.0",
     "@health-watchers/config": "*",
     "@sentry/node": "^8.0.0",
     "@sentry/profiling-node": "^8.0.0",
@@ -19,6 +21,7 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^8.0.0",
+    "multer": "^2.1.1",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.3",
     "zod": "^3.22.0"
@@ -27,6 +30,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.0.0",
     "@types/qrcode": "^1.5.5",
     "ts-node-dev": "^2.0.0",
