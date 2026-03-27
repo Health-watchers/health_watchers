@@ -18,7 +18,7 @@ const COMMON_PASSWORDS = new Set([
 
 export const passwordSchema = z
   .string()
-  .min(12, 'Password must be at least 12 characters')
+  .min(8, 'Password must be at least 8 characters')
   .refine((p) => /[A-Z]/.test(p), 'Password must contain at least one uppercase letter')
   .refine((p) => /[a-z]/.test(p), 'Password must contain at least one lowercase letter')
   .refine((p) => /[0-9]/.test(p), 'Password must contain at least one digit')
@@ -27,14 +27,14 @@ export const passwordSchema = z
 
 export const loginSchema = z.object({
   email:    z.string().email(),
-  password: z.string().min(1, 'Password is required'), // login: don't re-validate complexity
+  password: z.string().min(1, 'Password is required'),
 });
 
 export const registerSchema = z.object({
   fullName: z.string().min(1),
   email:    z.string().email(),
   password: passwordSchema,
-  role:     z.enum(['SUPER_ADMIN','CLINIC_ADMIN','DOCTOR','NURSE','ASSISTANT','READ_ONLY']),
+  role:     z.enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY']),
   clinicId: z.string().min(1),
 });
 
@@ -42,6 +42,17 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
-export type LoginDto    = z.infer<typeof loginSchema>;
-export type RegisterDto = z.infer<typeof registerSchema>;
-export type RefreshDto  = z.infer<typeof refreshSchema>;
+export const mfaVerifySchema = z.object({
+  totp: z.string().length(6),
+});
+
+export const mfaChallengeSchema = z.object({
+  tempToken: z.string().min(1),
+  totp:      z.string().length(6),
+});
+
+export type LoginDto        = z.infer<typeof loginSchema>;
+export type RegisterDto     = z.infer<typeof registerSchema>;
+export type RefreshDto      = z.infer<typeof refreshSchema>;
+export type MfaVerifyDto    = z.infer<typeof mfaVerifySchema>;
+export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;

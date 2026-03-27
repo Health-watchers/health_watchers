@@ -7,6 +7,7 @@ export interface Encounter {
   chiefComplaint: string;
   notes?: string;
   treatmentPlan?: string;
+  aiSummary?: string;
 }
 
 const encounterSchema = new Schema<Encounter>(
@@ -16,6 +17,7 @@ const encounterSchema = new Schema<Encounter>(
     chiefComplaint: { type: String, required: true },
     notes:          { type: String },
     treatmentPlan:  { type: String },
+    aiSummary:      { type: String },
   },
   { timestamps: true, versionKey: false }
 );

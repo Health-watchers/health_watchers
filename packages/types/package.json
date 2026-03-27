@@ -3,5 +3,14 @@
   "version": "1.0.0",
   "description": "Shared TypeScript types and interfaces for Health Watchers monorepo",
   "license": "MIT",
-  "main": "index.ts"
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  }
 }

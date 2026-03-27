@@ -10,7 +10,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
   try {
     // Lazy-import models to avoid circular deps at startup
-    const { PatientModel } = await import('../patients/patient.model');
+    const { PatientModel } = await import('../patients/models/patient.model');
     const { EncounterModel } = await import('../encounters/encounter.model');
     const { PaymentRecordModel } = await import('../payments/models/payment-record.model');
     const { UserModel } = await import('../auth/models/user.model');

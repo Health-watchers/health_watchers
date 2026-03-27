@@ -1,92 +1,86 @@
-import { Router, Request, Response } from 'express';
+import { Request, Response, Router } from 'express';
+import { authenticate } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
-import { toPatientResponse } from './patients.transformer';
+import { createPatientSchema, updatePatientSchema, CreatePatientDto, UpdatePatientDto } from './patients.validation';
 
 const router = Router();
+router.use(authenticate);
 
-async function nextSystemId(clinicId: string): Promise<string> {
+/** Atomically generate the next systemId for a clinic. Format: HW-{clinicShort}-{paddedNumber} */
+async function generateSystemId(clinicId: string): Promise<string> {
+  const key = `patient_${clinicId}`;
   const counter = await PatientCounterModel.findOneAndUpdate(
-    { _id: `patient_${clinicId}` },
+    { _id: key },
     { $inc: { value: 1 } },
     { new: true, upsert: true }
   );
-  return `P-${counter!.value}`;
+  const short = clinicId.slice(-6).toUpperCase();
+  const padded = String(counter!.value).padStart(6, '0');
+  return `HW-${short}-${padded}`;
 }
 
-// GET /patients
+router.post('/', validateRequest({ body: createPatientSchema }), async (req: Request<Record<string, never>, unknown, CreatePatientDto>, res: Response) => {
+  const { firstName, lastName, ...rest } = req.body;
+  const clinicId = req.user!.clinicId;
+  const searchName = `${lastName.toLowerCase()} ${firstName.toLowerCase()}`;
+  const systemId = await generateSystemId(clinicId);
+
+  const patient = await PatientModel.create({ ...rest, firstName, lastName, searchName, systemId, clinicId });
+  return res.status(201).json({ status: 'success', data: patient });
+});
+
 router.get('/', async (req: Request, res: Response) => {
-  try {
-    const docs = await PatientModel.find({ isActive: true }).sort({ createdAt: -1 });
-    return res.json({ status: 'success', data: docs.map(toPatientResponse) });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
+  const { q, page = '1', limit = '20' } = req.query as Record<string, string>;
+  const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
+  if (q) filter.searchName = { $regex: q.toLowerCase(), $options: 'i' };
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [patients, total] = await Promise.all([
+    PatientModel.find(filter).skip(skip).limit(Number(limit)).lean(),
+    PatientModel.countDocuments(filter),
+  ]);
+  return res.json({ status: 'success', data: patients, meta: { total, page: Number(page), limit: Number(limit) } });
 });
 
-// GET /patients/search?q=
 router.get('/search', async (req: Request, res: Response) => {
-  try {
-    const q = String(req.query.q || '').toLowerCase().trim();
-    const docs = await PatientModel.find({
-      isActive: true,
-      searchName: { $regex: q, $options: 'i' },
-    }).sort({ createdAt: -1 });
-    return res.json({ status: 'success', data: docs.map(toPatientResponse) });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const docs = await PatientModel.find({
+    clinicId: req.user!.clinicId,
+    isActive: true,
+    searchName: { $regex: q, $options: 'i' },
+  }).sort({ createdAt: -1 });
+  return res.json({ status: 'success', data: docs });
 });
 
-// GET /patients/:id
 router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const doc = await PatientModel.findById(req.params.id);
-    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-    return res.json({ status: 'success', data: toPatientResponse(doc) });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
+  const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+  if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  return res.json({ status: 'success', data: patient });
 });
 
-// POST /patients
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
-    const searchName = `${firstName} ${lastName}`.toLowerCase();
-    const systemId = await nextSystemId(clinicId || 'default');
-    const doc = await PatientModel.create({
-      systemId, firstName, lastName,
-      dateOfBirth: new Date(dateOfBirth),
-      sex, contactNumber, address,
-      clinicId: clinicId || 'default',
-      isActive: true,
-      searchName,
-    });
-    return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
+router.patch('/:id', validateRequest({ body: updatePatientSchema }), async (req: Request<{ id: string }, unknown, UpdatePatientDto>, res: Response) => {
+  const { firstName, lastName, ...rest } = req.body;
+  const update: Record<string, unknown> = { ...rest };
+  if (firstName) update.firstName = firstName;
+  if (lastName)  update.lastName  = lastName;
+  // Keep searchName in sync whenever name fields change
+  if (firstName || lastName) {
+    const existing = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    if (!existing) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    const fn = firstName ?? existing.firstName;
+    const ln = lastName  ?? existing.lastName;
+    update.searchName = `${ln.toLowerCase()} ${fn.toLowerCase()}`;
   }
+
+  const patient = await PatientModel.findOneAndUpdate(
+    { _id: req.params.id, clinicId: req.user!.clinicId },
+    update,
+    { new: true }
+  );
+  if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  return res.json({ status: 'success', data: patient });
 });
 
-// PUT /patients/:id
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
-    const update: Record<string, any> = { contactNumber, address, sex };
-    if (firstName) { update.firstName = firstName; }
-    if (lastName)  { update.lastName  = lastName;  }
-    if (firstName || lastName) {
-      update.searchName = `${firstName || ''} ${lastName || ''}`.toLowerCase().trim();
-    }
-    if (dateOfBirth) update.dateOfBirth = new Date(dateOfBirth);
-
-    const doc = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
-    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-    return res.json({ status: 'success', data: toPatientResponse(doc) });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
-  }
-});
-
-export const patientRoutes = router;
+export { router as patientRoutes };

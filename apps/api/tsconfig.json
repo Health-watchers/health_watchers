@@ -1,7 +1,8 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "CommonJS",
     "lib": ["ES2020"],
     "outDir": "dist",
     "rootDir": "src",
@@ -9,10 +10,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0",
+    "moduleResolution": "Node",
     "baseUrl": "src",
     "paths": {
-      "@api/*": ["*"]
+      "@api/*": ["./*"]
     }
   },
-  "include": ["src"]
+  "include": ["src/**/*"]
 }

@@ -8,17 +8,19 @@ interface ValidateOptions {
 }
 
 export function validateRequest(schemas: ValidateOptions) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     for (const [key, schema] of Object.entries(schemas) as [keyof ValidateOptions, ZodSchema][]) {
       const result = schema.safeParse(req[key]);
       if (!result.success) {
-        return res.status(400).json({
+        res.status(400).json({
           error: 'ValidationError',
           message: result.error.errors.map((e) => e.message).join(', '),
+          issues: result.error.issues,
         });
+        return;
       }
-      (req as any)[key] = result.data;
+      (req as Record<string, unknown>)[key] = result.data;
     }
-    return next();
+    next();
   };
 }

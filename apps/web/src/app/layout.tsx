@@ -4,6 +4,7 @@ import { getMessages, getLocale } from "next-intl/server";
 import Navbar from "../components/Navbar";
 import { ErrorBoundary } from "../components/ui/error-boundary";
 import { QueryProvider } from "@/lib/QueryProvider";
+import { RealtimeProvider } from "@/components/RealtimeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,12 +27,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-neutral-50 font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <QueryProvider>
-            <Navbar />
-            <div id="main-content" tabIndex={-1}>
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
-            </div>
+            <RealtimeProvider>
+              <Navbar />
+              <div id="main-content" tabIndex={-1}>
+                <ErrorBoundary>
+                  {children}
+                </ErrorBoundary>
+              </div>
+            </RealtimeProvider>
           </QueryProvider>
         </NextIntlClientProvider>
       </body>
