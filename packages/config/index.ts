@@ -45,6 +45,18 @@ export const config = {
 
   // PHI Field-Level Encryption
   fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || "",
+
+  // Email / SMTP Configuration
+  smtp: {
+    host:     process.env.SMTP_HOST     || "smtp.mailtrap.io",
+    port:     parseInt(process.env.SMTP_PORT || "587", 10),
+    user:     process.env.SMTP_USER     || "",
+    pass:     process.env.SMTP_PASS     || "",
+    from:     process.env.EMAIL_FROM    || "no-reply@health-watchers.app",
+  },
+
+  // Redis (used by BullMQ)
+  redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
 };
 
 if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {

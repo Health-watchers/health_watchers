@@ -42,6 +42,28 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
-export type LoginDto    = z.infer<typeof loginSchema>;
-export type RegisterDto = z.infer<typeof registerSchema>;
-export type RefreshDto  = z.infer<typeof refreshSchema>;
+export const mfaVerifySchema = z.object({
+  totp: z.string().length(6, 'TOTP must be 6 digits'),
+});
+
+export const mfaChallengeSchema = z.object({
+  tempToken: z.string().min(1),
+  totp:      z.string().length(6, 'TOTP must be 6 digits'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token:    z.string().min(1, 'Token is required'),
+  password: passwordSchema,
+});
+
+export type LoginDto          = z.infer<typeof loginSchema>;
+export type RegisterDto       = z.infer<typeof registerSchema>;
+export type RefreshDto        = z.infer<typeof refreshSchema>;
+export type MfaVerifyDto      = z.infer<typeof mfaVerifySchema>;
+export type MfaChallengeDto   = z.infer<typeof mfaChallengeSchema>;
+export type ForgotPasswordDto = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordDto  = z.infer<typeof resetPasswordSchema>;
