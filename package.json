@@ -17,6 +17,10 @@
     "medical-records",
     "monorepo"
   ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "packageManager": "npm@10.9.2",
   "workspaces": [
     "apps/*",
@@ -28,14 +32,29 @@
     "start": "turbo run start",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "husky",
     "seed": "ts-node -r tsconfig-paths/register --project scripts/tsconfig.seed.json scripts/seed.ts",
     "changeset": "changeset",
     "version": "changeset version && npm install --package-lock-only",
     "release": "changeset publish"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
     "@types/node": "25.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "turbo": "2.8.20",

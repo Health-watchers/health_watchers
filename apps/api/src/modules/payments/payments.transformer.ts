@@ -5,6 +5,8 @@ export interface PaymentResponse {
   intentId: string;
   patientId?: string;
   amount: string;
+  assetCode: string;
+  assetIssuer?: string;
   destination: string;
   memo?: string;
   status: string;
@@ -19,6 +21,8 @@ export function toPaymentResponse(doc: Document & Record<string, any>): PaymentR
     intentId:    doc.intentId,
     patientId:   doc.patientId ? String(doc.patientId) : undefined,
     amount:      doc.amount,
+    assetCode:   doc.assetCode || 'XLM',
+    assetIssuer: doc.assetIssuer ?? undefined,
     destination: doc.destination,
     memo:        doc.memo,
     status:      doc.status,

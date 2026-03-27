@@ -40,6 +40,14 @@ export const config = {
     platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY  || "",
   },
 
+  // Payment Assets
+  // Comma-separated list of supported asset codes. XLM (native) is always included.
+  // Format: "XLM,USDC,EURC"
+  supportedAssets: (process.env.SUPPORTED_ASSETS || "XLM")
+    .split(",")
+    .map((a) => a.trim().toUpperCase())
+    .filter(Boolean),
+
   // AI/LLM Configuration
   geminiApiKey: process.env.GEMINI_API_KEY || "",
 
