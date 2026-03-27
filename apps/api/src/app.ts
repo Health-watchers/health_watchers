@@ -28,7 +28,7 @@ app.use(mongoSanitize({ replaceWith: "_" }));
 app.use("/api/v1/ai", express.json({ limit: aiLimit }), aiRoutes);
 
 app.get("/health", (_req, res) =>
-  res.json({ status: "ok", service: "health-watchers-api" })
+  res.json({ status: "ok", service: "health-watchers-api", db: dbState() })
 );
 
 app.use("/api/v1/auth",       authRoutes);
