@@ -32,15 +32,11 @@ const JWT_AUDIENCE = mockConfig.jwt.audience;
 const ACCESS_TOKEN_EXPIRY = '15m';
 
 function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(
-    payload,
-    mockConfig.jwt.accessTokenSecret,
-    {
-      expiresIn: ACCESS_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign(payload, mockConfig.jwt.accessTokenSecret, {
+    expiresIn: ACCESS_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 function verifyAccessToken(token: string): TokenPayload | null {
@@ -54,7 +50,7 @@ function verifyAccessToken(token: string): TokenPayload | null {
       role: decoded.role,
       clinicId: decoded.clinicId,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -73,7 +69,7 @@ function assert(condition: boolean, testName: string) {
   }
 }
 
-function assertEqual(actual: any, expected: any, testName: string) {
+function assertEqual(actual: unknown, expected: unknown, testName: string) {
   const condition = JSON.stringify(actual) === JSON.stringify(expected);
   assert(condition, testName);
   if (!condition) {
@@ -95,7 +91,9 @@ const mockPayload: TokenPayload = {
 // Test 1: Token is signed with issuer and audience
 console.log('\n📋 Test Group: Token Signing\n');
 const validToken = signAccessToken(mockPayload);
-const decoded = jwt.decode(validToken, { complete: true }) as any;
+const decoded = jwt.decode(validToken, { complete: true }) as {
+  payload: Record<string, unknown>;
+} | null;
 assert(decoded?.payload?.iss === 'health-watchers-api', 'Token includes correct issuer claim');
 assert(decoded?.payload?.aud === 'health-watchers-client', 'Token includes correct audience claim');
 assert(decoded?.payload?.userId === 'user123', 'Token includes userId');
@@ -107,47 +105,37 @@ assertEqual(verifiedPayload, mockPayload, 'Valid token is verified and returns c
 
 // Test 3: Token without issuer is rejected
 console.log('\n📋 Test Group: Issuer Validation\n');
-const tokenWithoutIssuer = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  { expiresIn: '15m', audience: 'health-watchers-client' }
-);
+const tokenWithoutIssuer = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, {
+  expiresIn: '15m',
+  audience: 'health-watchers-client',
+});
 const resultNoIssuer = verifyAccessToken(tokenWithoutIssuer);
 assertEqual(resultNoIssuer, null, 'Token without issuer claim is REJECTED');
 
 // Test 4: Token with wrong issuer is rejected
-const tokenWithWrongIssuer = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  {
-    expiresIn: '15m',
-    issuer: 'malicious-service',
-    audience: 'health-watchers-client',
-  }
-);
+const tokenWithWrongIssuer = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, {
+  expiresIn: '15m',
+  issuer: 'malicious-service',
+  audience: 'health-watchers-client',
+});
 const resultWrongIssuer = verifyAccessToken(tokenWithWrongIssuer);
 assertEqual(resultWrongIssuer, null, 'Token with wrong issuer is REJECTED');
 
 // Test 5: Token without audience is rejected
 console.log('\n📋 Test Group: Audience Validation\n');
-const tokenWithoutAudience = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  { expiresIn: '15m', issuer: 'health-watchers-api' }
-);
+const tokenWithoutAudience = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, {
+  expiresIn: '15m',
+  issuer: 'health-watchers-api',
+});
 const resultNoAudience = verifyAccessToken(tokenWithoutAudience);
 assertEqual(resultNoAudience, null, 'Token without audience claim is REJECTED');
 
 // Test 6: Token with wrong audience is rejected
-const tokenWithWrongAudience = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  {
-    expiresIn: '15m',
-    issuer: 'health-watchers-api',
-    audience: 'wrong-audience',
-  }
-);
+const tokenWithWrongAudience = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, {
+  expiresIn: '15m',
+  issuer: 'health-watchers-api',
+  audience: 'wrong-audience',
+});
 const resultWrongAudience = verifyAccessToken(tokenWithWrongAudience);
 assertEqual(resultWrongAudience, null, 'Token with wrong audience is REJECTED');
 
@@ -160,35 +148,27 @@ const otherServiceToken = jwt.sign(
     expiresIn: '15m',
     issuer: 'other-service-api',
     audience: 'other-service-client',
-  }
+  },
 );
 const resultOtherService = verifyAccessToken(otherServiceToken);
 assertEqual(
   resultOtherService,
   null,
-  'Token from other service (same secret, different iss/aud) is REJECTED'
+  'Token from other service (same secret, different iss/aud) is REJECTED',
 );
 
 // Test 8: Token with no claims at all
-const tokenNoClaims = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  { expiresIn: '15m' }
-);
+const tokenNoClaims = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, { expiresIn: '15m' });
 const resultNoClaims = verifyAccessToken(tokenNoClaims);
 assertEqual(resultNoClaims, null, 'Token without any iss/aud claims is REJECTED');
 
 // Test 9: Expired token is rejected
 console.log('\n📋 Test Group: Additional Security Checks\n');
-const expiredToken = jwt.sign(
-  mockPayload,
-  mockConfig.jwt.accessTokenSecret,
-  {
-    expiresIn: '-1s',
-    issuer: 'health-watchers-api',
-    audience: 'health-watchers-client',
-  }
-);
+const expiredToken = jwt.sign(mockPayload, mockConfig.jwt.accessTokenSecret, {
+  expiresIn: '-1s',
+  issuer: 'health-watchers-api',
+  audience: 'health-watchers-client',
+});
 const resultExpired = verifyAccessToken(expiredToken);
 assertEqual(resultExpired, null, 'Expired token is REJECTED');
 

@@ -11,6 +11,8 @@ export interface PaymentRecord {
   patientId?: string;
   assetCode: string;
   assetIssuer?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(

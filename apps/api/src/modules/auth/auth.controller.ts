@@ -4,20 +4,30 @@ import { Request, Response, Router } from 'express';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
-  LoginDto, RefreshDto, RegisterDto,
-  loginSchema, refreshSchema, registerSchema, mfaVerifySchema, mfaChallengeSchema,
-  MfaVerifyDto, MfaChallengeDto,
+  LoginDto,
+  RefreshDto,
+  RegisterDto,
+  loginSchema,
+  refreshSchema,
+  registerSchema,
+  mfaVerifySchema,
+  mfaChallengeSchema,
+  MfaVerifyDto,
+  MfaChallengeDto,
 } from './auth.validation';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
-  signAccessToken, signRefreshToken, signTempToken,
-  verifyRefreshToken, verifyTempToken,
+  signAccessToken,
+  signRefreshToken,
+  signTempToken,
+  verifyRefreshToken,
+  verifyTempToken,
 } from './token.service';
-import { generateSecret, generateURI, totpVerify } from './totp.service';
+import { generateSecret, generateURI } from './totp.service';
 
 // ── local type helpers ────────────────────────────────────────────────────
-type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;
+type LoginReq = Request<Record<string, never>, unknown, LoginDto>;
 type RefreshReq = Request<Record<string, never>, unknown, RefreshDto>;
 type RegisterReq = Request<Record<string, never>, unknown, RegisterDto>;
 
@@ -33,7 +43,7 @@ function hashToken(token: string): string {
 
 // ── Role hierarchy: who can create whom ──────────────────────────────────
 const ROLE_CREATE_PERMISSIONS: Record<string, string[]> = {
-  SUPER_ADMIN:  ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
+  SUPER_ADMIN: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
   CLINIC_ADMIN: ['DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
 };
 
@@ -66,32 +76,41 @@ const ROLE_CREATE_PERMISSIONS: Record<string, string[]> = {
  *       403:
  *         description: Insufficient permissions to create this role
  */
-router.post('/register', authenticate, validateRequest({ body: registerSchema }), async (req: RegisterReq, res: Response) => {
-  const callerRole = req.user!.role as string;
-  const allowed = ROLE_CREATE_PERMISSIONS[callerRole] ?? [];
-  if (!allowed.includes(req.body.role)) {
-    return res.status(403).json({ error: 'Forbidden', message: `A ${callerRole} cannot create a ${req.body.role} account` });
-  }
+router.post(
+  '/register',
+  authenticate,
+  validateRequest({ body: registerSchema }),
+  async (req: RegisterReq, res: Response) => {
+    const callerRole = req.user!.role as string;
+    const allowed = ROLE_CREATE_PERMISSIONS[callerRole] ?? [];
+    if (!allowed.includes(req.body.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: `A ${callerRole} cannot create a ${req.body.role} account`,
+      });
+    }
 
-  const existing = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
-  if (existing) return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
+    const existing = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
+    if (existing)
+      return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
 
-  const user = await UserModel.create({
-    fullName: req.body.fullName,
-    email:    req.body.email.toLowerCase().trim(),
-    password: req.body.password,   // hashed by pre-save hook
-    role:     req.body.role,
-    clinicId: req.body.clinicId,
-  });
+    const user = await UserModel.create({
+      fullName: req.body.fullName,
+      email: req.body.email.toLowerCase().trim(),
+      password: req.body.password, // hashed by pre-save hook
+      role: req.body.role,
+      clinicId: req.body.clinicId,
+    });
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  const accessToken  = signAccessToken(p);
-  const refreshToken = signRefreshToken(p);
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const accessToken = signAccessToken(p);
+    const refreshToken = signRefreshToken(p);
 
-  await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+    await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
 
-  return res.status(201).json({ status: 'success', data: { accessToken, refreshToken } });
-});
+    return res.status(201).json({ status: 'success', data: { accessToken, refreshToken } });
+  },
+);
 
 /**
  * @swagger
@@ -117,49 +136,58 @@ router.post('/register', authenticate, validateRequest({ body: registerSchema })
  *       423:
  *         description: Account temporarily locked
  */
-router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginReq, res: Response) => {
-  const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
-  if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: INVALID });
+router.post(
+  '/login',
+  validateRequest({ body: loginSchema }),
+  async (req: LoginReq, res: Response) => {
+    const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
+    if (!user || !user.isActive)
+      return res.status(401).json({ error: 'Unauthorized', message: INVALID });
 
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    const retryAfterSecs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
-    res.set('Retry-After', String(retryAfterSecs));
-    return res.status(423).json({
-      error: 'AccountLocked',
-      message: 'Account is temporarily locked due to too many failed login attempts. Please try again later.',
-      retryAfter: retryAfterSecs,
-    });
-  }
-
-  const passwordValid = await bcrypt.compare(req.body.password, user.password);
-  if (!passwordValid) {
-    user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
-    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-      user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const retryAfterSecs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+      res.set('Retry-After', String(retryAfterSecs));
+      return res.status(423).json({
+        error: 'AccountLocked',
+        message:
+          'Account is temporarily locked due to too many failed login attempts. Please try again later.',
+        retryAfter: retryAfterSecs,
+      });
     }
-    await user.save();
-    return res.status(401).json({ error: 'Unauthorized', message: INVALID });
-  }
 
-  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-    user.failedLoginAttempts = 0;
-    user.lockedUntil = undefined;
-    await user.save();
-  }
+    const passwordValid = await bcrypt.compare(req.body.password, user.password);
+    if (!passwordValid) {
+      user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
+      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+        user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+      }
+      await user.save();
+      return res.status(401).json({ error: 'Unauthorized', message: INVALID });
+    }
 
-  if (user.mfaEnabled) {
-    return res.json({ status: 'mfa_required', data: { mfaRequired: true, tempToken: signTempToken(user.id) } });
-  }
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockedUntil = undefined;
+      await user.save();
+    }
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  const accessToken  = signAccessToken(p);
-  const refreshToken = signRefreshToken(p);
+    if (user.mfaEnabled) {
+      return res.json({
+        status: 'mfa_required',
+        data: { mfaRequired: true, tempToken: signTempToken(user.id) },
+      });
+    }
 
-  // Store hashed refresh token
-  await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const accessToken = signAccessToken(p);
+    const refreshToken = signRefreshToken(p);
 
-  return res.json({ status: 'success', data: { accessToken, refreshToken } });
-});
+    // Store hashed refresh token
+    await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+
+    return res.json({ status: 'success', data: { accessToken, refreshToken } });
+  },
+);
 
 /**
  * @swagger
@@ -182,30 +210,38 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginR
  *       401:
  *         description: Invalid, expired, or already-rotated refresh token
  */
-router.post('/refresh', validateRequest({ body: refreshSchema }), async (req: RefreshReq, res: Response) => {
-  const decoded = verifyRefreshToken(req.body.refreshToken);
-  if (!decoded) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
+router.post(
+  '/refresh',
+  validateRequest({ body: refreshSchema }),
+  async (req: RefreshReq, res: Response) => {
+    const decoded = verifyRefreshToken(req.body.refreshToken);
+    if (!decoded)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
-  const user = await UserModel.findById(decoded.userId).select('+refreshTokenHash');
-  if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
+    const user = await UserModel.findById(decoded.userId).select('+refreshTokenHash');
+    if (!user || !user.isActive)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
-  const incomingHash = hashToken(req.body.refreshToken);
+    const incomingHash = hashToken(req.body.refreshToken);
 
-  // Token reuse detected — possible theft: invalidate all tokens
-  if (!user.refreshTokenHash || user.refreshTokenHash !== incomingHash) {
-    await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: undefined });
-    return res.status(401).json({ error: 'Unauthorized', message: 'Refresh token reuse detected' });
-  }
+    // Token reuse detected — possible theft: invalidate all tokens
+    if (!user.refreshTokenHash || user.refreshTokenHash !== incomingHash) {
+      await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: undefined });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Refresh token reuse detected' });
+    }
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  const accessToken  = signAccessToken(p);
-  const refreshToken = signRefreshToken(p);
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const accessToken = signAccessToken(p);
+    const refreshToken = signRefreshToken(p);
 
-  // Rotate: store new hash, invalidate old
-  await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+    // Rotate: store new hash, invalidate old
+    await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
 
-  return res.json({ status: 'success', data: { accessToken, refreshToken } });
-});
+    return res.json({ status: 'success', data: { accessToken, refreshToken } });
+  },
+);
 
 /**
  * @swagger
@@ -237,7 +273,6 @@ router.post('/mfa/setup', authenticate, async (req: Request, res: Response) => {
   const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { generateSecret, generateURI } = await import('@otplib/core');
   const qrcode = await import('qrcode');
 
   const secret = generateSecret();
@@ -259,19 +294,25 @@ router.post('/mfa/setup', authenticate, async (req: Request, res: Response) => {
  *     security:
  *       - bearerAuth: []
  */
-router.post('/mfa/verify', authenticate, validateRequest({ body: mfaVerifySchema }), async (req: Request<Record<string, never>, unknown, MfaVerifyDto>, res: Response) => {
-  const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
-  if (!user || !user.mfaSecret) return res.status(401).json({ error: 'Unauthorized', message: 'MFA setup not initiated' });
+router.post(
+  '/mfa/verify',
+  authenticate,
+  validateRequest({ body: mfaVerifySchema }),
+  async (req: Request<Record<string, never>, unknown, MfaVerifyDto>, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
+    if (!user || !user.mfaSecret)
+      return res.status(401).json({ error: 'Unauthorized', message: 'MFA setup not initiated' });
 
-  const { totp } = await import('@otplib/preset-default');
-  const valid = totp.verify({ token: req.body.totp, secret: user.mfaSecret });
-  if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    const { totp } = await import('@otplib/preset-default');
+    const valid = totp.verify({ token: req.body.totp, secret: user.mfaSecret });
+    if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
 
-  user.mfaEnabled = true;
-  await user.save();
+    user.mfaEnabled = true;
+    await user.save();
 
-  return res.json({ status: 'success', data: { mfaEnabled: true } });
-});
+    return res.json({ status: 'success', data: { mfaEnabled: true } });
+  },
+);
 
 /**
  * @swagger
@@ -280,26 +321,33 @@ router.post('/mfa/verify', authenticate, validateRequest({ body: mfaVerifySchema
  *     summary: Complete MFA login — exchange temp token + TOTP for real tokens
  *     tags: [Auth]
  */
-router.post('/mfa/challenge', validateRequest({ body: mfaChallengeSchema }), async (req: Request<Record<string, never>, unknown, MfaChallengeDto>, res: Response) => {
-  const userId = verifyTempToken(req.body.tempToken);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
+router.post(
+  '/mfa/challenge',
+  validateRequest({ body: mfaChallengeSchema }),
+  async (req: Request<Record<string, never>, unknown, MfaChallengeDto>, res: Response) => {
+    const userId = verifyTempToken(req.body.tempToken);
+    if (!userId)
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
 
-  const user = await UserModel.findById(userId).select('+mfaSecret');
-  if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret)
-    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
+    const user = await UserModel.findById(userId).select('+mfaSecret');
+    if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
 
-  const { totp } = await import('@otplib/preset-default');
-  const valid = totp.verify({ token: req.body.totp, secret: user.mfaSecret });
-  if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    const { totp } = await import('@otplib/preset-default');
+    const valid = totp.verify({ token: req.body.totp, secret: user.mfaSecret });
+    if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  const accessToken  = signAccessToken(p);
-  const refreshToken = signRefreshToken(p);
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const accessToken = signAccessToken(p);
+    const refreshToken = signRefreshToken(p);
 
-  await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+    await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
 
-  return res.json({ status: 'success', data: { accessToken, refreshToken } });
-});
+    return res.json({ status: 'success', data: { accessToken, refreshToken } });
+  },
+);
 
 /**
  * @swagger
@@ -328,19 +376,26 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /auth/register
-router.post('/register', validateRequest({ body: registerSchema }), async (req: Request<Record<string, never>, unknown, RegisterDto>, res: Response) => {
-  const { fullName, email, password, role, clinicId } = req.body;
+router.post(
+  '/register',
+  validateRequest({ body: registerSchema }),
+  async (req: Request<Record<string, never>, unknown, RegisterDto>, res: Response) => {
+    const { fullName, email, password, role, clinicId } = req.body;
 
-  const clinic = await ClinicModel.findById(clinicId);
-  if (!clinic || !clinic.isActive) {
-    return res.status(404).json({ error: 'ClinicNotFound', message: 'Clinic not found' });
-  }
+    const clinic = await ClinicModel.findById(clinicId);
+    if (!clinic || !clinic.isActive) {
+      return res.status(404).json({ error: 'ClinicNotFound', message: 'Clinic not found' });
+    }
 
-  const existing = await UserModel.findOne({ email: email.toLowerCase().trim() });
-  if (existing) return res.status(409).json({ error: 'Conflict', message: 'Email already registered' });
+    const existing = await UserModel.findOne({ email: email.toLowerCase().trim() });
+    if (existing)
+      return res.status(409).json({ error: 'Conflict', message: 'Email already registered' });
 
-  const user = await UserModel.create({ fullName, email, password, role, clinicId });
-  return res.status(201).json({ status: 'success', data: { id: user.id, email: user.email, role: user.role } });
-});
+    const user = await UserModel.create({ fullName, email, password, role, clinicId });
+    return res
+      .status(201)
+      .json({ status: 'success', data: { id: user.id, email: user.email, role: user.role } });
+  },
+);
 
 export const authRoutes = router;

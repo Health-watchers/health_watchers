@@ -20,7 +20,15 @@ const sizeMap = {
   lg: 'max-w-2xl',
 };
 
-export function Modal({ open, onClose, title, description, children, className, size = 'md' }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  className,
+  size = 'md',
+}: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
@@ -43,10 +51,14 @@ export function Modal({ open, onClose, title, description, children, className, 
           {(title || description) && (
             <div className="mb-4">
               {title && (
-                <Dialog.Title className="text-lg font-semibold text-neutral-800">{title}</Dialog.Title>
+                <Dialog.Title className="text-lg font-semibold text-neutral-800">
+                  {title}
+                </Dialog.Title>
               )}
               {description && (
-                <Dialog.Description className="mt-1 text-sm text-neutral-500">{description}</Dialog.Description>
+                <Dialog.Description className="mt-1 text-sm text-neutral-500">
+                  {description}
+                </Dialog.Description>
               )}
             </div>
           )}
@@ -58,8 +70,19 @@ export function Modal({ open, onClose, title, description, children, className, 
             className="absolute right-4 top-4 rounded-md p-1 text-neutral-400 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
             aria-label="Close"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </Dialog.Close>
         </Dialog.Content>

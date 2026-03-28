@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Schema } from 'mongoose';
-import { generateClinicalSummary, isAIServiceAvailable } from './ai.service';
+import { isAIServiceAvailable, generateClinicalSummary } from './ai.service';
 
 const router = Router();
 
@@ -30,7 +29,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
     }
 
     // Validate encounterId is a valid MongoDB ObjectId
-    if (!Schema.Types.ObjectId.isValid(encounterId)) {
+    if (!/^[a-f\d]{24}$/i.test(encounterId)) {
       return res.status(400).json({
         error: 'ValidationError',
         message: 'Invalid encounterId format',
@@ -65,11 +64,12 @@ router.post('/summarize', async (req: Request, res: Response) => {
       summary,
       encounterId,
     });
-  } catch (error: any) {
-    console.error('AI summarize error:', error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('AI summarize error:', err);
 
     // Handle Gemini API specific errors
-    if (error.message.includes('Failed to generate AI summary')) {
+    if (err.message.includes('Failed to generate AI summary')) {
       return res.status(503).json({
         error: 'AIServiceError',
         message: 'Failed to generate AI summary. Please try again later.',
@@ -78,7 +78,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
 
     return res.status(500).json({
       error: 'InternalServerError',
-      message: error.message || 'An unexpected error occurred',
+      message: err.message || 'An unexpected error occurred',
     });
   }
 });

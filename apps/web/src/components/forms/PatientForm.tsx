@@ -1,29 +1,29 @@
-'use client'
+'use client';
 
-import React, { useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { Button, Input, Select } from '@/components/ui'
-import { queryKeys } from '@/lib/queryKeys'
+import React, { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Button, Input, Select } from '@/components/ui';
+import { queryKeys } from '@/lib/queryKeys';
 
 export interface PatientFormData {
-  firstName: string
-  lastName: string
-  dateOfBirth: string
-  sex: 'M' | 'F' | 'O'
-  contactNumber: string
-  address: string
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  sex: 'M' | 'F' | 'O';
+  contactNumber: string;
+  address: string;
 }
 
 export interface PatientFormProps {
-  initialData?: Partial<PatientFormData>
-  isLoading?: boolean
-  onSubmit: (data: PatientFormData) => Promise<void>
-  onCancel: () => void
+  initialData?: Partial<PatientFormData>;
+  isLoading?: boolean;
+  onSubmit: (data: PatientFormData) => Promise<void>;
+  onCancel: () => void;
 }
 
 const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
   ({ initialData, isLoading = false, onSubmit, onCancel }, ref) => {
-    const queryClient = useQueryClient()
+    const queryClient = useQueryClient();
     const [formData, setFormData] = useState<PatientFormData>({
       firstName: initialData?.firstName || '',
       lastName: initialData?.lastName || '',
@@ -31,76 +31,73 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
       sex: initialData?.sex || 'M',
       contactNumber: initialData?.contactNumber || '',
       address: initialData?.address || '',
-    })
+    });
 
-    const [errors, setErrors] = useState<Partial<Record<keyof PatientFormData, string>>>({})
-    const [submitting, setSubmitting] = useState(false)
+    const [errors, setErrors] = useState<Partial<Record<keyof PatientFormData, string>>>({});
+    const [submitting, setSubmitting] = useState(false);
 
     const validateForm = useCallback((): boolean => {
-      const newErrors: typeof errors = {}
+      const newErrors: typeof errors = {};
 
       if (!formData.firstName.trim()) {
-        newErrors.firstName = 'First name is required'
+        newErrors.firstName = 'First name is required';
       }
       if (!formData.lastName.trim()) {
-        newErrors.lastName = 'Last name is required'
+        newErrors.lastName = 'Last name is required';
       }
       if (!formData.dateOfBirth) {
-        newErrors.dateOfBirth = 'Date of birth is required'
+        newErrors.dateOfBirth = 'Date of birth is required';
       }
       if (!formData.contactNumber.trim()) {
-        newErrors.contactNumber = 'Contact number is required'
+        newErrors.contactNumber = 'Contact number is required';
       }
       if (!formData.address.trim()) {
-        newErrors.address = 'Address is required'
+        newErrors.address = 'Address is required';
       }
 
-      setErrors(newErrors)
-      return Object.keys(newErrors).length === 0
-    }, [formData])
+      setErrors(newErrors);
+      return Object.keys(newErrors).length === 0;
+    }, [formData]);
 
-    const handleChange = useCallback((
-      e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-    ) => {
-      const { name, value } = e.target
-      setFormData(prev => ({
-        ...prev,
-        [name]: value,
-      }))
-      // Clear error when user starts typing
-      if (errors[name as keyof PatientFormData]) {
-        setErrors(prev => ({
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData((prev) => ({
           ...prev,
-          [name]: undefined,
-        }))
-      }
-    }, [errors])
+          [name]: value,
+        }));
+        // Clear error when user starts typing
+        if (errors[name as keyof PatientFormData]) {
+          setErrors((prev) => ({
+            ...prev,
+            [name]: undefined,
+          }));
+        }
+      },
+      [errors],
+    );
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault()
+      e.preventDefault();
 
       if (!validateForm()) {
-        return
+        return;
       }
 
-      setSubmitting(true)
+      setSubmitting(true);
       try {
-        await onSubmit(formData)
+        await onSubmit(formData);
         // Invalidate patient list queries after successful submission
-        await queryClient.invalidateQueries({ queryKey: queryKeys.patients.all })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
       } catch (error) {
-        console.error('Form submission error:', error)
+        console.error('Form submission error:', error);
       } finally {
-        setSubmitting(false)
+        setSubmitting(false);
       }
-    }
+    };
 
     return (
-      <form
-        ref={ref}
-        onSubmit={handleSubmit}
-        className="space-y-4"
-      >
+      <form ref={ref} onSubmit={handleSubmit} className="space-y-4">
         {/* First Name */}
         <Input
           label="First Name"
@@ -199,10 +196,10 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
           </Button>
         </div>
       </form>
-    )
-  }
-)
+    );
+  },
+);
 
-PatientForm.displayName = 'PatientForm'
+PatientForm.displayName = 'PatientForm';
 
-export { PatientForm }
+export { PatientForm };

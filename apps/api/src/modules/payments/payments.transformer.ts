@@ -30,7 +30,7 @@ export function toPaymentResponse(
     memo: doc.memo,
     status: doc.status,
     txHash: doc.txHash,
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : (doc.createdAt ?? ''),
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : (doc.updatedAt ?? ''),
   };
 }

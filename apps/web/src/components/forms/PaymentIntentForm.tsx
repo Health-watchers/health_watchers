@@ -1,19 +1,17 @@
-"use client";
+'use client';
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { AssetSelector } from "@/components/ui/AssetSelector";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { AssetSelector } from '@/components/ui/AssetSelector';
 
 const schema = z.object({
-  patientId: z.string().min(1, "Patient is required"),
-  amount: z
-    .string()
-    .regex(/^\d+(\.\d{1,7})?$/, "Enter a valid amount (e.g. 10.50)"),
-  asset: z.string().min(1, "Asset is required"),
-  memo: z.string().max(28, "Memo must be 28 chars or fewer").optional(),
+  patientId: z.string().min(1, 'Patient is required'),
+  amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'Enter a valid amount (e.g. 10.50)'),
+  asset: z.string().min(1, 'Asset is required'),
+  memo: z.string().max(28, 'Memo must be 28 chars or fewer').optional(),
 });
 
 export type PaymentIntentData = z.infer<typeof schema>;
@@ -32,22 +30,19 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     setError,
   } = useForm<PaymentIntentData>({
     resolver: zodResolver(schema),
-    defaultValues: { asset: "XLM" },
+    defaultValues: { asset: 'XLM' },
   });
 
-  const amount = watch("amount");
-  const asset = watch("asset");
-  const patientId = watch("patientId");
+  const amount = watch('amount');
+  const asset = watch('asset');
+  const patientId = watch('patientId');
 
   const submit = async (data: PaymentIntentData) => {
     try {
       await onSubmit(data);
     } catch (err) {
-      setError("root", {
-        message:
-          err instanceof Error
-            ? err.message
-            : "Failed to create payment intent.",
+      setError('root', {
+        message: err instanceof Error ? err.message : 'Failed to create payment intent.',
       });
     }
   };
@@ -55,10 +50,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-5">
       {errors.root && (
-        <p
-          role="alert"
-          className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-500"
-        >
+        <p role="alert" className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-500">
           {errors.root.message}
         </p>
       )}
@@ -66,7 +58,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
       <Input
         label="Patient ID"
         placeholder="Search or enter patient ID"
-        {...register("patientId")}
+        {...register('patientId')}
         error={errors.patientId?.message}
       />
 
@@ -77,23 +69,19 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
             type="text"
             inputMode="decimal"
             placeholder="0.00"
-            {...register("amount")}
+            {...register('amount')}
             error={errors.amount?.message}
           />
         </div>
         <div className="w-40">
-          <AssetSelector
-            label="Asset"
-            {...register("asset")}
-            error={errors.asset?.message}
-          />
+          <AssetSelector label="Asset" {...register('asset')} error={errors.asset?.message} />
         </div>
       </div>
 
       <Input
         label="Memo (optional)"
         placeholder="Up to 28 characters"
-        {...register("memo")}
+        {...register('memo')}
         error={errors.memo?.message}
         helperText="Visible on the Stellar network"
       />
@@ -128,13 +116,8 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         >
           Cancel
         </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          className="flex-1"
-          loading={isSubmitting}
-        >
-          {isSubmitting ? "Submitting…" : "Create Payment Intent"}
+        <Button type="submit" variant="primary" className="flex-1" loading={isSubmitting}>
+          {isSubmitting ? 'Submitting…' : 'Create Payment Intent'}
         </Button>
       </div>
     </form>

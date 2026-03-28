@@ -35,14 +35,18 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {hasError && (
-          <p id={`${inputId}-error`} className="text-xs text-danger-500">{error}</p>
+          <p id={`${inputId}-error`} className="text-xs text-danger-500">
+            {error}
+          </p>
         )}
         {!hasError && helperText && (
-          <p id={`${inputId}-helper`} className="text-xs text-neutral-500">{helperText}</p>
+          <p id={`${inputId}-helper`} className="text-xs text-neutral-500">
+            {helperText}
+          </p>
         )}
       </div>
     );
-  }
+  },
 );
 
 Textarea.displayName = 'Textarea';

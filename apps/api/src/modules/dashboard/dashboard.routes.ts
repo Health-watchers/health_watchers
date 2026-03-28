@@ -29,7 +29,10 @@ router.get('/', async (_req: Request, res: Response) => {
       PaymentRecordModel.countDocuments({ status: 'pending' }),
       UserModel.countDocuments({ role: 'DOCTOR', isActive: true }),
       PatientModel.find().sort({ createdAt: -1 }).limit(5).lean(),
-      EncounterModel.find({ createdAt: { $gte: today } }).sort({ createdAt: -1 }).limit(5).lean(),
+      EncounterModel.find({ createdAt: { $gte: today } })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
       PaymentRecordModel.find({ status: 'pending' }).sort({ createdAt: -1 }).limit(5).lean(),
     ]);
 
@@ -42,8 +45,9 @@ router.get('/', async (_req: Request, res: Response) => {
         pendingPayments: pendingPaymentsList,
       },
     });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+  } catch (error: unknown) {
+    const err = error as Error;
+    return res.status(500).json({ error: err.message });
   }
 });
 

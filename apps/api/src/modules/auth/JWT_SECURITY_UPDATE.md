@@ -1,20 +1,26 @@
 # JWT Security Update: Issuer and Audience Claims
 
 ## Overview
+
 This update addresses a token confusion attack vector by adding `issuer` (iss) and `audience` (aud) claims to all JWT tokens.
 
 ## Problem
+
 Previously, JWTs were signed without issuer or audience claims. If another service in the same infrastructure used JWTs signed with the same secret, tokens from that service could be accepted by this API, creating a token confusion attack vector.
 
 ## Solution
+
 All JWT signing and verification now includes:
+
 - `issuer: 'health-watchers-api'` - Identifies this API as the token issuer
 - `audience: 'health-watchers-client'` - Identifies the intended recipient
 
 ## Changes Made
 
 ### 1. Created `token.service.ts`
+
 New service module that handles all JWT operations:
+
 - `signAccessToken()` - Signs access tokens with iss/aud claims
 - `signRefreshToken()` - Signs refresh tokens with iss/aud claims
 - `signTempToken()` - Signs temporary MFA tokens with iss/aud claims
@@ -23,16 +29,21 @@ New service module that handles all JWT operations:
 - `verifyTempToken()` - Verifies temp tokens and validates iss/aud
 
 ### 2. Updated Configuration
+
 **`packages/config/index.ts`**
+
 - Added `jwt.issuer` configuration (default: 'health-watchers-api')
 - Added `jwt.audience` configuration (default: 'health-watchers-client')
 
 **`.env.example`**
+
 - Added `JWT_ISSUER=health-watchers-api`
 - Added `JWT_AUDIENCE=health-watchers-client`
 
 ### 3. Created Comprehensive Tests
+
 **`token.service.test.ts`** includes tests for:
+
 - ✅ Tokens are signed with correct iss and aud claims
 - ✅ Tokens without issuer claim are rejected
 - ✅ Tokens with wrong issuer are rejected
@@ -45,14 +56,17 @@ New service module that handles all JWT operations:
 ## Acceptance Criteria Status
 
 ✅ **A token signed without `iss: 'health-watchers-api'` is rejected by verifyAccessToken**
+
 - Test: "should reject a token without issuer claim"
 - Test: "should reject a token with wrong issuer"
 
 ✅ **A token signed with the correct secret but wrong aud is rejected**
+
 - Test: "should reject a token with wrong audience"
 - Test: "should reject a token without audience claim"
 
 ✅ **Unit tests cover the rejection of tokens with wrong iss and aud**
+
 - Comprehensive test suite in `token.service.test.ts`
 - Tests cover all verification functions
 - Tests include token confusion attack scenarios

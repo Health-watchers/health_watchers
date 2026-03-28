@@ -1,5 +1,5 @@
-import { Schema, model, models } from "mongoose";
-import { sanitizeText } from "@api/utils/sanitize";
+import { Schema, model, models } from 'mongoose';
+import { sanitizeText } from '@api/utils/sanitize';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -12,7 +12,7 @@ export interface VitalSigns {
 }
 
 export interface Diagnosis {
-  code: string;       // ICD-10 code
+  code: string;
   description: string;
   isPrimary?: boolean;
 }
@@ -30,11 +30,10 @@ export interface Encounter {
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: "open" | "closed" | "follow-up";
+  status: 'open' | 'closed' | 'follow-up';
   notes?: string;
-  diagnosis?: string;
-  treatmentPlan?: string;
   diagnosis?: Diagnosis[];
+  treatmentPlan?: string;
   vitalSigns?: VitalSigns;
   prescriptions?: Prescription[];
   followUpDate?: Date;
@@ -43,69 +42,62 @@ export interface Encounter {
 
 const vitalSignsSchema = new Schema<VitalSigns>(
   {
-    bloodPressure:    { type: String },
-    heartRate:        { type: Number },
-    temperature:      { type: Number },
-    respiratoryRate:  { type: Number },
+    bloodPressure: { type: String },
+    heartRate: { type: Number },
+    temperature: { type: Number },
+    respiratoryRate: { type: Number },
     oxygenSaturation: { type: Number },
-    weight:           { type: Number },
-    height:           { type: Number },
+    weight: { type: Number },
+    height: { type: Number },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const diagnosisSchema = new Schema<Diagnosis>(
   {
-    code:        { type: String, required: true },
+    code: { type: String, required: true },
     description: { type: String, required: true },
-    isPrimary:   { type: Boolean, default: false },
+    isPrimary: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const prescriptionSchema = new Schema<Prescription>(
   {
     medication: { type: String, required: true },
-    dosage:     { type: String, required: true },
-    frequency:  { type: String, required: true },
-    duration:   { type: String },
-    notes:      { type: String },
+    dosage: { type: String, required: true },
+    frequency: { type: String, required: true },
+    duration: { type: String },
+    notes: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const encounterSchema = new Schema<Encounter>(
   {
-    patientId:         { type: Schema.Types.ObjectId, ref: "Patient",  required: true, index: true },
-    clinicId:          { type: Schema.Types.ObjectId, ref: "Clinic",   required: true, index: true },
-    attendingDoctorId: { type: Schema.Types.ObjectId, ref: "User",     required: true, index: true },
-    chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ["open", "closed", "follow-up"], default: "open", index: true },
-    notes:             { type: String },
-    treatmentPlan:     { type: String },
-    diagnosis:         { type: [diagnosisSchema], default: undefined },
-    vitalSigns:        { type: vitalSignsSchema },
-    prescriptions:     { type: [prescriptionSchema], default: undefined },
-    followUpDate:      { type: Date },
-    aiSummary:         { type: String },
-    patientId:      { type: Schema.Types.ObjectId, ref: "Patient", required: true, index: true },
-    clinicId:       { type: Schema.Types.ObjectId, ref: "Clinic",  required: true, index: true },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     chiefComplaint: { type: String, required: true },
-    notes:          { type: String },
-    diagnosis:      { type: String },
-    treatmentPlan:  { type: String },
-    aiSummary:      { type: String },
+    status: { type: String, enum: ['open', 'closed', 'follow-up'], default: 'open', index: true },
+    notes: { type: String },
+    treatmentPlan: { type: String },
+    diagnosis: { type: [diagnosisSchema], default: undefined },
+    vitalSigns: { type: vitalSignsSchema },
+    prescriptions: { type: [prescriptionSchema], default: undefined },
+    followUpDate: { type: Date },
+    aiSummary: { type: String },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false },
 );
 
-const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan", "aiSummary"] as const;
+const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 
-encounterSchema.pre("save", function () {
+encounterSchema.pre('save', function (this: Record<string, unknown>) {
   for (const field of FREE_TEXT_FIELDS) {
     const val = this[field];
-    if (val) (this as Record<string, unknown>)[field] = sanitizeText(val);
+    if (val) this[field] = sanitizeText(val as string);
   }
 });
 
-export const EncounterModel = models.Encounter || model<Encounter>("Encounter", encounterSchema);
+export const EncounterModel = models.Encounter || model<Encounter>('Encounter', encounterSchema);

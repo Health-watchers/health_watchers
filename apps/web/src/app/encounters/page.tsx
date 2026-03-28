@@ -1,25 +1,20 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState } from 'react';
 import EncounterTable, {
   type EncounterRecord,
   type EncounterStatus,
   MOCK_ENCOUNTERS,
-} from "../../components/encounters/EncounterTable";
-import EncounterDetail from "../../components/encounters/EncounterDetail";
-import EncounterForm, {
-  type EncounterFormValues,
-} from "../../components/forms/EncounterForm";
+} from '../../components/encounters/EncounterTable';
+import EncounterDetail from '../../components/encounters/EncounterDetail';
+import EncounterForm, { type EncounterFormValues } from '../../components/forms/EncounterForm';
 
 function nextStatus(): EncounterStatus {
-  return "active";
+  return 'active';
 }
 
-function mapFormToEncounter(
-  values: EncounterFormValues,
-  existingLength: number,
-): EncounterRecord {
-  const encounterNumber = String(existingLength + 1).padStart(5, "0");
+function mapFormToEncounter(values: EncounterFormValues, existingLength: number): EncounterRecord {
+  const encounterNumber = String(existingLength + 1).padStart(5, '0');
 
   return {
     id: `EN-2026-${encounterNumber}`,
@@ -30,18 +25,18 @@ function mapFormToEncounter(
     encounterAt: new Date().toISOString(),
     chiefComplaint: values.chiefComplaint,
     diagnosis: values.diagnosis
-      .split("\n")
+      .split('\n')
       .map((item) => item.trim())
       .filter(Boolean),
     treatmentPlan: values.treatmentPlan,
     prescriptions: values.prescriptions
-      .split("\n")
+      .split('\n')
       .map((item) => item.trim())
       .filter(Boolean)
       .map((item) => ({
         name: item,
-        dose: "As documented",
-        frequency: "As directed",
+        dose: 'As documented',
+        frequency: 'As directed',
       })),
     vitals: {
       bloodPressure: values.bloodPressure,
@@ -54,11 +49,8 @@ function mapFormToEncounter(
 }
 
 export default function EncountersPage() {
-  const [encounters, setEncounters] =
-    useState<EncounterRecord[]>(MOCK_ENCOUNTERS);
-  const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(
-    null,
-  );
+  const [encounters, setEncounters] = useState<EncounterRecord[]>(MOCK_ENCOUNTERS);
+  const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   const selectedEncounter = useMemo(
@@ -68,7 +60,7 @@ export default function EncountersPage() {
 
   const doctors = useMemo(() => {
     const list = Array.from(new Set(encounters.map((item) => item.doctor)));
-    return list.length > 0 ? list : ["Dr. Julian Smith"];
+    return list.length > 0 ? list : ['Dr. Julian Smith'];
   }, [encounters]);
 
   const handleCreateEncounter = (values: EncounterFormValues) => {

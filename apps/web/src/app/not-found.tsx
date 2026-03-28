@@ -1,9 +1,9 @@
-import Link from "next/link";
-import { Button } from "@/components/ui";
+import Link from 'next/link';
+import { Button } from '@/components/ui';
 
 export const metadata = {
-  title: "Page Not Found",
-  description: "The page you are looking for does not exist.",
+  title: 'Page Not Found',
+  description: 'The page you are looking for does not exist.',
 };
 
 export default function NotFound() {

@@ -6,12 +6,19 @@ import { PasswordStrengthIndicator } from '@/components/ui/PasswordStrengthIndic
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'NURSE', clinicId: '' });
+  const [form, setForm] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    role: 'NURSE',
+    clinicId: '',
+  });
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set =
+    (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +32,9 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrors(Array.isArray(data.errors) ? data.errors : [data.message ?? 'Registration failed']);
+        setErrors(
+          Array.isArray(data.errors) ? data.errors : [data.message ?? 'Registration failed'],
+        );
         return;
       }
       router.push('/login');
@@ -36,7 +45,8 @@ export default function RegisterPage() {
     }
   };
 
-  const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const inputCls =
+    'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
@@ -46,38 +56,84 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit} className="space-y-4 bg-white p-8 rounded-lg shadow">
           {errors.length > 0 && (
             <ul className="rounded-md bg-red-50 p-4 space-y-1" role="alert">
-              {errors.map((e) => <li key={e} className="text-sm text-red-700">{e}</li>)}
+              {errors.map((e) => (
+                <li key={e} className="text-sm text-red-700">
+                  {e}
+                </li>
+              ))}
             </ul>
           )}
 
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-            <input id="fullName" type="text" required className={inputCls} value={form.fullName} onChange={set('fullName')} />
+            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+              Full name
+            </label>
+            <input
+              id="fullName"
+              type="text"
+              required
+              className={inputCls}
+              value={form.fullName}
+              onChange={set('fullName')}
+            />
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input id="email" type="email" required className={inputCls} value={form.email} onChange={set('email')} autoComplete="email" />
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              className={inputCls}
+              value={form.email}
+              onChange={set('email')}
+              autoComplete="email"
+            />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input id="password" type="password" required className={inputCls} value={form.password} onChange={set('password')} autoComplete="new-password" />
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              className={inputCls}
+              value={form.password}
+              onChange={set('password')}
+              autoComplete="new-password"
+            />
             <PasswordStrengthIndicator password={form.password} />
           </div>
 
           <div>
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+            <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+              Role
+            </label>
             <select id="role" className={inputCls} value={form.role} onChange={set('role')}>
-              {['CLINIC_ADMIN','DOCTOR','NURSE','ASSISTANT','READ_ONLY'].map((r) => (
-                <option key={r} value={r}>{r}</option>
+              {['CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label htmlFor="clinicId" className="block text-sm font-medium text-gray-700 mb-1">Clinic ID</label>
-            <input id="clinicId" type="text" required className={inputCls} value={form.clinicId} onChange={set('clinicId')} />
+            <label htmlFor="clinicId" className="block text-sm font-medium text-gray-700 mb-1">
+              Clinic ID
+            </label>
+            <input
+              id="clinicId"
+              type="text"
+              required
+              className={inputCls}
+              value={form.clinicId}
+              onChange={set('clinicId')}
+            />
           </div>
 
           <button
