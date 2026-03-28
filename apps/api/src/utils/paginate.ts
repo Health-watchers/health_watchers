@@ -11,11 +11,12 @@ export async function paginate<T>(
   model: Model<T>,
   query: FilterQuery<T>,
   page: number,
-  limit: number
+  limit: number,
+  sort: Record<string, 1 | -1> = { createdAt: -1 }
 ): Promise<{ data: T[]; meta: PaginationMeta }> {
   const [total, data] = await Promise.all([
     model.countDocuments(query),
-    model.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean() as Promise<T[]>,
+    model.find(query).sort(sort).skip((page - 1) * limit).limit(limit).lean() as Promise<T[]>,
   ]);
   return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
 }

@@ -12,6 +12,7 @@ export interface PaymentResponse {
   memo?: string;
   status: string;
   txHash?: string;
+  confirmedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +28,12 @@ export function toPaymentResponse(
     assetCode: doc.assetCode || 'XLM',
     assetIssuer: doc.assetIssuer ?? undefined,
     destination: doc.destination,
+    memo:        doc.memo,
+    status:      doc.status,
+    txHash:      doc.txHash,
+    confirmedAt: doc.confirmedAt instanceof Date ? doc.confirmedAt.toISOString() : doc.confirmedAt,
+    createdAt:   doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt:   doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
     memo: doc.memo,
     status: doc.status,
     txHash: doc.txHash,

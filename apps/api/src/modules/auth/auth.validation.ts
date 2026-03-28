@@ -25,6 +25,14 @@ export const passwordSchema = z
   .refine((p) => /[^A-Za-z0-9]/.test(p), 'Password must contain at least one special character')
   .refine((p) => !COMMON_PASSWORDS.has(p), 'Password is too common');
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword:     passwordSchema,
+  confirmPassword: z.string().min(1, 'Confirm password is required'),
+});
+
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
+
 export const loginSchema = z.object({
   email:    z.string().email(),
   password: z.string().min(1, 'Password is required'),
@@ -51,8 +59,19 @@ export const mfaChallengeSchema = z.object({
   totp:      z.string().length(6),
 });
 
-export type LoginDto       = z.infer<typeof loginSchema>;
-export type RegisterDto    = z.infer<typeof registerSchema>;
-export type RefreshDto     = z.infer<typeof refreshSchema>;
-export type MfaVerifyDto   = z.infer<typeof mfaVerifySchema>;
-export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token:       z.string().min(1),
+  newPassword: passwordSchema,
+});
+
+export type LoginDto            = z.infer<typeof loginSchema>;
+export type RegisterDto         = z.infer<typeof registerSchema>;
+export type RefreshDto          = z.infer<typeof refreshSchema>;
+export type MfaVerifyDto        = z.infer<typeof mfaVerifySchema>;
+export type MfaChallengeDto     = z.infer<typeof mfaChallengeSchema>;
+export type ForgotPasswordDto   = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordDto    = z.infer<typeof resetPasswordSchema>;

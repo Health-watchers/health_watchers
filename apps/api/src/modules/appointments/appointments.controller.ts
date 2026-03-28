@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { authenticate } from '@api/middlewares/auth.middleware';
 
 export const appointmentRoutes = Router();
 
@@ -18,7 +18,7 @@ async function hasConflict(
   doctorId: string,
   scheduledAt: Date,
   durationMinutes: number,
-  excludeId?: string
+  excludeId?: string,
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + durationMinutes * 60_000);
 
@@ -50,7 +50,9 @@ appointmentRoutes.get('/availability', async (req: Request, res: Response) => {
     const { clinicId } = req.user!;
 
     if (!doctorId || !date) {
-      return res.status(400).json({ error: 'BadRequest', message: 'doctorId and date are required' });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: 'doctorId and date are required' });
     }
 
     const dayStart = new Date(date);
@@ -78,9 +80,7 @@ appointmentRoutes.get('/availability', async (req: Request, res: Response) => {
 appointmentRoutes.get('/', async (req: Request, res: Response) => {
   try {
     const { clinicId } = req.user!;
-    const appointments = await AppointmentModel.find({ clinicId })
-      .sort({ scheduledAt: 1 })
-      .lean();
+    const appointments = await AppointmentModel.find({ clinicId }).sort({ scheduledAt: 1 }).lean();
     return res.json({ status: 'success', data: appointments });
   } catch (err: any) {
     return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -92,7 +92,8 @@ appointmentRoutes.get('/:id', async (req: Request, res: Response) => {
   try {
     const { clinicId } = req.user!;
     const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId }).lean();
-    if (!appointment) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+    if (!appointment)
+      return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
     return res.json({ status: 'success', data: appointment });
   } catch (err: any) {
     return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -106,7 +107,12 @@ appointmentRoutes.post('/', async (req: Request, res: Response) => {
     const { patientId, doctorId, scheduledAt, durationMinutes = 30, reason, notes } = req.body;
 
     if (!patientId || !doctorId || !scheduledAt) {
-      return res.status(400).json({ error: 'BadRequest', message: 'patientId, doctorId, and scheduledAt are required' });
+      return res
+        .status(400)
+        .json({
+          error: 'BadRequest',
+          message: 'patientId, doctorId, and scheduledAt are required',
+        });
     }
 
     const start = new Date(scheduledAt);
@@ -119,8 +125,13 @@ appointmentRoutes.post('/', async (req: Request, res: Response) => {
     }
 
     const appointment = await AppointmentModel.create({
-      patientId, doctorId, clinicId, scheduledAt: start,
-      durationMinutes, reason, notes,
+      patientId,
+      doctorId,
+      clinicId,
+      scheduledAt: start,
+      durationMinutes,
+      reason,
+      notes,
     });
 
     return res.status(201).json({ status: 'success', data: appointment });
@@ -134,17 +145,18 @@ appointmentRoutes.patch('/:id', async (req: Request, res: Response) => {
   try {
     const { clinicId } = req.user!;
     const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
-    if (!existing) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+    if (!existing)
+      return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
 
     const { scheduledAt, durationMinutes, doctorId, status, reason, notes } = req.body;
 
     // Re-check conflicts only when time/doctor is changing
-    const newStart     = scheduledAt     ? new Date(scheduledAt)  : existing.scheduledAt;
-    const newDuration  = durationMinutes ?? existing.durationMinutes;
-    const newDoctorId  = doctorId        ?? String(existing.doctorId);
+    const newStart = scheduledAt ? new Date(scheduledAt) : existing.scheduledAt;
+    const newDuration = durationMinutes ?? existing.durationMinutes;
+    const newDoctorId = doctorId ?? String(existing.doctorId);
 
-    const timeChanged   = scheduledAt || durationMinutes || doctorId;
-    if (timeChanged && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
+    const timeChanged = scheduledAt || durationMinutes || doctorId;
+    if (timeChanged && (await hasConflict(newDoctorId, newStart, newDuration, req.params.id))) {
       return res.status(409).json({
         error: 'TimeSlotUnavailable',
         message: 'The doctor already has an appointment during this time slot',
@@ -153,8 +165,15 @@ appointmentRoutes.patch('/:id', async (req: Request, res: Response) => {
 
     const updated = await AppointmentModel.findByIdAndUpdate(
       req.params.id,
-      { scheduledAt: newStart, durationMinutes: newDuration, doctorId: newDoctorId, status, reason, notes },
-      { new: true, runValidators: true }
+      {
+        scheduledAt: newStart,
+        durationMinutes: newDuration,
+        doctorId: newDoctorId,
+        status,
+        reason,
+        notes,
+      },
+      { new: true, runValidators: true },
     ).lean();
 
     return res.json({ status: 'success', data: updated });
@@ -168,7 +187,8 @@ appointmentRoutes.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { clinicId } = req.user!;
     const appointment = await AppointmentModel.findOneAndDelete({ _id: req.params.id, clinicId });
-    if (!appointment) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+    if (!appointment)
+      return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
     return res.json({ status: 'success', data: null });
   } catch (err: any) {
     return res.status(500).json({ error: 'InternalError', message: err.message });

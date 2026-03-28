@@ -1,5 +1,5 @@
 import { Schema, model, models } from "mongoose";
-import { sanitizeText } from "@api/utils/sanitize";
+import { sanitizeText } from "../../utils/sanitize";
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -32,9 +32,8 @@ export interface Encounter {
   chiefComplaint: string;
   status: "open" | "closed" | "follow-up";
   notes?: string;
-  diagnosis?: string;
-  treatmentPlan?: string;
   diagnosis?: Diagnosis[];
+  treatmentPlan?: string;
   vitalSigns?: VitalSigns;
   prescriptions?: Prescription[];
   followUpDate?: Date;
@@ -71,7 +70,6 @@ const prescriptionSchema = new Schema<Prescription>(
     duration:   { type: String },
     notes:      { type: String },
   },
-  { _id: false }
 );
 
 const encounterSchema = new Schema<Encounter>(
@@ -88,13 +86,6 @@ const encounterSchema = new Schema<Encounter>(
     prescriptions:     { type: [prescriptionSchema], default: undefined },
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
-    patientId:      { type: Schema.Types.ObjectId, ref: "Patient", required: true, index: true },
-    clinicId:       { type: Schema.Types.ObjectId, ref: "Clinic",  required: true, index: true },
-    chiefComplaint: { type: String, required: true },
-    notes:          { type: String },
-    diagnosis:      { type: String },
-    treatmentPlan:  { type: String },
-    aiSummary:      { type: String },
   },
   { timestamps: true, versionKey: false }
 );
@@ -104,7 +95,7 @@ const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan", "aiSummary
 encounterSchema.pre("save", function () {
   for (const field of FREE_TEXT_FIELDS) {
     const val = this[field];
-    if (val) (this as Record<string, unknown>)[field] = sanitizeText(val);
+    if (val) (this as any)[field] = sanitizeText(val);
   }
 });
 

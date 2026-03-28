@@ -1,3 +1,4 @@
+import './config/env'; // must be first — validates all required env vars before anything else
 import express from 'express';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
@@ -5,9 +6,12 @@ import mongoose from 'mongoose';
 import { config } from '@health-watchers/config';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
+import { userRoutes } from './modules/users/users.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { paymentRoutes } from './modules/payments/payments.controller';
+import { webhookRoutes } from './modules/webhooks/webhooks.controller';
+import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
@@ -51,9 +55,12 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'health-watchers-api' }));
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
 // Override limit for AI routes
 app.use('/api/v1/ai', express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);

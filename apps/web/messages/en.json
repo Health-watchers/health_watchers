@@ -13,7 +13,15 @@
   },
   "home": {
     "title": "Health Watchers",
-    "subtitle": "AI-assisted EMR powered by Stellar blockchain."
+    "subtitle": "AI-assisted EMR powered by Stellar blockchain.",
+    "stats": {
+      "todayPatients": "Today's Patients",
+      "openEncounters": "Open Encounters",
+      "pendingPayments": "Pending Payments",
+      "totalPatients": "Total Patients"
+    },
+    "loading": "Loading dashboard...",
+    "error": "Failed to load dashboard statistics."
   },
   "patients": {
     "title": "Patients",
