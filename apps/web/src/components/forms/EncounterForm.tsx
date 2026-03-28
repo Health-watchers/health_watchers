@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState } from 'react';
 
 export interface EncounterFormValues {
   patientName: string;
@@ -25,27 +25,27 @@ interface EncounterFormProps {
 }
 
 const INITIAL_VALUES: EncounterFormValues = {
-  patientName: "",
-  patientMrn: "",
-  doctor: "Dr. Julian Smith",
-  chiefComplaint: "",
-  bloodPressure: "",
-  heartRate: "",
-  temperature: "",
-  spo2: "",
-  diagnosis: "",
-  treatmentPlan: "",
-  prescriptions: "",
-  followUpDate: "",
+  patientName: '',
+  patientMrn: '',
+  doctor: 'Dr. Julian Smith',
+  chiefComplaint: '',
+  bloodPressure: '',
+  heartRate: '',
+  temperature: '',
+  spo2: '',
+  diagnosis: '',
+  treatmentPlan: '',
+  prescriptions: '',
+  followUpDate: '',
 };
 
-const STEPS = ["Initial Assessment", "Clinical Data", "Review & Sign"];
+const STEPS = ['Initial Assessment', 'Clinical Data', 'Review & Sign'];
 
 export default function EncounterForm({
   open,
   onClose,
   onSubmit,
-  doctors = ["Dr. Julian Smith"],
+  doctors = ['Dr. Julian Smith'],
 }: EncounterFormProps) {
   const [step, setStep] = useState(0);
   const [values, setValues] = useState(INITIAL_VALUES);
@@ -61,35 +61,26 @@ export default function EncounterForm({
     const currentErrors: Record<string, string> = {};
 
     if (stepIndex === 0) {
-      if (!values.patientName.trim())
-        currentErrors.patientName = "Patient name is required";
-      if (!values.patientMrn.trim())
-        currentErrors.patientMrn = "Patient MRN is required";
-      if (!values.doctor.trim())
-        currentErrors.doctor = "Attending doctor is required";
+      if (!values.patientName.trim()) currentErrors.patientName = 'Patient name is required';
+      if (!values.patientMrn.trim()) currentErrors.patientMrn = 'Patient MRN is required';
+      if (!values.doctor.trim()) currentErrors.doctor = 'Attending doctor is required';
       if (!values.chiefComplaint.trim())
-        currentErrors.chiefComplaint = "Chief complaint is required";
+        currentErrors.chiefComplaint = 'Chief complaint is required';
     }
 
     if (stepIndex === 1) {
-      if (!values.bloodPressure.trim())
-        currentErrors.bloodPressure = "Blood pressure is required";
-      if (!values.heartRate.trim())
-        currentErrors.heartRate = "Heart rate is required";
-      if (!values.temperature.trim())
-        currentErrors.temperature = "Temperature is required";
-      if (!values.spo2.trim()) currentErrors.spo2 = "SpO2 is required";
-      if (!values.diagnosis.trim())
-        currentErrors.diagnosis = "Diagnosis is required";
-      if (!values.treatmentPlan.trim())
-        currentErrors.treatmentPlan = "Treatment plan is required";
+      if (!values.bloodPressure.trim()) currentErrors.bloodPressure = 'Blood pressure is required';
+      if (!values.heartRate.trim()) currentErrors.heartRate = 'Heart rate is required';
+      if (!values.temperature.trim()) currentErrors.temperature = 'Temperature is required';
+      if (!values.spo2.trim()) currentErrors.spo2 = 'SpO2 is required';
+      if (!values.diagnosis.trim()) currentErrors.diagnosis = 'Diagnosis is required';
+      if (!values.treatmentPlan.trim()) currentErrors.treatmentPlan = 'Treatment plan is required';
     }
 
     if (stepIndex === 2) {
       if (!values.prescriptions.trim())
-        currentErrors.prescriptions = "Prescription details are required";
-      if (!values.followUpDate.trim())
-        currentErrors.followUpDate = "Follow-up date is required";
+        currentErrors.prescriptions = 'Prescription details are required';
+      if (!values.followUpDate.trim()) currentErrors.followUpDate = 'Follow-up date is required';
     }
 
     setErrors(currentErrors);
@@ -131,18 +122,14 @@ export default function EncounterForm({
       {multiline ? (
         <textarea
           value={values[key]}
-          onChange={(e) =>
-            setValues((prev) => ({ ...prev, [key]: e.target.value }))
-          }
+          onChange={(e) => setValues((prev) => ({ ...prev, [key]: e.target.value }))}
           placeholder={placeholder}
           className="min-h-24 w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
         />
       ) : (
         <input
           value={values[key]}
-          onChange={(e) =>
-            setValues((prev) => ({ ...prev, [key]: e.target.value }))
-          }
+          onChange={(e) => setValues((prev) => ({ ...prev, [key]: e.target.value }))}
           placeholder={placeholder}
           className="w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
         />
@@ -196,12 +183,8 @@ export default function EncounterForm({
         <div className="space-y-4 rounded-lg bg-neutral-0 p-4">
           {step === 0 ? (
             <>
-              {field("patientName", "Patient Name", "Enter patient full name")}
-              {field(
-                "patientMrn",
-                "Patient MRN",
-                "Enter medical record number",
-              )}
+              {field('patientName', 'Patient Name', 'Enter patient full name')}
+              {field('patientMrn', 'Patient MRN', 'Enter medical record number')}
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-600">
                   Attending Doctor
@@ -223,28 +206,23 @@ export default function EncounterForm({
                   <p className="mt-1 text-xs text-error-500">{errors.doctor}</p>
                 ) : null}
               </label>
-              {field(
-                "chiefComplaint",
-                "Chief Complaint",
-                "Enter the main reason for visit",
-                true,
-              )}
+              {field('chiefComplaint', 'Chief Complaint', 'Enter the main reason for visit', true)}
             </>
           ) : null}
 
           {step === 1 ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
-                {field("bloodPressure", "Blood Pressure", "e.g. 120/80")}
-                {field("heartRate", "Heart Rate", "e.g. 72")}
-                {field("temperature", "Temperature", "e.g. 98.6")}
-                {field("spo2", "SpO2", "e.g. 98")}
+                {field('bloodPressure', 'Blood Pressure', 'e.g. 120/80')}
+                {field('heartRate', 'Heart Rate', 'e.g. 72')}
+                {field('temperature', 'Temperature', 'e.g. 98.6')}
+                {field('spo2', 'SpO2', 'e.g. 98')}
               </div>
-              {field("diagnosis", "Diagnosis", "Primary diagnosis", true)}
+              {field('diagnosis', 'Diagnosis', 'Primary diagnosis', true)}
               {field(
-                "treatmentPlan",
-                "Treatment Plan",
-                "Medication, follow-up, and recommendations",
+                'treatmentPlan',
+                'Treatment Plan',
+                'Medication, follow-up, and recommendations',
                 true,
               )}
             </>
@@ -256,12 +234,7 @@ export default function EncounterForm({
                 Review all entries before submission. Encounter will be saved to
                 patient history.
               </div>
-              {field(
-                "prescriptions",
-                "Prescriptions",
-                "Example: Lisinopril 10mg once daily",
-                true,
-              )}
+              {field('prescriptions', 'Prescriptions', 'Example: Lisinopril 10mg once daily', true)}
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-600">
                   Follow-up Date

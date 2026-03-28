@@ -1,4 +1,10 @@
-export type AppRole = 'SUPER_ADMIN' | 'CLINIC_ADMIN' | 'DOCTOR' | 'NURSE' | 'ASSISTANT' | 'READ_ONLY';
+export type AppRole =
+  | 'SUPER_ADMIN'
+  | 'CLINIC_ADMIN'
+  | 'DOCTOR'
+  | 'NURSE'
+  | 'ASSISTANT'
+  | 'READ_ONLY';
 
 declare global {
   namespace Express {

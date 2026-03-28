@@ -19,22 +19,40 @@ export interface EncounterResponse {
   updatedAt: string;
 }
 
-export function toEncounterResponse(doc: Document & Record<string, any>): EncounterResponse {
+export function toEncounterResponse(
+  doc: Document & {
+    patientId: unknown;
+    clinicId: unknown;
+    attendingDoctorId: unknown;
+    chiefComplaint: string;
+    status: string;
+    notes?: string;
+    treatmentPlan?: string;
+    diagnosis?: Diagnosis[];
+    vitalSigns?: VitalSigns;
+    prescriptions?: Prescription[];
+    followUpDate?: Date | string;
+    aiSummary?: string;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+  },
+): EncounterResponse {
   return {
-    id:                String(doc._id),
-    patientId:         String(doc.patientId),
-    clinicId:          String(doc.clinicId),
+    id: String(doc._id),
+    patientId: String(doc.patientId),
+    clinicId: String(doc.clinicId),
     attendingDoctorId: String(doc.attendingDoctorId),
-    chiefComplaint:    doc.chiefComplaint,
-    status:            doc.status,
-    notes:             doc.notes,
-    treatmentPlan:     doc.treatmentPlan,
-    diagnosis:         doc.diagnosis,
-    vitalSigns:        doc.vitalSigns,
-    prescriptions:     doc.prescriptions,
-    followUpDate:      doc.followUpDate instanceof Date ? doc.followUpDate.toISOString() : doc.followUpDate,
-    aiSummary:         doc.aiSummary,
-    createdAt:         doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
-    updatedAt:         doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    chiefComplaint: doc.chiefComplaint,
+    status: doc.status,
+    notes: doc.notes,
+    treatmentPlan: doc.treatmentPlan,
+    diagnosis: doc.diagnosis,
+    vitalSigns: doc.vitalSigns,
+    prescriptions: doc.prescriptions,
+    followUpDate:
+      doc.followUpDate instanceof Date ? doc.followUpDate.toISOString() : doc.followUpDate,
+    aiSummary: doc.aiSummary,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : (doc.createdAt ?? ''),
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : (doc.updatedAt ?? ''),
   };
 }

@@ -6,11 +6,11 @@ interface Rule {
 }
 
 const RULES: Rule[] = [
-  { label: 'At least 12 characters',       test: (p) => p.length >= 12 },
-  { label: 'One uppercase letter (A–Z)',    test: (p) => /[A-Z]/.test(p) },
-  { label: 'One lowercase letter (a–z)',    test: (p) => /[a-z]/.test(p) },
-  { label: 'One digit (0–9)',               test: (p) => /[0-9]/.test(p) },
-  { label: 'One special character (!@#…)',  test: (p) => /[^A-Za-z0-9]/.test(p) },
+  { label: 'At least 12 characters', test: (p) => p.length >= 12 },
+  { label: 'One uppercase letter (A–Z)', test: (p) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a–z)', test: (p) => /[a-z]/.test(p) },
+  { label: 'One digit (0–9)', test: (p) => /[0-9]/.test(p) },
+  { label: 'One special character (!@#…)', test: (p) => /[^A-Za-z0-9]/.test(p) },
 ];
 
 export function PasswordStrengthIndicator({ password }: { password: string }) {

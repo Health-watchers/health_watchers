@@ -2,7 +2,13 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-export type AppRole = 'SUPER_ADMIN' | 'CLINIC_ADMIN' | 'DOCTOR' | 'NURSE' | 'ASSISTANT' | 'READ_ONLY';
+export type AppRole =
+  | 'SUPER_ADMIN'
+  | 'CLINIC_ADMIN'
+  | 'DOCTOR'
+  | 'NURSE'
+  | 'ASSISTANT'
+  | 'READ_ONLY';
 
 interface AuthUser {
   userId: string;

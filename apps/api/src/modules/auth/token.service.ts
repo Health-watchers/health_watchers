@@ -19,39 +19,27 @@ const REFRESH_TOKEN_EXPIRY = '7d';
 const TEMP_TOKEN_EXPIRY = '5m';
 
 export function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(
-    payload,
-    config.jwt.accessTokenSecret,
-    {
-      expiresIn: ACCESS_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign(payload, config.jwt.accessTokenSecret, {
+    expiresIn: ACCESS_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 export function signRefreshToken(payload: TokenPayload): string {
-  return jwt.sign(
-    payload,
-    config.jwt.refreshTokenSecret,
-    {
-      expiresIn: REFRESH_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign(payload, config.jwt.refreshTokenSecret, {
+    expiresIn: REFRESH_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 export function signTempToken(userId: string): string {
-  return jwt.sign(
-    { userId },
-    config.jwt.accessTokenSecret,
-    {
-      expiresIn: TEMP_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign({ userId }, config.jwt.accessTokenSecret, {
+    expiresIn: TEMP_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 export function verifyAccessToken(token: string): TokenPayload | null {
@@ -65,7 +53,7 @@ export function verifyAccessToken(token: string): TokenPayload | null {
       role: decoded.role,
       clinicId: decoded.clinicId,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -81,7 +69,7 @@ export function verifyRefreshToken(token: string): TokenPayload | null {
       role: decoded.role,
       clinicId: decoded.clinicId,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -93,7 +81,7 @@ export function verifyTempToken(token: string): string | null {
       audience: JWT_AUDIENCE,
     }) as { userId: string };
     return decoded.userId;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

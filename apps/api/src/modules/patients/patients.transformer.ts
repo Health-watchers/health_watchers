@@ -13,17 +13,29 @@ export interface PatientResponse {
   updatedAt: string;
 }
 
-export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
+export function toPatientResponse(
+  doc: Document & {
+    systemId: string;
+    firstName: string;
+    lastName: string;
+    dateOfBirth: Date | string;
+    sex: string;
+    contactNumber?: string;
+    address?: string;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+  },
+): PatientResponse {
   return {
-    id:            String(doc._id),
-    systemId:      doc.systemId,
-    firstName:     doc.firstName,
-    lastName:      doc.lastName,
-    dateOfBirth:   doc.dateOfBirth instanceof Date ? doc.dateOfBirth.toISOString() : doc.dateOfBirth,
-    sex:           doc.sex,
+    id: String(doc._id),
+    systemId: doc.systemId,
+    firstName: doc.firstName,
+    lastName: doc.lastName,
+    dateOfBirth: doc.dateOfBirth instanceof Date ? doc.dateOfBirth.toISOString() : doc.dateOfBirth,
+    sex: doc.sex,
     contactNumber: doc.contactNumber,
-    address:       doc.address,
-    createdAt:     doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
-    updatedAt:     doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    address: doc.address,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : (doc.createdAt ?? ''),
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : (doc.updatedAt ?? ''),
   };
 }

@@ -1,36 +1,36 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { StellarAddressDisplay } from "@/components/ui/StellarAddressDisplay";
-import { ConfirmPaymentModal } from "@/components/payments/ConfirmPaymentModal";
+import { useState } from 'react';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
+import { ConfirmPaymentModal } from '@/components/payments/ConfirmPaymentModal';
 
 export interface Payment {
   id: string;
   patientId: string;
   amount: string;
   asset?: string;
-  status: "pending" | "completed" | "failed" | string;
+  status: 'pending' | 'completed' | 'failed' | string;
   txHash?: string;
   createdAt?: string;
 }
 
-type StatusFilter = "all" | "pending" | "completed" | "failed";
+type StatusFilter = 'all' | 'pending' | 'completed' | 'failed';
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "completed", label: "Completed" },
-  { value: "failed", label: "Failed" },
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
 ];
 
 function statusBadgeVariant(status: string) {
-  if (status === "completed") return "success";
-  if (status === "pending") return "warning";
-  if (status === "failed") return "danger";
-  return "default";
+  if (status === 'completed') return 'success';
+  if (status === 'pending') return 'warning';
+  if (status === 'failed') return 'danger';
+  return 'default';
 }
 
 interface Props {
@@ -40,21 +40,16 @@ interface Props {
   onConfirm: (paymentId: string, txHash: string) => Promise<void>;
 }
 
-export function PaymentTable({
-  payments,
-  network = "testnet",
-  onConfirm,
-}: Props) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
   const filtered = payments.filter((p) => {
-    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false;
     if (dateFrom && p.createdAt && p.createdAt < dateFrom) return false;
-    if (dateTo && p.createdAt && p.createdAt > dateTo + "T23:59:59")
-      return false;
+    if (dateTo && p.createdAt && p.createdAt > dateTo + 'T23:59:59') return false;
     return true;
   });
 
@@ -62,10 +57,7 @@ export function PaymentTable({
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-        <Tabs
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-        >
+        <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <TabsList>
             {STATUS_TABS.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
@@ -76,10 +68,7 @@ export function PaymentTable({
         </Tabs>
 
         <div className="flex items-center gap-2 ml-auto">
-          <label
-            htmlFor="date-from"
-            className="text-xs text-neutral-500 whitespace-nowrap"
-          >
+          <label htmlFor="date-from" className="text-xs text-neutral-500 whitespace-nowrap">
             From
           </label>
           <input
@@ -154,19 +143,13 @@ export function PaymentTable({
           <tbody className="divide-y divide-neutral-100 bg-white">
             {filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-neutral-400"
-                >
+                <td colSpan={7} className="px-4 py-8 text-center text-neutral-400">
                   No payments match the current filters.
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-neutral-50 transition-colors"
-                >
+                <tr key={p.id} className="hover:bg-neutral-50 transition-colors">
                   <td
                     className="px-4 py-3 font-mono text-xs text-neutral-600 max-w-[120px] truncate"
                     title={p.id}
@@ -175,41 +158,27 @@ export function PaymentTable({
                   </td>
                   <td className="px-4 py-3 text-neutral-700">{p.patientId}</td>
                   <td className="px-4 py-3 font-medium text-neutral-900">
-                    {p.amount}{" "}
-                    <span className="text-neutral-400 font-normal">
-                      {p.asset ?? "XLM"}
-                    </span>
+                    {p.amount}{' '}
+                    <span className="text-neutral-400 font-normal">{p.asset ?? 'XLM'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={statusBadgeVariant(p.status)}>
-                      {p.status}
-                    </Badge>
+                    <Badge variant={statusBadgeVariant(p.status)}>{p.status}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     {p.txHash ? (
-                      <StellarAddressDisplay
-                        value={p.txHash}
-                        type="tx"
-                        network={network}
-                      />
+                      <StellarAddressDisplay value={p.txHash} type="tx" network={network} />
                     ) : (
                       <span className="text-neutral-300">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">
-                    {p.createdAt
-                      ? new Date(p.createdAt).toLocaleDateString()
-                      : "—"}
+                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {/* Confirm only visible on pending rows */}
-                      {p.status === "pending" && (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => setConfirmTarget(p.id)}
-                        >
+                      {p.status === 'pending' && (
+                        <Button size="sm" variant="primary" onClick={() => setConfirmTarget(p.id)}>
                           Confirm
                         </Button>
                       )}

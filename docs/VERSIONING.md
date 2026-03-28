@@ -13,6 +13,7 @@ Versions are formatted as `MAJOR.MINOR.PATCH`:
 ### Pre-1.0.0 Versions
 
 During initial development (0.x.x versions):
+
 - Breaking changes may occur in minor versions
 - The API is not considered stable
 - Version 1.0.0 will mark the first stable release
@@ -30,6 +31,7 @@ npm run changeset
 ```
 
 This will:
+
 1. Prompt you to select affected packages
 2. Ask for the type of change (major, minor, patch)
 3. Request a description of the changes
@@ -38,6 +40,7 @@ This will:
 ### When to Create a Changeset
 
 Create a changeset for:
+
 - ✅ New features
 - ✅ Bug fixes
 - ✅ Breaking changes
@@ -45,6 +48,7 @@ Create a changeset for:
 - ✅ Security fixes
 
 Skip changesets for:
+
 - ❌ Documentation updates
 - ❌ Test changes
 - ❌ Internal refactoring with no user impact

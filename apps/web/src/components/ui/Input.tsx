@@ -36,25 +36,31 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
               'disabled:cursor-not-allowed disabled:opacity-50',
               hasError ? 'border-danger-500' : 'border-neutral-200',
-              leftIcon  ? 'pl-9'  : '',
-              rightIcon ? 'pr-9'  : '',
+              leftIcon ? 'pl-9' : '',
+              rightIcon ? 'pr-9' : '',
               className ?? '',
             ].join(' ')}
             {...props}
           />
           {rightIcon && (
-            <span className="absolute right-3 text-neutral-400 pointer-events-none">{rightIcon}</span>
+            <span className="absolute right-3 text-neutral-400 pointer-events-none">
+              {rightIcon}
+            </span>
           )}
         </div>
         {hasError && (
-          <p id={`${inputId}-error`} className="text-xs text-danger-500">{error}</p>
+          <p id={`${inputId}-error`} className="text-xs text-danger-500">
+            {error}
+          </p>
         )}
         {!hasError && helperText && (
-          <p id={`${inputId}-helper`} className="text-xs text-neutral-500">{helperText}</p>
+          <p id={`${inputId}-helper`} className="text-xs text-neutral-500">
+            {helperText}
+          </p>
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = 'Input';

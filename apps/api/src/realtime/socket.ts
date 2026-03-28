@@ -4,6 +4,10 @@ import { verifyAccessToken } from '@api/modules/auth/token.service';
 
 let io: SocketIOServer | null = null;
 
+interface AuthenticatedSocket extends Socket {
+  user: TokenPayload;
+}
+
 export function initSocket(httpServer: HttpServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
     cors: {
@@ -28,7 +32,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     }
 
     // Attach user info to socket for use in handlers
-    (socket as any).user = payload;
+    (socket as AuthenticatedSocket).user = payload;
     next();
   });
 

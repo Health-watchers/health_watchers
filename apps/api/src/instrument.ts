@@ -28,9 +28,19 @@ Sentry.init({
  * Patient names, IDs, DOBs and contact info must never reach Sentry.
  */
 const PHI_KEYS = [
-  'firstName', 'lastName', 'fullName', 'name',
-  'dateOfBirth', 'dob', 'phone', 'email', 'address',
-  'patientId', 'mrn', 'ssn', 'insuranceId',
+  'firstName',
+  'lastName',
+  'fullName',
+  'name',
+  'dateOfBirth',
+  'dob',
+  'phone',
+  'email',
+  'address',
+  'patientId',
+  'mrn',
+  'ssn',
+  'insuranceId',
 ];
 
 function scrubPHI<T extends Sentry.Event>(event: T): T {

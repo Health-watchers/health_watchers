@@ -1,5 +1,3 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
 export async function refreshAccessToken(): Promise<boolean> {
   try {
     const res = await fetch('/api/auth/refresh', {
@@ -24,10 +22,7 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function fetchWithAuth(
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> {
+export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   let res = await fetch(url, {
     ...options,
     credentials: 'include',

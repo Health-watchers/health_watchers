@@ -3,28 +3,30 @@ import { z } from 'zod';
 const objectIdRegex = /^[a-f\d]{24}$/i;
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid ObjectId');
 
-const vitalSignsSchema = z.object({
-  bloodPressure:    z.string().optional(),
-  heartRate:        z.number().positive().optional(),
-  temperature:      z.number().positive().optional(),
-  respiratoryRate:  z.number().positive().optional(),
-  oxygenSaturation: z.number().min(0).max(100).optional(),
-  weight:           z.number().positive().optional(),
-  height:           z.number().positive().optional(),
-}).optional();
+const vitalSignsSchema = z
+  .object({
+    bloodPressure: z.string().optional(),
+    heartRate: z.number().positive().optional(),
+    temperature: z.number().positive().optional(),
+    respiratoryRate: z.number().positive().optional(),
+    oxygenSaturation: z.number().min(0).max(100).optional(),
+    weight: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+  })
+  .optional();
 
 const diagnosisSchema = z.object({
-  code:        z.string().min(1, 'Diagnosis code is required'),
+  code: z.string().min(1, 'Diagnosis code is required'),
   description: z.string().min(1, 'Diagnosis description is required'),
-  isPrimary:   z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
 });
 
 const prescriptionSchema = z.object({
   medication: z.string().min(1, 'Medication name is required'),
-  dosage:     z.string().min(1, 'Dosage is required'),
-  frequency:  z.string().min(1, 'Frequency is required'),
-  duration:   z.string().optional(),
-  notes:      z.string().max(1000).optional(),
+  dosage: z.string().min(1, 'Dosage is required'),
+  frequency: z.string().min(1, 'Frequency is required'),
+  duration: z.string().optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 export const createEncounterSchema = z.object({
@@ -56,14 +58,17 @@ export const updateEncounterSchema = createEncounterSchema.partial().refine(
 );
 
 export const listEncountersQuerySchema = z.object({
-  patientId: z.string().regex(objectIdRegex, 'Invalid patientId').optional(),
-  doctorId:  z.string().regex(objectIdRegex, 'Invalid doctorId').optional(),
-  status:    z.enum(['open', 'closed', 'follow-up']).optional(),
-  date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD').optional(),
-  page:      z.coerce.number().int().min(1).default(1),
-  limit:     z.coerce.number().int().min(1).max(100).default(20),
+  patientId: objectId.optional(),
+  doctorId: objectId.optional(),
+  status: z.enum(['open', 'closed', 'follow-up']).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export type CreateEncounterDto  = z.infer<typeof createEncounterSchema>;
-export type UpdateEncounterDto  = z.infer<typeof updateEncounterSchema>;
+export type CreateEncounterDto = z.infer<typeof createEncounterSchema>;
+export type UpdateEncounterDto = z.infer<typeof updateEncounterSchema>;
 export type ListEncountersQuery = z.infer<typeof listEncountersQuerySchema>;

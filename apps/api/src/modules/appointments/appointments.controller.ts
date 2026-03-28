@@ -71,8 +71,8 @@ appointmentRoutes.get('/availability', async (req: Request, res: Response) => {
       .lean();
 
     return res.json({ status: 'success', data: booked });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
@@ -82,8 +82,8 @@ appointmentRoutes.get('/', async (req: Request, res: Response) => {
     const { clinicId } = req.user!;
     const appointments = await AppointmentModel.find({ clinicId }).sort({ scheduledAt: 1 }).lean();
     return res.json({ status: 'success', data: appointments });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
@@ -95,8 +95,8 @@ appointmentRoutes.get('/:id', async (req: Request, res: Response) => {
     if (!appointment)
       return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
     return res.json({ status: 'success', data: appointment });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
@@ -135,8 +135,8 @@ appointmentRoutes.post('/', async (req: Request, res: Response) => {
     });
 
     return res.status(201).json({ status: 'success', data: appointment });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
@@ -177,8 +177,8 @@ appointmentRoutes.patch('/:id', async (req: Request, res: Response) => {
     ).lean();
 
     return res.json({ status: 'success', data: updated });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
@@ -190,7 +190,7 @@ appointmentRoutes.delete('/:id', async (req: Request, res: Response) => {
     if (!appointment)
       return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
     return res.json({ status: 'success', data: null });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });

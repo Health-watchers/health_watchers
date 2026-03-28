@@ -7,10 +7,7 @@ export async function POST(request: NextRequest) {
     const refreshToken = request.cookies.get('refreshToken')?.value;
 
     if (!refreshToken) {
-      return NextResponse.json(
-        { error: 'No refresh token' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'No refresh token' }, { status: 401 });
     }
 
     const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
@@ -37,10 +34,7 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

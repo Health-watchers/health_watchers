@@ -24,6 +24,7 @@ See the [README.md](README.md) for detailed setup instructions using Docker Comp
 ## Commit Message Guidelines
 
 Use conventional commit format:
+
 - `feat:` New feature
 - `fix:` Bug fix
 - `docs:` Documentation changes

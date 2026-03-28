@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { Button } from "@/components/ui";
+import { useEffect } from 'react';
+import { Button } from '@/components/ui';
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -11,10 +11,10 @@ interface ErrorProps {
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
     // Optionally log the error to an error reporting service
-    console.error("Error:", error);
+    console.error('Error:', error);
   }, [error]);
 
-  const requestId = error.digest || "UNKNOWN";
+  const requestId = error.digest || 'UNKNOWN';
 
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
@@ -27,13 +27,11 @@ export default function Error({ error, reset }: ErrorProps) {
         </div>
 
         {/* Error Title */}
-        <h1 className="text-2xl font-bold text-neutral-900">
-          Something went wrong
-        </h1>
+        <h1 className="text-2xl font-bold text-neutral-900">Something went wrong</h1>
 
         {/* Error Description */}
         <p className="text-neutral-600">
-          {error.message || "An unexpected error occurred. Please try again."}
+          {error.message || 'An unexpected error occurred. Please try again.'}
         </p>
 
         {/* Request ID */}
@@ -43,16 +41,11 @@ export default function Error({ error, reset }: ErrorProps) {
 
         {/* Action Buttons */}
         <div className="flex flex-col gap-3 pt-2">
-          <Button
-            onClick={reset}
-            variant="primary"
-            size="md"
-            className="w-full"
-          >
+          <Button onClick={reset} variant="primary" size="md" className="w-full">
             Try Again
           </Button>
           <Button
-            onClick={() => (window.location.href = "/")}
+            onClick={() => (window.location.href = '/')}
             variant="secondary"
             size="md"
             className="w-full"
@@ -63,8 +56,7 @@ export default function Error({ error, reset }: ErrorProps) {
 
         {/* Additional Help */}
         <p className="text-xs text-neutral-500 pt-2">
-          If the problem persists, please contact support with the Request ID
-          above.
+          If the problem persists, please contact support with the Request ID above.
         </p>
       </div>
     </div>
