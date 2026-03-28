@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_URL } from '@/lib/api';
 
 export async function POST(request: NextRequest) {
   try {
     const refreshToken = request.cookies.get('refreshToken')?.value;
 
     if (!refreshToken) {
-      return NextResponse.json(
-        { error: 'No refresh token' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'No refresh token' }, { status: 401 });
     }
 
     const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
@@ -38,9 +35,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { type Patient, formatDate } from "@health-watchers/types";
-import { ErrorMessage } from "@/components/ui";
-import { queryKeys } from "@/lib/queryKeys";
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { type Patient, formatDate } from '@health-watchers/types';
+import { ErrorMessage } from '@/components/ui';
+import { API_BASE } from '@/lib/api';
 
 interface Encounter {
   _id: string;
@@ -22,22 +22,36 @@ interface Labels {
   noEncounters: string;
 }
 
-export default function PatientDetailClient({ patientId, labels }: { patientId: string; labels: Labels }) {
-  const { data: patient, isLoading: patientLoading, error: patientError } = useQuery({
+export default function PatientDetailClient({
+  patientId,
+  labels,
+}: {
+  patientId: string;
+  labels: Labels;
+}) {
+  const {
+    data: patient,
+    isLoading: patientLoading,
+    error: patientError,
+  } = useQuery({
     queryKey: queryKeys.patients.detail(patientId),
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/patients/${patientId}`);
-      if (!res.ok) throw new Error("Failed to load patient");
+      const res = await fetch(`${API_BASE}/patients/${patientId}`);
+      if (!res.ok) throw new Error('Failed to load patient');
       const data = await res.json();
       return data.data;
     },
   });
 
-  const { data: encounters = [], isLoading: encountersLoading, error: encountersError } = useQuery({
+  const {
+    data: encounters = [],
+    isLoading: encountersLoading,
+    error: encountersError,
+  } = useQuery({
     queryKey: queryKeys.encounters.byPatient(patientId),
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/encounters/patient/${patientId}`);
-      if (!res.ok) throw new Error("Failed to load encounters");
+      const res = await fetch(`${API_BASE}/encounters/patient/${patientId}`);
+      if (!res.ok) throw new Error('Failed to load encounters');
       const data = await res.json();
       return data.data || [];
     },
@@ -51,7 +65,12 @@ export default function PatientDetailClient({ patientId, labels }: { patientId: 
   }
 
   if (error || !patient) {
-    return <ErrorMessage message={error instanceof Error ? error.message : labels.error} onRetry={() => window.location.reload()} />;
+    return (
+      <ErrorMessage
+        message={error instanceof Error ? error.message : labels.error}
+        onRetry={() => window.location.reload()}
+      />
+    );
   }
 
   return (
@@ -61,7 +80,9 @@ export default function PatientDetailClient({ patientId, labels }: { patientId: 
       </Link>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">{patient.firstName} {patient.lastName}</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          {patient.firstName} {patient.lastName}
+        </h1>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <p className="text-xs text-gray-500 uppercase font-semibold">System ID</p>
