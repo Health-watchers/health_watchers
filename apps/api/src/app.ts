@@ -1,3 +1,4 @@
+import './config/env'; // must be first — validates all required env vars before anything else
 import express from 'express';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';

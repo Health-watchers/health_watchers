@@ -25,6 +25,14 @@ export const passwordSchema = z
   .refine((p) => /[^A-Za-z0-9]/.test(p), 'Password must contain at least one special character')
   .refine((p) => !COMMON_PASSWORDS.has(p), 'Password is too common');
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword:     passwordSchema,
+  confirmPassword: z.string().min(1, 'Confirm password is required'),
+});
+
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
+
 export const loginSchema = z.object({
   email:    z.string().email(),
   password: z.string().min(1, 'Password is required'),

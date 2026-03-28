@@ -7,6 +7,7 @@ import {
   LoginDto, RefreshDto, RegisterDto,
   loginSchema, refreshSchema, registerSchema, mfaVerifySchema, mfaChallengeSchema,
   MfaVerifyDto, MfaChallengeDto,
+  changePasswordSchema, ChangePasswordDto,
 } from './auth.validation';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
@@ -17,9 +18,10 @@ import {
 import { generateSecret, generateURI, totpVerify } from './totp.service';
 
 // ── local type helpers ────────────────────────────────────────────────────
-type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;
-type RefreshReq = Request<Record<string, never>, unknown, RefreshDto>;
-type RegisterReq = Request<Record<string, never>, unknown, RegisterDto>;
+type LoginReq          = Request<Record<string, never>, unknown, LoginDto>;
+type RefreshReq        = Request<Record<string, never>, unknown, RefreshDto>;
+type RegisterReq       = Request<Record<string, never>, unknown, RegisterDto>;
+type ChangePasswordReq = Request<Record<string, never>, unknown, ChangePasswordDto>;
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -341,6 +343,55 @@ router.post('/register', validateRequest({ body: registerSchema }), async (req: 
 
   const user = await UserModel.create({ fullName, email, password, role, clinicId });
   return res.status(201).json({ status: 'success', data: { id: user.id, email: user.email, role: user.role } });
+});
+
+/**
+ * @swagger
+ * /auth/me/password:
+ *   patch:
+ *     summary: Change the authenticated user's password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword, confirmPassword]
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword:     { type: string, minLength: 8 }
+ *               confirmPassword: { type: string }
+ *     responses:
+ *       200:
+ *         description: Password updated successfully
+ *       400:
+ *         description: Validation error or passwords do not match
+ *       401:
+ *         description: Unauthorized or current password incorrect
+ */
+router.patch('/me/password', authenticate, validateRequest({ body: changePasswordSchema }), async (req: ChangePasswordReq, res: Response) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+
+  const user = await UserModel.findById(req.user!.userId).select('+password +refreshTokenHash');
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!passwordMatch) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Current password is incorrect' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: 'BadRequest', message: 'Passwords do not match' });
+  }
+
+  user.password = newPassword; // pre-save hook will bcrypt-hash this
+  user.refreshTokenHash = undefined;
+  await user.save();
+
+  return res.status(200).json({ status: 'success', data: { message: 'Password updated successfully' } });
 });
 
 export const authRoutes = router;

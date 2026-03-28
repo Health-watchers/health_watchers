@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const objectIdRegex = /^[a-f\d]{24}$/i;
+const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid ObjectId');
 
 const vitalSignsSchema = z.object({
   bloodPressure:    z.string().optional(),
@@ -27,23 +28,6 @@ const prescriptionSchema = z.object({
 });
 
 export const createEncounterSchema = z.object({
-const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid ObjectId');
-
-export const createEncounterSchema = z.object({
-  patientId:      objectId,
-  clinicId:       objectId,
-  chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters'),
-  notes:          z.string().max(5000).optional(),
-});
-
-export const encounterIdParamSchema = z.object({
-  id: objectId,
-});
-
-export const patientIdParamSchema = z.object({
-  patientId: objectId,
-});
-export const createEncounterSchema = z.object({
   patientId:         z.string().regex(objectIdRegex, 'Invalid patientId'),
   clinicId:          z.string().regex(objectIdRegex, 'Invalid clinicId'),
   attendingDoctorId: z.string().regex(objectIdRegex, 'Invalid attendingDoctorId'),
@@ -56,6 +40,14 @@ export const createEncounterSchema = z.object({
   prescriptions:     z.array(prescriptionSchema).optional(),
   followUpDate:      z.string().datetime({ offset: true }).optional(),
   aiSummary:         z.string().max(5000).optional(),
+});
+
+export const encounterIdParamSchema = z.object({
+  id: objectId,
+});
+
+export const patientIdParamSchema = z.object({
+  patientId: objectId,
 });
 
 export const updateEncounterSchema = createEncounterSchema.partial().refine(

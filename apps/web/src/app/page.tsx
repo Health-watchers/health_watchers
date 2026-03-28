@@ -1,4 +1,10 @@
+import { Metadata } from "next-intl";
 import { useTranslations } from "next-intl";
+
+export const metadata = {
+  title: "Dashboard",
+  description: "Overview of your healthcare dashboard - recent patients, upcoming appointments, and system status.",
+};
 
 export default function HomePage() {
   const t = useTranslations("home");
