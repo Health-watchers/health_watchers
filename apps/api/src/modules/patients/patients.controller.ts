@@ -1,22 +1,26 @@
 import { Router, Request, Response } from 'express';
-import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
-import { validateRequest } from '@api/middlewares/validate.middleware';
-import { asyncHandler } from '@api/utils/asyncHandler';
-import { paginate, parsePagination } from '@api/utils/paginate';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
-import {
-  createPatientSchema,
-  updatePatientSchema,
-  CreatePatientDto,
-  UpdatePatientDto,
-} from './patients.validation';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { paginate, parsePagination } from '../../utils/paginate';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { PaymentRecordModel } from '../payments/models/payment-record.model';
+import { toPaymentResponse } from '../payments/payments.transformer';
 
 const router = Router();
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
+
+const ALLOWED_PATCH_FIELDS = new Set([
+  'firstName',
+  'lastName',
+  'dateOfBirth',
+  'sex',
+  'contactNumber',
+  'address',
+]);
 
 async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
@@ -29,18 +33,18 @@ async function nextSystemId(clinicId: string): Promise<string> {
   return `HW-${short}-${padded}`;
 }
 
-// GET /patients
+// GET /patients?page=1&limit=20&clinicId=
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, string>);
+    const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
       return res
         .status(400)
         .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
-    const filter: Record<string, unknown> = { isActive: true };
+    const filter: Record<string, any> = { isActive: true };
     if (req.query.clinicId) filter.clinicId = req.query.clinicId;
 
     const result = await paginate(PatientModel, filter, page, limit);
@@ -52,19 +56,27 @@ router.get(
   }),
 );
 
-// GET /patients/search
+// GET /patients/search?q=
 router.get(
   '/search',
   asyncHandler(async (req: Request, res: Response) => {
-    const q = String(req.query.q || '')
-      .toLowerCase()
-      .trim();
-    const docs = await PatientModel.find({
-      clinicId: req.user!.clinicId,
-      isActive: true,
-      searchName: { $regex: q, $options: 'i' },
-    }).sort({ createdAt: -1 });
-    return res.json({ status: 'success', data: docs.map(toPatientResponse) });
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const q = String(req.query.q || '').trim();
+    const filter: Record<string, any> = { isActive: true };
+    if (q) filter.searchName = { $regex: q, $options: 'i' };
+
+    const result = await paginate(PatientModel, filter, page, limit);
+    return res.json({
+      status: 'success',
+      data: result.data.map(toPatientResponse),
+      meta: result.meta,
+    });
   }),
 );
 
@@ -72,7 +84,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const doc = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(doc) });
   }),
@@ -81,48 +93,68 @@ router.get(
 // POST /patients
 router.post(
   '/',
-  WRITE_ROLES,
-  validateRequest({ body: createPatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as CreatePatientDto;
-    const { firstName, lastName, ...rest } = body;
-    const clinicId = req.user!.clinicId;
-    const searchName = `${lastName.toLowerCase()} ${firstName.toLowerCase()}`;
-    const systemId = await nextSystemId(clinicId);
-    const patient = await PatientModel.create({
-      ...rest,
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
+    const searchName = `${firstName} ${lastName}`.toLowerCase();
+    const systemId = await nextSystemId(clinicId || 'default');
+    const doc = await PatientModel.create({
+      systemId,
       firstName,
       lastName,
+      dateOfBirth: new Date(dateOfBirth),
+      sex,
+      contactNumber,
+      address,
+      clinicId: clinicId || 'default',
+      isActive: true,
       searchName,
-      systemId,
-      clinicId,
     });
-    return res.status(201).json({ status: 'success', data: toPatientResponse(patient) });
+    return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   }),
 );
 
-// PATCH /patients/:id
-router.patch(
-  '/:id',
-  WRITE_ROLES,
-  validateRequest({ body: updatePatientSchema }),
-  asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as UpdatePatientDto;
-    const { firstName, lastName, ...rest } = body;
-    const update: Record<string, unknown> = { ...rest };
-    if (firstName) update.firstName = firstName;
-    if (lastName) update.lastName = lastName;
-    if (firstName || lastName) {
-      const existing = await PatientModel.findOne({
-        _id: req.params.id,
-        clinicId: req.user!.clinicId,
-      });
-      if (!existing)
-        return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-      const fn = firstName ?? existing.firstName;
-      const ln = lastName ?? existing.lastName;
-      update.searchName = `${ln.toLowerCase()} ${fn.toLowerCase()}`;
+// PUT /patients/:id
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
+  const update: Record<string, any> = { contactNumber, address, sex };
+  if (firstName) { update.firstName = firstName; }
+  if (lastName)  { update.lastName  = lastName;  }
+  if (firstName || lastName) {
+    update.searchName = `${firstName || ''} ${lastName || ''}`.toLowerCase().trim();
+  }
+  if (dateOfBirth) update.dateOfBirth = new Date(dateOfBirth);
+
+  const doc = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
+  if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  return res.json({ status: 'success', data: toPatientResponse(doc) });
+}));
+
+// PATCH /patients/:id — partial update of allowed fields only
+router.patch('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Response) => {
+  try {
+    const disallowed = Object.keys(req.body).filter((k) => !ALLOWED_PATCH_FIELDS.has(k));
+    if (disallowed.length > 0) {
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: `Field(s) not updatable: ${disallowed.join(', ')}` });
     }
+
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
+    const update: Record<string, any> = {};
+    if (sex !== undefined) update.sex = sex;
+    if (contactNumber !== undefined) update.contactNumber = contactNumber;
+    if (address !== undefined) update.address = address;
+    if (firstName !== undefined) update.firstName = firstName;
+    if (lastName !== undefined) update.lastName = lastName;
+    if (dateOfBirth !== undefined) update.dateOfBirth = new Date(dateOfBirth);
+    if (firstName !== undefined || lastName !== undefined) {
+      const doc = await PatientModel.findById(req.params.id);
+      if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+      update.searchName = `${firstName ?? doc.firstName} ${lastName ?? doc.lastName}`
+        .toLowerCase()
+        .trim();
+    }
+
     const updated = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!updated) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(updated) });
@@ -130,10 +162,8 @@ router.patch(
 );
 
 // DELETE /patients/:id — soft delete
-router.delete(
-  '/:id',
-  WRITE_ROLES,
-  asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Response) => {
+  try {
     const doc = await PatientModel.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
@@ -143,5 +173,39 @@ router.delete(
     return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
   }),
 );
+
+// GET /patients/:id/payments
+router.get('/:id/payments', asyncHandler(async (req: Request, res: Response) => {
+  const pagination = parsePagination(req.query as Record<string, any>);
+  if (!pagination) {
+    return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+  }
+  const { page, limit } = pagination;
+
+  // First verify patient belongs to the caller's clinic
+  const patient = await PatientModel.findOne({ 
+    _id: req.params.id, 
+    clinicId: req.user!.clinicId,
+    isActive: true 
+  });
+  
+  if (!patient) {
+    return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  }
+
+  // Query payment records by patientId and clinicId
+  const filter = { 
+    patientId: req.params.id,
+    clinicId: req.user!.clinicId 
+  };
+
+  const result = await paginate(PaymentRecordModel, filter, page, limit);
+  
+  return res.json({ 
+    status: 'success', 
+    data: result.data.map(toPaymentResponse), 
+    meta: result.meta 
+  });
+}));
 
 export const patientRoutes = router;

@@ -22,7 +22,8 @@ function getGeminiClient(): GoogleGenerativeAI {
 export interface ClinicalNotesInput {
   chiefComplaint: string;
   notes?: string;
-  treatmentPlan?: string;
+  diagnosis?: any;
+  vitalSigns?: any;
 }
 
 /**
@@ -39,12 +40,13 @@ Keep the summary to 2-3 sentences and focus on the most important clinical findi
 
 Chief Complaint: ${clinicalNotes.chiefComplaint}
 ${clinicalNotes.notes ? `Clinical Notes: ${clinicalNotes.notes}` : ''}
-${clinicalNotes.treatmentPlan ? `Treatment Plan: ${clinicalNotes.treatmentPlan}` : ''}
+${clinicalNotes.diagnosis ? `Diagnosis: ${JSON.stringify(clinicalNotes.diagnosis)}` : ''}
+${clinicalNotes.vitalSigns ? `Vital Signs: ${JSON.stringify(clinicalNotes.vitalSigns)}` : ''}
 
 Generate a professional clinical summary:`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-pro' });
+    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(prompt);
     const response = result.response;
     const text = response.text();

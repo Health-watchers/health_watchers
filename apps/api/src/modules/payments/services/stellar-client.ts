@@ -30,8 +30,7 @@ class StellarClient {
   private baseUrl: string;
 
   constructor() {
-    // Stellar service URL from config or default to localhost:3002
-    this.baseUrl = config.stellarServiceUrl || 'http://localhost:3002';
+    this.baseUrl = config.stellarServiceUrl;
 
     this.client = axios.create({
       baseURL: this.baseUrl,

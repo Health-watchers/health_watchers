@@ -11,6 +11,17 @@ import { queryKeys } from '@/lib/queryKeys';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 
+function getPaymentsErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unable to load payments right now.';
+  if (error.message.includes('Failed to fetch')) {
+    return 'Unable to reach the server. Please check your connection and try again.';
+  }
+  if (error.message.startsWith('Request failed')) {
+    return 'Unable to load payments right now. Please try again.';
+  }
+  return error.message;
+}
+
 export default function PaymentsClient() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -72,14 +83,22 @@ export default function PaymentsClient() {
       </div>
 
       {isLoading && (
-        <p role="status" aria-live="polite" className="text-neutral-500 py-8">
-          Loading payments…
-        </p>
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 py-8 text-neutral-500"
+        >
+          <span
+            className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
+            aria-hidden="true"
+          />
+          <span>Loading payments...</span>
+        </div>
       )}
 
       {error && (
         <ErrorMessage
-          message={error instanceof Error ? error.message : 'Failed to load payments.'}
+          message={getPaymentsErrorMessage(error)}
           onRetry={() =>
             queryClient.invalidateQueries({
               queryKey: queryKeys.payments.list(),
@@ -88,7 +107,19 @@ export default function PaymentsClient() {
         />
       )}
 
-      {!isLoading && !error && (
+      {!isLoading && !error && payments.length === 0 && (
+        <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center">
+          <h2 className="text-lg font-semibold text-neutral-900">No records found</h2>
+          <p className="mt-2 text-sm text-neutral-600">
+            No payments found. Create a new payment to get started.
+          </p>
+          <Button className="mt-5" onClick={() => setShowForm(true)}>
+            + New Payment
+          </Button>
+        </div>
+      )}
+
+      {!isLoading && !error && payments.length > 0 && (
         <PaymentTable payments={payments} network={NETWORK} onConfirm={handleConfirm} />
       )}
 

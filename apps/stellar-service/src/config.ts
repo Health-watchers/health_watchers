@@ -10,7 +10,6 @@ export const stellarConfig = {
   mainnetConfirmed: process.env.STELLAR_MAINNET_CONFIRMED === 'true',
   dryRun: process.env.STELLAR_DRY_RUN === 'true',
   maxTransactionXlm: parseFloat(process.env.STELLAR_MAX_TRANSACTION_XLM || '1000'),
-  port: process.env.STELLAR_SERVICE_PORT || '3002',
-  /** Server-side Stellar secret key — NEVER accept this from callers */
-  stellarSecretKey: process.env.STELLAR_SECRET_KEY ?? null,
+  // Prefer STELLAR_PORT, keep STELLAR_SERVICE_PORT for backward compatibility.
+  port: process.env.STELLAR_PORT || process.env.STELLAR_SERVICE_PORT || '3002',
 };

@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { isAIServiceAvailable, generateClinicalSummary } from './ai.service';
+import { isValidObjectId } from 'mongoose';
+import { generateClinicalSummary, isAIServiceAvailable } from './ai.service';
+import { authenticate } from '../../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -9,13 +11,12 @@ router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 // POST /api/v1/ai/summarize
 // Request body: { encounterId: string }
 // Returns: { success: boolean, summary: string } or error responses
-router.post('/summarize', async (req: Request, res: Response) => {
+router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   try {
     // Check if AI service is available
     if (!isAIServiceAvailable()) {
       return res.status(503).json({
-        error: 'AIServiceUnavailable',
-        message: 'AI service is not configured. Please set GEMINI_API_KEY environment variable.',
+        error: 'AIUnavailable',
       });
     }
 
@@ -29,7 +30,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
     }
 
     // Validate encounterId is a valid MongoDB ObjectId
-    if (!/^[a-f\d]{24}$/i.test(encounterId)) {
+    if (!isValidObjectId(encounterId)) {
       return res.status(400).json({
         error: 'ValidationError',
         message: 'Invalid encounterId format',
@@ -52,7 +53,8 @@ router.post('/summarize', async (req: Request, res: Response) => {
     const summary = await generateClinicalSummary({
       chiefComplaint: encounter.chiefComplaint,
       notes: encounter.notes,
-      treatmentPlan: encounter.treatmentPlan,
+      diagnosis: encounter.diagnosis,
+      vitalSigns: encounter.vitalSigns,
     });
 
     // Store the summary in the encounter

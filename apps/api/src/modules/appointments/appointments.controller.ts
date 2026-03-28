@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { authenticate } from '@api/middlewares/auth.middleware';
 
 export const appointmentRoutes = Router();
 
@@ -107,10 +107,12 @@ appointmentRoutes.post('/', async (req: Request, res: Response) => {
     const { patientId, doctorId, scheduledAt, durationMinutes = 30, reason, notes } = req.body;
 
     if (!patientId || !doctorId || !scheduledAt) {
-      return res.status(400).json({
-        error: 'BadRequest',
-        message: 'patientId, doctorId, and scheduledAt are required',
-      });
+      return res
+        .status(400)
+        .json({
+          error: 'BadRequest',
+          message: 'patientId, doctorId, and scheduledAt are required',
+        });
     }
 
     const start = new Date(scheduledAt);

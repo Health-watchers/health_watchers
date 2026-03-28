@@ -1,5 +1,5 @@
-import { Schema, model, models } from 'mongoose';
-import { sanitizeText } from '@api/utils/sanitize';
+import { Schema, model, models } from "mongoose";
+import { sanitizeText } from "../../utils/sanitize";
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -75,18 +75,18 @@ const prescriptionSchema = new Schema<Prescription>(
 
 const encounterSchema = new Schema<Encounter>(
   {
-    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    chiefComplaint: { type: String, required: true },
-    status: { type: String, enum: ['open', 'closed', 'follow-up'], default: 'open', index: true },
-    notes: { type: String },
-    treatmentPlan: { type: String },
-    diagnosis: { type: [diagnosisSchema], default: undefined },
-    vitalSigns: { type: vitalSignsSchema },
-    prescriptions: { type: [prescriptionSchema], default: undefined },
-    followUpDate: { type: Date },
-    aiSummary: { type: String },
+    patientId:         { type: Schema.Types.ObjectId, ref: "Patient",  required: true, index: true },
+    clinicId:          { type: Schema.Types.ObjectId, ref: "Clinic",   required: true, index: true },
+    attendingDoctorId: { type: Schema.Types.ObjectId, ref: "User",     required: true, index: true },
+    chiefComplaint:    { type: String, required: true },
+    status:            { type: String, enum: ["open", "closed", "follow-up"], default: "open", index: true },
+    notes:             { type: String },
+    treatmentPlan:     { type: String },
+    diagnosis:         { type: [diagnosisSchema], default: undefined },
+    vitalSigns:        { type: vitalSignsSchema },
+    prescriptions:     { type: [prescriptionSchema], default: undefined },
+    followUpDate:      { type: Date },
+    aiSummary:         { type: String },
   },
   { timestamps: true, versionKey: false },
 );
@@ -96,7 +96,7 @@ const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary
 encounterSchema.pre('save', function (this: Record<string, unknown>) {
   for (const field of FREE_TEXT_FIELDS) {
     const val = this[field];
-    if (val) this[field] = sanitizeText(val as string);
+    if (val) (this as any)[field] = sanitizeText(val);
   }
 });
 

@@ -1,6 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
+import { verifyAccessToken } from '@api/modules/auth/token.service';
 
 let io: SocketIOServer | null = null;
 
@@ -37,7 +37,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
   });
 
   io.on('connection', (socket: Socket) => {
-    const user = (socket as AuthenticatedSocket).user;
+    const user = (socket as any).user;
     const clinicRoom = `clinic:${user.clinicId}`;
 
     // Join the clinic-scoped room automatically
