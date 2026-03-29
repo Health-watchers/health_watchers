@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../modules/auth/token.service";
+import { AppRole } from "../types/express";
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -22,4 +23,15 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 
   req.user = payload;
   return next();
+}
+
+export function requireRoles(...roles: AppRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+    return next();
+  };
 }
