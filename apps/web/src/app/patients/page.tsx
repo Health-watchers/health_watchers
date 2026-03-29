@@ -1,5 +1,11 @@
+import { Metadata } from "next";
 import { useTranslations } from "next-intl";
 import PatientsClient from "./PatientsClient";
+
+export const metadata: Metadata = {
+  title: "Patients",
+  description: "Manage patient records, view medical history, and track patient care.",
+};
 
 export default function PatientsPage() {
   const t = useTranslations("patients");

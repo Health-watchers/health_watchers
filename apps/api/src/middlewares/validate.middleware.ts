@@ -29,6 +29,7 @@ export function validateRequest(schemas: ValidateOptions) {
           message: "Invalid request params",
           details: result.error.errors,
         });
+        return;
       }
     }
 

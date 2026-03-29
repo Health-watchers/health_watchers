@@ -17,6 +17,10 @@
     "medical-records",
     "monorepo"
   ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "packageManager": "npm@10.9.2",
   "workspaces": [
     "apps/*",
@@ -28,18 +32,38 @@
     "start": "turbo run start",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "husky",
     "seed": "ts-node -r tsconfig-paths/register --project scripts/tsconfig.seed.json scripts/seed.ts",
     "changeset": "changeset",
     "version": "changeset version && npm install --package-lock-only",
     "release": "changeset publish"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "25.5.0",
+    "@types/supertest": "^7.2.0",
+    "husky": "^9.1.7",
+    "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "turbo": "2.8.20",
-    "typescript": "6.0.2"
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -50,6 +74,7 @@
     "otplib": "^13.4.0",
     "qrcode": "^1.5.4",
     "react-hook-form": "^7.72.0",
+    "socket.io": "^4.8.1",
     "zod": "^4.3.6"
   }
 }

@@ -22,6 +22,73 @@ const INVALID = "Invalid email or password";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
+/** SHA-256 hash of a token for safe storage */
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// ── Role hierarchy: who can create whom ──────────────────────────────────
+const ROLE_CREATE_PERMISSIONS: Record<string, string[]> = {
+  SUPER_ADMIN:  ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
+  CLINIC_ADMIN: ['DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
+};
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Create a new user account (SUPER_ADMIN or CLINIC_ADMIN only)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password, role, clinicId]
+ *             properties:
+ *               fullName:  { type: string }
+ *               email:     { type: string, format: email }
+ *               password:  { type: string, minLength: 8 }
+ *               role:      { type: string, enum: [SUPER_ADMIN, CLINIC_ADMIN, DOCTOR, NURSE, ASSISTANT, READ_ONLY] }
+ *               clinicId:  { type: string }
+ *     responses:
+ *       201:
+ *         description: User created — tokens returned
+ *       409:
+ *         description: Email already in use
+ *       403:
+ *         description: Insufficient permissions to create this role
+ */
+router.post('/register', authenticate, validateRequest({ body: registerSchema }), async (req: RegisterReq, res: Response) => {
+  const callerRole = req.user!.role as string;
+  const allowed = ROLE_CREATE_PERMISSIONS[callerRole] ?? [];
+  if (!allowed.includes(req.body.role)) {
+    return res.status(403).json({ error: 'Forbidden', message: `A ${callerRole} cannot create a ${req.body.role} account` });
+  }
+
+  const existing = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
+  if (existing) return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
+
+  const user = await UserModel.create({
+    fullName: req.body.fullName,
+    email:    req.body.email.toLowerCase().trim(),
+    password: req.body.password,   // hashed by pre-save hook
+    role:     req.body.role,
+    clinicId: req.body.clinicId,
+  });
+
+  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+  const accessToken  = signAccessToken(p);
+  const refreshToken = signRefreshToken(p);
+
+  await UserModel.findByIdAndUpdate(user.id, { refreshTokenHash: hashToken(refreshToken) });
+
+  return res.status(201).json({ status: 'success', data: { accessToken, refreshToken } });
+});
+
 /**
  * @swagger
  * /auth/login:
@@ -36,41 +103,15 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               password:
- *                 type: string
- *                 minLength: 8
+ *               email:    { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
  *     responses:
  *       200:
  *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken:  { type: string }
- *                     refreshToken: { type: string }
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  *       401:
  *         description: Invalid credentials
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  *       423:
- *         description: Account temporarily locked due to too many failed login attempts
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
+ *         description: Account temporarily locked
  */
 router.post(
   "/login",
@@ -145,7 +186,7 @@ router.post(
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Refresh an access token using a refresh token
+ *     summary: Rotate refresh token and issue new access + refresh tokens
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -158,22 +199,9 @@ router.post(
  *               refreshToken: { type: string }
  *     responses:
  *       200:
- *         description: New access token issued
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string }
+ *         description: New tokens issued
  *       401:
- *         description: Invalid or expired refresh token
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
+ *         description: Invalid, expired, or already-rotated refresh token
  */
 router.post(
   "/refresh",
@@ -204,35 +232,36 @@ router.post(
 
 /**
  * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Invalidate the current refresh token
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ */
+router.post('/logout', authenticate, async (req: Request, res: Response) => {
+  await UserModel.findByIdAndUpdate(req.user!.userId, { refreshTokenHash: undefined });
+  return res.json({ status: 'success', data: { loggedOut: true } });
+});
+
+/**
+ * @swagger
  * /auth/mfa/setup:
  *   post:
  *     summary: Generate a TOTP secret and QR code URI for MFA setup
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: TOTP secret and QR code URI generated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     otpauthUrl: { type: string, description: "otpauth:// URI for QR code scanning" }
- *                     qrCodeDataUrl: { type: string, description: Base64 PNG data URL of the QR code }
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post("/mfa/setup", authenticate, async (req: Request, res: Response) => {
   const user = await UserModel.findById(req.user!.userId).select("+mfaSecret");
   if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const { generateSecret, generateURI } = await import('@otplib/core');
+  const qrcode = await import('qrcode');
 
   const secret = generateSecret();
   user.mfaSecret = secret;
@@ -256,38 +285,6 @@ router.post("/mfa/setup", authenticate, async (req: Request, res: Response) => {
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [totp]
- *             properties:
- *               totp: { type: string, length: 6, example: "123456" }
- *     responses:
- *       200:
- *         description: MFA enabled successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     mfaEnabled: { type: boolean, example: true }
- *       400:
- *         description: Invalid TOTP code
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       401:
- *         description: Unauthorized or MFA not set up
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post(
   "/mfa/verify",
@@ -328,40 +325,6 @@ router.post(
  *   post:
  *     summary: Complete MFA login — exchange temp token + TOTP for real tokens
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [tempToken, totp]
- *             properties:
- *               tempToken: { type: string, description: Temp token received from /auth/login }
- *               totp:      { type: string, length: 6, example: "123456" }
- *     responses:
- *       200:
- *         description: MFA verified — full tokens returned
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken:  { type: string }
- *                     refreshToken: { type: string }
- *       401:
- *         description: Invalid or expired temp token
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       400:
- *         description: Invalid TOTP code
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post(
   "/mfa/challenge",
@@ -418,41 +381,6 @@ router.post(
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [email]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *     responses:
- *       200:
- *         description: Account unlocked successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     unlocked: { type: boolean, example: true }
- *                     email:    { type: string }
- *       403:
- *         description: Forbidden — SUPER_ADMIN role required
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post("/unlock", authenticate, async (req: Request, res: Response) => {
   if (req.user!.role !== "SUPER_ADMIN")
