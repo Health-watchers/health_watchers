@@ -1,0 +1,37 @@
+version: '3.8'
+
+# Minimal dev dependency stack — MongoDB only.
+# Eliminates the need for a local MongoDB installation.
+# Usage: docker-compose -f docker-compose.dev.yml up -d
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: health-watchers-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: health-watchers-mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_BASICAUTH: "false"
+
+volumes:
+  mongo_data:
+    driver: local
