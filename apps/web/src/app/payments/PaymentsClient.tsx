@@ -1,16 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
 import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
 import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
 import { Button } from '@/components/ui/Button';
 import { queryKeys } from '@/lib/queryKeys';
-import { usePayments, type Payment } from '@/lib/queries';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
+
+function getPaymentsErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unable to load payments right now.';
+  if (error.message.includes('Failed to fetch')) {
+    return 'Unable to reach the server. Please check your connection and try again.';
+  }
+  if (error.message.startsWith('Request failed')) {
+    return 'Unable to load payments right now. Please try again.';
+  }
+  return error.message;
+}
 
 export default function PaymentsClient() {
   const queryClient = useQueryClient();
@@ -61,14 +71,22 @@ export default function PaymentsClient() {
       </div>
 
       {isLoading && (
-        <p role="status" aria-live="polite" className="text-neutral-500 py-8">
-          Loading payments…
-        </p>
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 py-8 text-neutral-500"
+        >
+          <span
+            className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
+            aria-hidden="true"
+          />
+          <span>Loading payments...</span>
+        </div>
       )}
 
       {error && (
         <ErrorMessage
-          message={error instanceof Error ? error.message : 'Failed to load payments.'}
+          message={getPaymentsErrorMessage(error)}
           onRetry={() =>
             queryClient.invalidateQueries({
               queryKey: queryKeys.payments.list(),

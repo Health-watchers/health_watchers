@@ -125,7 +125,7 @@ export default function EncounterForm({
     multiline?: boolean,
   ) => (
     <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-600">
         {label}
       </span>
       {multiline ? (
@@ -135,7 +135,7 @@ export default function EncounterForm({
             setValues((prev) => ({ ...prev, [key]: e.target.value }))
           }
           placeholder={placeholder}
-          className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+          className="min-h-24 w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
         />
       ) : (
         <input
@@ -144,11 +144,11 @@ export default function EncounterForm({
             setValues((prev) => ({ ...prev, [key]: e.target.value }))
           }
           placeholder={placeholder}
-          className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+          className="w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
         />
       )}
       {errors[key] ? (
-        <p className="mt-1 text-xs text-red-600">{errors[key]}</p>
+        <p className="mt-1 text-xs text-error-500">{errors[key]}</p>
       ) : null}
     </label>
   );
@@ -156,36 +156,36 @@ export default function EncounterForm({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-[560px] overflow-y-auto bg-[#f5f7fb] p-5 shadow-2xl">
+      <aside className="absolute right-0 top-0 h-full w-full max-w-[560px] overflow-y-auto bg-neutral-50 p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900">
+            <h2 className="text-2xl font-semibold text-neutral-900">
               Log Encounter
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-neutral-500">
               Step {step + 1} of {STEPS.length}: {STEPS[step]}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-2 text-gray-500 hover:bg-white"
+            className="rounded-md p-2 text-neutral-500 hover:bg-neutral-0"
           >
             ✕
           </button>
         </div>
 
-        <div className="mb-5 rounded-md bg-white p-3">
-          <div className="mb-2 h-2 overflow-hidden rounded-full bg-gray-100">
+        <div className="mb-5 rounded-md bg-neutral-0 p-3">
+          <div className="mb-2 h-2 overflow-hidden rounded-full bg-neutral-100">
             <div
-              className="h-full rounded-full bg-blue-700 transition-all"
+              className="h-full rounded-full bg-primary-700 transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className="grid grid-cols-3 text-[11px] font-medium text-gray-500">
+          <div className="grid grid-cols-3 text-[11px] font-medium text-neutral-500">
             {STEPS.map((title, index) => (
               <span
                 key={title}
-                className={index <= step ? "text-blue-700" : ""}
+                className={index <= step ? "text-primary-700" : ""}
               >
                 {title}
               </span>
@@ -193,7 +193,7 @@ export default function EncounterForm({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-lg bg-white p-4">
+        <div className="space-y-4 rounded-lg bg-neutral-0 p-4">
           {step === 0 ? (
             <>
               {field("patientName", "Patient Name", "Enter patient full name")}
@@ -203,7 +203,7 @@ export default function EncounterForm({
                 "Enter medical record number",
               )}
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-600">
                   Attending Doctor
                 </span>
                 <select
@@ -211,7 +211,7 @@ export default function EncounterForm({
                   onChange={(e) =>
                     setValues((prev) => ({ ...prev, doctor: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+                  className="w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
                 >
                   {doctors.map((doctor) => (
                     <option key={doctor} value={doctor}>
@@ -220,7 +220,7 @@ export default function EncounterForm({
                   ))}
                 </select>
                 {errors.doctor ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.doctor}</p>
+                  <p className="mt-1 text-xs text-error-500">{errors.doctor}</p>
                 ) : null}
               </label>
               {field(
@@ -252,7 +252,7 @@ export default function EncounterForm({
 
           {step === 2 ? (
             <>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+              <div className="rounded-md border border-primary-100 bg-primary-50 p-3 text-sm text-primary-800">
                 Review all entries before submission. Encounter will be saved to
                 patient history.
               </div>
@@ -263,7 +263,7 @@ export default function EncounterForm({
                 true,
               )}
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-600">
                   Follow-up Date
                 </span>
                 <input
@@ -275,10 +275,10 @@ export default function EncounterForm({
                       followUpDate: e.target.value,
                     }))
                   }
-                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400"
+                  className="w-full rounded-md border border-neutral-200 bg-neutral-0 px-3 py-2 text-sm text-neutral-700 outline-none focus:border-primary-400"
                 />
                 {errors.followUpDate ? (
-                  <p className="mt-1 text-xs text-red-600">
+                  <p className="mt-1 text-xs text-error-500">
                     {errors.followUpDate}
                   </p>
                 ) : null}
@@ -291,7 +291,7 @@ export default function EncounterForm({
           <button
             onClick={previous}
             disabled={step === 0}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-neutral-200 bg-neutral-0 px-4 py-2 text-sm font-medium text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back
           </button>
@@ -299,14 +299,14 @@ export default function EncounterForm({
           {step < STEPS.length - 1 ? (
             <button
               onClick={next}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+              className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-medium text-neutral-0 hover:bg-primary-800"
             >
               Continue
             </button>
           ) : (
             <button
               onClick={submit}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+              className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-medium text-neutral-0 hover:bg-primary-800"
             >
               Submit Encounter
             </button>

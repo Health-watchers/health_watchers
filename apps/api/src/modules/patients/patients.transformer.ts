@@ -1,6 +1,7 @@
 import { Document } from 'mongoose';
 
 export interface PatientResponse {
+  _id: string;
   id: string;
   systemId: string;
   firstName: string;
@@ -15,6 +16,7 @@ export interface PatientResponse {
 
 export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
   return {
+    _id:           String(doc._id),
     id:            String(doc._id),
     systemId:      doc.systemId,
     firstName:     doc.firstName,

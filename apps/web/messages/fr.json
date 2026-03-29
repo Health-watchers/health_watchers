@@ -13,7 +13,15 @@
   },
   "home": {
     "title": "Health Watchers",
-    "subtitle": "Dossier médical électronique assisté par IA, propulsé par la blockchain Stellar."
+    "subtitle": "Dossier médical électronique assisté par IA, propulsé par la blockchain Stellar.",
+    "stats": {
+      "todayPatients": "Patients d'aujourd'hui",
+      "openEncounters": "Consultations ouvertes",
+      "pendingPayments": "Paiements en attente",
+      "totalPatients": "Total des patients"
+    },
+    "loading": "Chargement du tableau de bord...",
+    "error": "Échec du chargement des statistiques du tableau de bord."
   },
   "patients": {
     "title": "Patients",

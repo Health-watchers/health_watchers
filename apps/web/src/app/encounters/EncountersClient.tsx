@@ -1,18 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, TableSkeleton, ModuleEmptyState, Button } from '@/components/ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
 } from '@/components/forms/CreateEncounterForm';
 import { queryKeys } from '@/lib/queryKeys';
-import { useEncounters, type Encounter } from '@/lib/queries';
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const API_V1 = API_BASE_URL.endsWith('/api/v1')
-  ? API_BASE_URL
-  : `${API_BASE_URL.replace(/\/$/, '')}/api/v1`;
+
+const API = 'http://localhost:3001/api/v1';
+
+interface Encounter {
+  id: string;
+  patientId: string;
+  date: string;
+  notes: string;
+}
 
 interface Labels {
   title: string;
@@ -22,6 +26,17 @@ interface Labels {
   patient: string;
   date: string;
   notes: string;
+}
+
+function getEncounterErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unable to load encounters right now.';
+  if (error.message.includes('Failed to fetch')) {
+    return 'Unable to reach the server. Please check your connection and try again.';
+  }
+  if (error.message.startsWith('Request failed')) {
+    return 'Unable to load encounters right now. Please try again.';
+  }
+  return error.message;
 }
 
 export default function EncountersClient({ labels }: { labels: Labels }) {
@@ -35,7 +50,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
   const { data: encounters = [], isLoading, error } = useEncounters();
 
   const handleCreate = async (data: CreateEncounterData) => {
-    const res = await fetch(`${API_V1}/encounters`, {
+    const res = await fetch(`${API}/encounters`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -49,11 +64,11 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
   };
 
-  if (isLoading) return <TableSkeleton columns={4} rows={5} />;
+  if (isLoading) return <TableSkeleton columns={6} rows={5} />;
   if (error)
     return (
       <ErrorMessage
-        message={error instanceof Error ? error.message : 'Failed to load encounters.'}
+        message={getEncounterErrorMessage(error)}
         onRetry={() =>
           queryClient.invalidateQueries({
             queryKey: queryKeys.encounters.list(),
@@ -84,14 +99,13 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
       )}
 
       {encounters.length === 0 ? (
-        <ModuleEmptyState
-          module="encounters"
-          action={
-            <Button variant="primary" size="md" className="mt-2">
-              Create Encounter
-            </Button>
-          }
-        />
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
+          <h2 className="text-lg font-semibold text-gray-900">No records found</h2>
+          <p className="mt-2 text-sm text-gray-600">{labels.empty}</p>
+          <Button variant="primary" size="md" className="mt-5" onClick={() => setShowForm(true)}>
+            Create Encounter
+          </Button>
+        </div>
       ) : (
         <ul aria-label={labels.title} className="flex flex-col gap-4 list-none p-0 m-0">
           {encounters.map((e: Encounter) => (

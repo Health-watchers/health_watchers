@@ -12,6 +12,7 @@ export default async function Navbar() {
     { href: "/patients", label: t("patients") },
     { href: "/encounters", label: t("encounters") },
     { href: "/payments", label: t("payments") },
+    { href: "/settings", label: "Settings" },
   ];
 
   return <NavbarClient links={links} locale={locale} />;
