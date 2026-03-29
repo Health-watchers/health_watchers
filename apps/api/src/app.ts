@@ -52,7 +52,36 @@ app.use(express.json({ limit: standardLimit }));
 // Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
 app.use(mongoSanitize({ replaceWith: '_' }));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'health-watchers-api' }));
+app.get('/health', async (_req, res) => {
+  const STELLAR_HEALTH_URL =
+    process.env.STELLAR_SERVICE_URL
+      ? `${process.env.STELLAR_SERVICE_URL}/health`
+      : 'http://stellar-service:3002/health';
+
+  const mongoOk = mongoose.connection.readyState === 1;
+
+  let stellarOk = false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const resp = await fetch(STELLAR_HEALTH_URL, { signal: controller.signal });
+    clearTimeout(timeout);
+    stellarOk = resp.ok;
+  } catch {
+    stellarOk = false;
+  }
+
+  const healthy = mongoOk && stellarOk;
+  const status = healthy ? 'ok' : 'degraded';
+
+  res.status(healthy ? 200 : 503).json({
+    status,
+    checks: {
+      mongo: mongoOk ? 'ok' : 'error',
+      stellar: stellarOk ? 'ok' : 'error',
+    },
+  });
+});
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
