@@ -18,6 +18,7 @@ import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
+import { authLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import {
   startPaymentExpirationJob,
@@ -86,7 +87,11 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'health-watchers-api' }));
 
-app.use('/api/v1/auth', authRoutes);
+// Apply general rate limiter to all API routes
+app.use('/api/v1', generalLimiter);
+
+// Apply strict rate limiter to auth routes (login + refresh brute-force protection)
+app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/patients', patientRoutes);
