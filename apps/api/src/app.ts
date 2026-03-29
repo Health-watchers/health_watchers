@@ -1,15 +1,18 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import compression from 'compression';
 import mongoose from 'mongoose';
-import {config} from '@health-watchers/config';   // adjust path if your config package is different
+import {config} from '@health-watchers/config';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // ========================
-// SECURITY MIDDLEWARE
+// SECURITY & PERFORMANCE MIDDLEWARE
 // ========================
+
+// 1. Helmet (Security) - First
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -33,13 +36,25 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
+// 2. Compression (Performance) - Should come early, after helmet
+app.use(compression({
+  level: 6,                    // Balance between speed and compression ratio
+  threshold: 1024,             // Only compress responses larger than 1KB
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+// 3. CORS
 app.use(cors({
   origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsers
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ========================
 // DATABASE CONNECTION
@@ -47,31 +62,36 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = config.mongoUri;
-
     if (!mongoUri) {
-      console.error('❌ MONGO_URI is not defined in environment variables');
+      console.error('❌ MONGO_URI is not defined');
       process.exit(1);
     }
 
     await mongoose.connect(mongoUri);
-
-    // Log only the host (never log credentials)
     const host = new URL(mongoUri).hostname;
-    console.log(`✅ MongoDB connected successfully to ${host}`);
-
+    console.log(`✅ MongoDB connected to ${host}`);
   } catch (error: any) {
     console.error('❌ MongoDB connection failed:', error.message);
-    process.exit(1); // Fail fast - don't start server without DB
+    process.exit(1);
   }
 };
 
-// MongoDB error handling after initial connection
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
+// ========================
+// BASIC HEALTH ROUTE
+// ========================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    message: 'Health Watchers API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    compression: 'enabled'
+  });
 });
 
-mongoose.connection.on('disconnected', () => {
-  console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
+// 404 Handler
+app.use('*', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
 });
 
 // ========================
@@ -81,11 +101,10 @@ const startServer = async () => {
   await connectDB();
 
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Server running on http://localhost:${PORT} with gzip compression enabled`);
   });
 };
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err: any) => {
   console.error('Unhandled Rejection:', err.message);
   process.exit(1);
