@@ -55,7 +55,6 @@ app.post('/intent', requireSecret, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
 
 // ✅ PUBLIC: GET /verify/:hash (no auth needed)
 app.get('/verify/:hash', async (req, res) => {
