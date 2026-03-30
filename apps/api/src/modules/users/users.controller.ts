@@ -1,36 +1,404 @@
-import { Router, Request, Response } from 'express';
-import { authenticate } from '@api/middlewares/auth.middleware';
-import { asyncHandler } from '@api/middlewares/async.handler';
-import { UserModel } from '../auth/models/user.model';
-import { ClinicModel } from '../clinics/clinic.model';
+import { Request, Response, Router } from "express";
+import { z } from "zod";
+import bcrypt from "bcryptjs";
+import { authenticator } from "otplib";
+import QRCode from "qrcode";
+import { authenticate } from "@api/middlewares/auth.middleware";
+import { validateRequest } from "@api/middlewares/validate.middleware";
+import { UserModel } from "../auth/models/user.model";
+
+const updateProfileSchema = z.object({
+  fullName: z.string().min(1, "Full name is required").max(100),
+});
 
 const router = Router();
-router.use(authenticate);
 
-// GET /users/me
-router.get(
-  '/me',
-  asyncHandler(async (req: Request, res: Response) => {
-    const user = await UserModel.findById(req.user!.userId).lean();
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'User not found or deactivated' });
+/**
+ * @swagger
+ * /users/me:
+ *   get:
+ *     summary: Get the authenticated user's profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     fullName:    { type: string }
+ *                     email:       { type: string }
+ *                     role:        { type: string }
+ *                     clinic:      { type: string }
+ *                     mfaEnabled:  { type: boolean }
+ *                     preferences:
+ *                       type: object
+ *                       properties:
+ *                         language:             { type: string }
+ *                         emailNotifications:   { type: boolean }
+ *                         inAppNotifications:   { type: boolean }
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/me", authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).lean();
+  if (!user) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", message: "User not found" });
+  }
+
+  return res.json({
+    status: "success",
+    data: {
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      clinic: String(user.clinicId),
+      mfaEnabled: user.mfaEnabled,
+      preferences: {
+        language: user.preferences?.language ?? "en",
+        emailNotifications: user.preferences?.emailNotifications ?? true,
+        inAppNotifications: user.preferences?.inAppNotifications ?? true,
+      },
+    },
+  });
+});
+
+/**
+ * @swagger
+ * /users/me/profile:
+ *   patch:
+ *     summary: Update the authenticated user's profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName]
+ *             properties:
+ *               fullName: { type: string, minLength: 1, maxLength: 100 }
+ *     responses:
+ *       200:
+ *         description: Updated user profile
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch(
+  "/me/profile",
+  authenticate,
+  validateRequest({ body: updateProfileSchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
     }
 
-    const clinic = await ClinicModel.findById(user.clinicId).lean();
+    user.fullName = req.body.fullName;
+    await user.save();
 
-    res.set('Cache-Control', 'private, max-age=60');
     return res.json({
-      status: 'success',
+      status: "success",
       data: {
-        userId:     String(user._id),
-        fullName:   user.fullName,
-        email:      user.email,
-        role:       user.role,
-        clinicId:   String(user.clinicId),
-        clinicName: clinic?.name ?? null,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        clinic: String(user.clinicId),
+        mfaEnabled: user.mfaEnabled,
+        preferences: {
+          language: user.preferences?.language ?? "en",
+          emailNotifications: user.preferences?.emailNotifications ?? true,
+          inAppNotifications: user.preferences?.inAppNotifications ?? true,
+        },
       },
     });
-  }),
+  },
 );
 
-export const userRoutes = router;
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+/**
+ * @swagger
+ * /users/me/password:
+ *   post:
+ *     summary: Change the authenticated user's password
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword: { type: string, minLength: 8 }
+ *     responses:
+ *       200:
+ *         description: Password updated successfully
+ *       400:
+ *         description: Current password is incorrect or validation error
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  "/me/password",
+  authenticate,
+  validateRequest({ body: changePasswordSchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId).select("+password");
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(
+      req.body.currentPassword,
+      user.password,
+    );
+    if (!isMatch) {
+      return res.status(400).json({
+        error: "BadRequest",
+        message: "Current password is incorrect",
+      });
+    }
+
+    user.password = req.body.newPassword;
+    await user.save();
+
+    return res.json({
+      status: "success",
+      message: "Password updated successfully",
+    });
+  },
+);
+
+const mfaVerifySchema = z.object({
+  code: z.string().regex(/^\d{6}$/, "Must be a 6-digit code"),
+});
+
+/**
+ * @swagger
+ * /users/me/mfa/enable:
+ *   post:
+ *     summary: Generate a TOTP secret and QR code for MFA setup
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: QR code URL and secret for MFA setup
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  "/me/mfa/enable",
+  authenticate,
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri(user.email, "HealthWatchers", secret);
+    const qrCodeUrl = await QRCode.toDataURL(otpauth);
+
+    user.mfaSecret = secret;
+    await user.save();
+
+    return res.json({
+      status: "success",
+      data: { qrCodeUrl, secret },
+    });
+  },
+);
+
+/**
+ * @swagger
+ * /users/me/mfa/verify:
+ *   post:
+ *     summary: Verify a TOTP code and activate MFA
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code]
+ *             properties:
+ *               code: { type: string, pattern: '^\d{6}$' }
+ *     responses:
+ *       200:
+ *         description: MFA enabled successfully
+ *       400:
+ *         description: Invalid verification code
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  "/me/mfa/verify",
+  authenticate,
+  validateRequest({ body: mfaVerifySchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId).select(
+      "+mfaSecret",
+    );
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
+    const isValid = authenticator.verify({
+      token: req.body.code,
+      secret: user.mfaSecret ?? "",
+    });
+
+    if (!isValid) {
+      return res.status(400).json({
+        error: "BadRequest",
+        message: "Invalid verification code",
+      });
+    }
+
+    user.mfaEnabled = true;
+    await user.save();
+
+    return res.json({
+      status: "success",
+      message: "MFA enabled successfully",
+    });
+  },
+);
+
+/**
+ * @swagger
+ * /users/me/mfa/disable:
+ *   post:
+ *     summary: Disable MFA for the authenticated user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: MFA disabled successfully
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  "/me/mfa/disable",
+  authenticate,
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
+    user.mfaEnabled = false;
+    user.mfaSecret = undefined;
+    await user.save();
+
+    return res.json({
+      status: "success",
+      message: "MFA disabled successfully",
+    });
+  },
+);
+
+const updatePreferencesSchema = z.object({
+  language: z.enum(["en", "fr"]).optional(),
+  emailNotifications: z.boolean().optional(),
+  inAppNotifications: z.boolean().optional(),
+});
+
+/**
+ * @swagger
+ * /users/me/preferences:
+ *   patch:
+ *     summary: Update the authenticated user's preferences
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               language:             { type: string, enum: [en, fr] }
+ *               emailNotifications:   { type: boolean }
+ *               inAppNotifications:   { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Updated preferences
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch(
+  "/me/preferences",
+  authenticate,
+  validateRequest({ body: updatePreferencesSchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "User not found" });
+    }
+
+    const { language, emailNotifications, inAppNotifications } = req.body;
+
+    if (language !== undefined) user.preferences.language = language;
+    if (emailNotifications !== undefined)
+      user.preferences.emailNotifications = emailNotifications;
+    if (inAppNotifications !== undefined)
+      user.preferences.inAppNotifications = inAppNotifications;
+
+    await user.save();
+
+    return res.json({
+      status: "success",
+      data: {
+        preferences: {
+          language: user.preferences.language,
+          emailNotifications: user.preferences.emailNotifications,
+          inAppNotifications: user.preferences.inAppNotifications,
+        },
+      },
+    });
+  },
+);
+
+export const usersRoutes = router;

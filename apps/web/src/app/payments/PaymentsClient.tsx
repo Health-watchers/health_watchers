@@ -1,26 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
-import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
-import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
-import { Button } from '@/components/ui/Button';
-import { queryKeys } from '@/lib/queryKeys';
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ErrorMessage,
+  Toast,
+  SlideOver,
+  PageWrapper,
+  PageHeader,
+} from "@/components/ui";
+import { PaymentTable, type Payment } from "@/components/payments/PaymentTable";
+import {
+  PaymentIntentForm,
+  type PaymentIntentData,
+} from "@/components/forms/PaymentIntentForm";
+import { Button } from "@/components/ui/Button";
+import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
-
-function getPaymentsErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unable to load payments right now.';
-  if (error.message.includes('Failed to fetch')) {
-    return 'Unable to reach the server. Please check your connection and try again.';
-  }
-  if (error.message.startsWith('Request failed')) {
-    return 'Unable to load payments right now. Please try again.';
-  }
-  return error.message;
-}
+const API = `${API_URL}/api/v1`;
+const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet";
 
 export default function PaymentsClient() {
   const queryClient = useQueryClient();
@@ -30,19 +29,7 @@ export default function PaymentsClient() {
     type: 'success' | 'error';
   } | null>(null);
 
-  const {
-    data: payments = [],
-    isLoading,
-    error,
-  } = useQuery<Payment[]>({
-    queryKey: queryKeys.payments.list(),
-    queryFn: async () => {
-      const res = await fetch(`${API}/payments`);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data ?? data ?? [];
-    },
-  });
+  const { data: payments = [], isLoading, error } = usePayments();
 
   const handleCreate = async (data: PaymentIntentData) => {
     const res = await fetch(`${API}/payments/intent`, {
@@ -107,19 +94,7 @@ export default function PaymentsClient() {
         />
       )}
 
-      {!isLoading && !error && payments.length === 0 && (
-        <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center">
-          <h2 className="text-lg font-semibold text-neutral-900">No records found</h2>
-          <p className="mt-2 text-sm text-neutral-600">
-            No payments found. Create a new payment to get started.
-          </p>
-          <Button className="mt-5" onClick={() => setShowForm(true)}>
-            + New Payment
-          </Button>
-        </div>
-      )}
-
-      {!isLoading && !error && payments.length > 0 && (
+      {!isLoading && !error && (
         <PaymentTable payments={payments} network={NETWORK} onConfirm={handleConfirm} />
       )}
 

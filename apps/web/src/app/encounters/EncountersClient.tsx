@@ -6,10 +6,11 @@ import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
-} from '@/components/forms/CreateEncounterForm';
-import { queryKeys } from '@/lib/queryKeys';
+} from "@/components/forms/CreateEncounterForm";
+import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
 
-const API = 'http://localhost:3001/api/v1';
+const API = `${API_URL}/api/v1`;
 
 interface Encounter {
   id: string;
@@ -47,19 +48,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
     type: 'success' | 'error';
   } | null>(null);
 
-  const {
-    data: encounters = [],
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: queryKeys.encounters.list(),
-    queryFn: async () => {
-      const res = await fetch(`${API}/encounters`);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data || data || [];
-    },
-  });
+  const { data: encounters = [], isLoading, error } = useEncounters();
 
   const handleCreate = async (data: CreateEncounterData) => {
     const res = await fetch(`${API}/encounters`, {

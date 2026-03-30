@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { PageWrapper, PageHeader, Button } from '@/components/ui'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { RecentTable } from '@/components/dashboard/RecentTable'
+import { API_URL } from '@/lib/api'
 
-const API = 'http://localhost:3001/api/v1'
+const API = `${API_URL}/api/v1`
 
 async function fetchDashboard() {
   const res = await fetch(`${API}/dashboard`)

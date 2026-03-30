@@ -15,6 +15,7 @@ router.use(authenticate);
 router.use(auditLog('Patient'));
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
+const ADMIN_ROLES  = requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN');
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'firstName',
@@ -31,7 +32,7 @@ async function nextSystemId(clinicId: string): Promise<string> {
     { $inc: { value: 1 } },
     { new: true, upsert: true },
   );
-  const short = clinicId.slice(-6).toUpperCase();
+  const short  = clinicId.slice(-6).toUpperCase();
   const padded = String(counter!.value).padStart(6, '0');
   return `HW-${short}-${padded}`;
 }

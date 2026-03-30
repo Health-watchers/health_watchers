@@ -1,7 +1,8 @@
-import './config/env'; // must be first — validates all required env vars before anything else
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
-import mongoSanitize from 'express-mongo-sanitize';
+import compression from 'compression';
+import morgan from 'morgan';
 import mongoose from 'mongoose';
 import { config } from '@health-watchers/config';
 import { connectDB } from './config/db';
@@ -10,12 +11,14 @@ import { userRoutes } from './modules/users/users.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { paymentRoutes } from './modules/payments/payments.controller';
+import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
+import { authLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import {
   startPaymentExpirationJob,
@@ -24,17 +27,24 @@ import {
 import logger from './utils/logger';
 
 const app = express();
-app.disable('x-powered-by');
+const PORT = process.env.PORT || 4000;
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
-  .split(',')
-  .map((o) => o.trim());
+// ========================
+// SECURITY & PERFORMANCE MIDDLEWARE
+// ========================
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      callback(Object.assign(new Error('Not allowed by CORS'), { status: 403 }));
+// 1. Helmet (Security) - First
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
     },
     credentials: true,
   }),
@@ -47,6 +57,29 @@ const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
 // AI routes allow larger payloads for summarization (default 500kb)
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
 
+// ========================
+// HTTP REQUEST LOGGING
+// ========================
+
+// 4. Morgan - HTTP request logger
+// Route output through the structured pino logger
+const morganStream = {
+  write: (message: string) => logger.info(message.trimEnd()),
+};
+
+const isProd = process.env.NODE_ENV === 'production';
+
+// In production, skip /health to reduce noise
+const skipHealthInProd = (req: express.Request) =>
+  isProd && req.path === '/health';
+
+app.use(
+  morgan(isProd ? 'combined' : 'dev', {
+    stream: morganStream,
+    skip: skipHealthInProd,
+  }),
+);
+
 app.use(express.json({ limit: standardLimit }));
 
 // Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
@@ -54,7 +87,12 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'health-watchers-api' }));
 
-app.use('/api/v1/auth', authRoutes);
+// Apply general rate limiter to all API routes
+app.use('/api/v1', generalLimiter);
+
+// Apply strict rate limiter to auth routes (login + refresh brute-force protection)
+app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
@@ -73,49 +111,53 @@ app.use(errorHandler);
 
 async function start() {
   try {
-    await connectDB();
-
-    // Start background jobs
-    startPaymentExpirationJob();
-
-    const server = app.listen(config.apiPort, () => {
-      logger.info(`Health Watchers API running on port ${config.apiPort}`);
-    });
-
-    const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10000);
-
-    async function shutdown(signal: string) {
-      logger.info({ signal }, 'Shutting down gracefully...');
-
-      // Stop background jobs
-      stopPaymentExpirationJob();
-
-      server.close(async () => {
-        logger.info('HTTP server closed');
-        try {
-          await mongoose.disconnect();
-          logger.info('MongoDB connection closed');
-          process.exit(0);
-        } catch (err) {
-          logger.error({ err }, 'Error closing MongoDB connection');
-          process.exit(1);
-        }
-      });
-
-      setTimeout(() => {
-        logger.error('Shutdown timeout exceeded — forcing exit');
-        process.exit(1);
-      }, SHUTDOWN_TIMEOUT_MS).unref();
+    const mongoUri = config.mongoUri;
+    if (!mongoUri) {
+      console.error('❌ MONGO_URI is not defined');
+      process.exit(1);
     }
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-  } catch (err) {
-    logger.error({ err }, 'Failed to start API');
+    await mongoose.connect(mongoUri);
+    const host = new URL(mongoUri).hostname;
+    console.log(`✅ MongoDB connected to ${host}`);
+  } catch (error: any) {
+    console.error('❌ MongoDB connection failed:', error.message);
     process.exit(1);
   }
-}
+};
 
-start();
+// ========================
+// BASIC HEALTH ROUTE
+// ========================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    message: 'Health Watchers API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    compression: 'enabled'
+  });
+});
 
-export default app;
+// 404 Handler
+app.use('*', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+// ========================
+// START SERVER
+// ========================
+const startServer = async () => {
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT} with gzip compression enabled`);
+  });
+};
+
+process.on('unhandledRejection', (err: any) => {
+  console.error('Unhandled Rejection:', err.message);
+  process.exit(1);
+});
+
+startServer();

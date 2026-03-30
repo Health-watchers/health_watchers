@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { locales, defaultLocale } from "./i18n.config";
 
-const protectedRoutes = ["/patients", "/encounters", "/payments"];
+const protectedRoutes = ["/patients", "/encounters", "/payments", "/settings"];
 const publicRoutes = ["/login"];
 
 export function middleware(request: NextRequest) {
@@ -18,9 +18,11 @@ export function middleware(request: NextRequest) {
 
   const accessToken = request.cookies.get("accessToken")?.value;
   const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
+    pathname.startsWith(route),
   );
-  const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route));
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route),
+  );
 
   // Redirect to login if accessing protected route without token
   if (isProtectedRoute && !accessToken) {
@@ -47,7 +49,10 @@ export function middleware(request: NextRequest) {
   const response = NextResponse.next();
   // Ensure cookie is set so it persists across refreshes
   if (!cookieLocale) {
-    response.cookies.set("locale", locale, { path: "/", maxAge: 60 * 60 * 24 * 365 });
+    response.cookies.set("locale", locale, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
   }
   return response;
 }

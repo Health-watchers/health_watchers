@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type Patient, formatDate } from "@health-watchers/types";
 import { ErrorMessage } from "@/components/ui";
 import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
 
 interface Encounter {
   _id: string;
@@ -26,7 +27,7 @@ export default function PatientDetailClient({ patientId, labels }: { patientId: 
   const { data: patient, isLoading: patientLoading, error: patientError } = useQuery({
     queryKey: queryKeys.patients.detail(patientId),
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/patients/${patientId}`);
+      const res = await fetch(`${API_URL}/api/v1/patients/${patientId}`);
       if (!res.ok) throw new Error("Failed to load patient");
       const data = await res.json();
       return data.data;
@@ -36,7 +37,7 @@ export default function PatientDetailClient({ patientId, labels }: { patientId: 
   const { data: encounters = [], isLoading: encountersLoading, error: encountersError } = useQuery({
     queryKey: queryKeys.encounters.byPatient(patientId),
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/api/v1/encounters/patient/${patientId}`);
+      const res = await fetch(`${API_URL}/api/v1/encounters/patient/${patientId}`);
       if (!res.ok) throw new Error("Failed to load encounters");
       const data = await res.json();
       return data.data || [];
