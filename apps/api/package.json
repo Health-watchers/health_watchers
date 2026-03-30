@@ -12,12 +12,12 @@
     "test": "echo \"Tests temporarily disabled due to TypeScript 6.0 compatibility issues with Jest/Babel\" && exit 0"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.3.0",
+    "@google/generative-ai": "^0.24.1",
     "@health-watchers/config": "*",
     "@sentry/node": "^8.0.0",
     "@sentry/profiling-node": "^8.0.0",
     "@types/nodemailer": "^7.0.11",
-    "axios": "^1.6.0",
+    "axios": "^1.14.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "dotenv": "^16.0.0",
