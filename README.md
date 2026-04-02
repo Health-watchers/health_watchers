@@ -35,12 +35,11 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 
 - Node.js >= 18.0.0
 - npm 10.9.2
-- Docker and Docker Compose (for quickstart)
-- MongoDB (or use Docker)
+- Docker and Docker Compose
 
-### 5-Minute Quickstart with Docker Compose
+### Quick Start — MongoDB only (recommended for local dev)
 
-The fastest way to get Health Watchers running locally:
+No local MongoDB installation required. Spin up just the database:
 
 ```bash
 # 1. Clone the repository
@@ -50,22 +49,40 @@ cd health-watchers
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start all services with Docker Compose
+# 3. Start MongoDB (and optional mongo-express UI on :8081)
+docker-compose -f docker-compose.dev.yml up -d
+
+# 4. Install dependencies and start the API
+npm install
+npm run dev --workspace=api
+```
+
+The default `MONGO_URI=mongodb://localhost:27017/health_watchers` in `.env.example` connects directly to the containerized MongoDB — no credentials needed for local dev.
+
+To stop:
+```bash
+docker-compose -f docker-compose.dev.yml down
+```
+
+### 5-Minute Quickstart — Full Stack with Docker Compose
+
+Runs all services (API, web, stellar-service, MongoDB) in containers:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/OWNER/health-watchers.git
+cd health-watchers
+
+# 2. Copy environment configuration
+cp .env.example .env
+
+# 3. Start all services
 docker-compose up -d
 
-# 4. Wait for services to be ready (about 30 seconds)
-docker-compose logs -f
-
-# 5. Access the application
+# 4. Access the application
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
 ```
-
-The Docker setup includes:
-- MongoDB database with automatic initialization
-- API server with hot-reload
-- Web frontend with hot-reload
-- Pre-configured networking between services
 
 To stop all services:
 ```bash

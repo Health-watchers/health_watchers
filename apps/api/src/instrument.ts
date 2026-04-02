@@ -19,7 +19,7 @@ Sentry.init({
   },
 
   beforeSendTransaction(event) {
-    return scrubPHI(event) as Sentry.TransactionEvent;
+    return scrubPHI(event);
   },
 });
 
@@ -38,7 +38,7 @@ function scrubPHI<T extends Sentry.Event>(event: T): T {
     event.request.data = redactKeys(event.request.data);
   }
   if (event.extra) {
-    event.extra = redactKeys(event.extra);
+    event.extra = redactKeys(event.extra) as Record<string, unknown>;
   }
   return event;
 }

@@ -1,27 +1,30 @@
-'use client'
+'use client';
 
 import { useQueries } from '@tanstack/react-query'
 import Link from 'next/link'
 import { PageWrapper, PageHeader, Button } from '@/components/ui'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { RecentTable } from '@/components/dashboard/RecentTable'
+import { API_URL } from '@/lib/api'
 
-import { apiFetch } from '@/lib/api'
+const API = `${API_URL}/api/v1`
 
 async function fetchDashboard() {
-  const json = await apiFetch('/api/v1/dashboard') as { data: unknown }
-  return (json as { data: unknown }).data
+  const res = await fetch(`${API}/dashboard`);
+  if (!res.ok) throw new Error('Failed to load dashboard');
+  const json = await res.json();
+  return json.data;
 }
 
 export default function DashboardPage() {
   const [{ data, isLoading, isError }] = useQueries({
     queries: [{ queryKey: ['dashboard'], queryFn: fetchDashboard }],
-  })
+  });
 
-  const stats = data?.stats
-  const recentPatients: Record<string, unknown>[] = data?.recentPatients ?? []
-  const todayEncounters: Record<string, unknown>[] = data?.todayEncounters ?? []
-  const pendingPayments: Record<string, unknown>[] = data?.pendingPayments ?? []
+  const stats = data?.stats;
+  const recentPatients: Record<string, unknown>[] = data?.recentPatients ?? [];
+  const todayEncounters: Record<string, unknown>[] = data?.todayEncounters ?? [];
+  const pendingPayments: Record<string, unknown>[] = data?.pendingPayments ?? [];
 
   return (
     <PageWrapper className="py-8 space-y-8">
@@ -88,9 +91,8 @@ export default function DashboardPage() {
             {
               key: 'createdAt',
               label: 'Registered',
-              render: row => row.createdAt
-                ? new Date(row.createdAt as string).toLocaleDateString()
-                : '—',
+              render: (row) =>
+                row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : '—',
             },
           ]}
           rows={recentPatients}
@@ -104,9 +106,13 @@ export default function DashboardPage() {
             {
               key: 'createdAt',
               label: 'Time',
-              render: row => row.createdAt
-                ? new Date(row.createdAt as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '—',
+              render: (row) =>
+                row.createdAt
+                  ? new Date(row.createdAt as string).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : '—',
             },
           ]}
           rows={todayEncounters}
@@ -116,7 +122,11 @@ export default function DashboardPage() {
           title="Pending Payments"
           emptyMessage="No pending payments"
           columns={[
-            { key: 'intentId', label: 'Intent ID', render: row => String(row.intentId ?? '').slice(0, 8) + '…' },
+            {
+              key: 'intentId',
+              label: 'Intent ID',
+              render: (row) => String(row.intentId ?? '').slice(0, 8) + '…',
+            },
             { key: 'amount', label: 'Amount' },
             { key: 'status', label: 'Status' },
           ]}
@@ -124,5 +134,5 @@ export default function DashboardPage() {
         />
       </div>
     </PageWrapper>
-  )
+  );
 }

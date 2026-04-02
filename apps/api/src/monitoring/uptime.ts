@@ -21,7 +21,7 @@ export function startUptimeMonitor(intervalSeconds = 60): () => void {
         status: 'in_progress',
       },
       {
-        schedule: { type: 'interval', value: intervalSeconds, unit: 'second' },
+        schedule: { type: 'interval', value: Math.ceil(intervalSeconds / 60) || 1, unit: 'minute' },
         checkinMargin: 5,       // minutes before Sentry marks as missed
         maxRuntime: 1,          // minutes before Sentry marks as timed out
         failureIssueThreshold: 1,

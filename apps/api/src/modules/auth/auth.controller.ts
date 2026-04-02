@@ -1,43 +1,94 @@
-import bcrypt from 'bcryptjs';
-import { Request, Response, Router } from 'express';
-import { TOTP } from 'otpauth';
-import qrcode from 'qrcode';
-import { validateRequest } from '@api/middlewares/validate.middleware';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import bcrypt from "bcryptjs";
+import { Request, Response, Router } from "express";
+import { validateRequest } from "@api/middlewares/validate.middleware";
+import { authenticate } from "@api/middlewares/auth.middleware";
 import {
-  LoginDto, RefreshDto, loginSchema, refreshSchema,
-  mfaVerifySchema, mfaChallengeSchema, MfaVerifyDto, MfaChallengeDto,
-} from './auth.validation';
-import { UserModel } from './models/user.model';
+  LoginDto,
+  RefreshDto,
+  loginSchema,
+  refreshSchema,
+} from "./auth.validation";
+import { UserModel } from "./models/user.model";
 import {
-  signAccessToken, signRefreshToken, signTempToken,
-  verifyRefreshToken, verifyTempToken,
-} from './token.service';
-
-// ── TOTP helpers ──────────────────────────────────────────────────────────
-function generateSecret(): string {
-  return new TOTP({ issuer: 'HealthWatchers', label: 'user', algorithm: 'SHA1', digits: 6, period: 30 }).secret.base32;
-}
-
-function generateURI({ label, issuer, secret }: { label: string; issuer: string; secret: string }): string {
-  const totp = new TOTP({ issuer, label, algorithm: 'SHA1', digits: 6, period: 30, secret });
-  return totp.toString();
-}
-
-async function totpVerify({ token, secret }: { token: string; secret: string }): Promise<{ valid: boolean }> {
-  const totp = new TOTP({ algorithm: 'SHA1', digits: 6, period: 30, secret });
-  const delta = totp.validate({ token, window: 1 });
-  return { valid: delta !== null };
-}
-
-// ── Local request types ───────────────────────────────────────────────────
-type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;
-type RefreshReq = Request<Record<string, never>, unknown, RefreshDto>;
+  signAccessToken,
+  signRefreshToken,
+  signTempToken,
+  verifyRefreshToken,
+  verifyTempToken,
+} from "./token.service";
 
 const router = Router();
-const INVALID = 'Invalid email or password';
+const INVALID = "Invalid email or password";
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+/** SHA-256 hash of a token for safe storage */
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// ── Role hierarchy: who can create whom ──────────────────────────────────
+const ROLE_CREATE_PERMISSIONS: Record<string, string[]> = {
+  SUPER_ADMIN:  ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
+  CLINIC_ADMIN: ['DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'],
+};
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Create a new user account (SUPER_ADMIN or CLINIC_ADMIN only)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, email, password, role, clinicId]
+ *             properties:
+ *               fullName:  { type: string }
+ *               email:     { type: string, format: email }
+ *               password:  { type: string, minLength: 8 }
+ *               role:      { type: string, enum: [SUPER_ADMIN, CLINIC_ADMIN, DOCTOR, NURSE, ASSISTANT, READ_ONLY] }
+ *               clinicId:  { type: string }
+ *     responses:
+ *       201:
+ *         description: User created — tokens returned
+ *       409:
+ *         description: Email already in use
+ *       403:
+ *         description: Insufficient permissions to create this role
+ */
+router.post('/register', authenticate, validateRequest({ body: registerSchema }), async (req: RegisterReq, res: Response) => {
+  const callerRole = req.user!.role as string;
+  const allowed = ROLE_CREATE_PERMISSIONS[callerRole] ?? [];
+  if (!allowed.includes(req.body.role)) {
+    return res.status(403).json({ error: 'Forbidden', message: `A ${callerRole} cannot create a ${req.body.role} account` });
+  }
+
+  const existing = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
+  if (existing) return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
+
+  // Validate that the clinic exists
+  const clinic = await ClinicModel.findById(req.body.clinicId);
+  if (!clinic) {
+    return res.status(400).json({ error: 'BadRequest', message: `Clinic with ID '${req.body.clinicId}' does not exist` });
+  }
+
+  const user = await UserModel.create({
+    fullName: req.body.fullName,
+    email:    req.body.email.toLowerCase().trim(),
+    password: req.body.password,   // hashed by pre-save hook
+    role:     req.body.role,
+    clinicId: req.body.clinicId,
+  });
+
+  const { password: _pw, ...sanitized } = user.toObject();
+  return res.status(201).json({ status: 'success', data: sanitized });
+});
 
 /**
  * @swagger
@@ -53,90 +104,90 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               password:
- *                 type: string
- *                 minLength: 8
+ *               email:    { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
  *     responses:
  *       200:
  *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken:  { type: string }
- *                     refreshToken: { type: string }
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  *       401:
  *         description: Invalid credentials
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  *       423:
- *         description: Account temporarily locked due to too many failed login attempts
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
+ *         description: Account temporarily locked
  */
-router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginReq, res: Response) => {
-  const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
-  if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: INVALID });
-
-  // --- account lockout check ---
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    const retryAfterSecs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
-    res.set('Retry-After', String(retryAfterSecs));
-    return res.status(423).json({
-      error: 'AccountLocked',
-      message: 'Account is temporarily locked due to too many failed login attempts. Please try again later.',
-      retryAfter: retryAfterSecs,
+router.post(
+  "/login",
+  validateRequest({ body: loginSchema }),
+  async (req: LoginReq, res: Response) => {
+    const user = await UserModel.findOne({
+      email: req.body.email.toLowerCase().trim(),
     });
-  }
+    if (!user || !user.isActive)
+      return res.status(401).json({ error: "Unauthorized", message: INVALID });
 
-  // --- password check ---
-  const passwordValid = await bcrypt.compare(req.body.password, user.password);
-  if (!passwordValid) {
-    user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
-
-    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-      user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+    // --- account lockout check ---
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const retryAfterSecs = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 1000,
+      );
+      res.set("Retry-After", String(retryAfterSecs));
+      return res.status(423).json({
+        error: "AccountLocked",
+        message:
+          "Account is temporarily locked due to too many failed login attempts. Please try again later.",
+        retryAfter: retryAfterSecs,
+      });
     }
 
-    await user.save();
-    return res.status(401).json({ error: 'Unauthorized', message: INVALID });
-  }
+    // --- password check ---
+    const passwordValid = await bcrypt.compare(
+      req.body.password,
+      user.password,
+    );
+    if (!passwordValid) {
+      user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
 
-  // --- successful login: reset lockout counters ---
-  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-    user.failedLoginAttempts = 0;
-    user.lockedUntil = undefined;
-    await user.save();
-  }
+      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+        user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+      }
 
-  if (user.mfaEnabled) {
-    return res.json({ status: 'mfa_required', data: { mfaRequired: true, tempToken: signTempToken(user.id) } });
-  }
+      await user.save();
+      return res.status(401).json({ error: "Unauthorized", message: INVALID });
+    }
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  return res.json({ status: 'success', data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) } });
-});
+    // --- successful login: reset lockout counters ---
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockedUntil = undefined;
+      await user.save();
+    }
+
+    if (user.mfaEnabled) {
+      return res.json({
+        status: "mfa_required",
+        data: { mfaRequired: true, tempToken: signTempToken(user.id) },
+      });
+    }
+
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+    };
+    return res.json({
+      status: "success",
+      data: {
+        accessToken: signAccessToken(p),
+        refreshToken: signRefreshToken(p),
+      },
+    });
+  },
+);
 
 /**
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Refresh an access token using a refresh token
+ *     summary: Rotate refresh token and issue new access + refresh tokens
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -149,29 +200,49 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginR
  *               refreshToken: { type: string }
  *     responses:
  *       200:
- *         description: New access token issued
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string }
+ *         description: New tokens issued
  *       401:
- *         description: Invalid or expired refresh token
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
+ *         description: Invalid, expired, or already-rotated refresh token
  */
-router.post('/refresh', validateRequest({ body: refreshSchema }), async (req: RefreshReq, res: Response) => {
-  const decoded = verifyRefreshToken(req.body.refreshToken);
-  if (!decoded) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
-  const user = await UserModel.findById(decoded.userId);
-  if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
-  return res.json({ status: 'success', data: { accessToken: signAccessToken({ userId: user.id, role: user.role, clinicId: String(user.clinicId) }) } });
+router.post(
+  "/refresh",
+  validateRequest({ body: refreshSchema }),
+  async (req: RefreshReq, res: Response) => {
+    const decoded = verifyRefreshToken(req.body.refreshToken);
+    if (!decoded)
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "Invalid refresh token" });
+    const user = await UserModel.findById(decoded.userId);
+    if (!user || !user.isActive)
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "Invalid refresh token" });
+    return res.json({
+      status: "success",
+      data: {
+        accessToken: signAccessToken({
+          userId: user.id,
+          role: user.role,
+          clinicId: String(user.clinicId),
+        }),
+      },
+    });
+  },
+);
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Invalidate the current refresh token
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/logout', authenticate, async (req: Request, res: Response) => {
+  await UserModel.findByIdAndUpdate(req.user!.userId, { refreshTokenHash: undefined });
+  return res.json({ status: 'success', data: { loggedOut: true } });
 });
 
 /**
@@ -182,38 +253,26 @@ router.post('/refresh', validateRequest({ body: refreshSchema }), async (req: Re
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: TOTP secret and QR code URI generated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     otpauthUrl: { type: string, description: "otpauth:// URI for QR code scanning" }
- *                     qrCodeDataUrl: { type: string, description: Base64 PNG data URL of the QR code }
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/mfa/setup', authenticate, async (req: Request, res: Response) => {
-  const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
-  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+router.post("/mfa/setup", authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).select("+mfaSecret");
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const { generateSecret, generateURI } = await import('@otplib/core');
+  const qrcode = await import('qrcode');
 
   const secret = generateSecret();
   user.mfaSecret = secret;
   await user.save();
 
-  const otpauthUrl = generateURI({ label: user.email, issuer: 'Health Watchers', secret });
+  const otpauthUrl = generateURI({
+    label: user.email,
+    issuer: "Health Watchers",
+    secret,
+  });
   const qrCodeDataUrl = await qrcode.toDataURL(otpauthUrl);
 
-  return res.json({ status: 'success', data: { otpauthUrl, qrCodeDataUrl } });
+  return res.json({ status: "success", data: { otpauthUrl, qrCodeDataUrl } });
 });
 
 /**
@@ -224,52 +283,39 @@ router.post('/mfa/setup', authenticate, async (req: Request, res: Response) => {
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [totp]
- *             properties:
- *               totp: { type: string, length: 6, example: "123456" }
- *     responses:
- *       200:
- *         description: MFA enabled successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     mfaEnabled: { type: boolean, example: true }
- *       400:
- *         description: Invalid TOTP code
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       401:
- *         description: Unauthorized or MFA not set up
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/mfa/verify', authenticate, validateRequest({ body: mfaVerifySchema }), async (req: Request<Record<string, never>, unknown, MfaVerifyDto>, res: Response) => {
-  const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
-  if (!user || !user.mfaSecret) return res.status(401).json({ error: 'Unauthorized', message: 'MFA setup not initiated' });
+router.post(
+  "/mfa/verify",
+  authenticate,
+  validateRequest({ body: mfaVerifySchema }),
+  async (
+    req: Request<Record<string, never>, unknown, MfaVerifyDto>,
+    res: Response,
+  ) => {
+    const user = await UserModel.findById(req.user!.userId).select(
+      "+mfaSecret",
+    );
+    if (!user || !user.mfaSecret)
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "MFA setup not initiated" });
 
-  const result = await totpVerify({ token: req.body.totp, secret: user.mfaSecret! });
-  const valid = result.valid;
-  if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    const result = await totpVerify({
+      token: req.body.totp,
+      secret: user.mfaSecret!,
+    });
+    const valid = result.valid;
+    if (!valid)
+      return res
+        .status(400)
+        .json({ error: "InvalidCode", message: "Invalid TOTP code" });
 
-  user.mfaEnabled = true;
-  await user.save();
+    user.mfaEnabled = true;
+    await user.save();
 
-  return res.json({ status: 'success', data: { mfaEnabled: true } });
-});
+    return res.json({ status: "success", data: { mfaEnabled: true } });
+  },
+);
 
 /**
  * @swagger
@@ -277,56 +323,53 @@ router.post('/mfa/verify', authenticate, validateRequest({ body: mfaVerifySchema
  *   post:
  *     summary: Complete MFA login — exchange temp token + TOTP for real tokens
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [tempToken, totp]
- *             properties:
- *               tempToken: { type: string, description: Temp token received from /auth/login }
- *               totp:      { type: string, length: 6, example: "123456" }
- *     responses:
- *       200:
- *         description: MFA verified — full tokens returned
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken:  { type: string }
- *                     refreshToken: { type: string }
- *       401:
- *         description: Invalid or expired temp token
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       400:
- *         description: Invalid TOTP code
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/mfa/challenge', validateRequest({ body: mfaChallengeSchema }), async (req: Request<Record<string, never>, unknown, MfaChallengeDto>, res: Response) => {
-  const userId = verifyTempToken(req.body.tempToken);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
+router.post(
+  "/mfa/challenge",
+  validateRequest({ body: mfaChallengeSchema }),
+  async (
+    req: Request<Record<string, never>, unknown, MfaChallengeDto>,
+    res: Response,
+  ) => {
+    const userId = verifyTempToken(req.body.tempToken);
+    if (!userId)
+      return res
+        .status(401)
+        .json({
+          error: "Unauthorized",
+          message: "Invalid or expired temp token",
+        });
 
-  const user = await UserModel.findById(userId).select('+mfaSecret');
-  if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret)
-    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
+    const user = await UserModel.findById(userId).select("+mfaSecret");
+    if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret)
+      return res
+        .status(401)
+        .json({ error: "Unauthorized", message: "Invalid session" });
 
-  const result = await totpVerify({ token: req.body.totp, secret: user.mfaSecret! });
-  const valid = result.valid;
-  if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    const result = await totpVerify({
+      token: req.body.totp,
+      secret: user.mfaSecret!,
+    });
+    const valid = result.valid;
+    if (!valid)
+      return res
+        .status(400)
+        .json({ error: "InvalidCode", message: "Invalid TOTP code" });
 
-  const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
-  return res.json({ status: 'success', data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) } });
-});
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+    };
+    return res.json({
+      status: "success",
+      data: {
+        accessToken: signAccessToken(p),
+        refreshToken: signRefreshToken(p),
+      },
+    });
+  },
+);
 
 /**
  * @swagger
@@ -336,58 +379,33 @@ router.post('/mfa/challenge', validateRequest({ body: mfaChallengeSchema }), asy
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [email]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *     responses:
- *       200:
- *         description: Account unlocked successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: object
- *                   properties:
- *                     unlocked: { type: boolean, example: true }
- *                     email:    { type: string }
- *       403:
- *         description: Forbidden — SUPER_ADMIN role required
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/unlock', authenticate, async (req: Request, res: Response) => {
-  if (req.user!.role !== 'SUPER_ADMIN')
-    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+router.post("/unlock", authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== "SUPER_ADMIN")
+    return res
+      .status(403)
+      .json({ error: "Forbidden", message: "SUPER_ADMIN role required" });
 
   const { email } = req.body as { email?: string };
   if (!email)
-    return res.status(400).json({ error: 'BadRequest', message: 'email is required' });
+    return res
+      .status(400)
+      .json({ error: "BadRequest", message: "email is required" });
 
   const user = await UserModel.findOne({ email: email.toLowerCase().trim() });
-  if (!user) return res.status(404).json({ error: 'NotFound', message: 'User not found' });
+  if (!user)
+    return res
+      .status(404)
+      .json({ error: "NotFound", message: "User not found" });
 
   user.failedLoginAttempts = 0;
   user.lockedUntil = undefined;
   await user.save();
 
-  return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
+  return res.json({
+    status: "success",
+    data: { unlocked: true, email: user.email },
+  });
 });
 
 export const authRoutes = router;

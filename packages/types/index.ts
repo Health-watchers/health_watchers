@@ -5,17 +5,17 @@ export interface Patient {
   lastName: string;
   dateOfBirth: string;
   sex: 'M' | 'F' | 'O';
-  gender?: string;
   contactNumber?: string;
-  phone?: string;
   address?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  gender?: string;
+  phone?: string;
 }
 
-export function formatDate(value?: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+export function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return 'N/A';
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }

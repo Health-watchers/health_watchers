@@ -11,10 +11,10 @@
     "moduleResolution": "bundler",
     "rootDir": ".",
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "paths": {
-      "@/*": ["./src/*"]
-
+      "@/*": [
+        "./src/*"
+      ]
     },
     "allowJs": true,
     "noEmit": true,

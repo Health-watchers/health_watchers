@@ -38,6 +38,16 @@
 - [ ] I have updated the documentation accordingly
 - [ ] My commit messages follow the Conventional Commits specification
 
+## Security & Compliance
+
+<!-- Required for changes to auth, payments, or patient data -->
+
+- [ ] No sensitive data (passwords, tokens, PHI) is logged or exposed
+- [ ] Input validation is implemented for all user inputs
+- [ ] Authentication and authorization checks are in place
+- [ ] HIPAA compliance considerations have been reviewed (if applicable)
+- [ ] Security best practices have been followed
+
 ## Related Issues
 
 <!-- Link any related issues here using #issue_number -->

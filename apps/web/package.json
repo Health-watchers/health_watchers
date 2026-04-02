@@ -1,8 +1,10 @@
 {
   "name": "web",
   "version": "1.0.0",
+  "description": "Next.js web application for Health Watchers healthcare management platform",
+  "license": "MIT",
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_DISABLE_LOCKFILE_PATCHING=1 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -18,17 +20,19 @@
     "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "next": "^14.0.0",
+    "next": "^14.2.35",
     "next-intl": "^4.8.3",
     "postcss": "^8.5.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.54.0",
+    "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/node": "25.5.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "eslint": "^9.39.4",

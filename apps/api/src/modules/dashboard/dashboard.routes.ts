@@ -1,6 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { authenticate } from '../../middlewares/auth.middleware';
+import { getStats } from './dashboard.controller';
 
 const router = Router();
+
+// GET /api/v1/dashboard/stats
+// Returns dashboard statistics scoped to the authenticated user's clinic
+router.get('/stats', authenticate, getStats);
 
 // GET /api/v1/dashboard
 // Returns today's stats + recent records (last 5 each)
@@ -10,7 +16,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
   try {
     // Lazy-import models to avoid circular deps at startup
-    const { PatientModel } = await import('../patients/patient.model');
+    const { PatientModel } = await import('../patients/models/patient.model');
     const { EncounterModel } = await import('../encounters/encounter.model');
     const { PaymentRecordModel } = await import('../payments/models/payment-record.model');
     const { UserModel } = await import('../auth/models/user.model');
@@ -42,8 +48,8 @@ router.get('/', async (_req: Request, res: Response) => {
         pendingPayments: pendingPaymentsList,
       },
     });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 

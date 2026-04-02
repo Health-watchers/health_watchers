@@ -1,31 +1,99 @@
 import jwt from 'jsonwebtoken';
-import { AppRole } from '@api/types/express';
+import { config } from '@health-watchers/config';
 
-interface TokenPayload {
+export interface TokenPayload {
   userId: string;
-  role: AppRole;
+  role: string;
   clinicId: string;
 }
 
-const accessSecret  = () => process.env.JWT_ACCESS_TOKEN_SECRET  || 'dev-access-secret';
-const refreshSecret = () => process.env.JWT_REFRESH_TOKEN_SECRET || 'dev-refresh-secret';
-const tempSecret    = () => process.env.JWT_ACCESS_TOKEN_SECRET  || 'dev-temp-secret';
+interface JwtPayload extends TokenPayload {
+  iss: string;
+  aud: string;
+}
 
-export const signAccessToken  = (p: TokenPayload) => jwt.sign(p, accessSecret(),  { expiresIn: '15m' });
-export const signRefreshToken = (p: TokenPayload) => jwt.sign(p, refreshSecret(), { expiresIn: '7d'  });
-export const signTempToken    = (userId: string)  => jwt.sign({ userId }, tempSecret(), { expiresIn: '5m' });
+const JWT_ISSUER = config.jwt.issuer;
+const JWT_AUDIENCE = config.jwt.audience;
+const ACCESS_TOKEN_EXPIRY = '15m';
+const REFRESH_TOKEN_EXPIRY = '7d';
+const TEMP_TOKEN_EXPIRY = '5m';
 
-export const verifyRefreshToken = (token: string): TokenPayload | null => {
-  try { return jwt.verify(token, refreshSecret()) as TokenPayload; } catch { return null; }
-};
+export function signAccessToken(payload: TokenPayload): string {
+  return jwt.sign(
+    payload,
+    config.jwt.accessTokenSecret,
+    {
+      expiresIn: ACCESS_TOKEN_EXPIRY,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }
+  );
+}
 
-export const verifyAccessToken = (token: string): TokenPayload | null => {
-  try { return jwt.verify(token, accessSecret()) as TokenPayload; } catch { return null; }
-};
+export function signRefreshToken(payload: TokenPayload): string {
+  return jwt.sign(
+    payload,
+    config.jwt.refreshTokenSecret,
+    {
+      expiresIn: REFRESH_TOKEN_EXPIRY,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }
+  );
+}
 
-export const verifyTempToken = (token: string): string | null => {
+export function signTempToken(userId: string): string {
+  return jwt.sign(
+    { userId },
+    config.jwt.accessTokenSecret,
+    {
+      expiresIn: TEMP_TOKEN_EXPIRY,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }
+  );
+}
+
+export function verifyAccessToken(token: string): TokenPayload | null {
   try {
-    const decoded = jwt.verify(token, tempSecret()) as { userId: string };
+    const decoded = jwt.verify(token, config.jwt.accessTokenSecret, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }) as JwtPayload;
+    return {
+      userId: decoded.userId,
+      role: decoded.role,
+      clinicId: decoded.clinicId,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+export function verifyRefreshToken(token: string): TokenPayload | null {
+  try {
+    const decoded = jwt.verify(token, config.jwt.refreshTokenSecret, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }) as JwtPayload;
+    return {
+      userId: decoded.userId,
+      role: decoded.role,
+      clinicId: decoded.clinicId,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+export function verifyTempToken(token: string): string | null {
+  try {
+    const decoded = jwt.verify(token, config.jwt.accessTokenSecret, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }) as { userId: string };
     return decoded.userId;
-  } catch { return null; }
-};
+  } catch (error) {
+    return null;
+  }
+}
