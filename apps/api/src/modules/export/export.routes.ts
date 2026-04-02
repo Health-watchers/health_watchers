@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Types } from 'mongoose';
-import { authenticate, requireRole } from '@api/middlewares/auth.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { exportRateLimit } from '@api/middlewares/export-rate-limit.middleware';
 import { createAuditLog } from '@api/modules/audit/audit.service';
 import {
@@ -10,9 +9,6 @@ import {
   buildClinicRecord,
   sendClinicZip,
 } from './export.service';
-
-/** Roles considered "authorized staff" for cross-patient access within a clinic */
-const STAFF_ROLES = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT'] as const;
 
 const router = Router();
 
@@ -53,9 +49,6 @@ router.get(
     const { id } = req.params;
     const format = (req.query.format as string || '').toLowerCase();
 
-    if (!Types.ObjectId.isValid(id))
-      return res.status(400).json({ error: 'BadRequest', message: 'Invalid patient ID format' });
-
     if (!['json', 'pdf'].includes(format))
       return res.status(400).json({ error: 'BadRequest', message: 'format must be "json" or "pdf"' });
 
@@ -64,15 +57,10 @@ router.get(
       if (!record)
         return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-      const { role, clinicId, userId } = req.user!;
+      // Authorization: non-admins can only export patients from their own clinic
+      const { role, clinicId } = req.user!;
       const patientClinicId = String((record.patient as any).clinicId);
-
-      // HIPAA Right of Access: patient exports their own record OR authorized staff within same clinic
-      const isSelf  = role === 'READ_ONLY' && userId === id; // patient-role self-export
-      const isStaff = (STAFF_ROLES as readonly string[]).includes(role) && patientClinicId === clinicId;
-      const isSuperAdmin = role === 'SUPER_ADMIN';
-
-      if (!isSelf && !isStaff && !isSuperAdmin)
+      if (role !== 'SUPER_ADMIN' && patientClinicId !== clinicId)
         return res.status(403).json({ error: 'Forbidden', message: 'Access denied to this patient record' });
 
       // Audit log (fire-and-forget — don't block the response)
@@ -114,13 +102,10 @@ router.get(
 router.get(
   '/clinics/:id/export',
   authenticate,
-  requireRole('SUPER_ADMIN'),
+  requireRoles('SUPER_ADMIN'),
   exportRateLimit,
   async (req: Request, res: Response) => {
     const { id } = req.params;
-
-    if (!Types.ObjectId.isValid(id))
-      return res.status(400).json({ error: 'BadRequest', message: 'Invalid clinic ID format' });
 
     try {
       const record = await buildClinicRecord(id);

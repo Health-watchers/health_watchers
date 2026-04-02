@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
+import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
 import { config } from '@health-watchers/config';
 import { connectDB } from './config/db';
@@ -15,6 +16,7 @@ import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import aiRoutes from './modules/ai/ai.routes';
+import exportRoutes from './modules/export/export.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
@@ -103,41 +105,12 @@ app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1', exportRoutes);
 
 setupSwagger(app);
 
 // Global error handler — must be last
 app.use(errorHandler);
-
-async function start() {
-  try {
-    const mongoUri = config.mongoUri;
-    if (!mongoUri) {
-      console.error('❌ MONGO_URI is not defined');
-      process.exit(1);
-    }
-
-    await mongoose.connect(mongoUri);
-    const host = new URL(mongoUri).hostname;
-    console.log(`✅ MongoDB connected to ${host}`);
-  } catch (error: any) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    process.exit(1);
-  }
-};
-
-// ========================
-// BASIC HEALTH ROUTE
-// ========================
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    message: 'Health Watchers API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    compression: 'enabled'
-  });
-});
 
 // 404 Handler
 app.use('*', (req, res) => {
