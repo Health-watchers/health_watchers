@@ -7,7 +7,9 @@
     "dev": "NEXT_DISABLE_LOCKFILE_PATCHING=1 next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest --passWithNoTests",
+    "test:run": "jest --passWithNoTests --forceExit"
   },
   "dependencies": {
     "@health-watchers/types": "*",
@@ -20,6 +22,8 @@
     "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "enhanced-resolve": "^5.20.1",
+    "intl-messageformat": "^11.2.1",
     "next": "^14.2.35",
     "next-intl": "^4.8.3",
     "postcss": "^8.5.8",
@@ -32,11 +36,23 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.2",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "25.5.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "babel-jest": "^30.3.0",
     "eslint": "^9.39.4",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "fast-check": "^4.7.0",
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0",
     "typescript": "6.0.2"
   }
 }
