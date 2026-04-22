@@ -28,3 +28,21 @@ export async function sendPasswordResetEmail(to: string, resetToken: string): Pr
     logger.error({ err, to }, 'Failed to send password reset email');
   }
 }
+
+export async function sendVerificationEmail(to: string, verificationToken: string): Promise<void> {
+  const verifyUrl = `${process.env.APP_BASE_URL ?? 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+
+  try {
+    await transporter.sendMail({
+      from:    process.env.SMTP_FROM ?? 'no-reply@health-watchers.app',
+      to,
+      subject: 'Verify your Health Watchers account',
+      text:    `Welcome! Please verify your email address by clicking the link below:\n\n${verifyUrl}\n\nIf you did not create this account, ignore this email.`,
+      html:    `<p>Welcome! Please verify your email address:</p>
+               <p><a href="${verifyUrl}">${verifyUrl}</a></p>
+               <p>If you did not create this account, ignore this email.</p>`,
+    });
+  } catch (err) {
+    logger.error({ err, to }, 'Failed to send verification email');
+  }
+}

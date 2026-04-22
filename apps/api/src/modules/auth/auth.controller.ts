@@ -25,6 +25,7 @@ import {
   verifyTempToken,
 } from './token.service';
 import { totpService } from './totp.service';
+import { sendVerificationEmail } from '@api/lib/email.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -88,7 +89,13 @@ router.post(
       clinicId: req.body.clinicId,
     });
 
-    const { password: _pw, ...sanitized } = user.toObject();
+    // Generate email verification token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    await user.save();
+    await sendVerificationEmail(user.email, rawToken);
+
+    const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
   },
 );
@@ -300,6 +307,31 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
   await user.save();
 
   return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
+});
+
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   get:
+ *     summary: Verify email address using the token sent during registration
+ *     tags: [Auth]
+ */
+router.get('/verify-email', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').trim();
+  if (!token) return res.status(400).json({ error: 'BadRequest', message: 'token is required' });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await UserModel.findOne({ emailVerificationTokenHash: tokenHash }).select(
+    '+emailVerificationTokenHash',
+  );
+
+  if (!user) return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
+
+  user.emailVerified = true;
+  user.emailVerificationTokenHash = undefined;
+  await user.save();
+
+  return res.json({ status: 'success', data: { emailVerified: true } });
 });
 
 export const authRoutes = router;
