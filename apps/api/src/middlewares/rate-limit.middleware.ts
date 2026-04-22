@@ -1,48 +1,111 @@
 import rateLimit, { type Options, type RateLimitRequestHandler } from 'express-rate-limit';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 
-const makeHandler = (windowMs: number, message: Options['message']) =>
-  (req: Request, res: Response, _next: NextFunction, options: Options): void => {
-    const retryAfter = Math.ceil(windowMs / 1000);
-    res.set('Retry-After', String(retryAfter));
+// ── Retry-After handler ───────────────────────────────────────────────────────
+const makeHandler =
+  (windowMs: number, message: Options['message']) =>
+  (_req: Request, res: Response, _next: unknown, _options: Options): void => {
+    res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
     res.status(429).json(message);
   };
 
-/**
- * Strict limiter for auth endpoints (login, refresh).
- * 10 requests per 15 minutes per IP.
- * Returns 429 with Retry-After and X-RateLimit-* headers.
- */
-export const authLimiter: RateLimitRequestHandler = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+// ── Optional Redis store ──────────────────────────────────────────────────────
+// Falls back to in-memory when REDIS_URL is not set.
+async function buildStore() {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return undefined; // in-memory fallback
+
+  try {
+    const { createClient } = await import('redis');
+    const { RedisStore } = await import('rate-limit-redis');
+    const client = createClient({ url: redisUrl });
+    client.on('error', (err: Error) =>
+      console.error('[rate-limit] Redis error, falling back to in-memory:', err.message),
+    );
+    await client.connect();
+    return new RedisStore({ sendCommand: (...args: string[]) => client.sendCommand(args) });
+  } catch {
+    console.warn('[rate-limit] rate-limit-redis not installed, using in-memory store');
+    return undefined;
+  }
+}
+
+// Shared store promise — resolved once at startup
+const storePromise = buildStore();
+
+function make(windowMs: number, max: number, message: object): RateLimitRequestHandler {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message,
+    handler: makeHandler(windowMs, message),
+    // store is set lazily; in-memory is used until Redis resolves
+    store: undefined,
+  });
+}
+
+// Attach Redis store once it resolves (no-op if undefined)
+storePromise.then((store) => {
+  if (store) {
+    [authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter].forEach(
+      (limiter) => {
+        // express-rate-limit exposes the store on the handler object
+        (limiter as any).store = store;
+      },
+    );
+  }
+});
+
+// ── Auth: 10 req / 15 min per IP ──────────────────────────────────────────────
+export const authLimiter: RateLimitRequestHandler = make(
+  15 * 60 * 1000,
+  10,
+  { error: 'TooManyRequests', message: 'Too many login attempts. Try again in 15 minutes.' },
+);
+
+// ── Forgot-password: 5 req / 1 hour per IP ───────────────────────────────────
+export const forgotPasswordLimiter: RateLimitRequestHandler = make(
+  60 * 60 * 1000,
+  5,
+  { error: 'TooManyRequests', message: 'Too many password reset requests. Try again in 1 hour.' },
+);
+
+// ── AI endpoints: 10 req / 1 min per clinic ──────────────────────────────────
+export const aiLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60 * 1000,
   max: 10,
-  standardHeaders: true,  // sets X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+  standardHeaders: true,
   legacyHeaders: false,
-  message: {
+  keyGenerator: (req: Request) => req.user?.clinicId ?? req.ip ?? 'unknown',
+  message: { error: 'TooManyRequests', message: 'AI rate limit exceeded. Try again in 1 minute.' },
+  handler: makeHandler(60 * 1000, {
     error: 'TooManyRequests',
-    message: 'Too many requests from this IP, please try again after 15 minutes.',
-  },
-  handler: makeHandler(15 * 60 * 1000, {
-    error: 'TooManyRequests',
-    message: 'Too many requests from this IP, please try again after 15 minutes.',
+    message: 'AI rate limit exceeded. Try again in 1 minute.',
   }),
 });
 
-/**
- * General limiter for all API routes.
- * 100 requests per minute per IP.
- */
-export const generalLimiter: RateLimitRequestHandler = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100,
+// ── Payment intent: 20 req / 1 min per clinic ────────────────────────────────
+export const paymentLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req: Request) => req.user?.clinicId ?? req.ip ?? 'unknown',
   message: {
     error: 'TooManyRequests',
-    message: 'Too many requests from this IP, please try again after 1 minute.',
+    message: 'Payment rate limit exceeded. Try again in 1 minute.',
   },
   handler: makeHandler(60 * 1000, {
     error: 'TooManyRequests',
-    message: 'Too many requests from this IP, please try again after 1 minute.',
+    message: 'Payment rate limit exceeded. Try again in 1 minute.',
   }),
 });
+
+// ── General: 300 req / 15 min per IP ─────────────────────────────────────────
+export const generalLimiter: RateLimitRequestHandler = make(
+  15 * 60 * 1000,
+  300,
+  { error: 'TooManyRequests', message: 'Too many requests. Try again in 15 minutes.' },
+);
