@@ -1,24 +1,28 @@
-import { Schema, model, models } from 'mongoose';
+import { Schema, Types, model, models } from 'mongoose';
 
-export interface Clinic {
+export interface IClinic {
   name: string;
-  stellarPublicKey: string;
+  address: string;
+  phone: string;
+  email: string;
+  stellarPublicKey?: string;
+  subscriptionTier: 'free' | 'basic' | 'premium';
   isActive: boolean;
-  address?: string;
-  contactEmail?: string;
-  plan?: 'basic' | 'standard' | 'enterprise';
+  createdBy: Types.ObjectId;
 }
 
-const clinicSchema = new Schema<Clinic>(
+const clinicSchema = new Schema<IClinic>(
   {
-    name: { type: String, required: true, trim: true },
-    stellarPublicKey: { type: String, required: true, index: true, sparse: true },
-    isActive: { type: Boolean, required: true, default: true, index: true },
-    address: { type: String, trim: true },
-    contactEmail: { type: String, lowercase: true, trim: true },
-    plan: { type: String, enum: ['basic', 'standard', 'enterprise'], default: 'basic' },
+    name:             { type: String, required: true, trim: true },
+    address:          { type: String, required: true, trim: true },
+    phone:            { type: String, required: true, trim: true },
+    email:            { type: String, required: true, lowercase: true, trim: true },
+    stellarPublicKey: { type: String, sparse: true, index: true },
+    subscriptionTier: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
+    isActive:         { type: Boolean, default: true, index: true },
+    createdBy:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true, versionKey: false },
 );
 
-export const ClinicModel = models.Clinic || model<Clinic>('Clinic', clinicSchema);
+export const ClinicModel = models.Clinic || model<IClinic>('Clinic', clinicSchema);
