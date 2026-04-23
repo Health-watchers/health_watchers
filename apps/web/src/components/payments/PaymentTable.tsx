@@ -9,28 +9,60 @@ import { ConfirmPaymentModal } from "@/components/payments/ConfirmPaymentModal";
 
 export interface Payment {
   id: string;
+  intentId?: string;
   patientId: string;
   amount: string;
   asset?: string;
-  status: "pending" | "completed" | "failed" | string;
+  assetCode?: string;
+  status: "pending" | "confirmed" | "completed" | "failed" | string;
   txHash?: string;
+  confirmedAt?: string;
   createdAt?: string;
 }
 
-type StatusFilter = "all" | "pending" | "completed" | "failed";
+type StatusFilter = "all" | "pending" | "confirmed" | "failed";
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
-  { value: "completed", label: "Completed" },
+  { value: "confirmed", label: "Confirmed" },
   { value: "failed", label: "Failed" },
 ];
 
 function statusBadgeVariant(status: string) {
-  if (status === "completed") return "success";
+  if (status === "confirmed" || status === "completed") return "success";
   if (status === "pending") return "warning";
   if (status === "failed") return "danger";
   return "default";
+}
+
+/** Animated dot indicator for real-time status feedback */
+function StatusIndicator({ status }: { status: string }) {
+  if (status === "pending") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" aria-hidden="true" />
+        <Badge variant="warning">pending</Badge>
+      </span>
+    );
+  }
+  if (status === "confirmed" || status === "completed") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden="true" />
+        <Badge variant="success">{status}</Badge>
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
+        <Badge variant="danger">failed</Badge>
+      </span>
+    );
+  }
+  return <Badge variant="default">{status}</Badge>;
 }
 
 interface Props {
@@ -181,9 +213,7 @@ export function PaymentTable({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={statusBadgeVariant(p.status)}>
-                      {p.status}
-                    </Badge>
+                    <StatusIndicator status={p.status} />
                   </td>
                   <td className="px-4 py-3">
                     {p.txHash ? (
