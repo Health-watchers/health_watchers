@@ -18,4 +18,8 @@ export const queryKeys = {
     all: ['wallet'] as const,
     balance: () => [...queryKeys.wallet.all, 'balance'] as const,
   },
+  labResults: {
+    all: ['lab-results'] as const,
+    byPatient: (patientId: string) => [...queryKeys.labResults.all, 'patient', patientId] as const,
+  },
 } as const;
