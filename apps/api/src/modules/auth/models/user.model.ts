@@ -24,6 +24,8 @@ export interface User {
   role: AppRole;
   clinicId: Types.ObjectId;
   isActive: boolean;
+  emailVerified: boolean;
+  emailVerificationTokenHash?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
   resetPasswordTokenHash?: string;
@@ -47,6 +49,8 @@ const userSchema = new Schema(
     role: { type: String, enum: ROLES, required: true },
     clinicId: { type: Schema.Types.ObjectId, ref: "Clinic", required: true },
     isActive: { type: Boolean, default: true, index: true },
+    emailVerified: { type: Boolean, default: false },
+    emailVerificationTokenHash: { type: String, required: false, select: false, default: undefined },
     mfaEnabled: { type: Boolean, default: false },
     mfaSecret: {
       type: String,
