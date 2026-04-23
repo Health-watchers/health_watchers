@@ -3,7 +3,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
-export type AppRole = 'SUPER_ADMIN' | 'CLINIC_ADMIN' | 'DOCTOR' | 'NURSE' | 'ASSISTANT' | 'READ_ONLY';
+export type AppRole =
+  | 'SUPER_ADMIN'
+  | 'CLINIC_ADMIN'
+  | 'DOCTOR'
+  | 'NURSE'
+  | 'ASSISTANT'
+  | 'READ_ONLY';
 
 interface AuthUser {
   userId: string;

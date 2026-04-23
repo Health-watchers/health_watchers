@@ -30,18 +30,18 @@ const prescriptionSchema = z.object({
 });
 
 export const createEncounterSchema = z.object({
-  patientId:         z.string().regex(objectIdRegex, 'Invalid patientId'),
-  clinicId:          z.string().regex(objectIdRegex, 'Invalid clinicId'),
+  patientId: z.string().regex(objectIdRegex, 'Invalid patientId'),
+  clinicId: z.string().regex(objectIdRegex, 'Invalid clinicId'),
   attendingDoctorId: z.string().regex(objectIdRegex, 'Invalid attendingDoctorId'),
-  chiefComplaint:    z.string().min(3, 'chiefComplaint must be at least 3 characters'),
-  status:            z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
-  notes:             z.string().max(5000).optional(),
-  treatmentPlan:     z.string().max(5000).optional(),
-  diagnosis:         z.array(diagnosisSchema).optional(),
-  vitalSigns:        vitalSignsSchema,
-  prescriptions:     z.array(prescriptionSchema).optional(),
-  followUpDate:      z.string().datetime({ offset: true }).optional(),
-  aiSummary:         z.string().max(5000).optional(),
+  chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters'),
+  status: z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
+  notes: z.string().max(5000).optional(),
+  treatmentPlan: z.string().max(5000).optional(),
+  diagnosis: z.array(diagnosisSchema).optional(),
+  vitalSigns: vitalSignsSchema,
+  prescriptions: z.array(prescriptionSchema).optional(),
+  followUpDate: z.string().datetime({ offset: true }).optional(),
+  aiSummary: z.string().max(5000).optional(),
 });
 
 export const encounterIdParamSchema = z.object({
@@ -53,16 +53,15 @@ export const patientIdParamSchema = z.object({
 });
 
 export const prescriptionIdParamSchema = z.object({
-  id:             objectId,
+  id: objectId,
   prescriptionId: objectId,
 });
 
 export { prescriptionSchema };
 
-export const updateEncounterSchema = createEncounterSchema.partial().refine(
-  (d) => Object.keys(d).length > 0,
-  'At least one field is required',
-);
+export const updateEncounterSchema = createEncounterSchema
+  .partial()
+  .refine((d) => Object.keys(d).length > 0, 'At least one field is required');
 
 export const patchEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters').optional(),

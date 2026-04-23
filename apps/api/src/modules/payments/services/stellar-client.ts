@@ -70,7 +70,9 @@ class StellarClient {
    * Get XLM and USDC balances and recent transactions for a public key
    * Calls the stellar-service GET /balance/:publicKey endpoint
    */
-  async getBalance(publicKey: string): Promise<{ balance: string; usdcBalance: string | null; transactions: unknown[] }> {
+  async getBalance(
+    publicKey: string
+  ): Promise<{ balance: string; usdcBalance: string | null; transactions: unknown[] }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.get(`/balance/${publicKey}`, {
       headers: { Authorization: `Bearer ${secret}` },
@@ -84,13 +86,13 @@ class StellarClient {
    */
   async createUsdcTrustline(
     publicKey: string,
-    usdcIssuer: string,
+    usdcIssuer: string
   ): Promise<{ created?: boolean; alreadyExists?: boolean; hash?: string; dryRun?: boolean }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.post(
       '/trustline/usdc',
       { publicKey, usdcIssuer },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     return response.data;
   }
@@ -104,7 +106,7 @@ class StellarClient {
     const response = await this.client.post(
       '/fund',
       { publicKey },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     return response.data;
   }

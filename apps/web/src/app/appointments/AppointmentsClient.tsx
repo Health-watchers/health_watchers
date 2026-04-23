@@ -30,10 +30,10 @@ interface Labels {
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: '#3b82f6',
-  confirmed:  '#22c55e',
-  cancelled:  '#ef4444',
-  completed:  '#8b5cf6',
-  'no-show':  '#f97316',
+  confirmed: '#22c55e',
+  cancelled: '#ef4444',
+  completed: '#8b5cf6',
+  'no-show': '#f97316',
 };
 
 function getWeekDays(anchor: Date): Date[] {
@@ -47,20 +47,22 @@ function getWeekDays(anchor: Date): Date[] {
 }
 
 function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() &&
+  return (
+    a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+    a.getDate() === b.getDate()
+  );
 }
 
 export default function AppointmentsClient({ labels }: { labels: Labels }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [anchor, setAnchor]             = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [anchor, setAnchor] = useState(new Date());
   const [doctorFilter, setDoctorFilter] = useState('');
 
   const weekDays = getWeekDays(anchor);
   const dateFrom = weekDays[0].toISOString();
-  const dateTo   = weekDays[6].toISOString();
+  const dateTo = weekDays[6].toISOString();
 
   useEffect(() => {
     setLoading(true);
@@ -68,12 +70,15 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
     if (doctorFilter) params.set('doctorId', doctorFilter);
 
     fetch(`http://localhost:3001/api/v1/appointments?${params}`)
-      .then(r => r.json())
-      .then(d => { setAppointments(d?.data ?? []); setLoading(false); })
+      .then((r) => r.json())
+      .then((d) => {
+        setAppointments(d?.data ?? []);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [dateFrom, dateTo, doctorFilter]);
 
-  const doctors = Array.from(new Set(appointments.map(a => a.doctorId)));
+  const doctors = Array.from(new Set(appointments.map((a) => a.doctorId)));
 
   const shiftWeek = (n: number) => {
     const d = new Date(anchor);
@@ -86,47 +91,96 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
       <h1 style={{ marginBottom: '1rem' }}>{labels.title}</h1>
 
       {/* Controls */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <button onClick={() => shiftWeek(-1)} aria-label={labels.prevWeek}
-          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}>← {labels.prevWeek}</button>
-        <button onClick={() => setAnchor(new Date())}
-          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}>{labels.today}</button>
-        <button onClick={() => shiftWeek(1)} aria-label={labels.nextWeek}
-          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}>{labels.nextWeek} →</button>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          onClick={() => shiftWeek(-1)}
+          aria-label={labels.prevWeek}
+          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}
+        >
+          ← {labels.prevWeek}
+        </button>
+        <button
+          onClick={() => setAnchor(new Date())}
+          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}
+        >
+          {labels.today}
+        </button>
+        <button
+          onClick={() => shiftWeek(1)}
+          aria-label={labels.nextWeek}
+          style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}
+        >
+          {labels.nextWeek} →
+        </button>
 
         <select
           value={doctorFilter}
-          onChange={e => setDoctorFilter(e.target.value)}
+          onChange={(e) => setDoctorFilter(e.target.value)}
           aria-label={labels.allDoctors}
           style={{ padding: '0.4rem', marginLeft: 'auto' }}
         >
           <option value="">{labels.allDoctors}</option>
-          {doctors.map(d => <option key={d} value={d}>{d}</option>)}
+          {doctors.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
         </select>
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.8rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '1rem',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          fontSize: '0.8rem',
+        }}
+      >
         {Object.entries(STATUS_COLORS).map(([s, c]) => (
           <span key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }} />
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 3,
+                background: c,
+                display: 'inline-block',
+              }}
+            />
             {(labels as any)[s === 'no-show' ? 'noShow' : s]}
           </span>
         ))}
       </div>
 
       {loading ? (
-        <p role="status" aria-live="polite">{labels.loading}</p>
+        <p role="status" aria-live="polite">
+          {labels.loading}
+        </p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table role="grid" aria-label={labels.title}
-            style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+          <table
+            role="grid"
+            aria-label={labels.title}
+            style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}
+          >
             <thead>
               <tr>
-                {weekDays.map(day => {
+                {weekDays.map((day) => {
                   const isToday = isSameDay(day, new Date());
                   return (
-                    <th key={day.toISOString()} scope="col"
+                    <th
+                      key={day.toISOString()}
+                      scope="col"
                       style={{
                         padding: '0.5rem',
                         border: '1px solid #e5e7eb',
@@ -134,8 +188,13 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                         fontWeight: isToday ? 700 : 500,
                         fontSize: '0.85rem',
                         textAlign: 'center',
-                      }}>
-                      {day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      }}
+                    >
+                      {day.toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                     </th>
                   );
                 })}
@@ -143,15 +202,27 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
             </thead>
             <tbody>
               <tr>
-                {weekDays.map(day => {
-                  const dayAppts = appointments.filter(a => isSameDay(new Date(a.scheduledAt), day));
+                {weekDays.map((day) => {
+                  const dayAppts = appointments.filter((a) =>
+                    isSameDay(new Date(a.scheduledAt), day)
+                  );
                   return (
-                    <td key={day.toISOString()} valign="top"
-                      style={{ padding: '0.5rem', border: '1px solid #e5e7eb', verticalAlign: 'top', minHeight: 80 }}>
-                      {dayAppts.length === 0
-                        ? <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</span>
-                        : dayAppts.map(appt => (
-                          <div key={appt._id}
+                    <td
+                      key={day.toISOString()}
+                      valign="top"
+                      style={{
+                        padding: '0.5rem',
+                        border: '1px solid #e5e7eb',
+                        verticalAlign: 'top',
+                        minHeight: 80,
+                      }}
+                    >
+                      {dayAppts.length === 0 ? (
+                        <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</span>
+                      ) : (
+                        dayAppts.map((appt) => (
+                          <div
+                            key={appt._id}
                             role="article"
                             aria-label={`${appt.type} at ${new Date(appt.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
                             style={{
@@ -161,20 +232,32 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                               padding: '0.25rem 0.4rem',
                               marginBottom: '0.3rem',
                               fontSize: '0.75rem',
-                            }}>
+                            }}
+                          >
                             <div style={{ fontWeight: 600 }}>
-                              {new Date(appt.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              {' '}({appt.duration}m)
+                              {new Date(appt.scheduledAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}{' '}
+                              ({appt.duration}m)
                             </div>
                             <div style={{ opacity: 0.9 }}>{appt.type}</div>
                             {appt.chiefComplaint && (
-                              <div style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                              <div
+                                style={{
+                                  opacity: 0.8,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  maxWidth: 120,
+                                }}
+                              >
                                 {appt.chiefComplaint}
                               </div>
                             )}
                           </div>
                         ))
-                      }
+                      )}
                     </td>
                   );
                 })}
@@ -185,7 +268,9 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
       )}
 
       {!loading && appointments.length === 0 && (
-        <p role="status" style={{ marginTop: '1rem', color: '#6b7280' }}>{labels.empty}</p>
+        <p role="status" style={{ marginTop: '1rem', color: '#6b7280' }}>
+          {labels.empty}
+        </p>
       )}
     </main>
   );

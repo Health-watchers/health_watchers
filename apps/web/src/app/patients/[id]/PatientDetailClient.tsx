@@ -21,12 +21,17 @@ import {
   Toast,
 } from '@/components/ui';
 import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
-import { CreatePaymentIntentForm, type CreatePaymentData } from '@/components/forms/CreatePaymentIntentForm';
+import {
+  CreatePaymentIntentForm,
+  type CreatePaymentData,
+} from '@/components/forms/CreatePaymentIntentForm';
 import { queryKeys } from '@/lib/queryKeys';
 import { API_V1 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
-const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), { ssr: false });
+const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), {
+  ssr: false,
+});
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
 
 interface EncounterResponse {
@@ -213,7 +218,10 @@ export default function PatientDetailClient({
       setAiSummary(body.summary);
       setAiLastRun(new Date());
     } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : 'AI generation failed', type: 'error' });
+      setToast({
+        message: err instanceof Error ? err.message : 'AI generation failed',
+        type: 'error',
+      });
     } finally {
       setAiLoading(false);
     }
@@ -235,7 +243,7 @@ export default function PatientDetailClient({
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <p className="text-6xl font-bold text-neutral-200">404</p>
             <p className="mt-4 text-lg font-semibold text-neutral-700">{labels.notFound}</p>
-            <Link href="/patients" className="mt-6 text-sm text-primary-600 hover:underline">
+            <Link href="/patients" className="text-primary-600 mt-6 text-sm hover:underline">
               ← {labels.back}
             </Link>
           </div>
@@ -246,7 +254,9 @@ export default function PatientDetailClient({
       <PageWrapper className="py-8">
         <ErrorMessage
           message={patientError instanceof Error ? patientError.message : labels.error}
-          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(patientId) })}
+          onRetry={() =>
+            queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(patientId) })
+          }
         />
       </PageWrapper>
     );
@@ -259,12 +269,19 @@ export default function PatientDetailClient({
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-2 text-sm text-neutral-500">
-        <Link href="/" className="hover:text-neutral-800">Home</Link>
+      <nav
+        aria-label="Breadcrumb"
+        className="mb-6 flex items-center gap-2 text-sm text-neutral-500"
+      >
+        <Link href="/" className="hover:text-neutral-800">
+          Home
+        </Link>
         <span aria-hidden="true">/</span>
-        <Link href="/patients" className="hover:text-neutral-800">{labels.back.replace('← ', '')}</Link>
+        <Link href="/patients" className="hover:text-neutral-800">
+          {labels.back.replace('← ', '')}
+        </Link>
         <span aria-hidden="true">/</span>
-        <span className="text-neutral-900 font-medium" aria-current="page">
+        <span className="font-medium text-neutral-900" aria-current="page">
           {patient.firstName} {patient.lastName}
         </span>
       </nav>
@@ -272,9 +289,9 @@ export default function PatientDetailClient({
       {/* Demographics card */}
       <section
         aria-labelledby="demographics-heading"
-        className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm mb-8"
+        className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 id="demographics-heading" className="text-2xl font-bold text-neutral-900">
               {patient.firstName} {patient.lastName}
@@ -299,29 +316,41 @@ export default function PatientDetailClient({
           )}
         </div>
 
-        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.systemId}</dt>
-            <dd className="mt-0.5 text-neutral-900 font-mono">{patient.systemId}</dd>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.systemId}
+            </dt>
+            <dd className="mt-0.5 font-mono text-neutral-900">{patient.systemId}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.dob}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.dob}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{formatDate(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.age}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.age}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{calcAge(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.sex}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.sex}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.sex}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.contact}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.contact}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.contactNumber || 'N/A'}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.address}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+              {labels.address}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.address || 'N/A'}</dd>
           </div>
         </dl>
@@ -339,9 +368,13 @@ export default function PatientDetailClient({
 
         {/* Encounters tab */}
         <TabsContent value="encounters">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-neutral-500">{encounters.length} record(s)</p>
-            <Button size="sm" variant="primary" onClick={() => router.push(`/encounters/new?patientId=${patientId}`)}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => router.push(`/encounters/new?patientId=${patientId}`)}
+            >
               + {labels.newEncounter}
             </Button>
           </div>
@@ -355,7 +388,11 @@ export default function PatientDetailClient({
           ) : encountersError ? (
             <ErrorMessage
               message={encountersError instanceof Error ? encountersError.message : labels.error}
-              onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.encounters.byPatient(patientId) })}
+              onRetry={() =>
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.encounters.byPatient(patientId),
+                })
+              }
             />
           ) : encounters.length === 0 ? (
             <EmptyState title={labels.noEncounters} icon="📋" />
@@ -369,12 +406,12 @@ export default function PatientDetailClient({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-neutral-900">{enc.chiefComplaint}</p>
-                      <p className="text-xs text-neutral-400 mt-0.5">{formatDate(enc.createdAt)}</p>
+                      <p className="mt-0.5 text-xs text-neutral-400">{formatDate(enc.createdAt)}</p>
                     </div>
                     <Badge variant={statusVariant(enc.status)}>{enc.status}</Badge>
                   </div>
                   {enc.notes && (
-                    <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{enc.notes}</p>
+                    <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{enc.notes}</p>
                   )}
                   {enc.diagnosis && enc.diagnosis.length > 0 && (
                     <p className="mt-1 text-xs text-neutral-500">
@@ -383,7 +420,7 @@ export default function PatientDetailClient({
                   )}
                   {enc.aiSummary && (
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:underline">
+                      <summary className="text-primary-600 cursor-pointer text-xs font-medium hover:underline">
                         AI Summary
                       </summary>
                       <p className="mt-1 text-sm text-neutral-600">{enc.aiSummary}</p>
@@ -397,7 +434,7 @@ export default function PatientDetailClient({
 
         {/* Payments tab */}
         <TabsContent value="payments">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-neutral-500">{payments.length} record(s)</p>
             <Button size="sm" variant="primary" onClick={() => setShowPaymentForm(true)}>
               + {labels.initiatePayment}
@@ -413,7 +450,9 @@ export default function PatientDetailClient({
           ) : paymentsError ? (
             <ErrorMessage
               message={paymentsError instanceof Error ? paymentsError.message : labels.error}
-              onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.byPatient(patientId) })}
+              onRetry={() =>
+                queryClient.invalidateQueries({ queryKey: queryKeys.payments.byPatient(patientId) })
+              }
             />
           ) : payments.length === 0 ? (
             <EmptyState title={labels.noPayments} icon="💳" />
@@ -428,9 +467,9 @@ export default function PatientDetailClient({
                     <div>
                       <p className="font-medium text-neutral-900">
                         {p.amount}{' '}
-                        <span className="text-neutral-400 font-normal">{p.assetCode ?? 'XLM'}</span>
+                        <span className="font-normal text-neutral-400">{p.assetCode ?? 'XLM'}</span>
                       </p>
-                      <p className="text-xs text-neutral-400 mt-0.5">
+                      <p className="mt-0.5 text-xs text-neutral-400">
                         {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                       </p>
                     </div>
@@ -468,7 +507,7 @@ export default function PatientDetailClient({
         {/* AI Insights tab */}
         <TabsContent value="ai">
           <div className="rounded-xl border border-blue-100 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white">
                   CLINICAL AI
@@ -489,9 +528,9 @@ export default function PatientDetailClient({
             {aiLoading ? (
               <div className="space-y-2.5" aria-busy="true">
                 {[1, 2, 3, 4].map((i) => (
-                  <div 
-                    key={i} 
-                    className={`h-3.5 animate-pulse rounded bg-neutral-200 ${i === 1 ? 'w-[70%]' : i === 2 ? 'w-[77%]' : i === 3 ? 'w-[84%]' : 'w-[91%]'}`} 
+                  <div
+                    key={i}
+                    className={`h-3.5 animate-pulse rounded bg-neutral-200 ${i === 1 ? 'w-[70%]' : i === 2 ? 'w-[77%]' : i === 3 ? 'w-[84%]' : 'w-[91%]'}`}
                   />
                 ))}
               </div>

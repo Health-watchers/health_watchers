@@ -12,7 +12,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   (
     { label, helperText, error, errorRole = 'alert', leftIcon, rightIcon, className, id, ...props },
-    ref,
+    ref
   ) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
     const hasError = Boolean(error);
@@ -26,7 +26,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <span className="absolute left-3 text-neutral-400 pointer-events-none">{leftIcon}</span>
+            <span className="pointer-events-none absolute left-3 text-neutral-400">{leftIcon}</span>
           )}
           <input
             ref={ref}
@@ -36,8 +36,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             className={[
-              'w-full rounded-md border bg-neutral-0 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400',
-              'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'bg-neutral-0 w-full rounded-md border px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400',
+              'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
               hasError ? 'border-danger-500' : 'border-neutral-200',
               leftIcon ? 'pl-9' : '',
@@ -49,7 +49,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {rightIcon && <span className="absolute right-3 text-neutral-400">{rightIcon}</span>}
         </div>
         {hasError && (
-          <p id={`${inputId}-error`} role={errorRole} className="text-xs text-danger-500">
+          <p id={`${inputId}-error`} role={errorRole} className="text-danger-500 text-xs">
             {error}
           </p>
         )}
@@ -60,7 +60,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
       </div>
     );
-  },
+  }
 );
 
 Input.displayName = 'Input';

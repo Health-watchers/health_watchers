@@ -1,14 +1,15 @@
-import bcrypt from "bcryptjs";
-import { Schema, Types, model, models } from "mongoose";
-import { AppRole } from "@api/types/express";
+import bcrypt from 'bcryptjs';
+import { Schema, Types, model, models } from 'mongoose';
+import { AppRole } from '@api/types/express';
 
 const ROLES: AppRole[] = [
-  "SUPER_ADMIN",
-  "CLINIC_ADMIN",
-  "DOCTOR",
-  "NURSE",
-  "ASSISTANT",
-  "READ_ONLY",
+  'SUPER_ADMIN',
+  'CLINIC_ADMIN',
+  'DOCTOR',
+  'NURSE',
+  'ASSISTANT',
+  'READ_ONLY',
+  'PATIENT',
 ];
 
 export interface UserPreferences {
@@ -31,6 +32,7 @@ export interface User {
   password: string;
   role: AppRole;
   clinicId: Types.ObjectId;
+  patientId?: Types.ObjectId; // set when role === 'PATIENT'
   isActive: boolean;
   emailVerified: boolean;
   emailVerificationTokenHash?: string;
@@ -55,10 +57,16 @@ const userSchema = new Schema(
     },
     password: { type: String, required: true },
     role: { type: String, enum: ROLES, required: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: "Clinic", required: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', default: undefined },
     isActive: { type: Boolean, default: true, index: true },
     emailVerified: { type: Boolean, default: false },
-    emailVerificationTokenHash: { type: String, required: false, select: false, default: undefined },
+    emailVerificationTokenHash: {
+      type: String,
+      required: false,
+      select: false,
+      default: undefined,
+    },
     mfaEnabled: { type: Boolean, default: false },
     mfaSecret: {
       type: String,
@@ -87,7 +95,7 @@ const userSchema = new Schema(
       index: true,
     },
     preferences: {
-      language: { type: String, default: "en" },
+      language: { type: String, default: 'en' },
       emailNotifications: { type: Boolean, default: true },
       inAppNotifications: { type: Boolean, default: true },
       notificationTypes: {
@@ -100,12 +108,12 @@ const userSchema = new Schema(
       },
     },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 12);
 });
 
-export const UserModel = models.User || model("User", userSchema);
+export const UserModel = models.User || model('User', userSchema);

@@ -17,6 +17,9 @@ import {
   patientQuerySchema,
   patientSearchQuerySchema,
 } from './patients.validation';
+import { cacheResponse } from '@api/middlewares/cache.middleware';
+import { cache } from '@api/services/cache.service';
+import { CarePlanModel } from '../care-plans/care-plan.model';
 
 const router = Router();
 router.use(authenticate);
@@ -48,7 +51,7 @@ async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
     { _id: clinicId },
     { $inc: { value: 1 } },
-    { new: true, upsert: true },
+    { new: true, upsert: true }
   );
   const short = clinicId.slice(-6).toUpperCase();
   const padded = String(counter!.value).padStart(6, '0');
@@ -62,15 +65,21 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
     const filter: Record<string, any> = { isActive: true };
     if (req.query.clinicId) filter.clinicId = req.query.clinicId;
 
     const result = await paginate(PatientModel, filter, page, limit);
-    return res.json({ status: 'success', data: result.data.map(toPatientResponse), meta: result.meta });
-  }),
+    return res.json({
+      status: 'success',
+      data: result.data.map(toPatientResponse),
+      meta: result.meta,
+    });
+  })
 );
 
 // GET /patients/search?q=
@@ -80,7 +89,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
     const q = String(req.query.q || '').trim();
@@ -88,18 +99,23 @@ router.get(
     if (q) filter.searchName = { $regex: q, $options: 'i' };
 
     const result = await paginate(PatientModel, filter, page, limit);
-    return res.json({ status: 'success', data: result.data.map(toPatientResponse), meta: result.meta });
-  }),
+    return res.json({
+      status: 'success',
+      data: result.data.map(toPatientResponse),
+      meta: result.meta,
+    });
+  })
 );
 
 // GET /patients/:id
 router.get(
   '/:id',
+  cacheResponse(300, (req) => `${req.user?.clinicId}:patient:${req.params.id}`),
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(doc) });
-  }),
+  })
 );
 
 // POST /patients
@@ -124,7 +140,7 @@ router.post(
       searchName,
     });
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
-  }),
+  })
 );
 
 // PUT /patients/:id
@@ -144,8 +160,15 @@ router.put(
 
     const doc = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const clinicId = req.user!.clinicId;
+    await Promise.all([
+      cache.del(`${clinicId}:patient:${req.params.id}`),
+      cache.delPattern(`${clinicId}:GET:/dashboard*`),
+    ]);
+
     return res.json({ status: 'success', data: toPatientResponse(doc) });
-  }),
+  })
 );
 
 // PATCH /patients/:id — partial update of allowed fields only
@@ -182,11 +205,18 @@ router.patch(
     const updated = await PatientModel.findOneAndUpdate(
       { _id: req.params.id, clinicId: req.user!.clinicId },
       update,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const clinicId = req.user!.clinicId;
+    await Promise.all([
+      cache.del(`${clinicId}:patient:${req.params.id}`),
+      cache.delPattern(`${clinicId}:GET:/dashboard*`),
+    ]);
+
     return res.json({ status: 'success', data: toPatientResponse(updated) });
-  }),
+  })
 );
 
 // DELETE /patients/:id — soft delete
@@ -197,11 +227,11 @@ router.delete(
     const doc = await PatientModel.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
-      { new: true },
+      { new: true }
     );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
-  }),
+  })
 );
 
 // GET /patients/:id/payments
@@ -210,7 +240,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, unknown>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
 
@@ -225,10 +257,14 @@ router.get(
       PaymentRecordModel,
       { patientId: req.params.id, clinicId: req.user!.clinicId },
       page,
-      limit,
+      limit
     );
-    return res.json({ status: 'success', data: result.data.map(toPaymentResponse), meta: result.meta });
-  }),
+    return res.json({
+      status: 'success',
+      data: result.data.map(toPaymentResponse),
+      meta: result.meta,
+    });
+  })
 );
 
 // GET /patients/:id/encounters
@@ -237,7 +273,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, unknown>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
 
@@ -253,10 +291,14 @@ router.get(
       { patientId: req.params.id, clinicId: req.user!.clinicId, isActive: true },
       page,
       limit,
-      { createdAt: -1 },
+      { createdAt: -1 }
     );
-    return res.json({ status: 'success', data: result.data.map(toEncounterResponse), meta: result.meta });
-  }),
+    return res.json({
+      status: 'success',
+      data: result.data.map(toEncounterResponse),
+      meta: result.meta,
+    });
+  })
 );
 
 // GET /patients/:id/prescriptions - All prescriptions for a patient (across encounters)
@@ -357,7 +399,7 @@ router.get(
       });
 
     return res.json({ status: 'success', data: readings });
-  }),
+  })
 );
 
 // GET /patients/:id/analytics — computed vital sign statistics
@@ -415,31 +457,46 @@ router.get(
       })
       .filter((r) => !isNaN(r.systolic) && !isNaN(r.diastolic));
 
-    const bpAnalytics = bpReadings.length > 0 ? {
-      latest: { systolic: bpReadings.at(-1)!.systolic, diastolic: bpReadings.at(-1)!.diastolic },
-      average: {
-        systolic: Math.round(bpReadings.reduce((s, r) => s + r.systolic, 0) / bpReadings.length),
-        diastolic: Math.round(bpReadings.reduce((s, r) => s + r.diastolic, 0) / bpReadings.length),
-      },
-      trend: calcTrend(bpReadings.slice(-5).map((r) => r.systolic)),
-      readings: bpReadings.length,
-    } : null;
+    const bpAnalytics =
+      bpReadings.length > 0
+        ? {
+            latest: {
+              systolic: bpReadings.at(-1)!.systolic,
+              diastolic: bpReadings.at(-1)!.diastolic,
+            },
+            average: {
+              systolic: Math.round(
+                bpReadings.reduce((s, r) => s + r.systolic, 0) / bpReadings.length
+              ),
+              diastolic: Math.round(
+                bpReadings.reduce((s, r) => s + r.diastolic, 0) / bpReadings.length
+              ),
+            },
+            trend: calcTrend(bpReadings.slice(-5).map((r) => r.systolic)),
+            readings: bpReadings.length,
+          }
+        : null;
 
     // Weight analytics
     const weightReadings = encounters
       .filter((e) => e.vitalSigns?.weight != null)
       .map((e) => ({ value: e.vitalSigns!.weight as number, date: (e as any).createdAt }));
 
-    const weightAnalytics = weightReadings.length > 0 ? (() => {
-      const latest = weightReadings.at(-1)!.value;
-      const thirtyDayStart = weightReadings.find((r) => r.date >= thirtyDaysAgo);
-      const change30Days = thirtyDayStart ? +(latest - thirtyDayStart.value).toFixed(1) : null;
-      return {
-        latest,
-        change30Days,
-        trend: calcTrend(weightReadings.slice(-5).map((r) => r.value)),
-      };
-    })() : null;
+    const weightAnalytics =
+      weightReadings.length > 0
+        ? (() => {
+            const latest = weightReadings.at(-1)!.value;
+            const thirtyDayStart = weightReadings.find((r) => r.date >= thirtyDaysAgo);
+            const change30Days = thirtyDayStart
+              ? +(latest - thirtyDayStart.value).toFixed(1)
+              : null;
+            return {
+              latest,
+              change30Days,
+              trend: calcTrend(weightReadings.slice(-5).map((r) => r.value)),
+            };
+          })()
+        : null;
 
     // Encounter frequency
     const encounterFrequency = {
@@ -455,7 +512,7 @@ router.get(
         encounterFrequency,
       },
     });
-  }),
+  })
 );
 
 // GET /patients/:id/lab-results — All lab results for a patient
@@ -480,3 +537,32 @@ router.get(
 );
 
 export const patientRoutes = router;
+
+// GET /patients/:id/care-plans
+router.get(
+  '/:id/care-plans',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const plans = await CarePlanModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Flag overdue reviews
+    const now = new Date();
+    const data = plans.map((p) => ({
+      ...p,
+      reviewOverdue: p.status === 'active' && p.reviewDate < now,
+    }));
+
+    return res.json({ status: 'success', data });
+  })
+);

@@ -16,7 +16,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 
   const clinicId = req.user?.clinicId;
   if (!clinicId) {
-    return res.status(400).json({ error: 'Bad Request', message: 'Clinic ID not found in user context' });
+    return res
+      .status(400)
+      .json({ error: 'Bad Request', message: 'Clinic ID not found in user context' });
   }
 
   try {
@@ -39,8 +41,14 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       PaymentRecordModel.countDocuments({ clinicId, status: 'pending' }),
       UserModel.countDocuments({ clinicId, role: 'DOCTOR', isActive: true }),
       PatientModel.find({ clinicId }).sort({ createdAt: -1 }).limit(5).lean(),
-      EncounterModel.find({ clinicId, createdAt: { $gte: today } }).sort({ createdAt: -1 }).limit(5).lean(),
-      PaymentRecordModel.find({ clinicId, status: 'pending' }).sort({ createdAt: -1 }).limit(5).lean(),
+      EncounterModel.find({ clinicId, createdAt: { $gte: today } })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      PaymentRecordModel.find({ clinicId, status: 'pending' })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
     ]);
 
     return res.json({
@@ -53,7 +61,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    return res
+      .status(500)
+      .json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 

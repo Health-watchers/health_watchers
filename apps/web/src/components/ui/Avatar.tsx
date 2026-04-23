@@ -15,9 +15,7 @@ const avatar = cva(
   }
 );
 
-export interface AvatarProps
-  extends HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof avatar> {
+export interface AvatarProps extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof avatar> {
   src?: string;
   alt?: string;
   initials?: string;
@@ -28,7 +26,7 @@ export function Avatar({ src, alt, initials, size, className, ...props }: Avatar
     <span className={avatar({ size, className })} {...props}>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt ?? ''} className="w-full h-full object-cover" />
+        <img src={src} alt={alt ?? ''} className="h-full w-full object-cover" />
       ) : (
         <span aria-label={alt}>{initials ?? '?'}</span>
       )}

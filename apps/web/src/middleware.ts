@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const LOGIN_PATH = '/login';
+const STAFF_LOGIN = '/login';
+const PORTAL_LOGIN = '/portal/login';
 
-const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/mfa'];
+const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
+const PORTAL_PUBLIC = ['/portal/login'];
 
-function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+function isStaffPublic(p: string) {
+  return STAFF_PUBLIC.some((s) => p === s || p.startsWith(`${s}/`));
 }
 
 export function middleware(request: NextRequest) {
@@ -15,13 +17,27 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const accessToken = request.cookies.get('accessToken')?.value;
-  const isPublic = isPublicPath(pathname);
+  // ── Portal routes (/portal/*) ─────────────────────────────────────────────
+  if (pathname.startsWith('/portal')) {
+    const isPortalPublic = PORTAL_PUBLIC.some((s) => pathname === s || pathname.startsWith(`${s}/`));
+    const portalToken = request.cookies.get('portalAccessToken')?.value;
 
-  if (!accessToken && !isPublic) {
-    return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+    if (!portalToken && !isPortalPublic) {
+      return NextResponse.redirect(new URL(PORTAL_LOGIN, request.url));
+    }
+    if (portalToken && isPortalPublic) {
+      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+    }
+    return NextResponse.next();
   }
 
+  // ── Staff routes ──────────────────────────────────────────────────────────
+  const accessToken = request.cookies.get('accessToken')?.value;
+  const isPublic = isStaffPublic(pathname);
+
+  if (!accessToken && !isPublic) {
+    return NextResponse.redirect(new URL(STAFF_LOGIN, request.url));
+  }
   if (accessToken && isPublic) {
     return NextResponse.redirect(new URL('/', request.url));
   }

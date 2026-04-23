@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SubNavigation } from "@/components/settings/SubNavigation";
-import { ProfileSection } from "@/components/settings/ProfileSection";
-import { SecuritySection } from "@/components/settings/SecuritySection";
-import { PreferencesSection } from "@/components/settings/PreferencesSection";
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SubNavigation } from '@/components/settings/SubNavigation';
+import { ProfileSection } from '@/components/settings/ProfileSection';
+import { SecuritySection } from '@/components/settings/SecuritySection';
+import { PreferencesSection } from '@/components/settings/PreferencesSection';
 
-type Section = "profile" | "security" | "preferences";
+type Section = 'profile' | 'security' | 'preferences';
 
 interface MeResponse {
-  status: "success";
+  status: 'success';
   data: {
     fullName: string;
     email: string;
@@ -25,8 +25,8 @@ interface MeResponse {
   };
 }
 
-async function fetchMe(): Promise<MeResponse["data"]> {
-  const res = await fetch("/api/settings/me");
+async function fetchMe(): Promise<MeResponse['data']> {
+  const res = await fetch('/api/settings/me');
   if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
   const body: MeResponse = await res.json();
   return body.data;
@@ -34,10 +34,10 @@ async function fetchMe(): Promise<MeResponse["data"]> {
 
 export default function SettingsClient() {
   const queryClient = useQueryClient();
-  const [active, setActive] = useState<Section>("profile");
+  const [active, setActive] = useState<Section>('profile');
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["me"],
+    queryKey: ['me'],
     queryFn: fetchMe,
   });
 
@@ -51,21 +51,21 @@ export default function SettingsClient() {
 
   if (error || !data) {
     return (
-      <div className="flex items-center justify-center py-16 text-sm text-danger-500">
-        {error instanceof Error ? error.message : "Failed to load settings."}
+      <div className="text-danger-500 flex items-center justify-center py-16 text-sm">
+        {error instanceof Error ? error.message : 'Failed to load settings.'}
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-neutral-900 mb-8">Settings</h1>
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      <h1 className="mb-8 text-2xl font-bold text-neutral-900">Settings</h1>
       <div className="flex gap-8">
         <aside className="w-48 shrink-0">
           <SubNavigation active={active} onChange={setActive} />
         </aside>
-        <main className="flex-1 min-w-0">
-          {active === "profile" && (
+        <main className="min-w-0 flex-1">
+          {active === 'profile' && (
             <ProfileSection
               user={{
                 fullName: data.fullName,
@@ -75,17 +75,13 @@ export default function SettingsClient() {
               }}
             />
           )}
-          {active === "security" && (
+          {active === 'security' && (
             <SecuritySection
               mfaEnabled={data.mfaEnabled}
-              onMfaStatusChange={() =>
-                queryClient.invalidateQueries({ queryKey: ["me"] })
-              }
+              onMfaStatusChange={() => queryClient.invalidateQueries({ queryKey: ['me'] })}
             />
           )}
-          {active === "preferences" && (
-            <PreferencesSection preferences={data.preferences} />
-          )}
+          {active === 'preferences' && <PreferencesSection preferences={data.preferences} />}
         </main>
       </div>
     </div>

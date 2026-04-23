@@ -10,9 +10,5 @@
       "@health-watchers/types": ["packages/types/index.ts"]
     }
   },
-  "include": [
-    "../scripts/**/*",
-    "../apps/api/src/**/*",
-    "../packages/**/*"
-  ]
+  "include": ["../scripts/**/*", "../apps/api/src/**/*", "../packages/**/*"]
 }

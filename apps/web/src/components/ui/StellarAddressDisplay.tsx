@@ -1,11 +1,11 @@
-import type { HTMLAttributes } from "react";
-import { getStellarExplorerUrl } from "@/lib/stellar";
+import type { HTMLAttributes } from 'react';
+import { getStellarExplorerUrl } from '@/lib/stellar';
 
 export interface StellarAddressDisplayProps extends HTMLAttributes<HTMLDivElement> {
   /** Full Stellar address or transaction hash */
   value: string;
   /** 'address' shows a truncated account key; 'tx' links to explorer */
-  type?: "address" | "tx";
+  type?: 'address' | 'tx';
   network?: string;
 }
 
@@ -16,33 +16,28 @@ function truncate(s: string) {
 
 export function StellarAddressDisplay({
   value,
-  type = "address",
-  network = "testnet",
+  type = 'address',
+  network = 'testnet',
   className,
   ...props
 }: StellarAddressDisplayProps) {
   const display = truncate(value);
 
-  if (type === "tx") {
+  if (type === 'tx') {
     return (
-      <div
-        className={["inline-flex items-center gap-1", className ?? ""].join(
-          " ",
-        )}
-        {...props}
-      >
+      <div className={['inline-flex items-center gap-1', className ?? ''].join(' ')} {...props}>
         <a
           href={getStellarExplorerUrl(value, network)}
           target="_blank"
           rel="noopener noreferrer"
           title={value}
-          className="font-mono text-xs text-primary-500 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+          className="text-primary-500 focus-visible:ring-primary-500 rounded font-mono text-xs hover:underline focus:outline-none focus-visible:ring-2"
         >
           {display}
         </a>
         {/* external link icon */}
         <svg
-          className="w-3 h-3 text-neutral-400"
+          className="h-3 w-3 text-neutral-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -63,9 +58,9 @@ export function StellarAddressDisplay({
     <span
       title={value}
       className={[
-        "font-mono text-xs text-neutral-700 bg-neutral-100 px-1.5 py-0.5 rounded",
-        className ?? "",
-      ].join(" ")}
+        'rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-neutral-700',
+        className ?? '',
+      ].join(' ')}
       {...props}
     >
       {display}

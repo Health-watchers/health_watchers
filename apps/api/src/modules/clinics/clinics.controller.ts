@@ -104,7 +104,7 @@ router.delete(
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // GET /clinics/:id/users — paginated user list for clinic

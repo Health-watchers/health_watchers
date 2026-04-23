@@ -78,7 +78,8 @@ router.post(
     }
 
     const existing = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
-    if (existing) return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
+    if (existing)
+      return res.status(409).json({ error: 'Conflict', message: 'Email already in use' });
 
     const clinic = await ClinicModel.findById(req.body.clinicId);
     if (!clinic) {
@@ -105,7 +106,7 @@ router.post(
 
     const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
-  },
+  }
 );
 
 /**
@@ -169,7 +170,7 @@ router.post(
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
     });
-  },
+  }
 );
 
 /**
@@ -194,7 +195,9 @@ router.post(
     // Replay attack: token already consumed — revoke entire family
     if (existing.consumed) {
       await RefreshTokenModel.deleteMany({ family: existing.family });
-      return res.status(401).json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
     }
 
     const user = await UserModel.findById(decoded.userId);
@@ -219,7 +222,7 @@ router.post(
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
     });
-  },
+  }
 );
 
 /**
@@ -238,7 +241,7 @@ router.post(
       await RefreshTokenModel.deleteOne({ jti: decoded.jti });
     }
     return res.json({ status: 'success', data: { loggedOut: true } });
-  },
+  }
 );
 
 /**
@@ -300,7 +303,7 @@ router.post(
     await user.save();
 
     return res.json({ status: 'success', data: { mfaEnabled: true } });
-  },
+  }
 );
 
 /**
@@ -340,7 +343,7 @@ router.post(
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
     });
-  },
+  }
 );
 
 /**
@@ -357,8 +360,7 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
 
   const { email } = req.body as { email?: string };
-  if (!email)
-    return res.status(400).json({ error: 'BadRequest', message: 'email is required' });
+  if (!email) return res.status(400).json({ error: 'BadRequest', message: 'email is required' });
 
   const user = await UserModel.findOne({ email: email.toLowerCase().trim() });
   if (!user) return res.status(404).json({ error: 'NotFound', message: 'User not found' });
@@ -383,10 +385,13 @@ router.get('/verify-email', async (req: Request, res: Response) => {
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const user = await UserModel.findOne({ emailVerificationTokenHash: tokenHash }).select(
-    '+emailVerificationTokenHash',
+    '+emailVerificationTokenHash'
   );
 
-  if (!user) return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
+  if (!user)
+    return res
+      .status(400)
+      .json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
 
   user.emailVerified = true;
   user.emailVerificationTokenHash = undefined;
@@ -416,8 +421,11 @@ router.post(
       await user.save();
       await sendPasswordResetEmail(user.email, rawToken);
     }
-    return res.json({ status: 'success', data: { message: 'If that email exists, a reset link has been sent.' } });
-  },
+    return res.json({
+      status: 'success',
+      data: { message: 'If that email exists, a reset link has been sent.' },
+    });
+  }
 );
 
 /**
@@ -438,7 +446,9 @@ router.post(
     }).select('+resetPasswordTokenHash +resetPasswordExpiresAt');
 
     if (!user) {
-      return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired reset token' });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: 'Invalid or expired reset token' });
     }
 
     user.password = req.body.newPassword;
@@ -446,8 +456,11 @@ router.post(
     user.resetPasswordExpiresAt = undefined;
     await user.save();
 
-    return res.json({ status: 'success', data: { message: 'Password has been reset successfully.' } });
-  },
+    return res.json({
+      status: 'success',
+      data: { message: 'Password has been reset successfully.' },
+    });
+  }
 );
 
 export const authRoutes = router;

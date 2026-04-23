@@ -4,7 +4,8 @@ export type AppRole =
   | 'DOCTOR'
   | 'NURSE'
   | 'ASSISTANT'
-  | 'READ_ONLY';
+  | 'READ_ONLY'
+  | 'PATIENT';
 
 declare global {
   namespace Express {

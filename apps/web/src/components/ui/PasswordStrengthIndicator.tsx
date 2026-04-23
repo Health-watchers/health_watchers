@@ -6,11 +6,11 @@ interface Rule {
 }
 
 const RULES: Rule[] = [
-  { label: 'At least 12 characters',       test: (p) => p.length >= 12 },
-  { label: 'One uppercase letter (A–Z)',    test: (p) => /[A-Z]/.test(p) },
-  { label: 'One lowercase letter (a–z)',    test: (p) => /[a-z]/.test(p) },
-  { label: 'One digit (0–9)',               test: (p) => /[0-9]/.test(p) },
-  { label: 'One special character (!@#…)',  test: (p) => /[^A-Za-z0-9]/.test(p) },
+  { label: 'At least 12 characters', test: (p) => p.length >= 12 },
+  { label: 'One uppercase letter (A–Z)', test: (p) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a–z)', test: (p) => /[a-z]/.test(p) },
+  { label: 'One digit (0–9)', test: (p) => /[0-9]/.test(p) },
+  { label: 'One special character (!@#…)', test: (p) => /[^A-Za-z0-9]/.test(p) },
 ];
 
 export function PasswordStrengthIndicator({ password }: { password: string }) {
@@ -20,10 +20,13 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
   const pct = (passed / RULES.length) * 100;
 
   const colorClass =
-    pct <= 40  ? 'bg-error-500'    :
-    pct <= 60  ? 'bg-warning-500' :
-    pct <= 80  ? 'bg-warning-400' :
-                 'bg-success-500';
+    pct <= 40
+      ? 'bg-error-500'
+      : pct <= 60
+        ? 'bg-warning-500'
+        : pct <= 80
+          ? 'bg-warning-400'
+          : 'bg-success-500';
 
   return (
     <div className="mt-2 space-y-2" aria-live="polite">
@@ -47,7 +50,10 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
         {RULES.map((r) => {
           const ok = r.test(password);
           return (
-            <li key={r.label} className={`flex items-center gap-1.5 text-xs ${ok ? 'text-success-600' : 'text-neutral-400'}`}>
+            <li
+              key={r.label}
+              className={`flex items-center gap-1.5 text-xs ${ok ? 'text-success-600' : 'text-neutral-400'}`}
+            >
               <span aria-hidden="true">{ok ? '✓' : '○'}</span>
               {r.label}
             </li>

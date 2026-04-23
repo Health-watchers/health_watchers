@@ -1,26 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ErrorMessage,
-  Toast,
-  SlideOver,
-  PageWrapper,
-  PageHeader,
-} from "@/components/ui";
-import { PaymentTable, type Payment } from "@/components/payments/PaymentTable";
-import {
-  PaymentIntentForm,
-  type PaymentIntentData,
-} from "@/components/forms/PaymentIntentForm";
-import { Button } from "@/components/ui/Button";
-import { queryKeys } from "@/lib/queryKeys";
-import { fetchWithAuth } from "@/lib/auth";
-import { API_URL } from "@/lib/api";
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
+import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
+import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
+import { Button } from '@/components/ui/Button';
+import { queryKeys } from '@/lib/queryKeys';
+import { fetchWithAuth } from '@/lib/auth';
+import { API_URL } from '@/lib/api';
 
 const API = `${API_URL}/api/v1`;
-const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet";
+const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const POLL_INTERVAL_MS = 5000;
 
 function getPaymentsErrorMessage(error: unknown): string {
@@ -94,9 +85,6 @@ export default function PaymentsClient() {
 
   const handleConfirm = async (paymentId: string, txHash: string) => {
     const res = await fetchWithAuth(`${API}/payments/${paymentId}/confirm`, {
-      method: 'POST',
-  const handleConfirm = async (intentId: string, txHash: string) => {
-    const res = await fetch(`${API}/payments/${intentId}/confirm`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ txHash }),
@@ -115,7 +103,7 @@ export default function PaymentsClient() {
     <PageWrapper className="py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <PageHeader title="Payments" />
         <div className="flex items-center gap-3">
           {polling && (

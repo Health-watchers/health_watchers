@@ -32,22 +32,92 @@ const CLINIC_ID = new Types.ObjectId('aaaaaaaaaaaaaaaaaaaaaaaa');
 const SEED_PASSWORD = 'Seed@1234!';
 
 const USERS = [
-  { fullName: 'Super Admin',   email: 'superadmin@seed.dev',  role: 'SUPER_ADMIN'  },
-  { fullName: 'Clinic Admin',  email: 'clinicadmin@seed.dev', role: 'CLINIC_ADMIN' },
-  { fullName: 'Dr. Seed User', email: 'doctor@seed.dev',      role: 'DOCTOR'       },
+  { fullName: 'Super Admin', email: 'superadmin@seed.dev', role: 'SUPER_ADMIN' },
+  { fullName: 'Clinic Admin', email: 'clinicadmin@seed.dev', role: 'CLINIC_ADMIN' },
+  { fullName: 'Dr. Seed User', email: 'doctor@seed.dev', role: 'DOCTOR' },
 ] as const;
 
 const PATIENTS = [
-  { firstName: 'Alice',   lastName: 'Johnson',   dob: '1985-03-12', sex: 'F', phone: '555-0101', address: '1 Maple St' },
-  { firstName: 'Bob',     lastName: 'Williams',  dob: '1990-07-22', sex: 'M', phone: '555-0102', address: '2 Oak Ave' },
-  { firstName: 'Carol',   lastName: 'Martinez',  dob: '1978-11-05', sex: 'F', phone: '555-0103', address: '3 Pine Rd' },
-  { firstName: 'David',   lastName: 'Brown',     dob: '2000-01-30', sex: 'M', phone: '555-0104', address: '4 Elm Blvd' },
-  { firstName: 'Eva',     lastName: 'Davis',     dob: '1995-06-18', sex: 'F', phone: '555-0105', address: '5 Cedar Ln' },
-  { firstName: 'Frank',   lastName: 'Garcia',    dob: '1982-09-09', sex: 'M', phone: '555-0106', address: '6 Birch Dr' },
-  { firstName: 'Grace',   lastName: 'Wilson',    dob: '1970-04-25', sex: 'F', phone: '555-0107', address: '7 Walnut Ct' },
-  { firstName: 'Henry',   lastName: 'Anderson',  dob: '1988-12-14', sex: 'M', phone: '555-0108', address: '8 Spruce Way' },
-  { firstName: 'Iris',    lastName: 'Thomas',    dob: '2003-08-03', sex: 'F', phone: '555-0109', address: '9 Ash Pl' },
-  { firstName: 'James',   lastName: 'Jackson',   dob: '1965-02-20', sex: 'M', phone: '555-0110', address: '10 Poplar St' },
+  {
+    firstName: 'Alice',
+    lastName: 'Johnson',
+    dob: '1985-03-12',
+    sex: 'F',
+    phone: '555-0101',
+    address: '1 Maple St',
+  },
+  {
+    firstName: 'Bob',
+    lastName: 'Williams',
+    dob: '1990-07-22',
+    sex: 'M',
+    phone: '555-0102',
+    address: '2 Oak Ave',
+  },
+  {
+    firstName: 'Carol',
+    lastName: 'Martinez',
+    dob: '1978-11-05',
+    sex: 'F',
+    phone: '555-0103',
+    address: '3 Pine Rd',
+  },
+  {
+    firstName: 'David',
+    lastName: 'Brown',
+    dob: '2000-01-30',
+    sex: 'M',
+    phone: '555-0104',
+    address: '4 Elm Blvd',
+  },
+  {
+    firstName: 'Eva',
+    lastName: 'Davis',
+    dob: '1995-06-18',
+    sex: 'F',
+    phone: '555-0105',
+    address: '5 Cedar Ln',
+  },
+  {
+    firstName: 'Frank',
+    lastName: 'Garcia',
+    dob: '1982-09-09',
+    sex: 'M',
+    phone: '555-0106',
+    address: '6 Birch Dr',
+  },
+  {
+    firstName: 'Grace',
+    lastName: 'Wilson',
+    dob: '1970-04-25',
+    sex: 'F',
+    phone: '555-0107',
+    address: '7 Walnut Ct',
+  },
+  {
+    firstName: 'Henry',
+    lastName: 'Anderson',
+    dob: '1988-12-14',
+    sex: 'M',
+    phone: '555-0108',
+    address: '8 Spruce Way',
+  },
+  {
+    firstName: 'Iris',
+    lastName: 'Thomas',
+    dob: '2003-08-03',
+    sex: 'F',
+    phone: '555-0109',
+    address: '9 Ash Pl',
+  },
+  {
+    firstName: 'James',
+    lastName: 'Jackson',
+    dob: '1965-02-20',
+    sex: 'M',
+    phone: '555-0110',
+    address: '10 Poplar St',
+  },
 ] as const;
 
 const COMPLAINTS = [
@@ -59,9 +129,27 @@ const COMPLAINTS = [
 ];
 
 const PAYMENT_RECORDS = [
-  { intentId: 'seed-intent-001', amount: '150.00', destination: 'GBSEED1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Consultation fee',   status: 'confirmed' },
-  { intentId: 'seed-intent-002', amount: '75.50',  destination: 'GBSEED2XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Lab work payment',   status: 'confirmed' },
-  { intentId: 'seed-intent-003', amount: '200.00', destination: 'GBSEED3XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Specialist referral', status: 'pending'   },
+  {
+    intentId: 'seed-intent-001',
+    amount: '150.00',
+    destination: 'GBSEED1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Consultation fee',
+    status: 'confirmed',
+  },
+  {
+    intentId: 'seed-intent-002',
+    amount: '75.50',
+    destination: 'GBSEED2XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Lab work payment',
+    status: 'confirmed',
+  },
+  {
+    intentId: 'seed-intent-003',
+    amount: '200.00',
+    destination: 'GBSEED3XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Specialist referral',
+    status: 'pending',
+  },
 ] as const;
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -100,7 +188,15 @@ async function seed() {
   for (const u of USERS) {
     await UserModel.findOneAndUpdate(
       { email: u.email },
-      { $setOnInsert: { ...u, password: hashedPassword, clinicId: CLINIC_ID, isActive: true, mfaEnabled: false } },
+      {
+        $setOnInsert: {
+          ...u,
+          password: hashedPassword,
+          clinicId: CLINIC_ID,
+          isActive: true,
+          mfaEnabled: false,
+        },
+      },
       { upsert: true, new: true }
     );
     console.log(`   ✔ ${u.role}: ${u.email}`);
@@ -140,7 +236,10 @@ async function seed() {
   console.log('\n📋  Seeding encounters...');
   for (let i = 0; i < 5; i++) {
     const patient = patientDocs[i] as any;
-    const existing = await EncounterModel.findOne({ patientId: patient._id, chiefComplaint: COMPLAINTS[i] });
+    const existing = await EncounterModel.findOne({
+      patientId: patient._id,
+      chiefComplaint: COMPLAINTS[i],
+    });
     if (existing) {
       console.log(`   ↩ skipped (exists): encounter for ${patient.firstName}`);
       continue;

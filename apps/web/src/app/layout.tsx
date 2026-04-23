@@ -86,7 +86,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale} className={inter.variable}>
       <body className="min-h-screen bg-neutral-50 font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
-
           <Toaster />
         </NextIntlClientProvider>
       </body>

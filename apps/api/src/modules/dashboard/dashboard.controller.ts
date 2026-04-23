@@ -3,6 +3,9 @@ import { PatientModel } from '../patients/models/patient.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { UserModel } from '../auth/models/user.model';
+import { cache } from '@api/services/cache.service';
+
+const STATS_TTL = 300; // 5 min
 
 /**
  * GET /api/v1/dashboard/stats
@@ -18,6 +21,10 @@ export async function getStats(req: Request, res: Response) {
         message: 'Clinic ID not found in user context',
       });
     }
+
+    const cacheKey = `${clinicId}:GET:/dashboard/stats`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -46,7 +53,7 @@ export async function getStats(req: Request, res: Response) {
         .lean(),
     ]);
 
-    return res.json({
+    const body = {
       status: 'success',
       data: {
         stats: { todayPatients, todayEncounters, pendingPayments, activeDoctors },
@@ -54,7 +61,10 @@ export async function getStats(req: Request, res: Response) {
         todayEncounters: todayEncountersList,
         pendingPayments: pendingPaymentsList,
       },
-    });
+    };
+
+    await cache.set(cacheKey, body, STATS_TTL);
+    return res.json(body);
   } catch (error) {
     return res.status(500).json({
       error: 'Internal Server Error',

@@ -137,9 +137,11 @@ import { stellarConfig } from './config.js';
 import logger from './logger.js';
 
 function getServer() {
-  return new StellarSdk.Horizon.Server(stellarConfig.network === 'mainnet'
-    ? 'https://horizon.stellar.org'
-    : 'https://horizon-testnet.stellar.org');
+  return new StellarSdk.Horizon.Server(
+    stellarConfig.network === 'mainnet'
+      ? 'https://horizon.stellar.org'
+      : 'https://horizon-testnet.stellar.org'
+  );
 }
 
 /** Fund a testnet account via Friendbot */
@@ -163,7 +165,7 @@ export async function getAccountBalance(publicKey: string) {
   const account = await server.loadAccount(publicKey);
   const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
   const usdcBalance = account.balances.find(
-    (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native',
+    (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native'
   );
 
   const payments = await server.payments().forAccount(publicKey).limit(10).order('desc').call();
@@ -194,7 +196,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
 
   // Check if trustline already exists
   const existing = sourceAccount.balances.find(
-    (b: any) => b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer,
+    (b: any) => b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer
   );
   if (existing) {
     return { alreadyExists: true, trustline: 'USDC' };
@@ -211,7 +213,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
     .addOperation(
       StellarSdk.Operation.changeTrust({
         asset: new StellarSdk.Asset('USDC', usdcIssuer),
-      }),
+      })
     )
     .setTimeout(30)
     .build();
@@ -236,15 +238,18 @@ export async function createIntent(fromPublicKey: string, toPublicKey: string, a
 
   const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
     fee: String(fee),
-    networkPassphrase: stellarConfig.network === 'mainnet'
-      ? StellarSdk.Networks.PUBLIC
-      : StellarSdk.Networks.TESTNET,
+    networkPassphrase:
+      stellarConfig.network === 'mainnet'
+        ? StellarSdk.Networks.PUBLIC
+        : StellarSdk.Networks.TESTNET,
   })
-    .addOperation(StellarSdk.Operation.payment({
-      destination: toPublicKey,
-      asset: StellarSdk.Asset.native(),
-      amount,
-    }))
+    .addOperation(
+      StellarSdk.Operation.payment({
+        destination: toPublicKey,
+        asset: StellarSdk.Asset.native(),
+        amount,
+      })
+    )
     .setTimeout(30)
     .build();
 

@@ -56,7 +56,13 @@ async function sendWithRetry(job: EmailJob): Promise<void> {
   if (IS_TEST || !transporter) return;
 
   try {
-    await transporter.sendMail({ from: FROM, to: job.to, subject: job.subject, text: job.text, html: job.html });
+    await transporter.sendMail({
+      from: FROM,
+      to: job.to,
+      subject: job.subject,
+      text: job.text,
+      html: job.html,
+    });
     logger.info({ to: job.to, subject: job.subject }, 'Email sent');
   } catch (err) {
     if (job.attempt < MAX_RETRIES) {
@@ -64,7 +70,10 @@ async function sendWithRetry(job: EmailJob): Promise<void> {
       logger.warn({ to: job.to, attempt: job.attempt, delay }, 'Email failed, retrying');
       setTimeout(() => sendWithRetry({ ...job, attempt: job.attempt + 1 }), delay);
     } else {
-      logger.error({ err, to: job.to, subject: job.subject }, 'Email delivery failed after max retries');
+      logger.error(
+        { err, to: job.to, subject: job.subject },
+        'Email delivery failed after max retries'
+      );
     }
   }
 }
@@ -122,11 +131,15 @@ export function sendAppointmentReminderEmail(
   to: string,
   patientName: string,
   appointmentDate: Date,
-  doctorName: string,
+  doctorName: string
 ): void {
   const dateStr = appointmentDate.toLocaleString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
   const text = `Reminder: ${patientName} has an appointment with ${doctorName} on ${dateStr}.`;
   const html = `
@@ -145,7 +158,7 @@ export function sendPaymentConfirmationEmail(
   to: string,
   amount: string,
   assetCode: string,
-  txHash: string,
+  txHash: string
 ): void {
   const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
   const text = `Your payment of ${amount} ${assetCode} has been confirmed.\n\nTransaction: ${txHash}\nView on explorer: ${explorerUrl}`;
@@ -162,7 +175,7 @@ export function sendPaymentConfirmationEmail(
 export function sendAiSummaryReadyEmail(
   to: string,
   patientName: string,
-  encounterId: string,
+  encounterId: string
 ): void {
   const encounterUrl = `${APP_BASE_URL}/encounters/${encounterId}`;
   const text = `The AI clinical summary for ${patientName}'s encounter is ready.\n\nView it here: ${encounterUrl}`;

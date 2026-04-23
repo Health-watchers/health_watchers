@@ -68,9 +68,12 @@ const mockPatient = {
 async function putHandler(
   params: { id: string },
   body: Record<string, unknown>,
-  res: ReturnType<typeof makeRes>,
+  res: ReturnType<typeof makeRes>
 ) {
-  const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = body as Record<string, string>;
+  const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = body as Record<
+    string,
+    string
+  >;
   const update: Record<string, unknown> = { contactNumber, address, sex };
   if (firstName) update.firstName = firstName;
   if (lastName) update.lastName = lastName;
@@ -84,10 +87,7 @@ async function putHandler(
   return res.json({ status: 'success', data: doc });
 }
 
-async function deleteHandler(
-  params: { id: string },
-  res: ReturnType<typeof makeRes>,
-) {
+async function deleteHandler(params: { id: string }, res: ReturnType<typeof makeRes>) {
   const doc = await PatientModel.findByIdAndUpdate(params.id, { isActive: false }, { new: true });
   if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
   return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
@@ -105,14 +105,20 @@ describe('PUT /patients/:id handler', () => {
 
     await putHandler(
       { id: PATIENT_ID },
-      { firstName: 'Janet', lastName: 'Doe', sex: 'F', contactNumber: '555-9999', address: '456 Oak' },
-      res,
+      {
+        firstName: 'Janet',
+        lastName: 'Doe',
+        sex: 'F',
+        contactNumber: '555-9999',
+        address: '456 Oak',
+      },
+      res
     );
 
     expect(PatientModel.findByIdAndUpdate).toHaveBeenCalledWith(
       PATIENT_ID,
       expect.objectContaining({ firstName: 'Janet', searchName: 'janet doe' }),
-      { new: true },
+      { new: true }
     );
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
   });
@@ -136,7 +142,7 @@ describe('PUT /patients/:id handler', () => {
     expect(PatientModel.findByIdAndUpdate).toHaveBeenCalledWith(
       PATIENT_ID,
       expect.objectContaining({ searchName: 'alice smith' }),
-      { new: true },
+      { new: true }
     );
   });
 
@@ -166,7 +172,10 @@ describe('DELETE /patients/:id handler (soft-delete)', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('sets isActive=false and returns 200', async () => {
-    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({ ...mockPatient, isActive: false });
+    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+      ...mockPatient,
+      isActive: false,
+    });
     const res = makeRes();
 
     await deleteHandler({ id: PATIENT_ID }, res);
@@ -174,10 +183,13 @@ describe('DELETE /patients/:id handler (soft-delete)', () => {
     expect(PatientModel.findByIdAndUpdate).toHaveBeenCalledWith(
       PATIENT_ID,
       { isActive: false },
-      { new: true },
+      { new: true }
     );
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'success', data: expect.objectContaining({ isActive: false }) }),
+      expect.objectContaining({
+        status: 'success',
+        data: expect.objectContaining({ isActive: false }),
+      })
     );
   });
 
@@ -192,7 +204,10 @@ describe('DELETE /patients/:id handler (soft-delete)', () => {
   });
 
   it('does not hard-delete — isActive is set to false, not removed', async () => {
-    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({ ...mockPatient, isActive: false });
+    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+      ...mockPatient,
+      isActive: false,
+    });
     const res = makeRes();
 
     await deleteHandler({ id: PATIENT_ID }, res);
@@ -204,13 +219,17 @@ describe('DELETE /patients/:id handler (soft-delete)', () => {
   });
 
   it('returns the patient id in the response', async () => {
-    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({ ...mockPatient, _id: PATIENT_ID, isActive: false });
+    (PatientModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+      ...mockPatient,
+      _id: PATIENT_ID,
+      isActive: false,
+    });
     const res = makeRes();
 
     await deleteHandler({ id: PATIENT_ID }, res);
 
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ id: PATIENT_ID }) }),
+      expect.objectContaining({ data: expect.objectContaining({ id: PATIENT_ID }) })
     );
   });
 });

@@ -57,7 +57,7 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
       aria-selected={isActive}
       onClick={() => onChange(value)}
       className={[
-        'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+        'focus-visible:ring-primary-500 -mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2',
         isActive
           ? 'border-primary-500 text-primary-500'
           : 'border-transparent text-neutral-500 hover:text-neutral-800',

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { getSocket, disconnectSocket } from "@/lib/socket";
-import { queryKeys } from "@/lib/queryKeys";
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { getSocket, disconnectSocket } from '@/lib/socket';
+import { queryKeys } from '@/lib/queryKeys';
 
 /**
  * Subscribes to Socket.IO real-time events and invalidates the relevant
@@ -19,23 +19,23 @@ export function useRealtimeUpdates(accessToken: string | null) {
 
     const socket = getSocket(accessToken);
 
-    socket.on("patient:created", () => {
+    socket.on('patient:created', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
     });
 
-    socket.on("patient:updated", () => {
+    socket.on('patient:updated', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
     });
 
-    socket.on("encounter:created", () => {
+    socket.on('encounter:created', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.encounters.all });
     });
 
-    socket.on("encounter:updated", () => {
+    socket.on('encounter:updated', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.encounters.all });
     });
 
-    socket.on("payment:confirmed", () => {
+    socket.on('payment:confirmed', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
     });
 
@@ -44,12 +44,12 @@ export function useRealtimeUpdates(accessToken: string | null) {
     });
 
     return () => {
-      socket.off("patient:created");
-      socket.off("patient:updated");
-      socket.off("encounter:created");
-      socket.off("encounter:updated");
-      socket.off("payment:confirmed");
-      socket.off("notification:new");
+      socket.off('patient:created');
+      socket.off('patient:updated');
+      socket.off('encounter:created');
+      socket.off('encounter:updated');
+      socket.off('payment:confirmed');
+      socket.off('notification:new');
       disconnectSocket();
     };
   }, [accessToken, queryClient]);

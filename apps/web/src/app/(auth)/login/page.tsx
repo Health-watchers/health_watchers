@@ -55,12 +55,12 @@ export default function LoginPage() {
   return (
     <Card padding="lg" className="w-full max-w-[400px]">
       <div className="mb-6 flex flex-col items-center gap-2">
-        <span className="text-2xl font-bold text-primary-600">Health Watchers</span>
+        <span className="text-primary-600 text-2xl font-bold">Health Watchers</span>
         <h1 className="text-xl font-semibold text-neutral-800">Sign in to your account</h1>
       </div>
 
       {serverError && (
-        <p role="alert" className="mb-4 rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">
+        <p role="alert" className="bg-danger-50 text-danger-700 mb-4 rounded-md px-3 py-2 text-sm">
           {serverError}
         </p>
       )}
@@ -86,7 +86,7 @@ export default function LoginPage() {
         <div className="flex justify-end">
           <Link
             href="/forgot-password"
-            className="text-sm text-primary-600 hover:underline focus:outline-none focus:underline"
+            className="text-primary-600 text-sm hover:underline focus:underline focus:outline-none"
           >
             Forgot password?
           </Link>

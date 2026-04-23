@@ -40,7 +40,8 @@ clinicSettingsRoutes.get('/', async (req: Request, res: Response) => {
 clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
   try {
     const { clinicId, userId } = req.user!;
-    const { workingHours, appointmentDuration, timezone, currency, notifications, branding } = req.body;
+    const { workingHours, appointmentDuration, timezone, currency, notifications, branding } =
+      req.body;
 
     if (timezone && !isValidTimezone(timezone)) {
       return res.status(400).json({
@@ -50,17 +51,17 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
     }
 
     const update: Record<string, unknown> = {};
-    if (workingHours !== undefined)        update.workingHours = workingHours;
+    if (workingHours !== undefined) update.workingHours = workingHours;
     if (appointmentDuration !== undefined) update.appointmentDuration = appointmentDuration;
-    if (timezone !== undefined)            update.timezone = timezone;
-    if (currency !== undefined)            update.currency = currency;
-    if (notifications !== undefined)       update.notifications = notifications;
-    if (branding !== undefined)            update.branding = branding;
+    if (timezone !== undefined) update.timezone = timezone;
+    if (currency !== undefined) update.currency = currency;
+    if (notifications !== undefined) update.notifications = notifications;
+    if (branding !== undefined) update.branding = branding;
 
     const settings = await ClinicSettingsModel.findOneAndUpdate(
       { clinicId },
       { $set: update },
-      { new: true, upsert: true, runValidators: true },
+      { new: true, upsert: true, runValidators: true }
     ).lean();
 
     // Audit log
@@ -104,7 +105,7 @@ clinicSettingsRoutes.put('/stellar', async (req: Request, res: Response) => {
     const settings = await ClinicSettingsModel.findOneAndUpdate(
       { clinicId },
       { $set: { stellarPublicKey } },
-      { new: true, upsert: true },
+      { new: true, upsert: true }
     ).lean();
 
     await auditLog({

@@ -33,7 +33,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     assetCode: { type: String, required: true, default: 'XLM', uppercase: true, trim: true },
     assetIssuer: { type: String, default: null },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 paymentRecordSchema.index({ status: 1, createdAt: 1 });

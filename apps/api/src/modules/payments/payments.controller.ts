@@ -21,7 +21,9 @@ const router = Router();
 router.use(authenticate);
 
 function canReadPayments(role: string): boolean {
-  return ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].includes(role);
+  return ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].includes(
+    role
+  );
 }
 
 // GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
@@ -33,7 +35,9 @@ router.get(
     const clinic = await ClinicModel.findById(clinicId).lean();
 
     if (!clinic?.stellarPublicKey) {
-      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
     }
 
     try {
@@ -51,7 +55,7 @@ router.get(
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
-  }),
+  })
 );
 
 // POST /payments/fund — fund clinic's testnet account via Friendbot
@@ -63,17 +67,22 @@ router.post(
     const clinic = await ClinicModel.findById(clinicId).lean();
 
     if (!clinic?.stellarPublicKey) {
-      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
     }
 
     try {
       const data = await stellarClient.fundAccount(clinic.stellarPublicKey);
-      logger.info({ clinicId, publicKey: clinic.stellarPublicKey }, 'Testnet account funded via Friendbot');
+      logger.info(
+        { clinicId, publicKey: clinic.stellarPublicKey },
+        'Testnet account funded via Friendbot'
+      );
       return res.json({ status: 'success', data });
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
-  }),
+  })
 );
 
 // POST /payments/trustline — create USDC trustline for clinic's Stellar account
@@ -85,17 +94,22 @@ router.post(
     const clinic = await ClinicModel.findById(clinicId).lean();
 
     if (!clinic?.stellarPublicKey) {
-      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
     }
 
     try {
-      const data = await stellarClient.createUsdcTrustline(clinic.stellarPublicKey, config.stellar.usdcIssuer);
+      const data = await stellarClient.createUsdcTrustline(
+        clinic.stellarPublicKey,
+        config.stellar.usdcIssuer
+      );
       logger.info({ clinicId, publicKey: clinic.stellarPublicKey }, 'USDC trustline created');
       return res.json({ status: 'success', data });
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
-  }),
+  })
 );
 
 // GET /payments — paginated list scoped to the authenticated clinic
@@ -104,7 +118,9 @@ router.get(
   validateRequest({ query: listPaymentsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!canReadPayments(req.user!.role)) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
     }
 
     const { patientId, status, page, limit } = req.query as unknown as ListPaymentsQuery;
@@ -123,7 +139,7 @@ router.get(
       data: payments.map(toPaymentResponse),
       meta: { total, page, limit },
     });
-  }),
+  })
 );
 
 // POST /payments/intent
@@ -171,7 +187,7 @@ router.post(
       status: 'success',
       data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
     });
-  }),
+  })
 );
 
 // PATCH /payments/:intentId/confirm
@@ -184,15 +200,21 @@ router.patch(
 
     const payment = await PaymentRecordModel.findOne({ intentId, clinicId: req.user!.clinicId });
     if (!payment) {
-      return res.status(404).json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
     }
 
     if (payment.status === 'confirmed') {
-      return res.status(409).json({ error: 'AlreadyConfirmed', message: 'This payment has already been confirmed' });
+      return res
+        .status(409)
+        .json({ error: 'AlreadyConfirmed', message: 'This payment has already been confirmed' });
     }
 
     if (payment.status === 'failed') {
-      return res.status(400).json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
+      return res
+        .status(400)
+        .json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
     }
 
     const verification = await stellarClient.verifyTransaction(txHash);
@@ -237,7 +259,7 @@ router.patch(
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
       { status: 'confirmed', txHash, confirmedAt: new Date() },
-      { new: true },
+      { new: true }
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
@@ -247,12 +269,19 @@ router.patch(
       const { ClinicModel } = await import('../clinics/clinic.model');
       const clinic = await ClinicModel.findById(updatedPayment!.clinicId).lean();
       if (clinic?.email) {
-        sendPaymentConfirmationEmail(clinic.email, updatedPayment!.amount, updatedPayment!.assetCode, txHash);
+        sendPaymentConfirmationEmail(
+          clinic.email,
+          updatedPayment!.amount,
+          updatedPayment!.assetCode,
+          txHash
+        );
       }
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
 
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
-  }),
+  })
 );
 
 export const paymentRoutes = router;

@@ -7,7 +7,7 @@ import {
   isAIServiceAvailable,
   AI_DISCLAIMER,
 } from './ai.service';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
 import { sendAiSummaryReadyEmail } from '@api/lib/email.service';
 
@@ -92,7 +92,9 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
         sendAiSummaryReadyEmail(doctor.email, patientName, encounterId);
       }
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
 
     return res.json({
       success: true,
@@ -218,7 +220,9 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
 
     const { patientId } = req.body;
     if (!patientId || !isValidObjectId(patientId)) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Valid patientId is required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'Valid patientId is required' });
     }
 
     const { EncounterModel } = await import('../encounters/encounter.model');
@@ -242,7 +246,10 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
       .map((e) => ({ date: (e as any).createdAt, vitals: e.vitalSigns }));
 
     if (anonymizedVitals.length === 0) {
-      return res.status(422).json({ error: 'InsufficientData', message: 'No vital sign data available for trend analysis' });
+      return res.status(422).json({
+        error: 'InsufficientData',
+        message: 'No vital sign data available for trend analysis',
+      });
     }
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -319,3 +326,93 @@ Provide a plain-language clinical interpretation:`;
 });
 
 export default router;
+
+// POST /api/v1/ai/generate-care-plan
+// Input: { patientId, condition, icdCode? }
+// Returns: AI-suggested care plan (not saved — doctor must approve via POST /care-plans)
+router.post(
+  '/generate-care-plan',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({ error: 'AIUnavailable' });
+      }
+
+      const { patientId, condition, icdCode } = req.body;
+      if (!patientId || !condition) {
+        return res
+          .status(400)
+          .json({ error: 'ValidationError', message: 'patientId and condition are required' });
+      }
+      if (!isValidObjectId(patientId)) {
+        return res.status(400).json({ error: 'ValidationError', message: 'Invalid patientId' });
+      }
+
+      const { PatientModel } = await import('../patients/models/patient.model');
+      const { EncounterModel } = await import('../encounters/encounter.model');
+
+      const [patient, recentEncounters] = await Promise.all([
+        PatientModel.findOne({ _id: patientId, clinicId: req.user!.clinicId }).lean(),
+        EncounterModel.find({ patientId, clinicId: req.user!.clinicId, isActive: true })
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .select('chiefComplaint diagnosis vitalSigns notes createdAt')
+          .lean(),
+      ]);
+
+      if (!patient) {
+        return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+      }
+
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const { config } = await import('@health-watchers/config');
+      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+      const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const prompt = `You are a clinical decision support AI. Generate a structured chronic disease care plan for a patient with the following profile.
+
+Condition: ${condition}${icdCode ? ` (ICD-10: ${icdCode})` : ''}
+Patient sex: ${(patient as any).sex}
+Recent encounters (last 5): ${JSON.stringify(
+        recentEncounters.map((e) => ({
+          date: (e as any).createdAt,
+          chiefComplaint: e.chiefComplaint,
+          diagnosis: e.diagnosis,
+          vitalSigns: e.vitalSigns,
+        })),
+        null,
+        2
+      )}
+
+Respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):
+{
+  "goals": [{ "description": string, "targetValue": string | null, "status": "active" }],
+  "interventions": [{ "type": "medication"|"lifestyle"|"monitoring"|"referral", "description": string, "frequency": string | null }],
+  "monitoringSchedule": [{ "parameter": string, "frequency": string, "targetRange": string | null }],
+  "reviewDate": "<ISO date 3 months from today>"
+}`;
+
+      const result = await aiModel.generateContent(prompt);
+      const text = result.response.text().trim();
+
+      let suggestion: unknown;
+      try {
+        // Strip possible markdown code fences
+        const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        suggestion = JSON.parse(json);
+      } catch {
+        logger.warn({ text }, '[ai] generate-care-plan: failed to parse JSON response');
+        return res
+          .status(502)
+          .json({ error: 'AIParseError', message: 'AI returned an unparseable response' });
+      }
+
+      return res.json({ success: true, suggestion, aiGenerated: true });
+    } catch (error: any) {
+      logger.error({ err: error }, 'AI generate-care-plan error');
+      return res.status(500).json({ error: 'InternalServerError', message: error.message });
+    }
+  }
+);

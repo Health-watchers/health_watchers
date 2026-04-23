@@ -28,7 +28,7 @@ export async function expirePendingPayments(): Promise<number> {
     },
     {
       status: 'failed',
-    },
+    }
   );
 
   if (result.modifiedCount > 0) {
@@ -52,7 +52,7 @@ export function startPaymentExpirationJob(): void {
   }
 
   logger.info(
-    `Starting payment expiration job (checking every ${CHECK_INTERVAL_MS / 1000}s, expiring after ${PAYMENT_EXPIRY_MINUTES}m)`,
+    `Starting payment expiration job (checking every ${CHECK_INTERVAL_MS / 1000}s, expiring after ${PAYMENT_EXPIRY_MINUTES}m)`
   );
 
   // Run immediately on startup

@@ -4,11 +4,13 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-<<<<<<< fix/stellar-network-safety-guards-335
-import { fundAccount, createIntent, verifyIntent } from './stellar.js';
-=======
-import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
->>>>>>> main
+import {
+  fundAccount,
+  createIntent,
+  verifyIntent,
+  getAccountBalance,
+  createUsdcTrustline,
+} from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
@@ -31,26 +33,28 @@ if (!SHARED_SECRET) {
 // Middleware: Validate Shared Secret (ONLY for mutating endpoints)
 const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing Authorization header' });
   }
-  
+
   const token = authHeader.substring(7); // Remove "Bearer "
-  
+
   if (token !== SHARED_SECRET) {
     return res.status(401).json({ error: 'Invalid secret' });
   }
-  
+
   next();
 };
 
 app.use(express.json());
-app.use(pinoHttp({
-  logger,
-  genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-  redact: ['req.headers.authorization'],
-}));
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    redact: ['req.headers.authorization'],
+  })
+);
 
 // ✅ PUBLIC: GET /network - Network status endpoint
 app.get('/network', (req, res) => {

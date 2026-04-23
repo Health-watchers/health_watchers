@@ -56,7 +56,7 @@ export function PasswordInput({ error, ...props }: PasswordInputProps) {
       type="button"
       aria-label={visible ? 'Hide password' : 'Show password'}
       onClick={() => setVisible((v) => !v)}
-      className="text-neutral-400 hover:text-neutral-600 focus:outline-none focus:text-neutral-600"
+      className="text-neutral-400 hover:text-neutral-600 focus:text-neutral-600 focus:outline-none"
     >
       {visible ? <EyeOffIcon /> : <EyeIcon />}
     </button>

@@ -76,14 +76,18 @@ function SendPaymentForm({ balance, onSubmit, onCancel, loading }: SendPaymentFo
     const e: Record<string, string> = {};
     if (!destination.trim()) e.destination = 'Destination is required';
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) e.amount = 'Enter a valid amount';
-    else if (Number(amount) > Number(balance)) e.amount = `Insufficient balance (${balance} XLM available)`;
+    else if (Number(amount) > Number(balance))
+      e.amount = `Insufficient balance (${balance} XLM available)`;
     return e;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
     onSubmit({ destination: destination.trim(), amount, memo: memo.trim() || undefined });
   };
 
@@ -113,8 +117,12 @@ function SendPaymentForm({ balance, onSubmit, onCancel, loading }: SendPaymentFo
         placeholder="Payment reference"
       />
       <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
-        <Button type="submit" loading={loading}>Review Payment</Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>
+          Cancel
+        </Button>
+        <Button type="submit" loading={loading}>
+          Review Payment
+        </Button>
       </div>
     </form>
   );
@@ -128,7 +136,13 @@ interface ConfirmPaymentModalProps {
   loading: boolean;
 }
 
-function ConfirmPaymentModal({ open, data, onConfirm, onCancel, loading }: ConfirmPaymentModalProps) {
+function ConfirmPaymentModal({
+  open,
+  data,
+  onConfirm,
+  onCancel,
+  loading,
+}: ConfirmPaymentModalProps) {
   if (!data) return null;
   return (
     <Modal open={open} onClose={onCancel} title="Confirm Payment" size="sm">
@@ -148,9 +162,13 @@ function ConfirmPaymentModal({ open, data, onConfirm, onCancel, loading }: Confi
           </div>
         )}
       </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <Button variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
-        <Button onClick={onConfirm} loading={loading}>Send Payment</Button>
+      <div className="mt-6 flex justify-end gap-3">
+        <Button variant="secondary" onClick={onCancel} disabled={loading}>
+          Cancel
+        </Button>
+        <Button onClick={onConfirm} loading={loading}>
+          Send Payment
+        </Button>
       </div>
     </Modal>
   );
@@ -161,7 +179,11 @@ export default function WalletClient() {
   const { data: wallet, isLoading, error, refetch } = useWalletBalance();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showSendForm, setShowSendForm] = useState(false);
-  const [pendingPayment, setPendingPayment] = useState<{ destination: string; amount: string; memo?: string } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<{
+    destination: string;
+    amount: string;
+    memo?: string;
+  } | null>(null);
 
   const fundMutation = useMutation({
     mutationFn: async () => {
@@ -173,9 +195,15 @@ export default function WalletClient() {
       return res.json();
     },
     onSuccess: () => {
-      setToast({ message: 'Account funded successfully! Balance will update shortly.', type: 'success' });
+      setToast({
+        message: 'Account funded successfully! Balance will update shortly.',
+        type: 'success',
+      });
       // Delay refetch to allow Horizon to index the transaction
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: queryKeys.wallet.balance() }), 3000);
+      setTimeout(
+        () => queryClient.invalidateQueries({ queryKey: queryKeys.wallet.balance() }),
+        3000
+      );
     },
     onError: (err: Error) => {
       setToast({ message: err.message, type: 'error' });
@@ -193,7 +221,10 @@ export default function WalletClient() {
     },
     onSuccess: () => {
       setToast({ message: 'USDC trustline created successfully!', type: 'success' });
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: queryKeys.wallet.balance() }), 2000);
+      setTimeout(
+        () => queryClient.invalidateQueries({ queryKey: queryKeys.wallet.balance() }),
+        2000
+      );
     },
     onError: (err: Error) => {
       setToast({ message: err.message, type: 'error' });
@@ -226,27 +257,23 @@ export default function WalletClient() {
   });
 
   return (
-    <PageWrapper className="py-8 space-y-6">
+    <PageWrapper className="space-y-6 py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <PageHeader
-        title="Wallet"
-        subtitle="Manage your clinic's Stellar account"
-      />
+      <PageHeader title="Wallet" subtitle="Manage your clinic's Stellar account" />
 
       {isLoading && (
-        <div role="status" aria-live="polite" className="flex items-center gap-3 py-12 text-neutral-500">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 py-12 text-neutral-500"
+        >
           <Spinner />
           <span>Loading wallet...</span>
         </div>
       )}
 
-      {error && (
-        <ErrorMessage
-          message={(error as Error).message}
-          onRetry={() => refetch()}
-        />
-      )}
+      {error && <ErrorMessage message={(error as Error).message} onRetry={() => refetch()} />}
 
       {wallet && (
         <>
@@ -260,32 +287,45 @@ export default function WalletClient() {
             </CardHeader>
 
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                <span className="text-sm text-neutral-500 shrink-0">Public Key</span>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
+                <span className="shrink-0 text-sm text-neutral-500">Public Key</span>
                 <StellarAddressDisplay value={wallet.publicKey} className="text-sm" />
-                <span className="font-mono text-xs text-neutral-400 hidden sm:block truncate">{wallet.publicKey}</span>
+                <span className="hidden truncate font-mono text-xs text-neutral-400 sm:block">
+                  {wallet.publicKey}
+                </span>
               </div>
 
               <div className="flex items-end gap-2">
                 <span className="text-4xl font-bold text-neutral-900 tabular-nums">
-                  {parseFloat(wallet.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })}
+                  {parseFloat(wallet.balance).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 7,
+                  })}
                 </span>
-                <span className="text-lg text-neutral-500 mb-1">XLM</span>
+                <span className="mb-1 text-lg text-neutral-500">XLM</span>
               </div>
 
               {wallet.usdcBalance !== null && wallet.usdcBalance !== undefined ? (
                 <div className="flex items-end gap-2">
                   <span className="text-2xl font-semibold text-neutral-700 tabular-nums">
-                    {parseFloat(wallet.usdcBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {parseFloat(wallet.usdcBalance).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </span>
-                  <span className="text-base text-neutral-500 mb-0.5">USDC</span>
+                  <span className="mb-0.5 text-base text-neutral-500">USDC</span>
                 </div>
               ) : (
-                <p className="text-sm text-neutral-400">No USDC trustline — create one to receive USDC payments.</p>
+                <p className="text-sm text-neutral-400">
+                  No USDC trustline — create one to receive USDC payments.
+                </p>
               )}
 
               <div className="flex flex-wrap gap-3 pt-2">
-                <Button onClick={() => setShowSendForm(true)} disabled={parseFloat(wallet.balance) <= 0}>
+                <Button
+                  onClick={() => setShowSendForm(true)}
+                  disabled={parseFloat(wallet.balance) <= 0}
+                >
                   Send Payment
                 </Button>
                 {IS_TESTNET && (
@@ -294,7 +334,11 @@ export default function WalletClient() {
                     onClick={() => fundMutation.mutate()}
                     loading={fundMutation.isPending}
                     disabled={fundMutation.isSuccess}
-                    title={fundMutation.isSuccess ? 'Already funded this session' : 'Fund with Friendbot (testnet only)'}
+                    title={
+                      fundMutation.isSuccess
+                        ? 'Already funded this session'
+                        : 'Fund with Friendbot (testnet only)'
+                    }
                   >
                     {fundMutation.isSuccess ? '✓ Funded' : 'Fund with Friendbot'}
                   </Button>
@@ -321,7 +365,10 @@ export default function WalletClient() {
               </CardHeader>
               <SendPaymentForm
                 balance={wallet.balance}
-                onSubmit={(data) => { setPendingPayment(data); setShowSendForm(false); }}
+                onSubmit={(data) => {
+                  setPendingPayment(data);
+                  setShowSendForm(false);
+                }}
                 onCancel={() => setShowSendForm(false)}
                 loading={false}
               />
@@ -336,17 +383,27 @@ export default function WalletClient() {
             </CardHeader>
 
             {wallet.transactions.length === 0 ? (
-              <p className="text-sm text-neutral-500 py-4 text-center">No transactions yet.</p>
+              <p className="py-4 text-center text-sm text-neutral-500">No transactions yet.</p>
             ) : (
-              <div className="overflow-x-auto -mx-6">
+              <div className="-mx-6 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-neutral-100">
-                      <th className="px-6 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide">Type</th>
-                      <th className="px-6 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide">Amount</th>
-                      <th className="px-6 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide">From / To</th>
-                      <th className="px-6 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide">Date</th>
-                      <th className="px-6 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide">Tx</th>
+                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                        Type
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                        Amount
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                        From / To
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                        Date
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                        Tx
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-50">
@@ -365,7 +422,7 @@ export default function WalletClient() {
                           <td className="px-6 py-3">
                             <StellarAddressDisplay value={isIncoming ? tx.from : tx.to} />
                           </td>
-                          <td className="px-6 py-3 text-neutral-500 whitespace-nowrap">
+                          <td className="px-6 py-3 whitespace-nowrap text-neutral-500">
                             {new Date(tx.createdAt).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-3">
@@ -373,7 +430,7 @@ export default function WalletClient() {
                               href={getStellarExplorerUrl(tx.hash, NETWORK)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-primary-500 hover:underline text-xs font-mono"
+                              className="text-primary-500 font-mono text-xs hover:underline"
                               aria-label={`View transaction ${tx.hash} on Stellar Explorer`}
                             >
                               {tx.hash.slice(0, 8)}…
@@ -395,7 +452,10 @@ export default function WalletClient() {
         open={!!pendingPayment}
         data={pendingPayment}
         onConfirm={() => pendingPayment && sendMutation.mutate(pendingPayment)}
-        onCancel={() => { setPendingPayment(null); setShowSendForm(true); }}
+        onCancel={() => {
+          setPendingPayment(null);
+          setShowSendForm(true);
+        }}
         loading={sendMutation.isPending}
       />
     </PageWrapper>

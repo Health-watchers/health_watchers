@@ -68,7 +68,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
     <>
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-white focus:border focus:border-gray-400 focus:rounded"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:border focus:border-gray-400 focus:bg-white focus:px-4 focus:py-2"
       >
         Skip to main content
       </a>
@@ -76,12 +76,12 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
       <nav aria-label="Main navigation" className="border-b border-gray-200 bg-white" ref={menuRef}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-14 items-center justify-between">
-            <Link href="/" className="font-semibold text-gray-900 text-sm sm:text-base">
+            <Link href="/" className="text-sm font-semibold text-gray-900 sm:text-base">
               Health Watchers
             </Link>
 
             {isLoggedIn && (
-              <ul className="hidden md:flex gap-6 list-none m-0 p-0" role="list">
+              <ul className="m-0 hidden list-none gap-6 p-0 md:flex" role="list">
                 {links.map((l) => (
                   <li key={l.href}>
                     <Link href={l.href} className={linkClass(l.href)}>
@@ -92,12 +92,12 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
               </ul>
             )}
 
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden items-center gap-4 md:flex">
               <LanguageSwitcher current={locale} />
               {isLoggedIn && (
                 <button
                   onClick={handleLogout}
-                  className="text-sm text-gray-500 hover:text-red-600 focus:outline-none focus:underline transition-colors"
+                  className="text-sm text-gray-500 transition-colors hover:text-red-600 focus:underline focus:outline-none"
                 >
                   Logout
                 </button>
@@ -105,7 +105,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
             </div>
 
             <button
-              className="md:hidden p-2 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+              className="rounded p-2 focus:ring-2 focus:ring-gray-400 focus:outline-none md:hidden"
               aria-label={open ? 'Close menu' : 'Open menu'}
               aria-expanded={open}
               aria-controls="mobile-menu"
@@ -139,10 +139,10 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
         </div>
 
         {open && (
-          <div id="mobile-menu" className="md:hidden border-t border-gray-100 bg-white px-4 pb-4">
+          <div id="mobile-menu" className="border-t border-gray-100 bg-white px-4 pb-4 md:hidden">
             {isLoggedIn && (
               <>
-                <ul role="list" className="mt-3 flex flex-col gap-3 list-none m-0 p-0">
+                <ul role="list" className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
                   {links.map((l) => (
                     <li key={l.href}>
                       <Link
@@ -160,7 +160,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
                     handleLogout();
                     setOpen(false);
                   }}
-                  className="mt-3 block w-full text-left text-sm text-gray-500 hover:text-red-600 focus:outline-none focus:underline"
+                  className="mt-3 block w-full text-left text-sm text-gray-500 hover:text-red-600 focus:underline focus:outline-none"
                 >
                   Logout
                 </button>

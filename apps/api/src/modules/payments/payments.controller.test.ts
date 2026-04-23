@@ -90,7 +90,7 @@ function makeToken(): string {
       expiresIn: '15m',
       issuer: 'health-watchers-api',
       audience: 'health-watchers-client',
-    },
+    }
   );
 }
 
@@ -146,7 +146,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(PaymentRecordModel.findByIdAndUpdate).toHaveBeenCalledWith(
       pendingPayment._id,
       expect.objectContaining({ status: 'confirmed', txHash: 'valid-tx' }),
-      { new: true },
+      { new: true }
     );
   });
 
@@ -171,7 +171,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(res.body.error).toBe('TransactionNotFound');
     expect(PaymentRecordModel.findByIdAndUpdate).toHaveBeenCalledWith(
       pendingPayment._id,
-      expect.objectContaining({ status: 'failed', txHash: 'invalid-tx' }),
+      expect.objectContaining({ status: 'failed', txHash: 'invalid-tx' })
     );
   });
 

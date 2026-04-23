@@ -97,7 +97,9 @@ async function refreshHandler(body: { refreshToken: string }, res: ReturnType<ty
 
   if (existing.consumed) {
     await (RefreshTokenModel as any).deleteMany({ family: existing.family });
-    return res.status(401).json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
+    return res
+      .status(401)
+      .json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
   }
 
   const user = await (UserModel as any).findById(decoded.userId);
@@ -195,7 +197,11 @@ describe('Refresh token rotation', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('issues new access + refresh tokens and marks old JTI consumed', async () => {
-    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const { token, jti, family } = signRefreshToken({
+      userId: USER_ID,
+      role: 'DOCTOR',
+      clinicId: CLINIC_ID,
+    });
     const saveMock = jest.fn().mockResolvedValue(undefined);
     const existing = { jti, family, consumed: false, save: saveMock };
 
@@ -209,7 +215,7 @@ describe('Refresh token rotation', () => {
     expect(existing.consumed).toBe(true);
     expect(saveMock).toHaveBeenCalledTimes(1);
     expect(RefreshTokenModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ family, consumed: false }),
+      expect.objectContaining({ family, consumed: false })
     );
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'success' }),
@@ -258,15 +264,27 @@ describe('Refresh token rotation', () => {
     await refreshHandler(token, res);
       expect.objectContaining({
         status: 'success',
-        data: expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String) }),
-      }),
+        data: expect.objectContaining({
+          accessToken: expect.any(String),
+          refreshToken: expect.any(String),
+        }),
+      })
     );
   });
 
   it('new refresh token has a different JTI than the old one', async () => {
-    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const { token, jti, family } = signRefreshToken({
+      userId: USER_ID,
+      role: 'DOCTOR',
+      clinicId: CLINIC_ID,
+    });
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({
+      jti,
+      family,
+      consumed: false,
+      save: saveMock,
+    });
     (UserModel.findById as jest.Mock).mockResolvedValue(mockUser);
     (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
     const res = makeRes();
@@ -278,9 +296,18 @@ describe('Refresh token rotation', () => {
   });
 
   it('preserves the token family across rotation', async () => {
-    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const { token, jti, family } = signRefreshToken({
+      userId: USER_ID,
+      role: 'DOCTOR',
+      clinicId: CLINIC_ID,
+    });
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({
+      jti,
+      family,
+      consumed: false,
+      save: saveMock,
+    });
     (UserModel.findById as jest.Mock).mockResolvedValue(mockUser);
     (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
     const res = makeRes();
@@ -292,7 +319,11 @@ describe('Refresh token rotation', () => {
   });
 
   it('detects replay attack: revokes entire family when consumed JTI is presented', async () => {
-    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const { token, jti, family } = signRefreshToken({
+      userId: USER_ID,
+      role: 'DOCTOR',
+      clinicId: CLINIC_ID,
+    });
     (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: true });
     const res = makeRes();
 
@@ -336,7 +367,11 @@ describe('POST /auth/logout', () => {
 
     await logoutHandler(token, res);
   it('deletes the JTI from DB and returns loggedOut: true', async () => {
-    const { token, jti } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const { token, jti } = signRefreshToken({
+      userId: USER_ID,
+      role: 'DOCTOR',
+      clinicId: CLINIC_ID,
+    });
     (RefreshTokenModel.deleteOne as jest.Mock).mockResolvedValue({ deletedCount: 1 });
     const res = makeRes();
 

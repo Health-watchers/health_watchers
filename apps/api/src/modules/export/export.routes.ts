@@ -27,7 +27,7 @@ const router = Router();
  */
 router.get('/patients/:id/export', authenticate, async (req: Request, res: Response) => {
   const { id } = req.params;
-  const format = (req.query.format as string || '').toLowerCase();
+  const format = ((req.query.format as string) || '').toLowerCase();
 
   if (!Types.ObjectId.isValid(id))
     return res.status(400).json({ error: 'BadRequest', message: 'Invalid patient ID format' });
@@ -37,22 +37,24 @@ router.get('/patients/:id/export', authenticate, async (req: Request, res: Respo
 
   try {
     const record = await buildPatientRecord(id);
-    if (!record)
-      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    if (!record) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const { role, clinicId, userId } = req.user!;
     const patientClinicId = String((record.patient as any).clinicId);
 
     const isSelf = role === 'READ_ONLY' && userId === id;
-    const isStaff = (STAFF_ROLES as readonly string[]).includes(role) && patientClinicId === clinicId;
+    const isStaff =
+      (STAFF_ROLES as readonly string[]).includes(role) && patientClinicId === clinicId;
     const isSuperAdmin = role === 'SUPER_ADMIN';
 
     if (!isSelf && !isStaff && !isSuperAdmin)
-      return res.status(403).json({ error: 'Forbidden', message: 'Access denied to this patient record' });
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'Access denied to this patient record' });
 
     auditLog(
       { action: 'EXPORT_PATIENT_DATA', resourceType: 'Patient', resourceId: id, userId, clinicId },
-      req,
+      req
     ).catch((err) => logger.error({ err }, 'Audit log failed for patient export'));
 
     if (format === 'json') return sendPatientJson(res, record);
@@ -86,11 +88,19 @@ router.get(
       const record = await buildClinicRecord(id);
 
       if (!record.patients.length && !record.encounters.length && !record.payments.length)
-        return res.status(404).json({ error: 'NotFound', message: 'No data found for this clinic' });
+        return res
+          .status(404)
+          .json({ error: 'NotFound', message: 'No data found for this clinic' });
 
       auditLog(
-        { action: 'EXPORT_PATIENT_DATA', resourceType: 'Clinic', resourceId: id, userId: req.user!.userId, clinicId: req.user!.clinicId },
-        req,
+        {
+          action: 'EXPORT_PATIENT_DATA',
+          resourceType: 'Clinic',
+          resourceId: id,
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+        },
+        req
       ).catch((err) => logger.error({ err }, 'Audit log failed for clinic export'));
 
       return sendClinicZip(res, id, record);
@@ -98,7 +108,7 @@ router.get(
       logger.error({ err }, 'Clinic export error');
       return res.status(500).json({ error: 'InternalError', message: 'Export failed' });
     }
-  },
+  }
 );
 
 export default router;

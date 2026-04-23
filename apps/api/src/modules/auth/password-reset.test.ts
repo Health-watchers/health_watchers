@@ -57,12 +57,15 @@ async function forgotPasswordHandler(body: { email: string }, res: ReturnType<ty
     await user.save();
     await sendPasswordResetEmail(user.email, rawToken);
   }
-  return res.json({ status: 'success', data: { message: 'If that email exists, a reset link has been sent.' } });
+  return res.json({
+    status: 'success',
+    data: { message: 'If that email exists, a reset link has been sent.' },
+  });
 }
 
 async function resetPasswordHandler(
   body: { token: string; newPassword: string },
-  res: ReturnType<typeof makeRes>,
+  res: ReturnType<typeof makeRes>
 ) {
   const tokenHash = hashToken(body.token);
   const user = await (UserModel as any).findOne({
@@ -80,7 +83,10 @@ async function resetPasswordHandler(
   user.resetPasswordExpiresAt = undefined;
   await user.save();
 
-  return res.json({ status: 'success', data: { message: 'Password has been reset successfully.' } });
+  return res.json({
+    status: 'success',
+    data: { message: 'Password has been reset successfully.' },
+  });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -90,7 +96,12 @@ describe('POST /auth/forgot-password', () => {
 
   it('sends reset email and returns 200 when user exists', async () => {
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    const user = { email: 'doctor@clinic.com', resetPasswordTokenHash: undefined, resetPasswordExpiresAt: undefined, save: saveMock };
+    const user = {
+      email: 'doctor@clinic.com',
+      resetPasswordTokenHash: undefined,
+      resetPasswordExpiresAt: undefined,
+      save: saveMock,
+    };
     (UserModel.findOne as jest.Mock).mockResolvedValue(user);
     const res = makeRes();
 
@@ -115,7 +126,12 @@ describe('POST /auth/forgot-password', () => {
 
   it('stores a SHA-256 hash of the token, not the raw token', async () => {
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    const user = { email: 'x@x.com', resetPasswordTokenHash: undefined, resetPasswordExpiresAt: undefined, save: saveMock };
+    const user = {
+      email: 'x@x.com',
+      resetPasswordTokenHash: undefined,
+      resetPasswordExpiresAt: undefined,
+      save: saveMock,
+    };
     (UserModel.findOne as jest.Mock).mockResolvedValue(user);
     const res = makeRes();
 
@@ -129,12 +145,12 @@ describe('POST /auth/forgot-password', () => {
 
   it('sets expiry ~1 hour in the future', async () => {
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    const user: {
-      email: string;
-      resetPasswordTokenHash: string | undefined;
-      resetPasswordExpiresAt: Date | undefined;
-      save: jest.Mock;
-    } = { email: 'x@x.com', resetPasswordTokenHash: undefined, resetPasswordExpiresAt: undefined, save: saveMock };
+    const user = {
+      email: 'x@x.com',
+      resetPasswordTokenHash: undefined,
+      resetPasswordExpiresAt: undefined,
+      save: saveMock,
+    };
     (UserModel.findOne as jest.Mock).mockResolvedValue(user);
     const res = makeRes();
     const before = Date.now();

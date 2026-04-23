@@ -19,16 +19,16 @@ export interface Patient {
 
 const patientSchema = new Schema<Patient>(
   {
-    systemId:      { type: String, required: true, unique: true },
-    firstName:     { type: String, required: true, trim: true },
-    lastName:      { type: String, required: true, trim: true },
-    searchName:    { type: String, required: true, index: true },
-    dateOfBirth:   { type: String, required: true },
-    sex:           { type: String, enum: ['M', 'F', 'O'], required: true },
+    systemId: { type: String, required: true, unique: true },
+    firstName: { type: String, required: true, trim: true },
+    lastName: { type: String, required: true, trim: true },
+    searchName: { type: String, required: true, index: true },
+    dateOfBirth: { type: String, required: true },
+    sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
-    address:       { type: String },
-    clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    isActive:      { type: Boolean, default: true, index: true },
+    address: { type: String },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );
@@ -50,8 +50,12 @@ function decryptDoc(doc: unknown) {
   }
 }
 
-patientSchema.post('save', function () { decryptDoc(this as unknown as Record<string, unknown>); });
-patientSchema.post('find', function (docs: Record<string, unknown>[]) { docs.forEach(decryptDoc); });
+patientSchema.post('save', function () {
+  decryptDoc(this as unknown as Record<string, unknown>);
+});
+patientSchema.post('find', function (docs: Record<string, unknown>[]) {
+  docs.forEach(decryptDoc);
+});
 patientSchema.post('findOne', decryptDoc);
 patientSchema.post('findOneAndUpdate', decryptDoc);
 
