@@ -29,8 +29,8 @@ export function validateRequest(schemas: ValidateOptions) {
           message: "Invalid request params",
           details: result.error.errors,
         });
-        return;
       }
+      Object.assign(req.params, result.data);
     }
 
     if (schemas.query) {
@@ -42,6 +42,7 @@ export function validateRequest(schemas: ValidateOptions) {
           details: result.error.errors,
         });
       }
+      Object.assign(req.query, result.data);
     }
 
     return next();

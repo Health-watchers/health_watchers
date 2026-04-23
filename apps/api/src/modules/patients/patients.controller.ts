@@ -5,10 +5,17 @@ import { toPatientResponse } from './patients.transformer';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
 import { EncounterModel } from '../encounters/encounter.model';
 import { toEncounterResponse } from '../encounters/encounters.transformer';
+import {
+  createPatientSchema,
+  updatePatientSchema,
+  patientQuerySchema,
+  patientSearchQuerySchema,
+} from './patients.validation';
 
 const router = Router();
 router.use(authenticate);
@@ -39,6 +46,7 @@ async function nextSystemId(clinicId: string): Promise<string> {
 // GET /patients?page=1&limit=20&clinicId=
 router.get(
   '/',
+  validateRequest({ query: patientQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
@@ -56,6 +64,7 @@ router.get(
 // GET /patients/search?q=
 router.get(
   '/search',
+  validateRequest({ query: patientSearchQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
@@ -85,6 +94,7 @@ router.get(
 router.post(
   '/',
   WRITE_ROLES,
+  validateRequest({ body: createPatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
     const searchName = `${firstName} ${lastName}`.toLowerCase();
@@ -109,6 +119,7 @@ router.post(
 router.put(
   '/:id',
   WRITE_ROLES,
+  validateRequest({ body: createPatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
     const update: Record<string, any> = { contactNumber, address, sex };
@@ -129,6 +140,7 @@ router.put(
 router.patch(
   '/:id',
   WRITE_ROLES,
+  validateRequest({ body: updatePatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const disallowed = Object.keys(req.body).filter((k) => !ALLOWED_PATCH_FIELDS.has(k));
     if (disallowed.length > 0) {
