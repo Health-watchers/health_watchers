@@ -23,7 +23,9 @@ import {
   signTempToken,
   verifyRefreshToken,
   verifyTempToken,
+  REFRESH_TOKEN_EXPIRY_MS,
 } from './token.service';
+import { RefreshTokenModel } from './models/refresh-token.model';
 import { totpService } from './totp.service';
 
 const router = Router();
@@ -142,9 +144,17 @@ router.post(
     }
 
     const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );
@@ -164,19 +174,37 @@ router.post(
     if (!decoded)
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
+    const existing = await RefreshTokenModel.findOne({ jti: decoded.jti });
+    if (!existing)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
+
+    // Replay attack: token already consumed — revoke entire family
+    if (existing.consumed) {
+      await RefreshTokenModel.deleteMany({ family: existing.family });
+      return res.status(401).json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
+    }
+
     const user = await UserModel.findById(decoded.userId);
     if (!user || !user.isActive)
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
+    // Mark old token consumed and issue new one (rotation)
+    existing.consumed = true;
+    await existing.save();
+
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
+
     return res.json({
       status: 'success',
-      data: {
-        accessToken: signAccessToken({
-          userId: user.id,
-          role: user.role,
-          clinicId: String(user.clinicId),
-        }),
-      },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );
@@ -187,11 +215,30 @@ router.post(
  *   post:
  *     summary: Invalidate the current refresh token
  *     tags: [Auth]
+ */
+router.post(
+  '/logout',
+  validateRequest({ body: refreshSchema }),
+  async (req: RefreshReq, res: Response) => {
+    const decoded = verifyRefreshToken(req.body.refreshToken);
+    if (decoded) {
+      await RefreshTokenModel.deleteOne({ jti: decoded.jti });
+    }
+    return res.json({ status: 'success', data: { loggedOut: true } });
+  },
+);
+
+/**
+ * @swagger
+ * /auth/logout-all:
+ *   post:
+ *     summary: Revoke all refresh tokens for the authenticated user
+ *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
  */
-router.post('/logout', authenticate, async (req: Request, res: Response) => {
-  await UserModel.findByIdAndUpdate(req.user!.userId, { refreshTokenHash: undefined });
+router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
+  await RefreshTokenModel.deleteMany({ userId: req.user!.userId });
   return res.json({ status: 'success', data: { loggedOut: true } });
 });
 
@@ -268,9 +315,17 @@ router.post(
     if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
 
     const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );

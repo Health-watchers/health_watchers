@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '@health-watchers/config';
 
@@ -10,12 +11,15 @@ export interface TokenPayload {
 interface JwtPayload extends TokenPayload {
   iss: string;
   aud: string;
+  jti?: string;
+  family?: string;
 }
 
 const JWT_ISSUER = config.jwt.issuer;
 const JWT_AUDIENCE = config.jwt.audience;
 const ACCESS_TOKEN_EXPIRY = '15m';
-const REFRESH_TOKEN_EXPIRY = '7d';
+export const REFRESH_TOKEN_EXPIRY = '7d';
+export const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const TEMP_TOKEN_EXPIRY = '5m';
 
 export function signAccessToken(payload: TokenPayload): string {
@@ -30,9 +34,17 @@ export function signAccessToken(payload: TokenPayload): string {
   );
 }
 
-export function signRefreshToken(payload: TokenPayload): string {
-  return jwt.sign(
-    payload,
+export interface RefreshTokenMeta {
+  token: string;
+  jti: string;
+  family: string;
+}
+
+export function signRefreshToken(payload: TokenPayload, family?: string): RefreshTokenMeta {
+  const jti = crypto.randomUUID();
+  const tokenFamily = family ?? crypto.randomUUID();
+  const token = jwt.sign(
+    { ...payload, jti, family: tokenFamily },
     config.jwt.refreshTokenSecret,
     {
       expiresIn: REFRESH_TOKEN_EXPIRY,
@@ -40,6 +52,7 @@ export function signRefreshToken(payload: TokenPayload): string {
       audience: JWT_AUDIENCE,
     }
   );
+  return { token, jti, family: tokenFamily };
 }
 
 export function signTempToken(userId: string): string {
@@ -70,16 +83,24 @@ export function verifyAccessToken(token: string): TokenPayload | null {
   }
 }
 
-export function verifyRefreshToken(token: string): TokenPayload | null {
+export interface RefreshTokenPayload extends TokenPayload {
+  jti: string;
+  family: string;
+}
+
+export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
   try {
     const decoded = jwt.verify(token, config.jwt.refreshTokenSecret, {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
+    if (!decoded.jti || !decoded.family) return null;
     return {
       userId: decoded.userId,
       role: decoded.role,
       clinicId: decoded.clinicId,
+      jti: decoded.jti,
+      family: decoded.family,
     };
   } catch (error) {
     return null;
