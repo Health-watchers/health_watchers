@@ -27,6 +27,7 @@ import { API_V1 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), { ssr: false });
+const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -331,6 +332,7 @@ export default function PatientDetailClient({
         <TabsList>
           <TabsTrigger value="encounters">{labels.encounters}</TabsTrigger>
           <TabsTrigger value="payments">{labels.payments}</TabsTrigger>
+          <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
           <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
         </TabsList>
@@ -443,6 +445,11 @@ export default function PatientDetailClient({
               ))}
             </ol>
           )}
+        </TabsContent>
+
+        {/* Lab Results tab */}
+        <TabsContent value="lab-results">
+          <LabResultsTab patientId={patientId} />
         </TabsContent>
 
         {/* Vitals & Analytics tab */}

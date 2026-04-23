@@ -160,4 +160,55 @@ Provide a professional health trend summary:`;
   }
 });
 
+// POST /api/v1/ai/interpret-labs
+// Request body: { labResultId: string }
+// Returns: { success: boolean, interpretation: string, criticalValues: string[] }
+router.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable' });
+    }
+
+    const { labResultId } = req.body;
+    if (!labResultId || !isValidObjectId(labResultId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Valid labResultId is required' });
+    }
+
+    const { LabResultModel } = await import('../lab-results/lab-result.model');
+    const labResult = await LabResultModel.findById(labResultId);
+    if (!labResult) {
+      return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
+    }
+    if (!labResult.results || labResult.results.length === 0) {
+      return res.status(422).json({ error: 'NoResults', message: 'Lab result has no result entries to interpret' });
+    }
+
+    const criticalValues = labResult.results
+      .filter((r) => r.flag === 'HH' || r.flag === 'LL')
+      .map((r) => `${r.parameter} (${r.value} ${r.unit}, flag: ${r.flag})`);
+
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('@health-watchers/config');
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const prompt = `You are a medical AI assistant. Interpret the following lab results in plain language for a clinician.
+Highlight any abnormal values and flag critical values (HH/LL) for immediate attention. Keep the response to 3-4 sentences.
+
+Test: ${labResult.testName}${labResult.testCode ? ` (${labResult.testCode})` : ''}
+Results:
+${labResult.results.map((r) => `- ${r.parameter}: ${r.value} ${r.unit} (ref: ${r.referenceRange})${r.flag ? ` [${r.flag}]` : ''}`).join('\n')}
+
+Provide a plain-language clinical interpretation:`;
+
+    const result = await model.generateContent(prompt);
+    const interpretation = result.response.text();
+
+    return res.json({ success: true, interpretation, criticalValues });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI interpret-labs error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
 export default router;

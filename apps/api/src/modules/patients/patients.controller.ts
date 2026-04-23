@@ -10,6 +10,7 @@ import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
 import { EncounterModel } from '../encounters/encounter.model';
 import { toEncounterResponse } from '../encounters/encounters.transformer';
+import { LabResultModel } from '../lab-results/lab-result.model';
 import {
   createPatientSchema,
   updatePatientSchema,
@@ -381,6 +382,27 @@ router.get(
         encounterFrequency,
       },
     });
+  }),
+);
+
+// GET /patients/:id/lab-results — All lab results for a patient
+router.get(
+  '/:id/lab-results',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const { sort = 'orderedAt', order = 'desc' } = req.query as Record<string, string>;
+    const sortField = ['orderedAt', 'testName'].includes(sort) ? sort : 'orderedAt';
+    const sortOrder = order === 'asc' ? 1 : -1;
+
+    const docs = await LabResultModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
+      .sort({ [sortField]: sortOrder });
+    return res.json({ status: 'success', data: docs });
   }),
 );
 

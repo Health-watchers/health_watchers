@@ -22,5 +22,8 @@ export const queryKeys = {
     all: ['notifications'] as const,
     list: (page?: number) => [...queryKeys.notifications.all, 'list', page] as const,
     unreadCount: () => [...queryKeys.notifications.all, 'unread-count'] as const,
+  labResults: {
+    all: ['lab-results'] as const,
+    byPatient: (patientId: string) => [...queryKeys.labResults.all, 'patient', patientId] as const,
   },
 } as const;
