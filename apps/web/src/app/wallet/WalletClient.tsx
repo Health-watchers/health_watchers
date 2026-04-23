@@ -181,7 +181,7 @@ export default function WalletClient() {
 
   const sendMutation = useMutation({
     mutationFn: async (data: { destination: string; amount: string; memo?: string }) => {
-      const res = await fetch('/api/v1/payments/intent', {
+      const res = await fetch('/api/payments/intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, assetCode: 'XLM' }),
