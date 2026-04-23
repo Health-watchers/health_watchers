@@ -23,6 +23,8 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import { icd10Routes } from './modules/icd10/icd10.controller';
+import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
@@ -32,10 +34,10 @@ import logger from './utils/logger';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
-const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
-// AI routes allow larger payloads for summarization (default 500kb)
-const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
+// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
+const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '10kb';
+// AI routes allow larger payloads for clinical notes (default 50kb per issue #351)
+const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
 
 // ── Security & performance ────────────────────────────────────────────────────
 app.use(
@@ -91,7 +93,19 @@ app.use(
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(express.json({ limit: standardLimit }));
+app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
+
+// ── Content-Type validation (issue #351) ──────────────────────────────────────
+// Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
+      return res.status(415).json({ error: 'UnsupportedMediaType', message: 'Content-Type must be application/json' });
+    }
+  }
+  next();
+});
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) =>
@@ -112,6 +126,8 @@ app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/icd10', icd10Routes);
+app.use('/api/v1/settings', clinicSettingsRoutes);
 
 setupSwagger(app);
 

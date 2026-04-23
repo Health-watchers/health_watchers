@@ -10,6 +10,16 @@ import {
   encounterIdParamSchema,
   patientIdParamSchema,
 } from './encounter.validation';
+import { ICD10Model } from '../icd10/icd10.model';
+
+async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
+  if (!diagnoses || diagnoses.length === 0) return null;
+  for (const d of diagnoses) {
+    const exists = await ICD10Model.exists({ code: d.code.toUpperCase(), isValid: true });
+    if (!exists) return d.code;
+  }
+  return null;
+}
 
 const router = Router();
 router.use(authenticate);
@@ -19,6 +29,10 @@ router.post(
   '/',
   validateRequest({ body: createEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    const invalidCode = await validateDiagnosisCodes(req.body.diagnosis);
+    if (invalidCode) {
+      return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
+    }
     const doc = await EncounterModel.create(req.body);
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   }),
@@ -64,6 +78,13 @@ router.patch(
     for (const field of allowedFields) {
       if (field in req.body && req.body[field] !== undefined) {
         updateData[field] = req.body[field];
+      }
+    }
+
+    if (updateData.diagnosis) {
+      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis);
+      if (invalidCode) {
+        return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
       }
     }
 
