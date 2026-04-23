@@ -53,6 +53,6 @@
     "fast-check": "^4.7.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "typescript": "6.0.2"
+    "typescript": "^5.0.0"
   }
 }

@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 export default function PatientsPage() {
   const t = useTranslations("patients");
+  const tNew = useTranslations("patientNew");
   return (
     <PatientsClient
       labels={{
@@ -22,6 +23,7 @@ export default function PatientsPage() {
         contact: t("contact"),
         search: t("search"),
         view: t("view"),
+        registerNew: tNew("title"),
       }}
     />
   );

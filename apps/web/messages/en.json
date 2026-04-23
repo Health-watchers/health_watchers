@@ -61,5 +61,28 @@
     "details": "Patient Details",
     "encounters": "Encounter History",
     "noEncounters": "No encounters recorded."
+  },
+  "patientNew": {
+    "title": "Register New Patient",
+    "subtitle": "Fill in the details below to create a new patient record.",
+    "back": "Back to Patients",
+    "firstName": "First Name",
+    "firstNamePlaceholder": "e.g. John",
+    "lastName": "Last Name",
+    "lastNamePlaceholder": "e.g. Doe",
+    "dateOfBirth": "Date of Birth",
+    "sex": "Sex",
+    "sexMale": "Male",
+    "sexFemale": "Female",
+    "sexOther": "Other",
+    "contactNumber": "Contact Number",
+    "contactNumberPlaceholder": "+1 (555) 123-4567",
+    "address": "Address",
+    "addressPlaceholder": "123 Main Street, City, State 12345",
+    "submit": "Register Patient",
+    "submitting": "Registering...",
+    "cancel": "Cancel",
+    "successToast": "Patient registered successfully!",
+    "errorFallback": "Failed to register patient. Please try again."
   }
 }

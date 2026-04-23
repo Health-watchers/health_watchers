@@ -61,5 +61,28 @@
     "details": "Détails du Patient",
     "encounters": "Historique des Consultations",
     "noEncounters": "Aucune consultation enregistrée."
+  },
+  "patientNew": {
+    "title": "Enregistrer un nouveau patient",
+    "subtitle": "Remplissez les informations ci-dessous pour créer un nouveau dossier patient.",
+    "back": "Retour aux Patients",
+    "firstName": "Prénom",
+    "firstNamePlaceholder": "ex. Jean",
+    "lastName": "Nom de famille",
+    "lastNamePlaceholder": "ex. Dupont",
+    "dateOfBirth": "Date de naissance",
+    "sex": "Sexe",
+    "sexMale": "Masculin",
+    "sexFemale": "Féminin",
+    "sexOther": "Autre",
+    "contactNumber": "Numéro de contact",
+    "contactNumberPlaceholder": "+33 6 12 34 56 78",
+    "address": "Adresse",
+    "addressPlaceholder": "12 rue de la Paix, Paris 75001",
+    "submit": "Enregistrer le patient",
+    "submitting": "Enregistrement...",
+    "cancel": "Annuler",
+    "successToast": "Patient enregistré avec succès !",
+    "errorFallback": "Échec de l'enregistrement du patient. Veuillez réessayer."
   }
 }
