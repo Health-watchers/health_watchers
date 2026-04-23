@@ -2,7 +2,6 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12;
-const TAG_LEN = 16;
 
 function getKey(): Buffer {
   const hex = process.env.FIELD_ENCRYPTION_KEY ?? "";

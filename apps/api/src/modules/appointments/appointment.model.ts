@@ -1,4 +1,4 @@
-import { Schema, Types, model, models } from 'mongoose';
+import { Schema, model, models } from 'mongoose';
 
 export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
 

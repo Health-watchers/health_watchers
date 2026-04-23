@@ -13,7 +13,7 @@ Sentry.init({
   // - Error rate alert: > 1% over 5 min window
   // - p95 latency alert: > 2000ms
 
-  beforeSend(event: Sentry.Event) {
+  beforeSend(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
     return scrubPHI(event);
   },
 });
@@ -28,7 +28,7 @@ const PHI_KEYS = [
   'patientId', 'mrn', 'ssn', 'insuranceId',
 ];
 
-function scrubPHI<T extends Sentry.Event>(event: T): T {
+function scrubPHI<T extends Sentry.ErrorEvent>(event: T): T {
   if (event.request?.data) {
     event.request.data = redactKeys(event.request.data);
   }

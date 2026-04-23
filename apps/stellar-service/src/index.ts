@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-import { fundAccount, createIntent, verifyIntent } from './stellar.js'; // your existing imports
+import { fundAccount, createIntent, verifyIntent, getAccountBalance } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 
@@ -70,6 +70,17 @@ app.get('/verify/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
     const result = await verifyIntent(hash);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /balance/:publicKey (requires secret)
+app.get('/balance/:publicKey', requireSecret, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const result = await getAccountBalance(publicKey);
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message });

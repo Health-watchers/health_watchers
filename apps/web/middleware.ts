@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { locales, defaultLocale } from "./i18n.config";
 
-const protectedRoutes = ["/patients", "/encounters", "/payments", "/settings"];
+const protectedRoutes = ["/patients", "/encounters", "/payments", "/settings", "/wallet"];
 const publicRoutes = ["/login"];
 
 export function middleware(request: NextRequest) {

@@ -227,7 +227,7 @@ router.post(
         .json({ error: "Unauthorized", message: "User not found" });
     }
 
-    const { secret, otpauthUrl: otpauth, qrCodeDataUrl: qrCodeUrl } = await totpService.setup(user.email);
+    const { secret, otpauthUrl: _otpauthUrl, qrCodeDataUrl: qrCodeUrl } = await totpService.setup(user.email);
     user.mfaSecret = secret;
     await user.save();
 

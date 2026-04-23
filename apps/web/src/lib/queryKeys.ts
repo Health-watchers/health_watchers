@@ -12,5 +12,10 @@ export const queryKeys = {
   payments: {
     all: ['payments'] as const,
     list: () => [...queryKeys.payments.all, 'list'] as const,
+    byPatient: (patientId: string) => [...queryKeys.payments.all, 'patient', patientId] as const,
+  },
+  wallet: {
+    all: ['wallet'] as const,
+    balance: () => [...queryKeys.wallet.all, 'balance'] as const,
   },
 } as const;

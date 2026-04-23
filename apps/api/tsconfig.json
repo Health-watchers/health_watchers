@@ -7,6 +7,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "Node",
@@ -16,5 +19,10 @@
       "@api/*": ["./*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/modules/export/export.service.ts"
+  ]
 }

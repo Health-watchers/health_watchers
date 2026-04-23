@@ -15,11 +15,13 @@ export type CreatePaymentData = z.infer<typeof schema>
 interface Props {
   onSubmit: (data: CreatePaymentData) => Promise<void>
   onCancel: () => void
+  defaultPatientId?: string
 }
 
-export function CreatePaymentIntentForm({ onSubmit, onCancel }: Props) {
+export function CreatePaymentIntentForm({ onSubmit, onCancel, defaultPatientId }: Props) {
   const { register, handleSubmit, formState: { errors, isSubmitting }, setError } = useForm<CreatePaymentData>({
     resolver: zodResolver(schema),
+    defaultValues: { patientId: defaultPatientId ?? '' },
   })
 
   const submit = async (data: CreatePaymentData) => {

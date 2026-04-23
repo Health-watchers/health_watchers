@@ -28,6 +28,9 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+      - name: Typecheck API
+        run: npm run typecheck --workspace=api
+
   test:
     name: Test
     runs-on: ubuntu-latest

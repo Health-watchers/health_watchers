@@ -23,6 +23,49 @@ function canReadPayments(role: string): boolean {
   return ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].includes(role);
 }
 
+// GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
+router.get(
+  '/balance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const { ClinicModel } = await import('../clinics/clinic.model');
+    const clinic = await ClinicModel.findById(clinicId).lean();
+
+    if (!clinic?.stellarPublicKey) {
+      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+    }
+
+    try {
+      const data = await stellarClient.getBalance(clinic.stellarPublicKey);
+      return res.json({ status: 'success', data: { publicKey: clinic.stellarPublicKey, ...data } });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
+// POST /payments/fund — fund clinic's testnet account via Friendbot
+router.post(
+  '/fund',
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const { ClinicModel } = await import('../clinics/clinic.model');
+    const clinic = await ClinicModel.findById(clinicId).lean();
+
+    if (!clinic?.stellarPublicKey) {
+      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+    }
+
+    try {
+      const data = await stellarClient.fundAccount(clinic.stellarPublicKey);
+      logger.info({ clinicId, publicKey: clinic.stellarPublicKey }, 'Testnet account funded via Friendbot');
+      return res.json({ status: 'success', data });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
 // GET /payments — paginated list scoped to the authenticated clinic
 router.get(
   '/',

@@ -16,7 +16,9 @@ async function buildStore() {
   if (!redisUrl) return undefined; // in-memory fallback
 
   try {
+    // @ts-expect-error -- 'redis' is an optional peer dependency; not installed in all environments
     const { createClient } = await import('redis');
+    // @ts-expect-error -- 'rate-limit-redis' is an optional peer dependency; not installed in all environments
     const { RedisStore } = await import('rate-limit-redis');
     const client = createClient({ url: redisUrl });
     client.on('error', (err: Error) =>

@@ -16,11 +16,13 @@ export type CreateEncounterData = z.infer<typeof schema>
 interface Props {
   onSubmit: (data: CreateEncounterData) => Promise<void>
   onCancel: () => void
+  defaultPatientId?: string
 }
 
-export function CreateEncounterForm({ onSubmit, onCancel }: Props) {
+export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Props) {
   const { register, handleSubmit, formState: { errors, isSubmitting }, setError } = useForm<CreateEncounterData>({
     resolver: zodResolver(schema),
+    defaultValues: { patientId: defaultPatientId ?? '' },
   })
 
   const submit = async (data: CreateEncounterData) => {

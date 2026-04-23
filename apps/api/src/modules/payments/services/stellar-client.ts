@@ -67,6 +67,32 @@ class StellarClient {
   }
 
   /**
+   * Get XLM balance and recent transactions for a public key
+   * Calls the stellar-service GET /balance/:publicKey endpoint
+   */
+  async getBalance(publicKey: string): Promise<{ balance: string; transactions: unknown[] }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.get(`/balance/${publicKey}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    return response.data;
+  }
+
+  /**
+   * Fund a testnet account via Friendbot
+   * Calls the stellar-service POST /fund endpoint
+   */
+  async fundAccount(publicKey: string): Promise<{ funded: boolean; hash?: string }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fund',
+      { publicKey },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {
