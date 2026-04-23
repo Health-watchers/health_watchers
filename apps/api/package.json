@@ -43,7 +43,7 @@
     "@types/express-mongo-sanitize": "^2.0.0",
     "@types/jsonwebtoken": "^9.0.0",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.39",
     "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.5",
     "eslint": "^9.39.4",
