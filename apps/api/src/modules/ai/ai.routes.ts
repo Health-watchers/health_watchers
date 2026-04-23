@@ -85,4 +85,18 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/v1/ai/drug-interactions
+// Stub endpoint for future drug interaction checking
+// Request body: { medications: string[] }
+// Returns: 501 Not Implemented
+router.post('/drug-interactions', authenticate, async (req: Request, res: Response) => {
+  logger.info({ medications: req.body.medications }, 'Drug interaction check requested (not implemented)');
+  
+  return res.status(501).json({
+    error: 'NotImplemented',
+    message: 'Drug interaction checking is not yet implemented. This feature will be available in a future release.',
+    requestedMedications: req.body.medications || [],
+  });
+});
+
 export default router;

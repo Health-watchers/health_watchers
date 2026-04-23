@@ -247,4 +247,44 @@ router.get(
   }),
 );
 
+// GET /patients/:id/prescriptions - All prescriptions for a patient (across encounters)
+router.get(
+  '/:id/prescriptions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const encounters = await EncounterModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+      prescriptions: { $exists: true, $ne: [] },
+    })
+      .populate('prescriptions.prescribedBy', 'firstName lastName')
+      .sort({ createdAt: -1 });
+
+    // Flatten all prescriptions from all encounters
+    const allPrescriptions = encounters.flatMap((encounter) => {
+      return (encounter.prescriptions || []).map((prescription: any) => ({
+        ...prescription.toObject(),
+        encounterId: encounter._id,
+        encounterDate: encounter.createdAt,
+      }));
+    });
+
+    return res.json({ 
+      status: 'success', 
+      data: allPrescriptions,
+      meta: {
+        total: allPrescriptions.length,
+        encountersWithPrescriptions: encounters.length,
+      }
+    });
+  }),
+);
+
 export const patientRoutes = router;
