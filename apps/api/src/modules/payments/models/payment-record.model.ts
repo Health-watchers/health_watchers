@@ -19,14 +19,14 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     intentId: { type: String, required: true, unique: true },
     amount: { type: String, required: true },
     destination: { type: String, required: true },
-    memo: { type: String },
+    memo: { type: String, index: true },
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'failed'],
       default: 'pending',
       index: true,
     },
-    txHash: { type: String },
+    txHash: { type: String, index: true },
     confirmedAt: { type: Date },
     clinicId: { type: String, required: true, index: true },
     patientId: { type: String, index: true },
@@ -37,6 +37,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
 );
 
 paymentRecordSchema.index({ status: 1, createdAt: 1 });
+paymentRecordSchema.index({ memo: 1, clinicId: 1 });
 
 export const PaymentRecordModel =
   models.PaymentRecord || model<PaymentRecord>('PaymentRecord', paymentRecordSchema);
