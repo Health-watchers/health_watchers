@@ -1,4 +1,10 @@
-import { API_URL } from "@/lib/api";
+/**
+ * Client-side auth utilities.
+ *
+ * Tokens are stored exclusively in httpOnly cookies managed by the Next.js
+ * API routes (/api/auth/*). These helpers work with those cookies via
+ * `credentials: 'include'`.
+ */
 
 export async function refreshAccessToken(): Promise<boolean> {
   try {
@@ -6,7 +12,6 @@ export async function refreshAccessToken(): Promise<boolean> {
       method: 'POST',
       credentials: 'include',
     });
-
     return res.ok;
   } catch {
     return false;
@@ -20,17 +25,20 @@ export async function logout(): Promise<void> {
       credentials: 'include',
     });
   } catch {
-    // Ignore errors during logout
+    // ignore
   }
 }
 
+/**
+ * Wraps `fetch` with automatic token refresh on 401.
+ * On a second 401 (refresh failed), clears cookies and redirects to /login.
+ */
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   let res = await fetch(url, {
     ...options,
     credentials: 'include',
   });
 
-  // If 401, try to refresh token and retry once
   if (res.status === 401) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
@@ -39,9 +47,10 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
         credentials: 'include',
       });
     } else {
-      // Redirect to login if refresh fails
       await logout();
-      window.location.href = '/login';
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
   }
 

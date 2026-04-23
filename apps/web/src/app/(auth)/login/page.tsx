@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { PasswordInput } from '@/components/ui/PasswordInput';
+import { useAuth } from '@/context/AuthContext';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -20,6 +21,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
@@ -33,27 +35,20 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setServerError(null);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+      const result = await login(data.email, data.password);
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        setServerError(json?.message ?? 'Invalid email or password. Please try again.');
-        return;
-      }
-
-      if (json?.data?.requiresMfa) {
+      if (result.mfaRequired) {
+        // Store tempToken in sessionStorage so the MFA page can use it
+        if (result.tempToken) {
+          sessionStorage.setItem('mfa_temp_token', result.tempToken);
+        }
         router.push('/mfa');
         return;
       }
 
       router.push('/');
-    } catch {
-      setServerError('Something went wrong. Please try again.');
+    } catch (err) {
+      setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     }
   };
 

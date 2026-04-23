@@ -8,6 +8,7 @@ import {
   type CreateEncounterData,
 } from "@/components/forms/CreateEncounterForm";
 import { queryKeys } from "@/lib/queryKeys";
+import { fetchWithAuth } from "@/lib/auth";
 import { API_URL } from "@/lib/api";
 
 const API = `${API_URL}/api/v1`;
@@ -51,7 +52,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
   const { data: encounters = [], isLoading, error } = useEncounters();
 
   const handleCreate = async (data: CreateEncounterData) => {
-    const res = await fetch(`${API}/encounters`, {
+    const res = await fetchWithAuth(`${API}/encounters`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

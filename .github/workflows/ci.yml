@@ -32,20 +32,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     
-    services:
-      mongodb:
-        image: mongo:7.0
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: password123
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "echo 'db.runCommand(\"ping\").ok' | mongosh localhost:27017/test --quiet"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
       
@@ -59,16 +45,16 @@ jobs:
         run: npm ci
       
       - name: Run tests
-        run: npm test
+        run: npm test --workspace=apps/api
         env:
           MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers_test?authSource=admin
-          JWT_ACCESS_TOKEN_SECRET: test-access-secret
-          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
           STELLAR_NETWORK: testnet
           NODE_ENV: test
       
       - name: Generate coverage report
-        run: npm run test:coverage || echo "Coverage script not found, skipping"
+        run: npm run test:coverage --workspace=apps/api || echo "Coverage script not found, skipping"
         continue-on-error: true
       
       - name: Upload coverage to Codecov

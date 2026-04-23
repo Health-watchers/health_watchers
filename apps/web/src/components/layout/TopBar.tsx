@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 interface TopBarProps {
@@ -8,18 +7,7 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
-  const { user, setUser } = useAuth();
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    } catch {
-      // best-effort
-    }
-    setUser(null);
-    router.push('/login');
-  };
+  const { user, logout } = useAuth();
 
   return (
     <header className="flex items-center justify-between h-14 px-4 bg-neutral-0 border-b border-neutral-200 shrink-0">
@@ -56,7 +44,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         </div>
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={logout}
           className="text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus:underline"
           aria-label="Log out"
         >

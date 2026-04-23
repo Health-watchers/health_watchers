@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { PageWrapper, PageHeader, CardSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTable } from '@/components/dashboard/RecentTable';
+import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
 const API = `${API_URL}/api/v1`;
@@ -24,7 +25,7 @@ interface DashboardData {
 }
 
 async function fetchDashboard(): Promise<DashboardData> {
-  const res = await fetch(`${API}/dashboard`);
+  const res = await fetchWithAuth(`${API}/dashboard`);
   if (!res.ok) throw new Error('Failed to load dashboard');
   const json = await res.json();
   return json.data;

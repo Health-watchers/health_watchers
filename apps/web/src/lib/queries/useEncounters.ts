@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
-
+import { fetchWithAuth } from '@/lib/auth';
 import { API_V1 } from '@/lib/api';
 
 export interface Encounter {
@@ -14,7 +14,7 @@ export function useEncounters() {
   return useQuery<Encounter[]>({
     queryKey: queryKeys.encounters.list(),
     queryFn: async () => {
-      const res = await fetch(`${API_V1}/encounters`);
+      const res = await fetchWithAuth(`${API_V1}/encounters`);
       if (!res.ok) {
         throw new Error(`Request failed (${res.status})`);
       }
