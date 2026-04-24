@@ -27,6 +27,10 @@ const prescriptionSchema = z.object({
   frequency: z.string().min(1, 'Frequency is required'),
   duration: z.string().optional(),
   notes: z.string().max(1000).optional(),
+  allergyOverride: z.object({
+    allergyId: z.string(),
+    reason: z.string().min(1, 'Override reason is required'),
+  }).optional(),
 });
 
 export const createEncounterSchema = z.object({

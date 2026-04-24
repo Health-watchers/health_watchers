@@ -6,6 +6,7 @@ import {
   generatePatientInsights,
   isAIServiceAvailable,
   AI_DISCLAIMER,
+  checkDrugInteractions,
 } from './ai.service';
 import { authenticate } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
@@ -263,6 +264,28 @@ Provide a professional health trend summary:`;
     return res.json({ success: true, summary, readings: anonymizedVitals.length });
   } catch (error: any) {
     logger.error({ err: error }, 'AI health-trends error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
+// POST /api/v1/ai/drug-interactions
+// Body: { currentMedications: string[], newDrug: string }
+router.post('/drug-interactions', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable' });
+    }
+    const { currentMedications, newDrug } = req.body;
+    if (!newDrug || typeof newDrug !== 'string') {
+      return res.status(400).json({ error: 'ValidationError', message: 'newDrug is required' });
+    }
+    const result = await checkDrugInteractions({
+      currentMedications: Array.isArray(currentMedications) ? currentMedications : [],
+      newDrug,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI drug-interactions error');
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });

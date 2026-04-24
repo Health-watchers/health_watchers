@@ -50,6 +50,23 @@ interface PaymentResponse {
   createdAt?: string;
 }
 
+interface Allergy {
+  _id: string;
+  allergen: string;
+  allergenType: string;
+  reaction: string;
+  severity: 'mild' | 'moderate' | 'severe' | 'life-threatening';
+  onsetDate?: string;
+  isActive: boolean;
+}
+
+function severityVariant(severity: string) {
+  if (severity === 'life-threatening') return 'danger';
+  if (severity === 'severe') return 'danger';
+  if (severity === 'moderate') return 'warning';
+  return 'default';
+}
+
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const EDIT_ROLES = new Set(['DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN']);
 
@@ -180,6 +197,16 @@ export default function PatientDetailClient({
       return data.data ?? null;
     },
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: allergies = [], isLoading: allergiesLoading, refetch: refetchAllergies } = useQuery<Allergy[]>({
+    queryKey: ['allergies', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/allergies`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.data ?? [];
+    },
   });
 
   const canEdit = user && EDIT_ROLES.has(user.role);
@@ -334,6 +361,12 @@ export default function PatientDetailClient({
           <TabsTrigger value="payments">{labels.payments}</TabsTrigger>
           <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
           <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
+          <TabsTrigger value="allergies">
+            Allergies
+            {allergies.some((a) => a.severity === 'life-threatening' || a.severity === 'severe') && (
+              <span className="ml-1.5 inline-flex h-2 w-2 rounded-full bg-danger-500" aria-label="Has severe allergies" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
         </TabsList>
 
@@ -462,6 +495,36 @@ export default function PatientDetailClient({
             </div>
           ) : (
             <VitalSignsCharts vitals={vitals} analytics={analytics} />
+          )}
+        </TabsContent>
+
+        {/* Allergies tab */}
+        <TabsContent value="allergies">
+          {allergiesLoading ? (
+            <div className="space-y-3" aria-busy="true">
+              {[1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-neutral-100" />)}
+            </div>
+          ) : allergies.length === 0 ? (
+            <EmptyState title="No known allergies recorded" icon="💊" />
+          ) : (
+            <ol className="space-y-3" aria-label="Allergies">
+              {allergies.map((a) => (
+                <li key={a._id} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-neutral-900">{a.allergen}</p>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        {a.allergenType} · Reaction: {a.reaction}
+                        {a.onsetDate && ` · Onset: ${new Date(a.onsetDate).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                    <Badge variant={severityVariant(a.severity)}>
+                      {a.severity === 'life-threatening' ? '⚠ ' : ''}{a.severity}
+                    </Badge>
+                  </div>
+                </li>
+              ))}
+            </ol>
           )}
         </TabsContent>
 

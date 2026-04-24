@@ -4,6 +4,17 @@ import { sanitizeText } from '@api/utils/sanitize';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
+export interface IAllergy {
+  allergen: string;
+  allergenType: 'drug' | 'food' | 'environmental' | 'other';
+  reaction: string;
+  severity: 'mild' | 'moderate' | 'severe' | 'life-threatening';
+  onsetDate?: Date;
+  recordedBy: Schema.Types.ObjectId;
+  recordedAt: Date;
+  isActive: boolean;
+}
+
 export interface Patient {
   systemId: string;
   firstName: string;
@@ -15,7 +26,22 @@ export interface Patient {
   address?: string;
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
+  allergies: IAllergy[];
 }
+
+const allergySchema = new Schema<IAllergy>(
+  {
+    allergen:     { type: String, required: true, trim: true },
+    allergenType: { type: String, enum: ['drug', 'food', 'environmental', 'other'], required: true },
+    reaction:     { type: String, required: true },
+    severity:     { type: String, enum: ['mild', 'moderate', 'severe', 'life-threatening'], required: true },
+    onsetDate:    { type: Date },
+    recordedBy:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedAt:   { type: Date, default: () => new Date() },
+    isActive:     { type: Boolean, default: true },
+  },
+  { _id: true },
+);
 
 const patientSchema = new Schema<Patient>(
   {
@@ -29,6 +55,7 @@ const patientSchema = new Schema<Patient>(
     address:       { type: String },
     clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     isActive:      { type: Boolean, default: true, index: true },
+    allergies:     { type: [allergySchema], default: [] },
   },
   { timestamps: true, versionKey: false }
 );

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EncounterModel, Prescription } from './encounter.model';
+import { EncounterTemplateModel } from './encounter-template.model';
 import { toEncounterResponse } from './encounters.transformer';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -14,6 +15,8 @@ import {
 } from './encounter.validation';
 import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
+import { PatientModel } from '../patients/models/patient.model';
+import { auditLog } from '../audit/audit.service';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -27,25 +30,11 @@ async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<s
 const router = Router();
 router.use(authenticate);
 
-// GET /encounters
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page, limit, patientId, status } = req.query as unknown as ListEncountersQuery;
-    const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
-    if (patientId) filter.patientId = patientId;
-    if (status) filter.status = status;
-
-    const skip = (page - 1) * limit;
-    const [docs, total] = await Promise.all([
-      EncounterModel.find(filter)
-        .populate('patientId', 'firstName lastName systemId')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
     const { patientId, doctorId, status, date, page, limit } =
       req.query as unknown as ListEncountersQuery;
 
@@ -78,15 +67,68 @@ router.get(
 );
 
 // POST /encounters
+// Optional query param: ?templateId=<id> — pre-fills fields from template, doctor values take precedence
 router.post(
   '/',
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'NURSE'),
   validateRequest({ body: createEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    // Merge template defaults (request body overrides template)
+    const { templateId } = req.query;
+    if (templateId && typeof templateId === 'string') {
+      const template = await EncounterTemplateModel.findOne({
+        _id: templateId,
+        clinicId: req.user!.clinicId,
+        isActive: true,
+      });
+      if (template) {
+        if (!req.body.chiefComplaint && template.defaultChiefComplaint) {
+          req.body.chiefComplaint = template.defaultChiefComplaint;
+        }
+        if (!req.body.vitalSigns && template.defaultVitalSigns) {
+          req.body.vitalSigns = template.defaultVitalSigns;
+        }
+        if (!req.body.diagnosis?.length && template.suggestedDiagnoses?.length) {
+          req.body.diagnosis = template.suggestedDiagnoses.map((d, i) => ({ ...d, isPrimary: i === 0 }));
+        }
+        if (!req.body.notes && template.notes) {
+          req.body.notes = template.notes;
+        }
+        // Increment usage count (non-blocking)
+        EncounterTemplateModel.findByIdAndUpdate(templateId, { $inc: { usageCount: 1 } }).exec();
+      }
+    }
+
     const invalidCode = await validateDiagnosisCodes(req.body.diagnosis);
     if (invalidCode) {
       return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
     }
+
+    // Allergy check for prescriptions
+    if (req.body.prescriptions?.length && req.body.patientId) {
+      const patient = await PatientModel.findById(req.body.patientId).select('allergies').lean();
+      const activeAllergies = (patient?.allergies ?? []).filter((a: any) => a.isActive && a.allergenType === 'drug');
+
+      for (const rx of req.body.prescriptions as Array<{ drugName: string; allergyOverride?: { allergyId: string; reason: string } }>) {
+        const match = activeAllergies.find((a: any) =>
+          rx.drugName.toLowerCase().includes(a.allergen.toLowerCase()) ||
+          a.allergen.toLowerCase().includes(rx.drugName.toLowerCase()),
+        );
+        if (match) {
+          const overrideId = rx.allergyOverride?.allergyId;
+          const hasOverride = overrideId && String((match as any)._id) === overrideId && rx.allergyOverride?.reason;
+          if (!hasOverride) {
+            return res.status(409).json({
+              error: 'AllergyConflict',
+              message: `Patient has a known ${match.severity} allergy to '${match.allergen}' (reaction: ${match.reaction}). Provide allergyOverride with a reason to proceed.`,
+              allergy: match,
+            });
+          }
+          auditLog({ action: 'ALLERGY_OVERRIDE', resourceType: 'Patient', resourceId: String(req.body.patientId), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergen: match.allergen, medication: rx.drugName, reason: rx.allergyOverride!.reason } }, req);
+        }
+      }
+    }
+
     const doc = await EncounterModel.create(req.body);
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   }),

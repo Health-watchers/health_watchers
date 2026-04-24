@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -22,6 +22,19 @@ interface DiagnosisEntry {
   code: string;
   description: string;
   isPrimary: boolean;
+}
+
+interface EncounterTemplate {
+  _id: string;
+  name: string;
+  description?: string;
+  category: string;
+  defaultChiefComplaint?: string;
+  defaultVitalSigns?: Record<string, unknown>;
+  suggestedDiagnoses?: { code: string; description: string }[];
+  suggestedTests?: string[];
+  notes?: string;
+  usageCount: number;
 }
 
 // ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
@@ -87,6 +100,19 @@ export default function NewEncounterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [patientAllergies, setPatientAllergies] = useState<Array<{ _id: string; allergen: string; severity: string; reaction: string }>>([]);
+
+  // Templates
+  const [templates, setTemplates] = useState<EncounterTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [previewTemplate, setPreviewTemplate] = useState<EncounterTemplate | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_V1}/encounter-templates`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.data) setTemplates(d.data); })
+      .catch(() => {});
+  }, []);
 
   // ── Patient search ──────────────────────────────────────────────────────────
 
@@ -122,6 +148,27 @@ export default function NewEncounterPage() {
 
   const removeDiagnosis = (code: string) =>
     setDiagnoses(prev => prev.filter(d => d.code !== code));
+
+  // ── Template application ────────────────────────────────────────────────────
+
+  const applyTemplate = (t: EncounterTemplate) => {
+    if (t.defaultChiefComplaint && !chiefComplaint) setChiefComplaint(t.defaultChiefComplaint);
+    if (t.notes && !notes) setNotes(t.notes);
+    if (t.defaultVitalSigns) {
+      const vs = t.defaultVitalSigns as Record<string, string>;
+      if (vs.bloodPressure && !bp) setBp(vs.bloodPressure);
+      if (vs.heartRate && !hr) setHr(String(vs.heartRate));
+      if (vs.temperature && !temp) setTemp(String(vs.temperature));
+      if (vs.oxygenSaturation && !spo2) setSpo2(String(vs.oxygenSaturation));
+      if (vs.weight && !weight) setWeight(String(vs.weight));
+      if (vs.height && !height) setHeight(String(vs.height));
+    }
+    if (t.suggestedDiagnoses?.length && diagnoses.length === 0) {
+      setDiagnoses(t.suggestedDiagnoses.map((d, i) => ({ ...d, isPrimary: i === 0 })));
+    }
+    setSelectedTemplateId(t._id);
+    setPreviewTemplate(null);
+  };
 
   // ── Vitals conversion ───────────────────────────────────────────────────────
 
@@ -185,7 +232,7 @@ export default function NewEncounterPage() {
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await fetch(`${API_V1}/encounters`, {
+      const res = await fetch(`${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -247,7 +294,7 @@ export default function NewEncounterPage() {
               </div>
               <button
                 type="button"
-                onClick={() => { setSelectedPatient(null); setPatientQuery(''); }}
+                onClick={() => { setSelectedPatient(null); setPatientQuery(''); setPatientAllergies([]); }}
                 className="text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
               >
                 Change
@@ -287,8 +334,11 @@ export default function NewEncounterPage() {
                       aria-selected={false}
                       className="cursor-pointer px-4 py-2 text-sm hover:bg-primary-50 focus:bg-primary-50 outline-none"
                       tabIndex={0}
-                      onClick={() => { setSelectedPatient(p); setPatientHits([]); setPatientQuery(''); }}
-                      onKeyDown={e => e.key === 'Enter' && (setSelectedPatient(p), setPatientHits([]), setPatientQuery(''))}
+                      onClick={() => { setSelectedPatient(p); setPatientHits([]); setPatientQuery('');
+                        fetch(`${API_V1}/patients/${p._id}/allergies`).then(r => r.json()).then(d => setPatientAllergies(d.data ?? [])).catch(() => {});
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && (setSelectedPatient(p), setPatientHits([]), setPatientQuery(''),
+                        fetch(`${API_V1}/patients/${p._id}/allergies`).then(r => r.json()).then(d => setPatientAllergies(d.data ?? [])).catch(() => {}))}
                     >
                       <span className="font-medium">{p.firstName} {p.lastName}</span>
                       <span className="ml-2 text-neutral-400 text-xs">{p.systemId} · {formatDate(p.dateOfBirth)}</span>
@@ -299,6 +349,103 @@ export default function NewEncounterPage() {
             </div>
           )}
         </section>
+
+        {/* ── Template Selector ── */}
+        {templates.length > 0 && (
+          <section aria-labelledby="section-template">
+            <h2 id="section-template" className="text-sm font-semibold uppercase tracking-wide text-neutral-500 mb-3">
+              Start from Template <span className="font-normal normal-case text-neutral-400">(optional)</span>
+            </h2>
+
+            {selectedTemplateId ? (
+              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+                <p className="text-sm font-medium text-neutral-900">
+                  {templates.find(t => t._id === selectedTemplateId)?.name}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTemplateId('')}
+                  className="text-xs text-primary-600 hover:underline focus:outline-none"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {templates.map(t => (
+                  <div key={t._id} className="rounded-lg border border-neutral-200 bg-white p-3 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-neutral-900 truncate">{t.name}</p>
+                      <p className="text-xs text-neutral-400">{t.category}{t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}</p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTemplate(previewTemplate?._id === t._id ? null : t)}
+                        className="text-xs text-neutral-500 hover:text-neutral-800 focus:outline-none px-2 py-1 rounded border border-neutral-200 hover:bg-neutral-50"
+                        aria-expanded={previewTemplate?._id === t._id}
+                      >
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTemplate(t)}
+                        className="text-xs text-primary-600 hover:text-primary-800 focus:outline-none px-2 py-1 rounded border border-primary-200 hover:bg-primary-50"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {previewTemplate && (
+              <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm space-y-2">
+                <p className="font-semibold text-neutral-800">{previewTemplate.name}</p>
+                {previewTemplate.description && <p className="text-neutral-600">{previewTemplate.description}</p>}
+                {previewTemplate.defaultChiefComplaint && (
+                  <p className="text-neutral-600"><span className="font-medium">Chief complaint:</span> {previewTemplate.defaultChiefComplaint}</p>
+                )}
+                {previewTemplate.suggestedDiagnoses?.length ? (
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Diagnoses:</span>{' '}
+                    {previewTemplate.suggestedDiagnoses.map(d => d.code).join(', ')}
+                  </p>
+                ) : null}
+                {previewTemplate.suggestedTests?.length ? (
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Tests:</span>{' '}
+                    {previewTemplate.suggestedTests.join(', ')}
+                  </p>
+                ) : null}
+                {previewTemplate.notes && <p className="text-neutral-600"><span className="font-medium">Notes:</span> {previewTemplate.notes}</p>}
+                <button
+                  type="button"
+                  onClick={() => applyTemplate(previewTemplate)}
+                  className="mt-1 text-xs font-medium text-primary-600 hover:underline focus:outline-none"
+                >
+                  Apply this template →
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Allergy Alert ── */}
+        {patientAllergies.length > 0 && (
+          <div role="alert" aria-live="assertive" className="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3">
+            <p className="text-sm font-semibold text-danger-800 mb-2">⚠ Known Allergies</p>
+            <ul className="space-y-1">
+              {patientAllergies.map((a) => (
+                <li key={a._id} className="text-sm text-danger-700">
+                  <span className="font-medium">{a.allergen}</span>
+                  {' '}— {a.severity} · {a.reaction}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* ── Chief Complaint ── */}
         <section aria-labelledby="section-complaint">

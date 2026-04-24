@@ -18,16 +18,17 @@ export interface Diagnosis {
 }
 
 export interface Prescription {
-  drugName: string;          // Required
-  genericName?: string;      // Optional
-  dosage: string;            // e.g., '500mg'
-  frequency: string;         // e.g., 'twice daily'
-  duration: string;          // e.g., '7 days'
+  drugName: string;
+  genericName?: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
   route: 'oral' | 'topical' | 'injection' | 'inhaled' | 'other';
-  instructions?: string;     // Special instructions
-  prescribedBy: Schema.Types.ObjectId;  // userId of prescribing doctor
+  instructions?: string;
+  prescribedBy: Schema.Types.ObjectId;
   prescribedAt: Date;
-  refillsAllowed: number;    // Default 0
+  refillsAllowed: number;
+  allergyOverride?: { allergyId: string; reason: string };
 }
 
 export interface Encounter {
@@ -81,6 +82,10 @@ const prescriptionSchema = new Schema<Prescription>(
     prescribedBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
     prescribedAt:    { type: Date, default: Date.now },
     refillsAllowed:  { type: Number, default: 0 },
+    allergyOverride: {
+      type: new Schema({ allergyId: String, reason: String }, { _id: false }),
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

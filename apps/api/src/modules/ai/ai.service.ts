@@ -119,3 +119,36 @@ export async function generatePatientInsights(encounters: EncounterSummary[]): P
     throw new Error(`Failed to generate patient insights: ${msg}`);
   }
 }
+
+export interface DrugInteractionInput {
+  currentMedications: string[];
+  newDrug: string;
+}
+
+export interface DrugInteractionResult {
+  hasInteraction: boolean;
+  severity: 'none' | 'mild' | 'moderate' | 'severe';
+  recommendation: string;
+}
+
+export async function checkDrugInteractions(input: DrugInteractionInput): Promise<DrugInteractionResult> {
+  const client = getGeminiClient();
+
+  const prompt = `You are a clinical pharmacist AI. Check for drug-drug interactions between the new drug and the current medications.
+
+Current medications: ${input.currentMedications.join(', ') || 'none'}
+New drug: ${input.newDrug}
+
+Respond ONLY with valid JSON in this exact format (no markdown):
+{"hasInteraction": boolean, "severity": "none"|"mild"|"moderate"|"severe", "recommendation": "string"}`;
+
+  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const result = await model.generateContent(prompt);
+  const text = result.response.text().trim();
+
+  try {
+    return JSON.parse(text) as DrugInteractionResult;
+  } catch {
+    throw new Error(`Failed to parse drug interaction response: ${text}`);
+  }
+}
