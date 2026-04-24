@@ -7,7 +7,7 @@ import pinoHttp from 'pino-http';
 <<<<<<< fix/stellar-network-safety-guards-335
 import { fundAccount, createIntent, verifyIntent } from './stellar.js';
 =======
-import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
+import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline, getFeeStats } from './stellar.js';
 >>>>>>> main
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -90,6 +90,16 @@ app.post('/intent', requireSecret, async (req, res) => {
     res.json({ success: true, ...result });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fee-stats (no auth needed)
+app.get('/fee-stats', async (_req, res) => {
+  try {
+    const stats = await getFeeStats();
+    res.json({ success: true, ...stats });
+  } catch (error: any) {
+    res.status(502).json({ error: 'HorizonUnavailable', message: error.message });
   }
 });
 

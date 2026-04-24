@@ -11,6 +11,8 @@ export const createPaymentIntentSchema = z.object({
   currency: z.enum(['XLM', 'USDC']).optional(),
   assetCode: z.string().optional().default('XLM'),
   issuer: z.string().optional(),
+  /** Fee speed tier — defaults to 'standard' */
+  feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
 });
 
 export const confirmPaymentSchema = z.object({

@@ -12,6 +12,7 @@ export interface PaymentRecord {
   patientId?: string;
   assetCode: string;
   assetIssuer?: string | null;
+  feeStrategy?: 'slow' | 'standard' | 'fast';
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -32,6 +33,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     patientId: { type: String, index: true },
     assetCode: { type: String, required: true, default: 'XLM', uppercase: true, trim: true },
     assetIssuer: { type: String, default: null },
+    feeStrategy: { type: String, enum: ['slow', 'standard', 'fast'], default: 'standard' },
   },
   { timestamps: true, versionKey: false },
 );

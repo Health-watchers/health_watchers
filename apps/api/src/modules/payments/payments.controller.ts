@@ -24,6 +24,19 @@ function canReadPayments(role: string): boolean {
   return ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].includes(role);
 }
 
+// GET /payments/fee-estimate — fetch Stellar fee statistics
+router.get(
+  '/fee-estimate',
+  asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      const data = await stellarClient.getFeeEstimate();
+      return res.json({ status: 'success', data });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
 // GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
 router.get(
   '/balance',
@@ -131,7 +144,7 @@ router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer, currency } = req.body;
+    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer, currency, feeStrategy = 'standard' } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
     // `currency` takes precedence over `assetCode` for convenience
@@ -165,6 +178,7 @@ router.post(
       status: 'pending',
       assetCode: normalizedAsset,
       assetIssuer: normalizedAsset === 'XLM' ? null : resolvedIssuer,
+      feeStrategy,
     });
 
     return res.status(201).json({

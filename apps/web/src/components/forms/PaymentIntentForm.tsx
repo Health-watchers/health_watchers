@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { AssetSelector } from "@/components/ui/AssetSelector";
+import { FeeEstimateDisplay } from "@/components/payments/FeeEstimateDisplay";
+
+type FeeStrategy = 'slow' | 'standard' | 'fast';
 
 const schema = z.object({
   patientId: z.string().min(1, "Patient is required"),
@@ -16,7 +20,7 @@ const schema = z.object({
   memo: z.string().max(28, "Memo must be 28 chars or fewer").optional(),
 });
 
-export type PaymentIntentData = z.infer<typeof schema>;
+export type PaymentIntentData = z.infer<typeof schema> & { feeStrategy: FeeStrategy };
 
 interface Props {
   onSubmit: (data: PaymentIntentData) => Promise<void>;
@@ -24,13 +28,15 @@ interface Props {
 }
 
 export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
+  const [feeStrategy, setFeeStrategy] = useState<FeeStrategy>('standard');
+
   const {
     register,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
     setError,
-  } = useForm<PaymentIntentData>({
+  } = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: { asset: "XLM" },
   });
@@ -39,9 +45,9 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   const asset = watch("asset");
   const patientId = watch("patientId");
 
-  const submit = async (data: PaymentIntentData) => {
+  const submit = async (data: z.infer<typeof schema>) => {
     try {
-      await onSubmit(data);
+      await onSubmit({ ...data, feeStrategy });
     } catch (err) {
       setError("root", {
         message:
@@ -98,6 +104,15 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         helperText="Visible on the Stellar network"
       />
 
+      {/* Fee estimate — only shown for XLM payments */}
+      {asset === 'XLM' && (
+        <FeeEstimateDisplay
+          selected={feeStrategy}
+          onChange={setFeeStrategy}
+          amount={amount}
+        />
+      )}
+
       {/* Summary box — shown once amount + patient are filled */}
       {amount && patientId && (
         <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-1 text-sm">
@@ -112,6 +127,12 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               {amount} {asset}
             </span>
           </div>
+          {asset === 'XLM' && (
+            <div className="flex justify-between text-neutral-600">
+              <span>Fee speed</span>
+              <span className="capitalize">{feeStrategy}</span>
+            </div>
+          )}
           <p className="text-xs text-neutral-400 pt-1">
             Review carefully — Stellar transactions cannot be reversed.
           </p>
