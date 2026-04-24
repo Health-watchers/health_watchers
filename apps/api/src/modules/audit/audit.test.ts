@@ -22,9 +22,9 @@ describe('Audit Logging', () => {
         timestamp: new Date(),
       });
 
-      await expect(
-        AuditLogModel.deleteOne({ _id: log._id })
-      ).rejects.toThrow('Audit logs are immutable and cannot be deleted');
+      await expect(AuditLogModel.deleteOne({ _id: log._id })).rejects.toThrow(
+        'Audit logs are immutable and cannot be deleted'
+      );
     });
   });
 
@@ -59,9 +59,7 @@ describe('Audit Logging', () => {
 
     it('should not throw error if audit logging fails', async () => {
       // This should not throw even with invalid data
-      await expect(
-        auditLog({ action: 'INVALID_ACTION' as any }, undefined)
-      ).resolves.not.toThrow();
+      await expect(auditLog({ action: 'INVALID_ACTION' as any }, undefined)).resolves.not.toThrow();
     });
   });
 });

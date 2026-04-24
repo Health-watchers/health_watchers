@@ -14,7 +14,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
 
@@ -25,12 +27,16 @@ router.get(
         : { clinicId: req.user!.clinicId };
 
     const [logs, total] = await Promise.all([
-      AuditLogModel.find(filter).sort({ timestamp: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      AuditLogModel.find(filter)
+        .sort({ timestamp: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
       AuditLogModel.countDocuments(filter),
     ]);
 
     return res.json({ status: 'success', data: logs, meta: { total, page, limit } });
-  }),
+  })
 );
 
 export const auditLogRoutes = router;

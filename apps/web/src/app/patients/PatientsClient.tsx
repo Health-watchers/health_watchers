@@ -21,7 +21,7 @@ interface Labels {
   registerNew: string;
 }
 
-import { API_URL } from "@/lib/api";
+import { API_URL } from '@/lib/api';
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,14 +53,14 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* ── Page header ───────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{labels.title}</h1>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{labels.title}</h1>
         <Link
           href="/patients/new"
           id="register-new-patient-btn"
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-blue-800"
         >
           <span aria-hidden="true">+</span>
           {labels.registerNew}
@@ -75,7 +75,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           placeholder={labels.search}
           value={inputValue}
           onChange={(e) => handleSearch(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
           aria-label={labels.search}
         />
       </div>
@@ -93,7 +93,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             <Link
               href="/patients/new"
               id="register-new-patient-empty-btn"
-              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
               <span aria-hidden="true">+</span>
               {labels.registerNew}
@@ -102,26 +102,26 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         />
       ) : (
         <>
-          <div className="md:hidden flex flex-col gap-4">
+          <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.id}</p>
+                <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
-                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.name}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.name}</p>
                 <p className="font-medium text-gray-900">
                   {p.firstName} {p.lastName}
                 </p>
-                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.dob}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.dob}</p>
                 <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
-                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.sex}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.sex}</p>
                 <p className="text-gray-700">{p.sex}</p>
-                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">
                   {labels.contact}
                 </p>
                 <p className="text-gray-700">{p.contactNumber || 'N/A'}</p>
                 <Link
                   href={`/patients/${p._id}`}
-                  className="mt-3 inline-block px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  className="mt-3 inline-block rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
                 >
                   {labels.view}
                 </Link>
@@ -129,7 +129,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             ))}
           </div>
 
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50">

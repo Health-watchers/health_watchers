@@ -85,8 +85,8 @@ export function OtpInput({ value, onChange, disabled, error }: OtpInputProps) {
             disabled={disabled}
             aria-label={`Digit ${i + 1}`}
             className={[
-              'w-10 h-12 text-center rounded-md border text-sm font-medium',
-              'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'h-12 w-10 rounded-md border text-center text-sm font-medium',
+              'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
               error ? 'border-danger-500' : 'border-neutral-200',
             ].join(' ')}
@@ -97,7 +97,7 @@ export function OtpInput({ value, onChange, disabled, error }: OtpInputProps) {
         ))}
       </div>
       {error && (
-        <p role="alert" className="mt-1 text-xs text-danger-500">
+        <p role="alert" className="text-danger-500 mt-1 text-xs">
           {error}
         </p>
       )}

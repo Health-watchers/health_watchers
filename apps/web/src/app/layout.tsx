@@ -84,16 +84,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={inter.variable} suppressHydrationWarning>
-      <body className="min-h-screen bg-neutral-50 dark:bg-neutral-900 font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <QueryProvider>
-              {children}
-              <Toaster />
-            </QueryProvider>
-          </NextIntlClientProvider>
-        </ThemeProvider>
+    <html lang={locale} className={inter.variable}>
+      <body className="min-h-screen bg-neutral-50 font-sans antialiased">
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Toaster />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

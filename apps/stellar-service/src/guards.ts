@@ -1,5 +1,5 @@
-import { stellarConfig } from "./config";
-import logger from "./logger";
+import { stellarConfig } from './config';
+import logger from './logger';
 
 /**
  * Run at startup. Validates network configuration and exits with code 1 if:
@@ -26,8 +26,8 @@ export function assertMainnetSafety(): void {
     process.exit(1);
   }
 
-  if (network === "mainnet") {
-    logger.warn("⚠️  STELLAR_NETWORK=mainnet — REAL XLM WILL BE USED ⚠️");
+  if (network === 'mainnet') {
+    logger.warn('⚠️  STELLAR_NETWORK=mainnet — REAL XLM WILL BE USED ⚠️');
 
     if (!mainnetConfirmed) {
       logger.error(
@@ -39,7 +39,7 @@ export function assertMainnetSafety(): void {
     }
 
     if (dryRun) {
-      logger.warn("STELLAR_DRY_RUN=true — transactions will be simulated, not submitted.");
+      logger.warn('STELLAR_DRY_RUN=true — transactions will be simulated, not submitted.');
     }
 
     logger.warn("🚨 MAINNET MODE ACTIVE - All transactions will use real XLM 🚨");
@@ -61,6 +61,6 @@ export function assertTransactionLimit(amountXlm: number): void {
 export class TransactionLimitError extends Error {
   constructor(requested: number, limit: number) {
     super(`Transaction amount ${requested} XLM exceeds limit of ${limit} XLM`);
-    this.name = "TransactionLimitError";
+    this.name = 'TransactionLimitError';
   }
 }

@@ -3,5 +3,5 @@
  * Preserves plain text including special characters (e.g. O'Brien, <3 mg/dL).
  */
 export function sanitizeText(input: string): string {
-  return input.replace(/<[^>]*>/g, "");
+  return input.replace(/<[^>]*>/g, '');
 }

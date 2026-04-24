@@ -71,6 +71,8 @@ jest.mock('@api/modules/payments/models/payment-record.model', () => ({
 jest.mock('@api/modules/payments/services/stellar-client', () => ({
   stellarClient: {
     verifyTransaction: jest.fn(),
+    findPaths: jest.fn(),
+    getOrderbook: jest.fn(),
   },
 }));
 
@@ -90,7 +92,7 @@ function makeToken(): string {
       expiresIn: '15m',
       issuer: 'health-watchers-api',
       audience: 'health-watchers-client',
-    },
+    }
   );
 }
 
@@ -146,7 +148,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(PaymentRecordModel.findByIdAndUpdate).toHaveBeenCalledWith(
       pendingPayment._id,
       expect.objectContaining({ status: 'confirmed', txHash: 'valid-tx' }),
-      { new: true },
+      { new: true }
     );
   });
 
@@ -171,7 +173,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(res.body.error).toBe('TransactionNotFound');
     expect(PaymentRecordModel.findByIdAndUpdate).toHaveBeenCalledWith(
       pendingPayment._id,
-      expect.objectContaining({ status: 'failed', txHash: 'invalid-tx' }),
+      expect.objectContaining({ status: 'failed', txHash: 'invalid-tx' })
     );
   });
 
@@ -190,5 +192,54 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('AlreadyConfirmed');
     expect(stellarClient.verifyTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/v1/payments/paths', () => {
+  const token = makeToken();
+
+  it('returns available payment paths', async () => {
+    const mockPaths = [
+      {
+        sourceAssetCode: 'USDC',
+        sourceAmount: '10.5',
+        destinationAssetCode: 'XLM',
+        destinationAmount: '100',
+        path: [],
+      },
+    ];
+    (stellarClient.findPaths as jest.Mock).mockResolvedValue(mockPaths);
+
+    const res = await request(app)
+      .get('/api/v1/payments/paths')
+      .query({ sourceAsset: 'USDC', destinationAsset: 'XLM', amount: '100' })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data).toEqual(mockPaths);
+  });
+});
+
+describe('GET /api/v1/payments/stellar/orderbook', () => {
+  const token = makeToken();
+
+  it('returns current orderbook for XLM/USDC', async () => {
+    const mockOrderbook = {
+      base: 'XLM',
+      counter: 'USDC',
+      bids: [{ price: '0.1', amount: '1000' }],
+      asks: [{ price: '0.11', amount: '1000' }],
+    };
+    (stellarClient.getOrderbook as jest.Mock).mockResolvedValue(mockOrderbook);
+
+    const res = await request(app)
+      .get('/api/v1/payments/stellar/orderbook')
+      .query({ base: 'XLM', counter: 'USDC' })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data).toEqual(mockOrderbook);
   });
 });

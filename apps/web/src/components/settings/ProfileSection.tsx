@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useQueryClient } from "@tanstack/react-query";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useQueryClient } from '@tanstack/react-query';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 
 const profileSchema = z.object({
-  fullName: z.string().min(1, "Full name is required").max(100),
+  fullName: z.string().min(1, 'Full name is required').max(100),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -45,24 +45,22 @@ export function ProfileSection({ user }: ProfileSectionProps) {
     setErrorMessage(null);
 
     try {
-      const res = await fetch("/api/settings/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/settings/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: data.fullName }),
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message ?? "Failed to update profile");
+        throw new Error(body?.message ?? 'Failed to update profile');
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
       reset({ fullName: data.fullName });
-      setSuccessMessage("Profile updated successfully");
+      setSuccessMessage('Profile updated successfully');
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "An unexpected error occurred",
-      );
+      setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred');
     }
   };
 
@@ -73,10 +71,10 @@ export function ProfileSection({ user }: ProfileSectionProps) {
         <p className="text-sm text-neutral-500">Update your display name.</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-md">
+      <form onSubmit={handleSubmit(onSubmit)} className="max-w-md space-y-4">
         <Input
           label="Full Name"
-          {...register("fullName")}
+          {...register('fullName')}
           error={errors.fullName?.message}
           disabled={isSubmitting}
         />
@@ -103,13 +101,9 @@ export function ProfileSection({ user }: ProfileSectionProps) {
           </p>
         </div>
 
-        {successMessage && (
-          <p className="text-sm text-green-600">{successMessage}</p>
-        )}
+        {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
 
-        {errorMessage && (
-          <p className="text-sm text-danger-500">{errorMessage}</p>
-        )}
+        {errorMessage && <p className="text-danger-500 text-sm">{errorMessage}</p>}
 
         {isDirty && (
           <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>

@@ -30,12 +30,15 @@ async function run() {
         email: 'unknown@placeholder.invalid',
         subscriptionTier: 'free',
       },
-    },
+    }
   );
   console.log(`Clinics backfilled: ${clinicResult.modifiedCount}`);
 
   // 2. Standardize clinicId from String to ObjectId in patients collection
-  const patients = await db.collection('patients').find({ clinicId: { $type: 'string' } }).toArray();
+  const patients = await db
+    .collection('patients')
+    .find({ clinicId: { $type: 'string' } })
+    .toArray();
   let patientFixed = 0;
   for (const p of patients) {
     try {

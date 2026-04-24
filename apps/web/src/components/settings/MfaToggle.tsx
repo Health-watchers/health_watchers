@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { MfaSetupModal } from "./MfaSetupModal";
+import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { MfaSetupModal } from './MfaSetupModal';
 
 interface MfaToggleProps {
   mfaEnabled: boolean;
@@ -11,8 +11,8 @@ interface MfaToggleProps {
 
 export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
   const [modalOpen, setModalOpen] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState("");
-  const [secret, setSecret] = useState("");
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [secret, setSecret] = useState('');
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,12 +21,10 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
     setError(null);
     setIsLoading(true);
     try {
-      const res = await fetch("/api/settings/mfa/enable", { method: "POST" });
+      const res = await fetch('/api/settings/mfa/enable', { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(
-          body?.message ?? "Failed to initiate MFA setup. Please try again.",
-        );
+        setError(body?.message ?? 'Failed to initiate MFA setup. Please try again.');
         return;
       }
       const data = await res.json();
@@ -34,7 +32,7 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
       setSecret(data.secret);
       setModalOpen(true);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError('Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -44,16 +42,16 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
     setError(null);
     setIsLoading(true);
     try {
-      const res = await fetch("/api/settings/mfa/disable", { method: "POST" });
+      const res = await fetch('/api/settings/mfa/disable', { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.message ?? "Failed to disable MFA. Please try again.");
+        setError(body?.message ?? 'Failed to disable MFA. Please try again.');
         return;
       }
       setShowDisableConfirm(false);
       onMfaStatusChange();
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError('Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -63,11 +61,9 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-neutral-800">
-            Two-factor authentication
-          </p>
+          <p className="text-sm font-medium text-neutral-800">Two-factor authentication</p>
           <p className="text-sm text-neutral-500">
-            {mfaEnabled ? "MFA is enabled" : "MFA is disabled"}
+            {mfaEnabled ? 'MFA is enabled' : 'MFA is disabled'}
           </p>
         </div>
 
@@ -84,12 +80,7 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
             Disable MFA
           </Button>
         ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleEnableClick}
-            loading={isLoading}
-          >
+          <Button variant="primary" size="sm" onClick={handleEnableClick} loading={isLoading}>
             Enable MFA
           </Button>
         )}
@@ -98,16 +89,11 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
       {showDisableConfirm && (
         <div className="rounded-md border border-neutral-200 bg-neutral-50 p-4">
           <p className="mb-3 text-sm text-neutral-700">
-            Are you sure you want to disable two-factor authentication? This
-            will make your account less secure.
+            Are you sure you want to disable two-factor authentication? This will make your account
+            less secure.
           </p>
           <div className="flex gap-2">
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDisableConfirm}
-              loading={isLoading}
-            >
+            <Button variant="danger" size="sm" onClick={handleDisableConfirm} loading={isLoading}>
               Confirm
             </Button>
             <Button
@@ -126,7 +112,7 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-danger-500">
+        <p role="alert" className="text-danger-500 text-sm">
           {error}
         </p>
       )}

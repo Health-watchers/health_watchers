@@ -60,6 +60,9 @@ export const config = {
   // PHI Field-Level Encryption
   fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || '',
 
+  // Stellar Keypair Encryption (separate key from PHI encryption)
+  keypairEncryptionKey: process.env.KEYPAIR_ENCRYPTION_KEY || '',
+
   // Email Configuration
   email: {
     provider: (process.env.EMAIL_PROVIDER || 'smtp') as 'smtp' | 'sendgrid',

@@ -38,11 +38,7 @@ export interface RegisterPatientLabels {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export default function RegisterPatientClient({
-  labels,
-}: {
-  labels: RegisterPatientLabels;
-}) {
+export default function RegisterPatientClient({ labels }: { labels: RegisterPatientLabels }) {
   const router = useRouter();
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -108,17 +104,14 @@ export default function RegisterPatientClient({
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <main className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-10">
+    <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
       {/* ── Back link ─────────────────────────────────────────────────────── */}
       <Link
         href="/patients"
-        className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 mb-8 group"
+        className="text-primary-600 hover:text-primary-700 group mb-8 inline-flex items-center gap-1 text-sm"
         aria-label={labels.back}
       >
-        <span
-          aria-hidden="true"
-          className="transition-transform group-hover:-translate-x-0.5"
-        >
+        <span aria-hidden="true" className="transition-transform group-hover:-translate-x-0.5">
           ←
         </span>
         {labels.back}
@@ -126,26 +119,24 @@ export default function RegisterPatientClient({
 
       {/* ── Page header ───────────────────────────────────────────────────── */}
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900">
-          {labels.title}
-        </h1>
+        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">{labels.title}</h1>
         <p className="mt-1 text-sm text-neutral-500">{labels.subtitle}</p>
       </div>
 
       {/* ── Card ──────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-6 sm:p-8">
+      <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
         {/* API-level error banner */}
         {apiError && (
           <div
             role="alert"
             className="mb-6 flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
-            <span className="mt-0.5 font-bold shrink-0">✕</span>
+            <span className="mt-0.5 shrink-0 font-bold">✕</span>
             <p>{apiError}</p>
             <button
               aria-label="Dismiss error"
               onClick={() => setApiError(null)}
-              className="ml-auto shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+              className="ml-auto shrink-0 opacity-60 transition-opacity hover:opacity-100"
             >
               ×
             </button>
@@ -160,7 +151,7 @@ export default function RegisterPatientClient({
           className="space-y-6"
         >
           {/* ── Name row ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               id="firstName"
               label={labels.firstName}
@@ -197,15 +188,13 @@ export default function RegisterPatientClient({
 
           {/* ── Sex (radio group) ─────────────────────────────────────────── */}
           <fieldset>
-            <legend className="text-sm font-medium text-neutral-700 mb-2">
+            <legend className="mb-2 text-sm font-medium text-neutral-700">
               {labels.sex}
-              <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+              <span className="ml-0.5 text-red-500" aria-hidden="true">
+                *
+              </span>
             </legend>
-            <div
-              role="radiogroup"
-              aria-label={labels.sex}
-              className="flex flex-wrap gap-3"
-            >
+            <div role="radiogroup" aria-label={labels.sex} className="flex flex-wrap gap-3">
               {(
                 [
                   { value: 'M', label: labels.sexMale },
@@ -218,11 +207,11 @@ export default function RegisterPatientClient({
                   <label
                     key={value}
                     className={[
-                      'flex items-center gap-2 cursor-pointer rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors select-none',
+                      'flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors select-none',
                       checked
                         ? 'border-primary-500 bg-primary-50 text-primary-700'
                         : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50',
-                      isDisabled ? 'opacity-50 pointer-events-none' : '',
+                      isDisabled ? 'pointer-events-none opacity-50' : '',
                     ].join(' ')}
                   >
                     <input
@@ -272,7 +261,7 @@ export default function RegisterPatientClient({
           />
 
           {/* ── Actions ──────────────────────────────────────────────────── */}
-          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"

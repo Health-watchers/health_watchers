@@ -11,7 +11,13 @@ export type AuditAction =
   | 'ENCOUNTER_CREATE'
   | 'ENCOUNTER_UPDATE'
   | 'PAYMENT_CREATE'
-  | 'EXPORT_PATIENT_DATA';
+  | 'EXPORT_PATIENT_DATA'
+  | 'ALLERGY_CREATE'
+  | 'ALLERGY_UPDATE'
+  | 'ALLERGY_DELETE'
+  | 'ALLERGY_OVERRIDE'
+  | 'KEYPAIR_CREATE'
+  | 'KEYPAIR_ROTATE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -45,6 +51,12 @@ const auditLogSchema = new Schema<AuditLog>(
         'ENCOUNTER_UPDATE',
         'PAYMENT_CREATE',
         'EXPORT_PATIENT_DATA',
+        'ALLERGY_CREATE',
+        'ALLERGY_UPDATE',
+        'ALLERGY_DELETE',
+        'ALLERGY_OVERRIDE',
+        'KEYPAIR_CREATE',
+        'KEYPAIR_ROTATE',
       ],
       index: true,
     },

@@ -6,10 +6,10 @@ import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
-} from "@/components/forms/CreateEncounterForm";
-import { queryKeys } from "@/lib/queryKeys";
-import { fetchWithAuth } from "@/lib/auth";
-import { API_URL } from "@/lib/api";
+} from '@/components/forms/CreateEncounterForm';
+import { queryKeys } from '@/lib/queryKeys';
+import { fetchWithAuth } from '@/lib/auth';
+import { API_URL } from '@/lib/api';
 
 const API = `${API_URL}/api/v1`;
 
@@ -80,11 +80,11 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
     );
 
   return (
-    <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{labels.title}</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{labels.title}</h1>
         <button
           onClick={() => setShowForm(true)}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -95,7 +95,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
 
       {showForm && (
         <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">New Encounter</h2>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">New Encounter</h2>
           <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
         </div>
       )}
@@ -109,24 +109,24 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
           </Button>
         </div>
       ) : (
-        <ul aria-label={labels.title} className="flex flex-col gap-4 list-none p-0 m-0">
+        <ul aria-label={labels.title} className="m-0 flex list-none flex-col gap-4 p-0">
           {encounters.map((e: Encounter) => (
             <li key={e.id} className="rounded border border-gray-200 p-4 shadow-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.id}</p>
-                  <p className="font-medium text-gray-900 break-all">{e.id}</p>
+                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
+                  <p className="font-medium break-all text-gray-900">{e.id}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.patient}</p>
-                  <p className="font-medium text-gray-900 break-all">{e.patientId}</p>
+                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.patient}</p>
+                  <p className="font-medium break-all text-gray-900">{e.patientId}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.date}</p>
+                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.date}</p>
                   <p className="text-gray-700">{e.date}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.notes}</p>
+                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.notes}</p>
                   <p className="text-gray-700">{e.notes}</p>
                 </div>
               </div>

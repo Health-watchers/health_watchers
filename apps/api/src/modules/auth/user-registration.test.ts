@@ -68,7 +68,7 @@ const CLINIC_ID = '507f1f77bcf86cd799439011';
 async function registerHandler(
   callerRole: string,
   body: { fullName: string; email: string; password: string; role: string; clinicId: string },
-  res: ReturnType<typeof makeRes>,
+  res: ReturnType<typeof makeRes>
 ) {
   const allowed = ROLE_CREATE_PERMISSIONS[callerRole] ?? [];
   if (!allowed.includes(body.role)) {
@@ -114,7 +114,10 @@ async function verifyEmailHandler(token: string, res: ReturnType<typeof makeRes>
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const user = await (UserModel as any).findOne({ emailVerificationTokenHash: tokenHash });
 
-  if (!user) return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
+  if (!user)
+    return res
+      .status(400)
+      .json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
 
   user.emailVerified = true;
   user.emailVerificationTokenHash = undefined;
@@ -184,7 +187,13 @@ describe('POST /auth/register', () => {
   it('allows SUPER_ADMIN to create CLINIC_ADMIN', async () => {
     (UserModel.findOne as jest.Mock).mockResolvedValue(null);
     (ClinicModel.findById as jest.Mock).mockResolvedValue({ _id: CLINIC_ID });
-    const createdUser = { ...validBody, role: 'CLINIC_ADMIN', _id: 'user2', isActive: true, emailVerified: false };
+    const createdUser = {
+      ...validBody,
+      role: 'CLINIC_ADMIN',
+      _id: 'user2',
+      isActive: true,
+      emailVerified: false,
+    };
     (UserModel.create as jest.Mock).mockResolvedValue(createdUser);
     const res = makeRes();
 
@@ -205,7 +214,7 @@ describe('POST /auth/register', () => {
     const rawToken = (sendVerificationEmail as jest.Mock).mock.calls[0][1] as string;
     expect(createdUser).toHaveProperty('emailVerificationTokenHash');
     expect((createdUser as any).emailVerificationTokenHash).toBe(
-      crypto.createHash('sha256').update(rawToken).digest('hex'),
+      crypto.createHash('sha256').update(rawToken).digest('hex')
     );
     expect((createdUser as any).emailVerificationTokenHash).not.toBe(rawToken);
   });
@@ -241,7 +250,9 @@ describe('GET /auth/verify-email', () => {
     expect(user.emailVerified).toBe(true);
     expect(user.emailVerificationTokenHash).toBeUndefined();
     expect(saveMock).toHaveBeenCalledTimes(1);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { emailVerified: true } }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { emailVerified: true } })
+    );
   });
 
   it('returns 400 for invalid token', async () => {

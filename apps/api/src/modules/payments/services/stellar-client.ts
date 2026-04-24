@@ -70,7 +70,9 @@ class StellarClient {
    * Get XLM and USDC balances and recent transactions for a public key
    * Calls the stellar-service GET /balance/:publicKey endpoint
    */
-  async getBalance(publicKey: string): Promise<{ balance: string; usdcBalance: string | null; transactions: unknown[] }> {
+  async getBalance(
+    publicKey: string
+  ): Promise<{ balance: string; usdcBalance: string | null; transactions: unknown[] }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.get(`/balance/${publicKey}`, {
       headers: { Authorization: `Bearer ${secret}` },
@@ -84,13 +86,13 @@ class StellarClient {
    */
   async createUsdcTrustline(
     publicKey: string,
-    usdcIssuer: string,
+    usdcIssuer: string
   ): Promise<{ created?: boolean; alreadyExists?: boolean; hash?: string; dryRun?: boolean }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.post(
       '/trustline/usdc',
       { publicKey, usdcIssuer },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     return response.data;
   }
@@ -104,6 +106,23 @@ class StellarClient {
     const response = await this.client.post(
       '/fund',
       { publicKey },
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Transfer all XLM from one account to another (used during keypair rotation)
+   * Calls the stellar-service POST /transfer endpoint
+   */
+  async transferBalance(
+    fromPublicKey: string,
+    toPublicKey: string,
+  ): Promise<{ transferred: boolean; amount?: string; hash?: string }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/transfer',
+      { fromPublicKey, toPublicKey },
       { headers: { Authorization: `Bearer ${secret}` } },
     );
     return response.data;
@@ -122,6 +141,37 @@ class StellarClient {
       }
       throw new Error('Stellar service health check failed: unknown error');
     }
+  }
+
+  /**
+   * Discover payment paths from stellar-service
+   */
+  async findPaths(params: {
+    sourceAssetCode: string;
+    sourceAssetIssuer?: string;
+    destinationAssetCode: string;
+    destinationAssetIssuer?: string;
+    destinationAmount: string;
+  }): Promise<any[]> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.get('/paths', {
+      params,
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    return response.data.data;
+  }
+
+  /**
+   * Get orderbook from stellar-service
+   */
+  async getOrderbook(params: {
+    baseAssetCode: string;
+    baseAssetIssuer?: string;
+    counterAssetCode: string;
+    counterAssetIssuer?: string;
+  }): Promise<any> {
+    const response = await this.client.get('/orderbook', { params });
+    return response.data.data;
   }
 }
 

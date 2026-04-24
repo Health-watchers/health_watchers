@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 
 interface AiSummaryCardProps {
   patientName: string;
@@ -25,7 +25,7 @@ export default function AiSummaryCard({
     setTimeout(() => {
       setSummary(
         initialSummary ??
-          `${patientName} presents with a focused complaint pattern across recent visits. AI review suggests conservative management is appropriate with close follow-up and escalation to imaging if symptoms persist or worsen.`,
+          `${patientName} presents with a focused complaint pattern across recent visits. AI review suggests conservative management is appropriate with close follow-up and escalation to imaging if symptoms persist or worsen.`
       );
       setLoading(false);
     }, 1800);
@@ -45,14 +45,12 @@ export default function AiSummaryCard({
           <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white">
             CLINICAL AI
           </span>
-          <span className="text-sm font-semibold text-gray-800">
-            Intelligent Encounter Summary
-          </span>
+          <span className="text-sm font-semibold text-gray-800">Intelligent Encounter Summary</span>
         </div>
         <button
           onClick={generateSummary}
           disabled={loading}
-          className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
         >
           {/* Regenerate icon */}
           <svg
@@ -62,11 +60,7 @@ export default function AiSummaryCard({
             stroke="currentColor"
             strokeWidth="2"
           >
-            <path
-              d="M1 4v6h6M23 20v-6h-6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round" />
             <path
               d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"
               strokeLinecap="round"
