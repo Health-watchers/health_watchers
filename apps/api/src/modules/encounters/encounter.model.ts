@@ -31,6 +31,22 @@ export interface Prescription {
   allergyOverride?: { allergyId: string; reason: string };
 }
 
+export interface CPTCode {
+  code: string; // CPT code (e.g., "99213")
+  description: string;
+  units: number; // Number of times procedure was performed
+  fee: string; // Fee in USD (stored as string to avoid floating point issues)
+}
+
+export interface BillingInfo {
+  cptCodes: CPTCode[];
+  billingStatus: 'unbilled' | 'billed' | 'paid' | 'denied';
+  insuranceClaimId?: string; // External reference to insurance claim
+  totalFee: string; // Total fee in USD
+  billedAt?: Date;
+  paidAt?: Date;
+}
+
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
@@ -46,6 +62,7 @@ export interface Encounter {
   followUpDate?: Date;
   aiSummary?: string;
   isActive?: boolean;
+  billing?: BillingInfo;
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -90,6 +107,33 @@ const prescriptionSchema = new Schema<Prescription>(
   { timestamps: true }
 );
 
+const cptCodeSchema = new Schema<CPTCode>(
+  {
+    code: { type: String, required: true },
+    description: { type: String, required: true },
+    units: { type: Number, required: true, min: 1, default: 1 },
+    fee: { type: String, required: true },
+  },
+  { _id: false }
+);
+
+const billingInfoSchema = new Schema<BillingInfo>(
+  {
+    cptCodes: { type: [cptCodeSchema], default: [] },
+    billingStatus: { 
+      type: String, 
+      enum: ['unbilled', 'billed', 'paid', 'denied'], 
+      default: 'unbilled',
+      index: true 
+    },
+    insuranceClaimId: { type: String },
+    totalFee: { type: String, required: true, default: '0.00' },
+    billedAt: { type: Date },
+    paidAt: { type: Date },
+  },
+  { _id: false }
+);
+
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
@@ -106,6 +150,7 @@ const encounterSchema = new Schema<Encounter>(
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
     isActive:          { type: Boolean, default: true, index: true },
+    billing:           { type: billingInfoSchema },
   },
   { timestamps: true, versionKey: false }
 );
