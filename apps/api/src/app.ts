@@ -20,6 +20,7 @@ import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import aiRoutes from './modules/ai/ai.routes';
+import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
@@ -147,15 +148,9 @@ app.use((req, res, next) => {
   next();
 });
 
+
 // ── Health check ──────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) =>
-  res.json({
-    status: 'ok',
-    service: 'health-watchers-api',
-    timestamp: new Date().toISOString(),
-    cache: getCacheMetrics(),
-  })
-);
+app.use('/health', healthRoutes);
 
 // ── API version header on all /api/* responses ────────────────────────────────
 app.use('/api', apiVersionHeader('1.0'));
