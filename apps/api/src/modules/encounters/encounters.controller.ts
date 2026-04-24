@@ -182,7 +182,7 @@ router.patch(
       return res.status(403).json({ error: 'Forbidden', message: 'You can only edit your own encounters' });
     }
 
-    const allowedFields = ['chiefComplaint', 'notes', 'aiSummary', 'diagnosis', 'treatmentPlan', 'vitalSigns', 'prescriptions', 'followUpDate', 'status'] as const;
+    const allowedFields = ['chiefComplaint', 'notes', 'soapNotes', 'aiSummary', 'diagnosis', 'treatmentPlan', 'vitalSigns', 'prescriptions', 'followUpDate', 'status'] as const;
     const updateData: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in req.body && req.body[field] !== undefined) {

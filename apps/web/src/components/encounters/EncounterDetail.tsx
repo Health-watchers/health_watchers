@@ -1,6 +1,7 @@
 'use client';
 
 import AiSummaryCard from './AiSummaryCard';
+import { SoapNotesView } from './SoapNotesView';
 import type { EncounterRecord } from './EncounterTable';
 
 interface EncounterDetailProps {
@@ -104,6 +105,13 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
               Treatment Plan
             </h3>
             <p className="mt-2 text-gray-800">{encounter.treatmentPlan}</p>
+          </article>
+
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              SOAP Notes
+            </h3>
+            <SoapNotesView soapNotes={(encounter as any).soapNotes} />
           </article>
         </div>
 

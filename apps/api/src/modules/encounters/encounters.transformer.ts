@@ -10,6 +10,7 @@ export interface EncounterResponse {
   chiefComplaint: string;
   status: string;
   notes?: string;
+  soapNotes?: { subjective?: string; objective?: string; assessment?: string; plan?: string };
   treatmentPlan?: string;
   diagnosis?: Diagnosis[];
   vitalSigns?: VitalSigns;
@@ -38,6 +39,7 @@ export function toEncounterResponse(doc: Document & Record<string, any>): Encoun
     chiefComplaint: doc.chiefComplaint,
     status: doc.status,
     notes: doc.notes,
+    soapNotes: doc.soapNotes,
     treatmentPlan: doc.treatmentPlan,
     diagnosis: doc.diagnosis,
     vitalSigns: doc.vitalSigns,
