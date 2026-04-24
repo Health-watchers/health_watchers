@@ -50,7 +50,9 @@ jest.mock('@api/utils/logger', () => {
 
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -59,15 +61,29 @@ jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
 
 // Mock all other route modules to avoid side-effects
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
 
 // ── Patient model mock ────────────────────────────────────────────────────────
 const mockPatientCreate = jest.fn();
@@ -108,7 +124,7 @@ function makeToken(clinicId = CLINIC_A, role = 'DOCTOR') {
   return jwt.sign(
     { userId: '507f1f77bcf86cd799439099', role, clinicId },
     'test-access-secret-32-chars-long!!',
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' },
+    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
   );
 }
 
@@ -228,7 +244,7 @@ describe('POST /api/v1/patients', () => {
     const expired = jwt.sign(
       { userId: 'u1', role: 'DOCTOR', clinicId: CLINIC_A },
       'test-access-secret-32-chars-long!!',
-      { expiresIn: '-1s', issuer: 'health-watchers-api', audience: 'health-watchers-client' },
+      { expiresIn: '-1s', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
     );
     const res = await request(app)
       .post('/api/v1/patients')
@@ -282,7 +298,12 @@ describe('GET /api/v1/patients/search', () => {
 
   it('returns matching patients for valid query', async () => {
     const patients = [makePatient()];
-    mockPatientFind.mockReturnValue({ sort: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue(patients) });
+    mockPatientFind.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(patients),
+    });
     mockPatientCountDocuments.mockResolvedValue(1);
 
     const res = await request(app)
@@ -295,7 +316,12 @@ describe('GET /api/v1/patients/search', () => {
   });
 
   it('returns empty array for no matches', async () => {
-    mockPatientFind.mockReturnValue({ sort: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([]) });
+    mockPatientFind.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    });
     mockPatientCountDocuments.mockResolvedValue(0);
 
     const res = await request(app)
@@ -312,7 +338,12 @@ describe('GET /api/v1/patients/search', () => {
   });
 
   it('does not return patients from other clinics (filter includes clinicId from JWT)', async () => {
-    mockPatientFind.mockReturnValue({ sort: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([]) });
+    mockPatientFind.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    });
     mockPatientCountDocuments.mockResolvedValue(0);
 
     await request(app)
@@ -325,7 +356,12 @@ describe('GET /api/v1/patients/search', () => {
   });
 
   it('respects limit parameter', async () => {
-    mockPatientFind.mockReturnValue({ sort: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([]) });
+    mockPatientFind.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    });
     mockPatientCountDocuments.mockResolvedValue(0);
 
     const res = await request(app)
@@ -412,7 +448,12 @@ describe('Multi-tenant isolation', () => {
 
   it('search returns results scoped to authenticated clinic', async () => {
     const tokenA = makeToken(CLINIC_A);
-    mockPatientFind.mockReturnValue({ sort: jest.fn().mockReturnThis(), skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([makePatient()]) });
+    mockPatientFind.mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([makePatient()]),
+    });
     mockPatientCountDocuments.mockResolvedValue(1);
 
     const res = await request(app)

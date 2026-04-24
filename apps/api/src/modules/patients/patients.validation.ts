@@ -10,7 +10,7 @@ const dateOfBirth = z
       const age = (Date.now() - new Date(v).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
       return age < 150;
     },
-    { message: 'Patient age must be less than 150 years' },
+    { message: 'Patient age must be less than 150 years' }
   );
 
 // Accepts E.164 (+1234567890) or common local formats (digits, spaces, dashes, parens)
@@ -33,8 +33,8 @@ export const updatePatientSchema = createPatientSchema
   .refine((d) => Object.keys(d).length > 0, { message: 'At least one field is required' });
 
 export const patientQuerySchema = z.object({
-  page:     z.coerce.number().int().min(1).optional(),
-  limit:    z.coerce.number().int().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   clinicId: z.string().optional(),
 });
 

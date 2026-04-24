@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-type Section = "profile" | "security" | "preferences";
+type Section = 'profile' | 'security' | 'preferences';
 
 interface SubNavigationProps {
   active: Section;
@@ -8,9 +8,9 @@ interface SubNavigationProps {
 }
 
 const items: { id: Section; label: string }[] = [
-  { id: "profile", label: "Profile" },
-  { id: "security", label: "Security" },
-  { id: "preferences", label: "Preferences" },
+  { id: 'profile', label: 'Profile' },
+  { id: 'security', label: 'Security' },
+  { id: 'preferences', label: 'Preferences' },
 ];
 
 export function SubNavigation({ active, onChange }: SubNavigationProps) {
@@ -23,14 +23,14 @@ export function SubNavigation({ active, onChange }: SubNavigationProps) {
             <li key={id}>
               <button
                 type="button"
-                aria-current={isActive ? "page" : undefined}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => onChange(id)}
                 className={[
-                  "w-full text-left px-4 py-2 rounded-r-md text-sm transition-colors",
+                  'w-full rounded-r-md px-4 py-2 text-left text-sm transition-colors',
                   isActive
-                    ? "border-l-2 border-primary-600 font-semibold text-primary-700 bg-primary-50"
-                    : "border-l-2 border-transparent text-secondary-700 hover:bg-neutral-100",
-                ].join(" ")}
+                    ? 'border-primary-600 text-primary-700 bg-primary-50 border-l-2 font-semibold'
+                    : 'text-secondary-700 border-l-2 border-transparent hover:bg-neutral-100',
+                ].join(' ')}
               >
                 {label}
               </button>

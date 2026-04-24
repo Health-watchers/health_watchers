@@ -12,7 +12,6 @@ import {
   appointmentIdParamsSchema,
   doctorIdParamsSchema,
 } from './appointments.validation';
-import { sendAppointmentReminderEmail } from '@api/lib/email.service';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -233,64 +232,6 @@ appointmentRoutes.put(
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
-    const appointment = await AppointmentModel.create({
-      patientId,
-      doctorId,
-      clinicId,
-      scheduledAt: start,
-      durationMinutes,
-      reason,
-      notes,
-    });
-
-    // Schedule reminder email 24h before appointment (non-blocking)
-    try {
-      const { PatientModel } = await import('../patients/models/patient.model');
-      const { UserModel } = await import('../auth/models/user.model');
-      const [patient, doctor] = await Promise.all([
-        PatientModel.findById(patientId).lean(),
-        UserModel.findById(doctorId).lean(),
-      ]);
-      if (patient && doctor) {
-        const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
-        const msUntilAppt = start.getTime() - Date.now();
-        const reminderDelay = msUntilAppt - 24 * 60 * 60 * 1000;
-        if (reminderDelay > 0 && doctor.email) {
-          setTimeout(
-            () => sendAppointmentReminderEmail(doctor.email!, patientName, start, doctor.fullName),
-            reminderDelay,
-          );
-        }
-      }
-    } catch { /* non-critical */ }
-
-    return res.status(201).json({ status: 'success', data: appointment });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
-});
-
-// ── PATCH /appointments/:id ───────────────────────────────────────────────────
-appointmentRoutes.patch('/:id', async (req: Request, res: Response) => {
-  try {
-    const { clinicId } = req.user!;
-    const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
-    if (!existing)
-      return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
-
-    const { scheduledAt, durationMinutes, doctorId, status, reason, notes } = req.body;
-
-    // Re-check conflicts only when time/doctor is changing
-    const newStart = scheduledAt ? new Date(scheduledAt) : existing.scheduledAt;
-    const newDuration = durationMinutes ?? existing.durationMinutes;
-    const newDoctorId = doctorId ?? String(existing.doctorId);
-
-    const timeChanged = scheduledAt || durationMinutes || doctorId;
-    if (timeChanged && (await hasConflict(newDoctorId, newStart, newDuration, req.params.id))) {
-      return res.status(409).json({
-        error: 'TimeSlotUnavailable',
-        message: 'The doctor already has an appointment during this time slot',
-      });
     }
   },
 );

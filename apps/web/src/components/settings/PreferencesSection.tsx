@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export interface NotificationTypes {
   referral_received: boolean;
@@ -42,14 +42,14 @@ const DEFAULT_TYPES: NotificationTypes = {
 };
 
 async function patchPreferences(patch: Partial<UserPreferences & { notificationTypes: Partial<NotificationTypes> }>): Promise<void> {
-  const res = await fetch("/api/settings/preferences", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+  const res = await fetch('/api/settings/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.message ?? "Failed to save preference");
+    throw new Error(body?.message ?? 'Failed to save preference');
   }
 }
 
@@ -76,7 +76,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
       router.refresh();
     } catch (err) {
       setLanguage(prev);
-      setError(err instanceof Error ? err.message : "Failed to update language");
+      setError(err instanceof Error ? err.message : 'Failed to update language');
     }
   };
 
@@ -87,10 +87,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
     setSuccessMessage(null);
     try {
       await patchPreferences({ emailNotifications: checked });
-      setSuccessMessage("Preferences saved");
+      setSuccessMessage('Preferences saved');
     } catch (err) {
       setEmailNotifications(prev);
-      setError(err instanceof Error ? err.message : "Failed to update notification preference");
+      setError(err instanceof Error ? err.message : 'Failed to update notification preference');
     }
   };
 
@@ -101,10 +101,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
     setSuccessMessage(null);
     try {
       await patchPreferences({ inAppNotifications: checked });
-      setSuccessMessage("Preferences saved");
+      setSuccessMessage('Preferences saved');
     } catch (err) {
       setInAppNotifications(prev);
-      setError(err instanceof Error ? err.message : "Failed to update notification preference");
+      setError(err instanceof Error ? err.message : 'Failed to update notification preference');
     }
   };
 
@@ -115,10 +115,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
     setSuccessMessage(null);
     try {
       await patchPreferences({ notificationTypes: { [type]: checked } });
-      setSuccessMessage("Preferences saved");
+      setSuccessMessage('Preferences saved');
     } catch (err) {
       setNotifTypes((t) => ({ ...t, [type]: prev }));
-      setError(err instanceof Error ? err.message : "Failed to update notification preference");
+      setError(err instanceof Error ? err.message : 'Failed to update notification preference');
     }
   };
 
@@ -129,7 +129,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
         <p className="text-sm text-neutral-500">Manage your language and notification settings.</p>
       </div>
 
-      <div className="space-y-6 max-w-md">
+      <div className="max-w-md space-y-6">
         {/* Language selector */}
         <div className="flex flex-col gap-1">
           <label htmlFor="language-select" className="text-sm font-medium text-neutral-700">
@@ -139,7 +139,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
             id="language-select"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2"
           >
             <option value="en">English</option>
             <option value="fr">French</option>
@@ -160,7 +160,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
               role="switch"
               checked={emailNotifications}
               onChange={(e) => handleEmailToggle(e.target.checked)}
-              className="h-4 w-4 cursor-pointer accent-primary-500"
+              className="accent-primary-500 h-4 w-4 cursor-pointer"
               aria-checked={emailNotifications}
             />
           </div>
@@ -175,7 +175,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
               role="switch"
               checked={inAppNotifications}
               onChange={(e) => handleInAppToggle(e.target.checked)}
-              className="h-4 w-4 cursor-pointer accent-primary-500"
+              className="accent-primary-500 h-4 w-4 cursor-pointer"
               aria-checked={inAppNotifications}
             />
           </div>
@@ -206,7 +206,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
         )}
 
         {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
-        {error && <p className="text-sm text-danger-500">{error}</p>}
+        {error && <p className="text-danger-500 text-sm">{error}</p>}
       </div>
     </div>
   );

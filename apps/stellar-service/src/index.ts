@@ -4,11 +4,15 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-<<<<<<< fix/stellar-network-safety-guards-335
-import { fundAccount, createIntent, verifyIntent } from './stellar.js';
-=======
-import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
->>>>>>> main
+import {
+  fundAccount,
+  createIntent,
+  verifyIntent,
+  getAccountBalance,
+  createUsdcTrustline,
+  findPaths,
+  getOrderbook,
+} from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
@@ -31,30 +35,32 @@ if (!SHARED_SECRET) {
 // Middleware: Validate Shared Secret (ONLY for mutating endpoints)
 const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing Authorization header' });
   }
-  
+
   const token = authHeader.substring(7); // Remove "Bearer "
-  
+
   if (token !== SHARED_SECRET) {
     return res.status(401).json({ error: 'Invalid secret' });
   }
-  
-  next();
+
+  return next();
 };
 
 app.use(express.json());
-app.use(pinoHttp({
-  logger,
-  genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-  redact: ['req.headers.authorization'],
-}));
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    redact: ['req.headers.authorization'],
+  })
+);
 
 // ✅ PUBLIC: GET /network - Network status endpoint
-app.get('/network', (req, res) => {
-  res.json({
+app.get('/network', (_req, res) => {
+  return res.json({
     network: stellarConfig.network,
     horizonUrl: stellarConfig.horizonUrl,
     platformPublicKey: stellarConfig.platformPublicKey,
@@ -76,9 +82,9 @@ app.post('/fund', requireSecret, async (req, res) => {
   try {
     const { publicKey, amount } = req.body;
     const result = await fundAccount(publicKey, amount);
-    res.json({ success: true, ...result });
+    return res.json({ success: true, ...result });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -87,9 +93,9 @@ app.post('/intent', requireSecret, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount } = req.body;
     const result = await createIntent(fromPublicKey, toPublicKey, amount);
-    res.json({ success: true, ...result });
+    return res.json({ success: true, ...result });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -98,9 +104,9 @@ app.get('/verify/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
     const result = await verifyIntent(hash);
-    res.json({ success: true, ...result });
+    return res.json({ success: true, ...result });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -109,9 +115,9 @@ app.get('/balance/:publicKey', requireSecret, async (req, res) => {
   try {
     const { publicKey } = req.params;
     const result = await getAccountBalance(publicKey);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -123,9 +129,58 @@ app.post('/trustline/usdc', requireSecret, async (req, res) => {
       return res.status(400).json({ error: 'publicKey and usdcIssuer are required' });
     }
     const result = await createUsdcTrustline(publicKey, usdcIssuer);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /paths (requires secret)
+app.get('/paths', requireSecret, async (req, res) => {
+  try {
+    const { 
+      sourceAssetCode, 
+      sourceAssetIssuer, 
+      destinationAssetCode, 
+      destinationAssetIssuer, 
+      destinationAmount 
+    } = req.query;
+
+    if (!sourceAssetCode || !destinationAssetCode || !destinationAmount) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const result = await findPaths(
+      sourceAssetCode as string,
+      sourceAssetIssuer as string,
+      destinationAssetCode as string,
+      destinationAssetIssuer as string,
+      destinationAmount as string
+    );
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /orderbook (no auth needed)
+app.get('/orderbook', async (req, res) => {
+  try {
+    const { baseAssetCode, baseAssetIssuer, counterAssetCode, counterAssetIssuer } = req.query;
+
+    if (!baseAssetCode || !counterAssetCode) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const result = await getOrderbook(
+      baseAssetCode as string,
+      baseAssetIssuer as string,
+      counterAssetCode as string,
+      counterAssetIssuer as string
+    );
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 });
 

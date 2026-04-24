@@ -21,7 +21,7 @@ export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as 
 
 /** Max file sizes */
 export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-export const MAX_IMAGE_SIZE_BYTES    =  5 * 1024 * 1024; //  5 MB
+export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; //  5 MB
 
 /*
  * Uncomment and use when multer is installed:

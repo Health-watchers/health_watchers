@@ -66,7 +66,7 @@ function NotificationRow({ n }: { n: Notification }) {
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[n.type]}`}>
             {TYPE_LABELS[n.type]}
           </span>
-          <span className="text-xs text-neutral-400">{formatDate(n.createdAt)}</span>
+          <span className="text-xs text-neutral-500">{formatDate(n.createdAt)}</span>
         </div>
         <button
           type="button"
@@ -93,7 +93,7 @@ function NotificationRow({ n }: { n: Notification }) {
         <button
           type="button"
           onClick={() => deleteNotif.mutate(n._id)}
-          className="text-xs text-neutral-400 hover:text-red-500 focus:outline-none"
+          className="text-xs text-neutral-500 hover:text-red-500 focus:outline-none"
           aria-label="Delete notification"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

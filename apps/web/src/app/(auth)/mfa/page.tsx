@@ -100,7 +100,7 @@ export default function MfaPage() {
       </div>
 
       {serverError && (
-        <p role="alert" className="mb-4 rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">
+        <p role="alert" className="bg-danger-50 text-danger-700 mb-4 rounded-md px-3 py-2 text-sm">
           {serverError}
         </p>
       )}

@@ -40,7 +40,7 @@ function NotificationItem({ n, onRead }: { n: Notification; onRead: (id: string)
           <div className={!n.isRead ? '' : 'pl-4'}>
             <p className="text-sm font-medium text-neutral-900 leading-snug">{n.title}</p>
             <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{n.message}</p>
-            <p className="text-xs text-neutral-400 mt-1">{timeAgo(n.createdAt)}</p>
+            <p className="text-xs text-neutral-500 mt-1">{timeAgo(n.createdAt)}</p>
           </div>
         </div>
       </button>

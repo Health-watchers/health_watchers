@@ -92,36 +92,40 @@ export default function VitalSignsCharts({ vitals, analytics }: VitalSignsCharts
     <div className="space-y-8" role="region" aria-label="Vital signs charts">
       {/* Analytics Summary Cards */}
       {analytics && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {analytics.bloodPressure && (
-            <div className="rounded-lg border border-neutral-200 p-4 bg-white">
-              <h4 className="text-sm font-semibold text-neutral-700 mb-2">Blood Pressure</h4>
+            <div className="rounded-lg border border-neutral-200 bg-white p-4">
+              <h4 className="mb-2 text-sm font-semibold text-neutral-700">Blood Pressure</h4>
               <p className="text-2xl font-bold text-neutral-900">
                 {analytics.bloodPressure.latest.systolic}/{analytics.bloodPressure.latest.diastolic}
-                <span className="text-sm font-normal text-neutral-500 ml-1">mmHg</span>
+                <span className="ml-1 text-sm font-normal text-neutral-500">mmHg</span>
               </p>
-              <p className="text-xs text-neutral-500 mt-1">
-                Avg: {analytics.bloodPressure.average.systolic}/{analytics.bloodPressure.average.diastolic} mmHg
-                &nbsp;·&nbsp; {analytics.bloodPressure.readings} readings
+              <p className="mt-1 text-xs text-neutral-500">
+                Avg: {analytics.bloodPressure.average.systolic}/
+                {analytics.bloodPressure.average.diastolic} mmHg &nbsp;·&nbsp;{' '}
+                {analytics.bloodPressure.readings} readings
               </p>
-              <p className={`text-xs font-medium mt-1 ${trendColor(analytics.bloodPressure.trend)}`}>
+              <p
+                className={`mt-1 text-xs font-medium ${trendColor(analytics.bloodPressure.trend)}`}
+              >
                 {trendLabel(analytics.bloodPressure.trend)}
               </p>
             </div>
           )}
           {analytics.weight && (
-            <div className="rounded-lg border border-neutral-200 p-4 bg-white">
-              <h4 className="text-sm font-semibold text-neutral-700 mb-2">Weight</h4>
+            <div className="rounded-lg border border-neutral-200 bg-white p-4">
+              <h4 className="mb-2 text-sm font-semibold text-neutral-700">Weight</h4>
               <p className="text-2xl font-bold text-neutral-900">
                 {analytics.weight.latest}
-                <span className="text-sm font-normal text-neutral-500 ml-1">kg</span>
+                <span className="ml-1 text-sm font-normal text-neutral-500">kg</span>
               </p>
               {analytics.weight.change30Days !== null && (
-                <p className="text-xs text-neutral-500 mt-1">
-                  30-day change: {analytics.weight.change30Days > 0 ? '+' : ''}{analytics.weight.change30Days} kg
+                <p className="mt-1 text-xs text-neutral-500">
+                  30-day change: {analytics.weight.change30Days > 0 ? '+' : ''}
+                  {analytics.weight.change30Days} kg
                 </p>
               )}
-              <p className={`text-xs font-medium mt-1 ${trendColor(analytics.weight.trend)}`}>
+              <p className={`mt-1 text-xs font-medium ${trendColor(analytics.weight.trend)}`}>
                 {trendLabel(analytics.weight.trend)}
               </p>
             </div>
@@ -132,7 +136,7 @@ export default function VitalSignsCharts({ vitals, analytics }: VitalSignsCharts
       {/* Blood Pressure Chart */}
       {bpData.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-neutral-700 mb-3">Blood Pressure Over Time</h4>
+          <h4 className="mb-3 text-sm font-semibold text-neutral-700">Blood Pressure Over Time</h4>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={bpData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -164,7 +168,7 @@ export default function VitalSignsCharts({ vitals, analytics }: VitalSignsCharts
       {/* Weight Chart */}
       {weightData.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-neutral-700 mb-3">Weight Over Time (kg)</h4>
+          <h4 className="mb-3 text-sm font-semibold text-neutral-700">Weight Over Time (kg)</h4>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={weightData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -187,7 +191,7 @@ export default function VitalSignsCharts({ vitals, analytics }: VitalSignsCharts
       {/* Encounter Frequency */}
       {freqData.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-neutral-700 mb-3">Encounter Frequency</h4>
+          <h4 className="mb-3 text-sm font-semibold text-neutral-700">Encounter Frequency</h4>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={freqData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -201,7 +205,7 @@ export default function VitalSignsCharts({ vitals, analytics }: VitalSignsCharts
       )}
 
       {bpData.length === 0 && weightData.length === 0 && (
-        <p className="text-sm text-neutral-500 text-center py-6">
+        <p className="py-6 text-center text-sm text-neutral-500">
           No vital sign data available yet. Vital signs are recorded during encounters.
         </p>
       )}

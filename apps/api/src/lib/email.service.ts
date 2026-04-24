@@ -1,151 +1,80 @@
-/**
- * Email notification service — Issue #355
- *
- * Supports SMTP and SendGrid providers (configurable via EMAIL_PROVIDER env var).
- * All emails are sent asynchronously via an in-memory queue with up to 3 retries
- * and exponential backoff. Email sending is disabled in test environment.
- */
-
 import nodemailer from 'nodemailer';
+import { config } from '@health-watchers/config';
 import logger from '@api/utils/logger';
 
-const IS_TEST = process.env.NODE_ENV === 'test';
-const APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:3000';
-const FROM = process.env.EMAIL_FROM ?? 'no-reply@health-watchers.app';
+/**
+ * Basic email service using Nodemailer.
+ * In a production environment, you'd use a service like SendGrid, SES, or Mailgun.
+ */
 
-// ── Transporter ───────────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.mailtrap.io',
+  port: parseInt(process.env.EMAIL_PORT || '2525'),
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-function createTransporter() {
-  if (IS_TEST) return null;
-
-  const provider = process.env.EMAIL_PROVIDER ?? 'smtp';
-
-  if (provider === 'sendgrid') {
-    return nodemailer.createTransport({
-      host: 'smtp.sendgrid.net',
-      port: 587,
-      auth: { user: 'apikey', pass: process.env.SENDGRID_API_KEY ?? '' },
-    });
-  }
-
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? 'localhost',
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: process.env.SMTP_USER
-      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-      : undefined,
-  });
-}
-
-const transporter = createTransporter();
-
-// ── Async queue with retry ────────────────────────────────────────────────────
-
-interface EmailJob {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-  attempt: number;
-}
-
-const MAX_RETRIES = 3;
-
-async function sendWithRetry(job: EmailJob): Promise<void> {
-  if (IS_TEST || !transporter) return;
+/**
+ * Enqueue an email to be sent.
+ * Currently sends synchronously, but could be moved to a background job queue (e.g. BullMQ).
+ */
+export async function enqueue(to: string, subject: string, text: string, html?: string) {
+  if (process.env.NODE_ENV === 'test') return;
 
   try {
-    await transporter.sendMail({ from: FROM, to: job.to, subject: job.subject, text: job.text, html: job.html });
-    logger.info({ to: job.to, subject: job.subject }, 'Email sent');
+    const info = await transporter.sendMail({
+      from: `"Health Watchers" <${process.env.EMAIL_FROM || 'noreply@healthwatchers.com'}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+    logger.info({ messageId: info.messageId, to }, 'Email sent');
   } catch (err) {
-    if (job.attempt < MAX_RETRIES) {
-      const delay = Math.pow(2, job.attempt) * 1000; // 1s, 2s, 4s
-      logger.warn({ to: job.to, attempt: job.attempt, delay }, 'Email failed, retrying');
-      setTimeout(() => sendWithRetry({ ...job, attempt: job.attempt + 1 }), delay);
-    } else {
-      logger.error({ err, to: job.to, subject: job.subject }, 'Email delivery failed after max retries');
-    }
+    logger.error({ err, to, subject }, 'Failed to send email');
   }
 }
 
-/** Enqueue an email for async delivery (non-blocking) */
-function enqueue(to: string, subject: string, text: string, html: string): void {
-  setImmediate(() => sendWithRetry({ to, subject, text, html, attempt: 1 }));
+export function sendWelcomeEmail(to: string, name: string) {
+  const subject = 'Welcome to Health Watchers';
+  const text = `Hi ${name},\n\nWelcome to Health Watchers! Your account has been successfully created.`;
+  const html = `<h3>Welcome to Health Watchers</h3><p>Hi <strong>${name}</strong>,</p><p>Your account has been successfully created. You can now log in to the portal.</p>`;
+  enqueue(to, subject, text, html);
 }
 
-// ── Email templates ───────────────────────────────────────────────────────────
-
-/** Welcome email sent on new user registration */
-export function sendWelcomeEmail(to: string, fullName: string, tempPassword?: string): void {
-  const loginUrl = `${APP_BASE_URL}/login`;
-  const text = tempPassword
-    ? `Welcome to Health Watchers, ${fullName}!\n\nYour account has been created.\nTemporary password: ${tempPassword}\n\nPlease log in and change your password immediately:\n${loginUrl}`
-    : `Welcome to Health Watchers, ${fullName}!\n\nYour account has been created. Log in at:\n${loginUrl}`;
-
-  const html = `
-    <h2>Welcome to Health Watchers, ${fullName}!</h2>
-    <p>Your account has been created.</p>
-    ${tempPassword ? `<p><strong>Temporary password:</strong> <code>${tempPassword}</code></p><p>Please log in and change your password immediately.</p>` : ''}
-    <p><a href="${loginUrl}">Log in to Health Watchers</a></p>
-  `;
-
-  enqueue(to, 'Welcome to Health Watchers', text, html);
+export function sendPasswordResetEmail(to: string, token: string) {
+  const resetUrl = `${config.portalUrl}/reset-password?token=${token}`;
+  const subject = 'Password Reset Request';
+  const text = `You requested a password reset. Please use the following link: ${resetUrl}`;
+  const html = `<h3>Password Reset</h3><p>You requested a password reset. Please click the link below to set a new password:</p><p><a href="${resetUrl}">Reset Password</a></p><p>If you didn't request this, you can safely ignore this email.</p>`;
+  enqueue(to, subject, text, html);
 }
 
-/** Password reset email with secure token link (1-hour expiry) */
-export async function sendPasswordResetEmail(to: string, resetToken: string): Promise<void> {
-  const resetUrl = `${APP_BASE_URL}/reset-password?token=${resetToken}`;
-  const text = `You requested a password reset. Use the link below (valid for 1 hour):\n\n${resetUrl}\n\nIf you did not request this, ignore this email.`;
-  const html = `
-    <p>You requested a password reset. Click the link below (valid for 1 hour):</p>
-    <p><a href="${resetUrl}">${resetUrl}</a></p>
-    <p>If you did not request this, ignore this email.</p>
-  `;
-  enqueue(to, 'Password Reset Request', text, html);
+export function sendAppointmentReminderEmail(to: string, patientName: string, date: Date, doctorName: string) {
+  const dateStr = date.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
+  const subject = 'Appointment Reminder';
+  const text = `This is a reminder for your appointment with Dr. ${doctorName} on ${dateStr} for patient ${patientName}.`;
+  const html = `<h3>Appointment Reminder</h3><p>This is a reminder for your upcoming appointment:</p><ul><li><strong>Doctor:</strong> Dr. ${doctorName}</li><li><strong>Patient:</strong> ${patientName}</li><li><strong>Time:</strong> ${dateStr}</li></ul>`;
+  enqueue(to, subject, text, html);
 }
 
-/** Email verification link sent on registration */
-export async function sendVerificationEmail(to: string, verificationToken: string): Promise<void> {
-  const verifyUrl = `${APP_BASE_URL}/verify-email?token=${verificationToken}`;
-  const text = `Welcome! Please verify your email address:\n\n${verifyUrl}\n\nIf you did not create this account, ignore this email.`;
-  const html = `
-    <p>Welcome! Please verify your email address:</p>
-    <p><a href="${verifyUrl}">${verifyUrl}</a></p>
-    <p>If you did not create this account, ignore this email.</p>
-  `;
-  enqueue(to, 'Verify your Health Watchers account', text, html);
+export function sendPaymentConfirmationEmail(to: string, amount: string, assetCode: string, txHash: string) {
+  const subject = 'Payment Confirmation';
+  const text = `Your payment of ${amount} ${assetCode} has been confirmed.\n\nTransaction Hash: ${txHash}`;
+  const html = `<h3>Payment Confirmed</h3><p>Your payment has been successfully processed.</p><ul><li><strong>Amount:</strong> ${amount} ${assetCode}</li><li><strong>Transaction Hash:</strong> <code style="word-break: break-all;">${txHash}</code></li></ul><p>Thank you for using Health Watchers.</p>`;
+  enqueue(to, subject, text, html);
 }
 
-/** Appointment reminder sent 24 hours before appointment */
-export function sendAppointmentReminderEmail(
-  to: string,
-  patientName: string,
-  appointmentDate: Date,
-  doctorName: string,
-): void {
-  const dateStr = appointmentDate.toLocaleString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-  const text = `Reminder: ${patientName} has an appointment with ${doctorName} on ${dateStr}.`;
-  const html = `
-    <h3>Appointment Reminder</h3>
-    <p>This is a reminder that <strong>${patientName}</strong> has an upcoming appointment:</p>
-    <ul>
-      <li><strong>Date:</strong> ${dateStr}</li>
-      <li><strong>Doctor:</strong> ${doctorName}</li>
-    </ul>
-  `;
-  enqueue(to, 'Appointment Reminder — Health Watchers', text, html);
-}
-
+export function sendAISummaryNotification(to: string, patientName: string, encounterId: string) {
+  const APP_BASE_URL = config.portalUrl || 'http://localhost:3000';
 /** Payment confirmation email sent when Stellar transaction confirms */
 export function sendPaymentConfirmationEmail(
   to: string,
   amount: string,
   assetCode: string,
-  txHash: string,
+  txHash: string
 ): void {
   const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
   const text = `Your payment of ${amount} ${assetCode} has been confirmed.\n\nTransaction: ${txHash}\nView on explorer: ${explorerUrl}`;
@@ -158,11 +87,55 @@ export function sendPaymentConfirmationEmail(
   enqueue(to, `Payment Confirmed — ${amount} ${assetCode}`, text, html);
 }
 
+/** Invoice email sent to patient with QR code and payment link */
+export function sendInvoiceEmail(
+  to: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    stellarPayURI: string;
+    qrCodeDataUrl: string;
+  },
+): void {
+  const dueDateStr = invoice.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const text = `Invoice ${invoice.invoiceNumber}\n\nAmount due: ${invoice.total} ${invoice.currency}\nDue date: ${dueDateStr}\n\nPay via Stellar: ${invoice.stellarPayURI}`;
+  const html = `
+    <h2>Invoice ${invoice.invoiceNumber}</h2>
+    <p><strong>Amount due:</strong> ${invoice.total} ${invoice.currency}</p>
+    <p><strong>Due date:</strong> ${dueDateStr}</p>
+    <p><a href="${invoice.stellarPayURI}">Pay with Stellar Wallet</a></p>
+    <p>Or scan the QR code below:</p>
+    <img src="${invoice.qrCodeDataUrl}" alt="Stellar payment QR code" width="200" height="200" />
+  `;
+  enqueue(to, `Invoice ${invoice.invoiceNumber} — Health Watchers`, text, html);
+}
+
+/** Referral notification sent to receiving clinic admin */
+export function sendReferralNotificationEmail(
+  to: string,
+  adminName: string,
+  referral: { patientName: string; urgency: string; reason: string; referralId: string },
+): void {
+  const referralUrl = `${APP_BASE_URL}/referrals/incoming`;
+  const urgencyLabel = referral.urgency.toUpperCase();
+  const text = `A new ${urgencyLabel} referral has been received for patient ${referral.patientName}.\n\nReason: ${referral.reason}\n\nView referral: ${referralUrl}`;
+  const html = `
+    <h3>New Patient Referral Received</h3>
+    <p>Hello ${adminName},</p>
+    <p>A new <strong>${urgencyLabel}</strong> referral has been received for patient <strong>${referral.patientName}</strong>.</p>
+    <p><strong>Reason:</strong> ${referral.reason}</p>
+    <p><a href="${referralUrl}">View Incoming Referrals</a></p>
+  `;
+  enqueue(to, `New ${urgencyLabel} Referral — Health Watchers`, text, html);
+}
+
 /** AI summary ready notification sent when clinical summary is generated */
 export function sendAiSummaryReadyEmail(
   to: string,
   patientName: string,
-  encounterId: string,
+  encounterId: string
 ): void {
   const encounterUrl = `${APP_BASE_URL}/encounters/${encounterId}`;
   const text = `The AI clinical summary for ${patientName}'s encounter is ready.\n\nView it here: ${encounterUrl}`;
@@ -172,5 +145,4 @@ export function sendAiSummaryReadyEmail(
     <p><a href="${encounterUrl}">View Encounter Summary</a></p>
   `;
   enqueue(to, 'AI Clinical Summary Ready — Health Watchers', text, html);
-}
 }

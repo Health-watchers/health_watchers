@@ -22,7 +22,7 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
   try {
     const ipAddress = req
       ? (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-        req.headers['x-real-ip'] as string ||
+        (req.headers['x-real-ip'] as string) ||
         req.socket.remoteAddress
       : undefined;
 

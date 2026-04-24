@@ -43,8 +43,8 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
+      "prettier --write",
+      "eslint --fix"
     ],
     "*.{js,json,md}": [
       "prettier --write"
@@ -59,12 +59,14 @@
     "color-convert": "^2.0.1",
     "delayed-stream": "^1.0.0",
     "escape-html": "^1.0.3",
+    "eslint-config-prettier": "^10.1.8",
     "fresh": "^0.5.2",
     "husky": "^9.1.7",
     "ipaddr.js": "^2.3.0",
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.0.0-insiders.f7d2598",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",

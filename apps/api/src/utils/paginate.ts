@@ -16,13 +16,20 @@ export async function paginate<T>(
 ): Promise<{ data: T[]; meta: PaginationMeta }> {
   const [total, data] = await Promise.all([
     model.countDocuments(query),
-    model.find(query).sort(sort).skip((page - 1) * limit).limit(limit).lean() as Promise<T[]>,
+    model
+      .find(query)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean() as Promise<T[]>,
   ]);
   return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
 }
 
-export function parsePagination(query: Record<string, any>): { page: number; limit: number } | null {
-  const page  = Math.max(1, parseInt(query.page  as string) || 1);
+export function parsePagination(
+  query: Record<string, any>
+): { page: number; limit: number } | null {
+  const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = parseInt(query.limit as string) || 20;
   if (limit > 100) return null;
   return { page, limit: Math.max(1, limit) };

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const LOGIN_PATH = '/login';
+const STAFF_LOGIN = '/login';
+const PORTAL_LOGIN = '/portal/login';
 
-const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/mfa'];
+const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
+const PORTAL_PUBLIC = ['/portal/login'];
 
 const ADMIN_PATHS = ['/settings', '/reports', '/users'];
 const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
@@ -28,15 +30,29 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // ── Portal routes (/portal/*) ─────────────────────────────────────────────
+  if (pathname.startsWith('/portal')) {
+    const isPortalPublic = PORTAL_PUBLIC.some((s) => pathname === s || pathname.startsWith(`${s}/`));
+    const portalToken = request.cookies.get('portalAccessToken')?.value;
+
+    if (!portalToken && !isPortalPublic) {
+      return NextResponse.redirect(new URL(PORTAL_LOGIN, request.url));
+    }
+    if (portalToken && isPortalPublic) {
+      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // ── Staff routes ──────────────────────────────────────────────────────────
   const accessToken = request.cookies.get('accessToken')?.value;
-  const isPublic = isPublicPath(pathname);
+  const isPublic = isStaffPublic(pathname);
 
   if (!accessToken && !isPublic) {
     const loginUrl = new URL(LOGIN_PATH, request.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);
   }
-
   if (accessToken && isPublic) {
     return NextResponse.redirect(new URL('/', request.url));
   }

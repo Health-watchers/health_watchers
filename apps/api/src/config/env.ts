@@ -10,6 +10,8 @@ const envSchema = z.object({
     .string({ required_error: 'Missing required env var: MONGO_URI' })
     .min(1, 'Missing required env var: MONGO_URI'),
 
+  REDIS_URL: z.string().optional(),
+
   JWT_ACCESS_TOKEN_SECRET: z
     .string({ required_error: 'Missing required env var: JWT_ACCESS_TOKEN_SECRET' })
     .min(32, 'JWT_ACCESS_TOKEN_SECRET must be at least 32 characters (too weak)'),

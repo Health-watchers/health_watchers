@@ -26,10 +26,10 @@ export default function LanguageSwitcher({ current }: { current: Locale }) {
           onClick={() => toggle(loc)}
           aria-pressed={current === loc}
           className={[
-            'px-2 py-1 rounded text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+            'focus-visible:ring-primary-500 rounded px-2 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2',
             current === loc
               ? 'bg-primary-500 text-white'
-              : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100',
+              : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800',
           ].join(' ')}
         >
           {LABELS[loc]}

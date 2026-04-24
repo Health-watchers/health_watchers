@@ -101,7 +101,9 @@ router.post(
 
     const invalidCode = await validateDiagnosisCodes(req.body.diagnosis);
     if (invalidCode) {
-      return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
     }
 
     // Allergy check for prescriptions
@@ -131,7 +133,7 @@ router.post(
 
     const doc = await EncounterModel.create(req.body);
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
-  }),
+  })
 );
 
 // GET /encounters/:id
@@ -146,7 +148,7 @@ router.get(
     });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
-  }),
+  })
 );
 
 // PATCH /encounters/:id — only DOCTOR (own) or CLINIC_ADMIN; closed encounters → 409
@@ -189,9 +191,11 @@ router.patch(
     }
 
     if (updateData.diagnosis) {
-      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis);
+      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis as any);
       if (invalidCode) {
-        return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
+        return res
+          .status(400)
+          .json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
       }
     }
 
@@ -241,7 +245,7 @@ router.get(
       isActive: true,
     }).sort({ createdAt: -1 });
     return res.json({ status: 'success', data: docs.map(toEncounterResponse) });
-  }),
+  })
 );
 
 // ============================================================================
@@ -266,7 +270,7 @@ router.post(
 
     const prescription: Prescription = {
       ...req.body,
-      prescribedBy: req.user!._id,
+      prescribedBy: req.user!.userId,
       prescribedAt: new Date(),
     };
 

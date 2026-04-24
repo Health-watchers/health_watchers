@@ -21,13 +21,19 @@ import {
   Toast,
 } from '@/components/ui';
 import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
-import { CreatePaymentIntentForm, type CreatePaymentData } from '@/components/forms/CreatePaymentIntentForm';
+import {
+  CreatePaymentIntentForm,
+  type CreatePaymentData,
+} from '@/components/forms/CreatePaymentIntentForm';
 import { queryKeys } from '@/lib/queryKeys';
 import { API_V1 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
-const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), { ssr: false });
+const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), {
+  ssr: false,
+});
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
+const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientReferralsTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -265,7 +271,10 @@ export default function PatientDetailClient({
       setAiSummary(body.summary);
       setAiLastRun(new Date());
     } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : 'AI generation failed', type: 'error' });
+      setToast({
+        message: err instanceof Error ? err.message : 'AI generation failed',
+        type: 'error',
+      });
     } finally {
       setAiLoading(false);
     }
@@ -287,7 +296,7 @@ export default function PatientDetailClient({
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <p className="text-6xl font-bold text-neutral-200">404</p>
             <p className="mt-4 text-lg font-semibold text-neutral-700">{labels.notFound}</p>
-            <Link href="/patients" className="mt-6 text-sm text-primary-600 hover:underline">
+            <Link href="/patients" className="text-primary-600 mt-6 text-sm hover:underline">
               ← {labels.back}
             </Link>
           </div>
@@ -298,7 +307,9 @@ export default function PatientDetailClient({
       <PageWrapper className="py-8">
         <ErrorMessage
           message={patientError instanceof Error ? patientError.message : labels.error}
-          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(patientId) })}
+          onRetry={() =>
+            queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(patientId) })
+          }
         />
       </PageWrapper>
     );
@@ -311,12 +322,19 @@ export default function PatientDetailClient({
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-2 text-sm text-neutral-500">
-        <Link href="/" className="hover:text-neutral-800">Home</Link>
+      <nav
+        aria-label="Breadcrumb"
+        className="mb-6 flex items-center gap-2 text-sm text-neutral-500"
+      >
+        <Link href="/" className="hover:text-neutral-800">
+          Home
+        </Link>
         <span aria-hidden="true">/</span>
-        <Link href="/patients" className="hover:text-neutral-800">{labels.back.replace('← ', '')}</Link>
+        <Link href="/patients" className="hover:text-neutral-800">
+          {labels.back.replace('← ', '')}
+        </Link>
         <span aria-hidden="true">/</span>
-        <span className="text-neutral-900 font-medium" aria-current="page">
+        <span className="font-medium text-neutral-900" aria-current="page">
           {patient.firstName} {patient.lastName}
         </span>
       </nav>
@@ -324,9 +342,9 @@ export default function PatientDetailClient({
       {/* Demographics card */}
       <section
         aria-labelledby="demographics-heading"
-        className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm mb-8"
+        className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 id="demographics-heading" className="text-2xl font-bold text-neutral-900">
               {patient.firstName} {patient.lastName}
@@ -335,7 +353,7 @@ export default function PatientDetailClient({
               <Badge variant={patient.gender === 'inactive' ? 'danger' : 'success'}>
                 {labels.active}
               </Badge>
-              <span className="text-xs text-neutral-400">
+              <span className="text-xs text-neutral-500">
                 {labels.registeredOn}: {formatDate((patient as any).createdAt)}
               </span>
             </div>
@@ -351,29 +369,41 @@ export default function PatientDetailClient({
           )}
         </div>
 
-        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.systemId}</dt>
-            <dd className="mt-0.5 text-neutral-900 font-mono">{patient.systemId}</dd>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.systemId}
+            </dt>
+            <dd className="mt-0.5 font-mono text-neutral-900">{patient.systemId}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.dob}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.dob}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{formatDate(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.age}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.age}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{calcAge(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.sex}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.sex}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.sex}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.contact}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.contact}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.contactNumber || 'N/A'}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{labels.address}</dt>
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              {labels.address}
+            </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.address || 'N/A'}</dd>
           </div>
         </dl>
@@ -393,13 +423,19 @@ export default function PatientDetailClient({
             )}
           </TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
+          <TabsTrigger value="consent">Consent</TabsTrigger>
+          <TabsTrigger value="referrals">Referrals</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
         <TabsContent value="encounters">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-neutral-500">{encounters.length} record(s)</p>
-            <Button size="sm" variant="primary" onClick={() => router.push(`/encounters/new?patientId=${patientId}`)}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => router.push(`/encounters/new?patientId=${patientId}`)}
+            >
               + {labels.newEncounter}
             </Button>
           </div>
@@ -413,7 +449,11 @@ export default function PatientDetailClient({
           ) : encountersError ? (
             <ErrorMessage
               message={encountersError instanceof Error ? encountersError.message : labels.error}
-              onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.encounters.byPatient(patientId) })}
+              onRetry={() =>
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.encounters.byPatient(patientId),
+                })
+              }
             />
           ) : encounters.length === 0 ? (
             <EmptyState title={labels.noEncounters} icon="📋" />
@@ -427,12 +467,12 @@ export default function PatientDetailClient({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-neutral-900">{enc.chiefComplaint}</p>
-                      <p className="text-xs text-neutral-400 mt-0.5">{formatDate(enc.createdAt)}</p>
+                      <p className="mt-0.5 text-xs text-neutral-500">{formatDate(enc.createdAt)}</p>
                     </div>
                     <Badge variant={statusVariant(enc.status)}>{enc.status}</Badge>
                   </div>
                   {enc.notes && (
-                    <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{enc.notes}</p>
+                    <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{enc.notes}</p>
                   )}
                   {enc.diagnosis && enc.diagnosis.length > 0 && (
                     <p className="mt-1 text-xs text-neutral-500">
@@ -441,7 +481,7 @@ export default function PatientDetailClient({
                   )}
                   {enc.aiSummary && (
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:underline">
+                      <summary className="text-primary-600 cursor-pointer text-xs font-medium hover:underline">
                         AI Summary
                       </summary>
                       <p className="mt-1 text-sm text-neutral-600">{enc.aiSummary}</p>
@@ -455,7 +495,7 @@ export default function PatientDetailClient({
 
         {/* Payments tab */}
         <TabsContent value="payments">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-neutral-500">{payments.length} record(s)</p>
             <Button size="sm" variant="primary" onClick={() => setShowPaymentForm(true)}>
               + {labels.initiatePayment}
@@ -471,7 +511,9 @@ export default function PatientDetailClient({
           ) : paymentsError ? (
             <ErrorMessage
               message={paymentsError instanceof Error ? paymentsError.message : labels.error}
-              onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.byPatient(patientId) })}
+              onRetry={() =>
+                queryClient.invalidateQueries({ queryKey: queryKeys.payments.byPatient(patientId) })
+              }
             />
           ) : payments.length === 0 ? (
             <EmptyState title={labels.noPayments} icon="💳" />
@@ -486,9 +528,9 @@ export default function PatientDetailClient({
                     <div>
                       <p className="font-medium text-neutral-900">
                         {p.amount}{' '}
-                        <span className="text-neutral-400 font-normal">{p.assetCode ?? 'XLM'}</span>
+                        <span className="font-normal text-neutral-500">{p.assetCode ?? 'XLM'}</span>
                       </p>
-                      <p className="text-xs text-neutral-400 mt-0.5">
+                      <p className="mt-0.5 text-xs text-neutral-500">
                         {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                       </p>
                     </div>
@@ -611,7 +653,7 @@ export default function PatientDetailClient({
         {/* AI Insights tab */}
         <TabsContent value="ai">
           <div className="rounded-xl border border-blue-100 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white">
                   CLINICAL AI
@@ -632,9 +674,9 @@ export default function PatientDetailClient({
             {aiLoading ? (
               <div className="space-y-2.5" aria-busy="true">
                 {[1, 2, 3, 4].map((i) => (
-                  <div 
-                    key={i} 
-                    className={`h-3.5 animate-pulse rounded bg-neutral-200 ${i === 1 ? 'w-[70%]' : i === 2 ? 'w-[77%]' : i === 3 ? 'w-[84%]' : 'w-[91%]'}`} 
+                  <div
+                    key={i}
+                    className={`h-3.5 animate-pulse rounded bg-neutral-200 ${i === 1 ? 'w-[70%]' : i === 2 ? 'w-[77%]' : i === 3 ? 'w-[84%]' : 'w-[91%]'}`}
                   />
                 ))}
               </div>
@@ -642,15 +684,23 @@ export default function PatientDetailClient({
               <>
                 <p className="text-sm leading-relaxed text-neutral-600">{aiSummary}</p>
                 {aiLastRun && (
-                  <p className="mt-3 text-xs text-neutral-400">
+                  <p className="mt-3 text-xs text-neutral-500">
                     {labels.lastAnalysis}: {aiLastRun.toLocaleString()}
                   </p>
                 )}
               </>
             ) : (
-              <p className="text-sm text-neutral-400">{labels.aiSummaryPlaceholder}</p>
+              <p className="text-sm text-neutral-500">{labels.aiSummaryPlaceholder}</p>
             )}
           </div>
+        </TabsContent>
+
+        {/* Consent tab */}
+        <TabsContent value="consent">
+          <ConsentTab patientId={patientId} canEdit={!!canEdit} />
+        {/* Referrals tab */}
+        <TabsContent value="referrals">
+          <PatientReferralsTab patientId={patientId} />
         </TabsContent>
       </Tabs>
 
@@ -667,5 +717,103 @@ export default function PatientDetailClient({
         />
       </SlideOver>
     </PageWrapper>
+  );
+}
+
+// ── Consent Tab (inline component) ───────────────────────────────────────────
+function ConsentTab({ patientId, canEdit }: { patientId: string; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const [granting, setGranting] = useState<string | null>(null);
+
+  const CONSENT_TYPES = ['treatment', 'data_sharing', 'ai_analysis', 'research', 'marketing'] as const;
+
+  const { data: consents = [], isLoading } = useQuery<any[]>({
+    queryKey: ['consents', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/consent`);
+      if (!res.ok) return [];
+      return (await res.json()).data ?? [];
+    },
+  });
+
+  const consentMap = Object.fromEntries(consents.map((c) => [c.type, c]));
+
+  async function grant(type: string) {
+    setGranting(type);
+    try {
+      await fetch(`${API_V1}/patients/${patientId}/consent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['consents', patientId] });
+    } finally {
+      setGranting(null);
+    }
+  }
+
+  async function withdraw(type: string) {
+    setGranting(type);
+    try {
+      await fetch(`${API_V1}/patients/${patientId}/consent/${type}`, { method: 'DELETE' });
+      queryClient.invalidateQueries({ queryKey: ['consents', patientId] });
+    } finally {
+      setGranting(null);
+    }
+  }
+
+  if (isLoading) return <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />;
+
+  return (
+    <section aria-label="Patient consent management">
+      <p className="mb-4 text-sm text-neutral-500">
+        Manage patient consent for data use and treatment. Withdrawal is immediate.
+      </p>
+      <ul className="space-y-3" role="list">
+        {CONSENT_TYPES.map((type) => {
+          const consent = consentMap[type];
+          const isGranted = consent?.status === 'granted' && (!consent.expiresAt || new Date(consent.expiresAt) > new Date());
+          return (
+            <li key={type} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4">
+              <div>
+                <p className="font-medium capitalize text-neutral-900">{type.replace('_', ' ')}</p>
+                {consent?.grantedAt && (
+                  <p className="text-xs text-neutral-400">
+                    {isGranted ? 'Granted' : 'Withdrawn'} {new Date(consent.grantedAt).toLocaleDateString()}
+                    {consent.expiresAt && ` · Expires ${new Date(consent.expiresAt).toLocaleDateString()}`}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isGranted ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'}`}>
+                  {isGranted ? 'Granted' : consent?.status === 'withdrawn' ? 'Withdrawn' : 'Not set'}
+                </span>
+                {canEdit && (
+                  isGranted ? (
+                    <button
+                      onClick={() => withdraw(type)}
+                      disabled={granting === type}
+                      className="text-xs text-red-600 hover:underline focus:outline-none disabled:opacity-50"
+                      aria-label={`Withdraw ${type} consent`}
+                    >
+                      Withdraw
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => grant(type)}
+                      disabled={granting === type}
+                      className="text-primary-600 text-xs hover:underline focus:outline-none disabled:opacity-50"
+                      aria-label={`Grant ${type} consent`}
+                    >
+                      Grant
+                    </button>
+                  )
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

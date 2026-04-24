@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes } from 'react';
 
 export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   /** Convenience shorthand for rounded-full (e.g. avatar skeletons) */
@@ -10,10 +10,10 @@ export function Skeleton({ circle, className, ...props }: SkeletonProps) {
     <div
       aria-hidden="true"
       className={[
-        "animate-pulse bg-neutral-200",
-        circle ? "rounded-full" : "rounded-md",
-        className ?? "",
-      ].join(" ")}
+        'animate-pulse bg-neutral-200',
+        circle ? 'rounded-full' : 'rounded-md',
+        className ?? '',
+      ].join(' ')}
       {...props}
     />
   );
@@ -22,17 +22,11 @@ export function Skeleton({ circle, className, ...props }: SkeletonProps) {
 /**
  * Table skeleton loader showing 5 rows with columns
  */
-export function TableSkeleton({
-  columns = 6,
-  rows = 5,
-}: {
-  columns?: number;
-  rows?: number;
-}) {
+export function TableSkeleton({ columns = 6, rows = 5 }: { columns?: number; rows?: number }) {
   return (
     <div className="w-full overflow-x-auto rounded-lg border border-neutral-200">
       <table className="w-full text-sm">
-        <thead className="bg-neutral-50 border-b border-neutral-200">
+        <thead className="border-b border-neutral-200 bg-neutral-50">
           <tr>
             {Array.from({ length: columns }).map((_, i) => (
               <th key={i} className="px-4 py-3">
@@ -43,7 +37,7 @@ export function TableSkeleton({
         </thead>
         <tbody className="divide-y divide-neutral-100">
           {Array.from({ length: rows }).map((_, rowIdx) => (
-            <tr key={rowIdx} className="hover:bg-neutral-50 transition-colors">
+            <tr key={rowIdx} className="transition-colors hover:bg-neutral-50">
               {Array.from({ length: columns }).map((_, colIdx) => (
                 <td key={colIdx} className="px-4 py-3">
                   <Skeleton className="h-4 w-full" />
@@ -64,9 +58,9 @@ export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={[
-        "bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6",
-        className ?? "",
-      ].join(" ")}
+        'bg-neutral-0 rounded-lg border border-neutral-200 p-6 shadow-sm',
+        className ?? '',
+      ].join(' ')}
     >
       <div className="flex items-center gap-4">
         <Skeleton circle className="h-12 w-12 shrink-0" />
@@ -86,9 +80,9 @@ export function DetailSkeleton() {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6 space-y-4">
+      <div className="bg-neutral-0 space-y-4 rounded-lg border border-neutral-200 p-6 shadow-sm">
         <Skeleton className="h-8 w-1/3" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Skeleton className="h-4 w-1/4" />
             <Skeleton className="h-5 w-3/4" />
@@ -101,9 +95,9 @@ export function DetailSkeleton() {
       </div>
 
       {/* Section 1 */}
-      <div className="bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6 space-y-4">
+      <div className="bg-neutral-0 space-y-4 rounded-lg border border-neutral-200 p-6 shadow-sm">
         <Skeleton className="h-6 w-1/4" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="space-y-2">
               <Skeleton className="h-4 w-1/3" />
@@ -114,7 +108,7 @@ export function DetailSkeleton() {
       </div>
 
       {/* Section 2 */}
-      <div className="bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6 space-y-4">
+      <div className="bg-neutral-0 space-y-4 rounded-lg border border-neutral-200 p-6 shadow-sm">
         <Skeleton className="h-6 w-1/4" />
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-5/6" />

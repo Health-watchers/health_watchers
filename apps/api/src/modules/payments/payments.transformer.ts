@@ -12,6 +12,11 @@ export interface PaymentResponse {
   confirmedAt?: string;
   createdAt: string;
   updatedAt: string;
+  sourceAssetCode?: string;
+  sourceAssetIssuer?: string;
+  destinationAmount?: string;
+  maxSourceAmount?: string;
+  path?: string[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,5 +35,10 @@ export function toPaymentResponse(doc: any): PaymentResponse {
     confirmedAt: doc.confirmedAt instanceof Date ? doc.confirmedAt.toISOString() : doc.confirmedAt,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    sourceAssetCode: doc.sourceAssetCode,
+    sourceAssetIssuer: doc.sourceAssetIssuer ?? undefined,
+    destinationAmount: doc.destinationAmount,
+    maxSourceAmount: doc.maxSourceAmount,
+    path: doc.path,
   };
 }

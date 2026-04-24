@@ -16,7 +16,7 @@ export function auditMiddleware(action: AuditAction, resourceType?: string) {
       // Only log if response is successful (2xx status code)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const resourceId = req.params.id || req.params.patientId || req.params.encounterId;
-        
+
         auditLog(
           {
             action,

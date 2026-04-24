@@ -33,7 +33,11 @@ async function fetchDashboard(): Promise<DashboardData> {
 
 function KpiSkeletons() {
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-busy="true" aria-label="Loading KPI cards">
+    <div
+      className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+      aria-busy="true"
+      aria-label="Loading KPI cards"
+    >
       {Array.from({ length: 4 }).map((_, i) => (
         <CardSkeleton key={i} />
       ))}
@@ -54,7 +58,7 @@ export default function DashboardPage() {
   const pendingPayments: Record<string, unknown>[] = data?.pendingPayments ?? [];
 
   return (
-    <PageWrapper className="py-8 space-y-8">
+    <PageWrapper className="space-y-8 py-8">
       <PageHeader
         title="Dashboard"
         subtitle={`Today — ${new Date().toLocaleDateString('en-GB', {
@@ -64,24 +68,24 @@ export default function DashboardPage() {
           year: 'numeric',
         })}`}
         actions={
-          <nav aria-label="Quick actions" className="flex gap-2 flex-wrap">
+          <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
             <Link
               href="/patients/new"
-              className="inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700 h-8 px-3 text-xs"
+              className="focus-visible:ring-primary-500 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-xs font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               aria-label="Register a new patient"
             >
               + New Patient
             </Link>
             <Link
               href="/encounters"
-              className="inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 h-8 px-3 text-xs"
+              className="focus-visible:ring-primary-500 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-neutral-100"
               aria-label="Log a new encounter"
             >
               + Log Encounter
             </Link>
             <Link
               href="/payments"
-              className="inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 h-8 px-3 text-xs"
+              className="focus-visible:ring-primary-500 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-neutral-100"
               aria-label="Initiate a payment"
             >
               + Payment Intent
@@ -94,7 +98,7 @@ export default function DashboardPage() {
       {isError ? (
         <div
           role="alert"
-          className="rounded-lg border border-danger-100 bg-danger-50 p-4 text-sm text-danger-700"
+          className="border-danger-100 bg-danger-50 text-danger-700 rounded-lg border p-4 text-sm"
         >
           Could not load dashboard data. Make sure the API is running.
         </div>
@@ -146,9 +150,7 @@ export default function DashboardPage() {
                 key: 'createdAt',
                 label: 'Registered',
                 render: (row) =>
-                  row.createdAt
-                    ? new Date(row.createdAt as string).toLocaleDateString()
-                    : '—',
+                  row.createdAt ? new Date(row.createdAt as string).toLocaleDateString() : '—',
               },
             ]}
             rows={recentPatients}
@@ -200,7 +202,7 @@ export default function DashboardPage() {
                       href={`https://stellar.expert/explorer/testnet/tx/${row.txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-primary-600 hover:underline focus:outline-none focus:underline"
+                      className="text-primary-600 hover:underline focus:underline focus:outline-none"
                       aria-label={`View transaction ${String(row.txHash).slice(0, 8)} on Stellar Explorer`}
                     >
                       {String(row.txHash).slice(0, 8)}…

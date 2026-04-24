@@ -58,7 +58,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       {success ? (
-        <p className="rounded-md bg-success-50 px-3 py-2 text-sm text-success-700">
+        <p className="bg-success-50 text-success-700 rounded-md px-3 py-2 text-sm">
           Check your email for a reset link.
         </p>
       ) : (
@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
           {serverError && (
             <p
               role="alert"
-              className="mb-4 rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700"
+              className="bg-danger-50 text-danger-700 mb-4 rounded-md px-3 py-2 text-sm"
             >
               {serverError}
             </p>
@@ -98,7 +98,7 @@ export default function ForgotPasswordPage() {
       <div className="mt-4 text-center">
         <Link
           href="/login"
-          className="text-sm text-primary-600 hover:underline focus:outline-none focus:underline"
+          className="text-primary-600 text-sm hover:underline focus:underline focus:outline-none"
         >
           Back to login
         </Link>

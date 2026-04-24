@@ -4,3 +4,7 @@ dist
 coverage
 *.lock
 package-lock.json
+*.md
+# Files with pre-existing syntax errors
+apps/api/src/modules/appointments/appointments.controller.ts
+apps/web/src/components/ui/Toast.tsx

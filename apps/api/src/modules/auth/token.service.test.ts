@@ -85,82 +85,64 @@ describe('Token Service', () => {
     });
 
     it('should reject a token without issuer claim', () => {
-      const tokenWithoutIssuer = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        { expiresIn: '15m', audience: 'health-watchers-client' }
-      );
+      const tokenWithoutIssuer = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '15m',
+        audience: 'health-watchers-client',
+      });
 
       const result = verifyAccessToken(tokenWithoutIssuer);
       expect(result).toBeNull();
     });
 
     it('should reject a token with wrong issuer', () => {
-      const tokenWithWrongIssuer = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        {
-          expiresIn: '15m',
-          issuer: 'malicious-service',
-          audience: 'health-watchers-client',
-        }
-      );
+      const tokenWithWrongIssuer = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '15m',
+        issuer: 'malicious-service',
+        audience: 'health-watchers-client',
+      });
 
       const result = verifyAccessToken(tokenWithWrongIssuer);
       expect(result).toBeNull();
     });
 
     it('should reject a token without audience claim', () => {
-      const tokenWithoutAudience = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        { expiresIn: '15m', issuer: 'health-watchers-api' }
-      );
+      const tokenWithoutAudience = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '15m',
+        issuer: 'health-watchers-api',
+      });
 
       const result = verifyAccessToken(tokenWithoutAudience);
       expect(result).toBeNull();
     });
 
     it('should reject a token with wrong audience', () => {
-      const tokenWithWrongAudience = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        {
-          expiresIn: '15m',
-          issuer: 'health-watchers-api',
-          audience: 'wrong-audience',
-        }
-      );
+      const tokenWithWrongAudience = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '15m',
+        issuer: 'health-watchers-api',
+        audience: 'wrong-audience',
+      });
 
       const result = verifyAccessToken(tokenWithWrongAudience);
       expect(result).toBeNull();
     });
 
     it('should reject a token with correct secret but wrong issuer and audience', () => {
-      const maliciousToken = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        {
-          expiresIn: '15m',
-          issuer: 'other-service',
-          audience: 'other-client',
-        }
-      );
+      const maliciousToken = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '15m',
+        issuer: 'other-service',
+        audience: 'other-client',
+      });
 
       const result = verifyAccessToken(maliciousToken);
       expect(result).toBeNull();
     });
 
     it('should reject an expired token', () => {
-      const expiredToken = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        {
-          expiresIn: '-1s',
-          issuer: 'health-watchers-api',
-          audience: 'health-watchers-client',
-        }
-      );
+      const expiredToken = jwt.sign(mockPayload, 'test-access-secret', {
+        expiresIn: '-1s',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+      });
 
       const result = verifyAccessToken(expiredToken);
       expect(result).toBeNull();
@@ -225,30 +207,22 @@ describe('Token Service', () => {
     });
 
     it('should reject a token with wrong issuer', () => {
-      const tokenWithWrongIssuer = jwt.sign(
-        { userId: 'user123' },
-        'test-access-secret',
-        {
-          expiresIn: '5m',
-          issuer: 'malicious-service',
-          audience: 'health-watchers-client',
-        }
-      );
+      const tokenWithWrongIssuer = jwt.sign({ userId: 'user123' }, 'test-access-secret', {
+        expiresIn: '5m',
+        issuer: 'malicious-service',
+        audience: 'health-watchers-client',
+      });
 
       const result = verifyTempToken(tokenWithWrongIssuer);
       expect(result).toBeNull();
     });
 
     it('should reject a token with wrong audience', () => {
-      const tokenWithWrongAudience = jwt.sign(
-        { userId: 'user123' },
-        'test-access-secret',
-        {
-          expiresIn: '5m',
-          issuer: 'health-watchers-api',
-          audience: 'wrong-audience',
-        }
-      );
+      const tokenWithWrongAudience = jwt.sign({ userId: 'user123' }, 'test-access-secret', {
+        expiresIn: '5m',
+        issuer: 'health-watchers-api',
+        audience: 'wrong-audience',
+      });
 
       const result = verifyTempToken(tokenWithWrongAudience);
       expect(result).toBeNull();
@@ -275,11 +249,7 @@ describe('Token Service', () => {
 
     it('should prevent token confusion with missing claims', () => {
       // Token signed without iss and aud claims
-      const tokenWithoutClaims = jwt.sign(
-        mockPayload,
-        'test-access-secret',
-        { expiresIn: '15m' }
-      );
+      const tokenWithoutClaims = jwt.sign(mockPayload, 'test-access-secret', { expiresIn: '15m' });
 
       const result = verifyAccessToken(tokenWithoutClaims);
       expect(result).toBeNull();

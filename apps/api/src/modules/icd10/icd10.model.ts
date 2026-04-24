@@ -10,13 +10,13 @@ export interface IICD10Code {
 
 const icd10Schema = new Schema<IICD10Code>(
   {
-    code:        { type: String, required: true, unique: true, uppercase: true, trim: true },
+    code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     description: { type: String, required: true },
-    category:    { type: String, default: '' },
-    chapter:     { type: String, default: '' },
-    isValid:     { type: Boolean, default: true },
+    category: { type: String, default: '' },
+    chapter: { type: String, default: '' },
+    isValid: { type: Boolean, default: true },
   },
-  { timestamps: false, versionKey: false },
+  { timestamps: false, versionKey: false }
 );
 
 // Text index for full-text description search

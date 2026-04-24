@@ -32,8 +32,6 @@ export default function EncountersPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [total, setTotal] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const { data, isLoading, error } = useEncounters(page);
@@ -42,26 +40,6 @@ export default function EncountersPage() {
   const limit = data?.meta?.limit ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-<<<<<<< fix/198-encounters-list-endpoint
-  const fetchEncounters = async () => {
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-      });
-      
-      const response = await fetch(`/api/v1/encounters?${params}`);
-      const data: ApiResponse = await response.json();
-      
-      if (data.status === 'success') {
-        setEncounters(data.data);
-        setTotal(data.meta.total);
-      }
-    } catch (error) {
-      console.error('Failed to fetch encounters:', error);
-    } finally {
-      setLoading(false);
-=======
   const handleCreate = async (formData: CreateEncounterData) => {
     const res = await fetch(`${API}/encounters`, {
       method: 'POST',
@@ -71,55 +49,12 @@ export default function EncountersPage() {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.message || `Error ${res.status}`);
->>>>>>> main
     }
     setShowForm(false);
     setToast({ message: 'Encounter created successfully.', type: 'success' });
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
   };
 
-<<<<<<< fix/198-encounters-list-endpoint
-  const totalPages = Math.ceil(total / limit);
-
-  if (loading) return <div>Loading encounters...</div>;
-
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Encounters</h1>
-      <div className="grid gap-4">
-        {encounters.map((encounter) => (
-          <div key={encounter._id} className="p-4 border rounded-lg">
-            <div className="font-medium">
-              {encounter.patientId?.firstName} {encounter.patientId?.lastName}
-              <span className="text-sm text-gray-500 ml-2">
-                ({encounter.patientId?.systemId})
-              </span>
-            </div>
-            <div className="text-sm text-gray-600">
-              Status: <span className="font-semibold">{encounter.status}</span>
-            </div>
-            <div className="text-xs text-gray-500">
-              {new Date(encounter.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Pagination */}
-      <div className="mt-6 flex justify-between">
-        <button
-          onClick={() => setPage(p => Math.max(1, p - 1))}
-          disabled={page === 1}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-        >
-          Previous
-        </button>
-        <span>Page {page} of {totalPages || 1}</span>
-        <button
-          onClick={() => setPage(p => p + 1)}
-          disabled={page >= totalPages}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-=======
   if (isLoading) return <TableSkeleton columns={5} rows={8} />;
   if (error)
     return (
@@ -130,15 +65,14 @@ export default function EncountersPage() {
     );
 
   return (
-    <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Encounters</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Encounters</h1>
         <button
           onClick={() => setShowForm(true)}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
->>>>>>> main
         >
           + New Encounter
         </button>
@@ -146,7 +80,7 @@ export default function EncountersPage() {
 
       {showForm && (
         <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">New Encounter</h2>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">New Encounter</h2>
           <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
         </div>
       )}
@@ -169,7 +103,7 @@ export default function EncountersPage() {
                     <th
                       key={h}
                       scope="col"
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide"
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
                     >
                       {h}
                     </th>
@@ -178,9 +112,9 @@ export default function EncountersPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
                 {encounters.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={e.id} className="transition-colors hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.patientId}</td>
-                    <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{e.chiefComplaint}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">{e.chiefComplaint}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[e.status] ?? 'bg-gray-100 text-gray-700'}`}
@@ -189,7 +123,7 @@ export default function EncountersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.attendingDoctorId}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
                       {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
                     </td>
                   </tr>
@@ -207,14 +141,14 @@ export default function EncountersPage() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
+                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
+                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
               >
                 Next
               </button>
