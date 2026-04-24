@@ -112,6 +112,7 @@ export default function PaymentsClient() {
               Polling for updates…
             </span>
           )}
+          <Button variant="outline" onClick={() => window.location.href = '/invoices'}>Invoices</Button>
           <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
         </div>
       </div>

@@ -15,6 +15,7 @@ export interface Patient {
   address?: string;
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
+  dataSharingConsent: boolean;
 }
 
 const patientSchema = new Schema<Patient>(
@@ -29,6 +30,7 @@ const patientSchema = new Schema<Patient>(
     address: { type: String },
     clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     isActive: { type: Boolean, default: true, index: true },
+    dataSharingConsent: { type: Boolean, default: false },
   },
   { timestamps: true, versionKey: false }
 );
