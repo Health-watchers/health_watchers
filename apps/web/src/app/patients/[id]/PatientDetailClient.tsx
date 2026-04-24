@@ -33,6 +33,7 @@ const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsC
   ssr: false,
 });
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
+const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientReferralsTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -365,6 +366,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
           <TabsTrigger value="consent">Consent</TabsTrigger>
+          <TabsTrigger value="referrals">Referrals</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -553,6 +555,9 @@ export default function PatientDetailClient({
         {/* Consent tab */}
         <TabsContent value="consent">
           <ConsentTab patientId={patientId} canEdit={!!canEdit} />
+        {/* Referrals tab */}
+        <TabsContent value="referrals">
+          <PatientReferralsTab patientId={patientId} />
         </TabsContent>
       </Tabs>
 

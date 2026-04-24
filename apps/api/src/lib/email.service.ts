@@ -171,6 +171,50 @@ export function sendPaymentConfirmationEmail(
   enqueue(to, `Payment Confirmed — ${amount} ${assetCode}`, text, html);
 }
 
+/** Invoice email sent to patient with QR code and payment link */
+export function sendInvoiceEmail(
+  to: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    stellarPayURI: string;
+    qrCodeDataUrl: string;
+  },
+): void {
+  const dueDateStr = invoice.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const text = `Invoice ${invoice.invoiceNumber}\n\nAmount due: ${invoice.total} ${invoice.currency}\nDue date: ${dueDateStr}\n\nPay via Stellar: ${invoice.stellarPayURI}`;
+  const html = `
+    <h2>Invoice ${invoice.invoiceNumber}</h2>
+    <p><strong>Amount due:</strong> ${invoice.total} ${invoice.currency}</p>
+    <p><strong>Due date:</strong> ${dueDateStr}</p>
+    <p><a href="${invoice.stellarPayURI}">Pay with Stellar Wallet</a></p>
+    <p>Or scan the QR code below:</p>
+    <img src="${invoice.qrCodeDataUrl}" alt="Stellar payment QR code" width="200" height="200" />
+  `;
+  enqueue(to, `Invoice ${invoice.invoiceNumber} — Health Watchers`, text, html);
+}
+
+/** Referral notification sent to receiving clinic admin */
+export function sendReferralNotificationEmail(
+  to: string,
+  adminName: string,
+  referral: { patientName: string; urgency: string; reason: string; referralId: string },
+): void {
+  const referralUrl = `${APP_BASE_URL}/referrals/incoming`;
+  const urgencyLabel = referral.urgency.toUpperCase();
+  const text = `A new ${urgencyLabel} referral has been received for patient ${referral.patientName}.\n\nReason: ${referral.reason}\n\nView referral: ${referralUrl}`;
+  const html = `
+    <h3>New Patient Referral Received</h3>
+    <p>Hello ${adminName},</p>
+    <p>A new <strong>${urgencyLabel}</strong> referral has been received for patient <strong>${referral.patientName}</strong>.</p>
+    <p><strong>Reason:</strong> ${referral.reason}</p>
+    <p><a href="${referralUrl}">View Incoming Referrals</a></p>
+  `;
+  enqueue(to, `New ${urgencyLabel} Referral — Health Watchers`, text, html);
+}
+
 /** AI summary ready notification sent when clinical summary is generated */
 export function sendAiSummaryReadyEmail(
   to: string,
