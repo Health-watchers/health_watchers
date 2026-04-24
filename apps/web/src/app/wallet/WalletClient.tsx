@@ -37,6 +37,9 @@ interface Transaction {
 interface WalletBalance {
   publicKey: string;
   balance: string;
+  xlmBalance?: string;
+  usdcBalance: string | null;
+  usdcIssuer?: string;
   transactions: Transaction[];
 }
 
@@ -179,6 +182,24 @@ export default function WalletClient() {
     },
   });
 
+  const trustlineMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/payments/trustline', { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `Error ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setToast({ message: 'USDC trustline created successfully!', type: 'success' });
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: queryKeys.wallet.balance() }), 2000);
+    },
+    onError: (err: Error) => {
+      setToast({ message: err.message, type: 'error' });
+    },
+  });
+
   const sendMutation = useMutation({
     mutationFn: async (data: { destination: string; amount: string; memo?: string }) => {
       const res = await fetch('/api/payments/intent', {
@@ -252,6 +273,17 @@ export default function WalletClient() {
                 <span className="text-lg text-neutral-500 mb-1">XLM</span>
               </div>
 
+              {wallet.usdcBalance !== null && wallet.usdcBalance !== undefined ? (
+                <div className="flex items-end gap-2">
+                  <span className="text-2xl font-semibold text-neutral-700 tabular-nums">
+                    {parseFloat(wallet.usdcBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-base text-neutral-500 mb-0.5">USDC</span>
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-400">No USDC trustline — create one to receive USDC payments.</p>
+              )}
+
               <div className="flex flex-wrap gap-3 pt-2">
                 <Button onClick={() => setShowSendForm(true)} disabled={parseFloat(wallet.balance) <= 0}>
                   Send Payment
@@ -265,6 +297,16 @@ export default function WalletClient() {
                     title={fundMutation.isSuccess ? 'Already funded this session' : 'Fund with Friendbot (testnet only)'}
                   >
                     {fundMutation.isSuccess ? '✓ Funded' : 'Fund with Friendbot'}
+                  </Button>
+                )}
+                {wallet.usdcBalance === null && (
+                  <Button
+                    variant="outline"
+                    onClick={() => trustlineMutation.mutate()}
+                    loading={trustlineMutation.isPending}
+                    title="Create USDC trustline to receive USDC payments"
+                  >
+                    Enable USDC
                   </Button>
                 )}
               </div>

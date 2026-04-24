@@ -28,7 +28,9 @@ export async function getAccountBalance(publicKey: string) {
   const server = getServer();
   const account = await server.loadAccount(publicKey);
   const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
-  const balance = xlmBalance ? xlmBalance.balance : '0';
+  const usdcBalance = account.balances.find(
+    (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native',
+  );
 
   const payments = await server.payments().forAccount(publicKey).limit(10).order('desc').call();
   const transactions = payments.records
@@ -44,7 +46,52 @@ export async function getAccountBalance(publicKey: string) {
       createdAt: r.created_at,
     }));
 
-  return { balance, transactions };
+  return {
+    balance: xlmBalance ? xlmBalance.balance : '0',
+    usdcBalance: usdcBalance ? usdcBalance.balance : null,
+    transactions,
+  };
+}
+
+/** Create a USDC trustline for an account */
+export async function createUsdcTrustline(publicKey: string, usdcIssuer: string) {
+  const server = getServer();
+  const sourceAccount = await server.loadAccount(publicKey);
+
+  // Check if trustline already exists
+  const existing = sourceAccount.balances.find(
+    (b: any) => b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer,
+  );
+  if (existing) {
+    return { alreadyExists: true, trustline: 'USDC' };
+  }
+
+  const fee = await server.fetchBaseFee();
+  const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+    fee: String(fee),
+    networkPassphrase:
+      stellarConfig.network === 'mainnet'
+        ? StellarSdk.Networks.PUBLIC
+        : StellarSdk.Networks.TESTNET,
+  })
+    .addOperation(
+      StellarSdk.Operation.changeTrust({
+        asset: new StellarSdk.Asset('USDC', usdcIssuer),
+      }),
+    )
+    .setTimeout(30)
+    .build();
+
+  if (stellarConfig.stellarSecretKey) {
+    const keypair = StellarSdk.Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    transaction.sign(keypair);
+    if (!stellarConfig.dryRun) {
+      const result = await server.submitTransaction(transaction);
+      return { created: true, hash: result.hash };
+    }
+  }
+
+  return { envelope: transaction.toEnvelope().toXDR('base64'), dryRun: true };
 }
 
 /** Create a payment intent (build + sign + submit) */

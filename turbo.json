@@ -1,23 +1,33 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "package.json", "tsconfig.json"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
     },
-    "build": {
+    "test": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**"]
+      "inputs": ["src/**", "tests/**", "__tests__/**", "jest.config.*"],
+      "outputs": ["coverage/**"]
     },
     "typecheck": {
       "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json"],
+      "outputs": []
+    },
+    "lint": {
+      "inputs": ["src/**", ".eslintrc.*", "eslint.config.*"],
       "outputs": []
     },
     "start": {
-      "dependsOn": ["build"]
-    },
-    "lint": {
-      "outputs": []
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
     }
   }
 }

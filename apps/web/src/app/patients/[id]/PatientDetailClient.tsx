@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,6 +25,9 @@ import { CreatePaymentIntentForm, type CreatePaymentData } from '@/components/fo
 import { queryKeys } from '@/lib/queryKeys';
 import { API_V1 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+
+const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), { ssr: false });
+const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -154,6 +158,28 @@ export default function PatientDetailClient({
       const data = await res.json();
       return data.data ?? [];
     },
+  });
+
+  const { data: vitals = [], isLoading: vitalsLoading } = useQuery({
+    queryKey: ['vitals', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/vitals`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000, // cache 5 minutes
+  });
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ['analytics', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/analytics`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.data ?? null;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const canEdit = user && EDIT_ROLES.has(user.role);
@@ -306,6 +332,8 @@ export default function PatientDetailClient({
         <TabsList>
           <TabsTrigger value="encounters">{labels.encounters}</TabsTrigger>
           <TabsTrigger value="payments">{labels.payments}</TabsTrigger>
+          <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
+          <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
         </TabsList>
 
@@ -416,6 +444,24 @@ export default function PatientDetailClient({
                 </li>
               ))}
             </ol>
+          )}
+        </TabsContent>
+
+        {/* Lab Results tab */}
+        <TabsContent value="lab-results">
+          <LabResultsTab patientId={patientId} />
+        </TabsContent>
+
+        {/* Vitals & Analytics tab */}
+        <TabsContent value="vitals">
+          {vitalsLoading || analyticsLoading ? (
+            <div className="space-y-3" aria-busy="true">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
+            </div>
+          ) : (
+            <VitalSignsCharts vitals={vitals} analytics={analytics} />
           )}
         </TabsContent>
 

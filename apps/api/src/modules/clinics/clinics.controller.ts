@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ClinicModel } from './clinic.model';
+import { ClinicSettingsModel } from './clinic-settings.model';
 import { UserModel } from '../auth/models/user.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 
@@ -18,6 +19,8 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
       subscriptionTier,
       createdBy: req.user!.userId,
     });
+    // Auto-create default settings for the new clinic
+    await ClinicSettingsModel.create({ clinicId: clinic._id, branding: { clinicName: name } });
     return res.status(201).json({ status: 'success', data: clinic });
   } catch (err: any) {
     return res.status(400).json({ error: 'BadRequest', message: err.message });

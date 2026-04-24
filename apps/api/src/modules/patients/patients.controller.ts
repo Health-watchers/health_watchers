@@ -10,6 +10,7 @@ import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
 import { EncounterModel } from '../encounters/encounter.model';
 import { toEncounterResponse } from '../encounters/encounters.transformer';
+import { LabResultModel } from '../lab-results/lab-result.model';
 import {
   createPatientSchema,
   updatePatientSchema,
@@ -31,6 +32,17 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'contactNumber',
   'address',
 ]);
+
+/** Calculate trend from last N readings: 'improving' | 'stable' | 'worsening' */
+function calcTrend(values: number[]): 'improving' | 'stable' | 'worsening' {
+  if (values.length < 2) return 'stable';
+  const first = values[0];
+  const last = values[values.length - 1];
+  const delta = last - first;
+  const threshold = first * 0.03; // 3% change threshold
+  if (Math.abs(delta) < threshold) return 'stable';
+  return delta < 0 ? 'improving' : 'worsening';
+}
 
 async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
@@ -244,6 +256,153 @@ router.get(
       { createdAt: -1 },
     );
     return res.json({ status: 'success', data: result.data.map(toEncounterResponse), meta: result.meta });
+  }),
+);
+
+// GET /patients/:id/vitals — all vital sign readings across encounters
+// Query params: ?type=bloodPressure&from=2024-01-01&to=2024-12-31
+router.get(
+  '/:id/vitals',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const filter: Record<string, unknown> = {
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+      vitalSigns: { $exists: true, $ne: null },
+    };
+
+    if (req.query.from || req.query.to) {
+      const dateFilter: Record<string, Date> = {};
+      if (req.query.from) dateFilter.$gte = new Date(String(req.query.from));
+      if (req.query.to) dateFilter.$lte = new Date(String(req.query.to));
+      filter.createdAt = dateFilter;
+    }
+
+    const encounters = await EncounterModel.find(filter)
+      .sort({ createdAt: 1 })
+      .select('vitalSigns createdAt')
+      .lean();
+
+    const vitalType = req.query.type as string | undefined;
+
+    const readings = encounters
+      .filter((e) => e.vitalSigns && Object.keys(e.vitalSigns).length > 0)
+      .map((e) => ({
+        date: (e as any).createdAt,
+        vitals: vitalType
+          ? { [vitalType]: (e.vitalSigns as Record<string, unknown>)[vitalType] }
+          : e.vitalSigns,
+      }))
+      .filter((r) => {
+        if (!vitalType) return true;
+        return (r.vitals as Record<string, unknown>)[vitalType] !== undefined;
+      });
+
+    return res.json({ status: 'success', data: readings });
+  }),
+);
+
+// GET /patients/:id/analytics — computed vital sign statistics
+router.get(
+  '/:id/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    const encounters = await EncounterModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    })
+      .sort({ createdAt: 1 })
+      .select('vitalSigns createdAt')
+      .lean();
+
+    // Blood pressure analytics
+    const bpReadings = encounters
+      .filter((e) => e.vitalSigns?.bloodPressure)
+      .map((e) => {
+        const [sys, dia] = (e.vitalSigns!.bloodPressure as string).split('/').map(Number);
+        return { systolic: sys, diastolic: dia, date: (e as any).createdAt };
+      })
+      .filter((r) => !isNaN(r.systolic) && !isNaN(r.diastolic));
+
+    const bpAnalytics = bpReadings.length > 0 ? {
+      latest: { systolic: bpReadings.at(-1)!.systolic, diastolic: bpReadings.at(-1)!.diastolic },
+      average: {
+        systolic: Math.round(bpReadings.reduce((s, r) => s + r.systolic, 0) / bpReadings.length),
+        diastolic: Math.round(bpReadings.reduce((s, r) => s + r.diastolic, 0) / bpReadings.length),
+      },
+      trend: calcTrend(bpReadings.slice(-5).map((r) => r.systolic)),
+      readings: bpReadings.length,
+    } : null;
+
+    // Weight analytics
+    const weightReadings = encounters
+      .filter((e) => e.vitalSigns?.weight != null)
+      .map((e) => ({ value: e.vitalSigns!.weight as number, date: (e as any).createdAt }));
+
+    const weightAnalytics = weightReadings.length > 0 ? (() => {
+      const latest = weightReadings.at(-1)!.value;
+      const thirtyDayStart = weightReadings.find((r) => r.date >= thirtyDaysAgo);
+      const change30Days = thirtyDayStart ? +(latest - thirtyDayStart.value).toFixed(1) : null;
+      return {
+        latest,
+        change30Days,
+        trend: calcTrend(weightReadings.slice(-5).map((r) => r.value)),
+      };
+    })() : null;
+
+    // Encounter frequency
+    const encounterFrequency = {
+      last30Days: encounters.filter((e) => (e as any).createdAt >= thirtyDaysAgo).length,
+      last90Days: encounters.filter((e) => (e as any).createdAt >= ninetyDaysAgo).length,
+    };
+
+    return res.json({
+      status: 'success',
+      data: {
+        bloodPressure: bpAnalytics,
+        weight: weightAnalytics,
+        encounterFrequency,
+      },
+    });
+  }),
+);
+
+// GET /patients/:id/lab-results — All lab results for a patient
+router.get(
+  '/:id/lab-results',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const { sort = 'orderedAt', order = 'desc' } = req.query as Record<string, string>;
+    const sortField = ['orderedAt', 'testName'].includes(sort) ? sort : 'orderedAt';
+    const sortOrder = order === 'asc' ? 1 : -1;
+
+    const docs = await LabResultModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
+      .sort({ [sortField]: sortOrder });
+    return res.json({ status: 'success', data: docs });
   }),
 );
 

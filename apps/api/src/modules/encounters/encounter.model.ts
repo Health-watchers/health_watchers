@@ -29,8 +29,9 @@ export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
+  encounteredBy?: Schema.Types.ObjectId; // alias for attendingDoctorId (spec compat)
   chiefComplaint: string;
-  status: "open" | "closed" | "follow-up";
+  status: "open" | "closed" | "follow-up" | "cancelled";
   notes?: string;
   diagnosis?: Diagnosis[];
   treatmentPlan?: string;
@@ -78,8 +79,9 @@ const encounterSchema = new Schema<Encounter>(
     patientId:         { type: Schema.Types.ObjectId, ref: "Patient",  required: true, index: true },
     clinicId:          { type: Schema.Types.ObjectId, ref: "Clinic",   required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: "User",     required: true, index: true },
+    encounteredBy:     { type: Schema.Types.ObjectId, ref: "User" },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ["open", "closed", "follow-up"], default: "open", index: true },
+    status:            { type: String, enum: ["open", "closed", "follow-up", "cancelled"], default: "open", index: true },
     notes:             { type: String },
     treatmentPlan:     { type: String },
     diagnosis:         { type: [diagnosisSchema], default: undefined },
@@ -91,6 +93,9 @@ const encounterSchema = new Schema<Encounter>(
   },
   { timestamps: true, versionKey: false }
 );
+
+// Compound index for paginated clinic-scoped queries
+encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
 
 const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan", "aiSummary"] as const;
 

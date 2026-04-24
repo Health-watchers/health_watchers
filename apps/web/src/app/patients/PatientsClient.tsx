@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { type Patient, formatDate } from '@health-watchers/types';
-import { ErrorMessage, TableSkeleton, ModuleEmptyState, Button } from '@/components/ui';
+import { ErrorMessage, TableSkeleton, ModuleEmptyState } from '@/components/ui';
 import { queryKeys } from '@/lib/queryKeys';
 
 interface Labels {
@@ -18,6 +18,7 @@ interface Labels {
   contact: string;
   search: string;
   view: string;
+  registerNew: string;
 }
 
 import { API_URL } from "@/lib/api";
@@ -43,20 +44,36 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
     },
   });
 
+  const [inputValue, setInputValue] = useState('');
+
   const handleSearch = (value: string) => {
-    setSearchQuery(value);
+    setInputValue(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {}, 300);
+    debounceTimer.current = setTimeout(() => setSearchQuery(value), 300);
   };
 
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">{labels.title}</h1>
+      {/* ── Page header ───────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{labels.title}</h1>
+        <Link
+          href="/patients/new"
+          id="register-new-patient-btn"
+          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        >
+          <span aria-hidden="true">+</span>
+          {labels.registerNew}
+        </Link>
+      </div>
+
+      {/* ── Search bar ────────────────────────────────────── */}
       <div className="mb-6">
         <input
-          type="text"
+          id="patient-search"
+          type="search"
           placeholder={labels.search}
-          value={searchQuery}
+          value={inputValue}
           onChange={(e) => handleSearch(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           aria-label={labels.search}
@@ -73,9 +90,14 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         <ModuleEmptyState
           module="patients"
           action={
-            <Button variant="primary" size="md" className="mt-2">
-              Add New Patient
-            </Button>
+            <Link
+              href="/patients/new"
+              id="register-new-patient-empty-btn"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <span aria-hidden="true">+</span>
+              {labels.registerNew}
+            </Link>
           }
         />
       ) : (

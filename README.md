@@ -167,6 +167,66 @@ Health Watchers is designed with HIPAA compliance in mind:
 
 For detailed security guidelines, see `SECURITY.md`.
 
+## Database Migrations
+
+Health Watchers uses [migrate-mongo](https://github.com/seppevs/migrate-mongo) to version-control MongoDB schema changes. All migrations live in `apps/api/src/migrations/` and are written in TypeScript.
+
+### Available Commands
+
+Run from the repo root (or inside `apps/api/`):
+
+```bash
+# Apply all pending migrations
+npm run migrate:up --workspace=api
+
+# Roll back the last applied migration
+npm run migrate:down --workspace=api
+
+# Show migration status (applied / pending)
+npm run migrate:status --workspace=api
+
+# Scaffold a new migration file
+npm run migrate:create --workspace=api -- <migration-name>
+```
+
+### How It Works
+
+- migrate-mongo tracks applied migrations in the `changelog` collection in MongoDB.
+- Migrations run in filename order (lexicographic), so prefix files with a date: `YYYYMMDD_description.ts`.
+- Every migration **must** export both `up` and `down` functions — `down` must reverse what `up` does.
+- All `up` operations use idempotent MongoDB operations (e.g. `createIndex` with a named index, `updateMany` with `$exists` guards) so they are safe to re-run.
+
+### Writing a Migration
+
+```ts
+// apps/api/src/migrations/20240201_example.ts
+import { Db } from 'mongodb';
+
+export async function up(db: Db): Promise<void> {
+  await db.collection('patients').createIndex(
+    { clinicId: 1, isActive: 1 },
+    { background: true, name: 'clinicId_1_isActive_1' }
+  );
+}
+
+export async function down(db: Db): Promise<void> {
+  await db.collection('patients').dropIndex('clinicId_1_isActive_1').catch(() => {});
+}
+```
+
+### CI / Deployment
+
+- `migrate:up` runs automatically in the CI `test` job before the test suite (see `.github/workflows/ci.yml`).
+- Run `migrate:up` as part of your deployment pipeline before starting the API server to ensure the database schema is always up to date.
+
+### Rollback Strategy
+
+If a migration causes issues in production:
+
+1. Run `npm run migrate:down --workspace=api` to revert the last migration.
+2. Fix the migration file.
+3. Re-run `npm run migrate:up --workspace=api`.
+
 ## Testing
 
 ```bash

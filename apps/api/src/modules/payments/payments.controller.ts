@@ -15,6 +15,7 @@ import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
+import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 
 const router = Router();
 router.use(authenticate);
@@ -37,7 +38,16 @@ router.get(
 
     try {
       const data = await stellarClient.getBalance(clinic.stellarPublicKey);
-      return res.json({ status: 'success', data: { publicKey: clinic.stellarPublicKey, ...data } });
+      return res.json({
+        status: 'success',
+        data: {
+          publicKey: clinic.stellarPublicKey,
+          xlmBalance: data.balance,
+          usdcBalance: data.usdcBalance,
+          usdcIssuer: config.stellar.usdcIssuer,
+          transactions: data.transactions,
+        },
+      });
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
@@ -59,6 +69,28 @@ router.post(
     try {
       const data = await stellarClient.fundAccount(clinic.stellarPublicKey);
       logger.info({ clinicId, publicKey: clinic.stellarPublicKey }, 'Testnet account funded via Friendbot');
+      return res.json({ status: 'success', data });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
+// POST /payments/trustline — create USDC trustline for clinic's Stellar account
+router.post(
+  '/trustline',
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const { ClinicModel } = await import('../clinics/clinic.model');
+    const clinic = await ClinicModel.findById(clinicId).lean();
+
+    if (!clinic?.stellarPublicKey) {
+      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured for this clinic' });
+    }
+
+    try {
+      const data = await stellarClient.createUsdcTrustline(clinic.stellarPublicKey, config.stellar.usdcIssuer);
+      logger.info({ clinicId, publicKey: clinic.stellarPublicKey }, 'USDC trustline created');
       return res.json({ status: 'success', data });
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
@@ -99,10 +131,11 @@ router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer } = req.body;
+    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer, currency } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
-    const normalizedAsset = String(assetCode).toUpperCase().trim();
+    // `currency` takes precedence over `assetCode` for convenience
+    const normalizedAsset = (currency ?? String(assetCode)).toUpperCase().trim();
 
     if (normalizedAsset !== 'XLM' && !config.supportedAssets.includes(normalizedAsset)) {
       return res.status(400).json({
@@ -111,7 +144,11 @@ router.post(
       });
     }
 
-    if (normalizedAsset !== 'XLM' && !issuer) {
+    // Auto-resolve USDC issuer from config if not provided
+    const resolvedIssuer =
+      normalizedAsset === 'USDC' && !issuer ? config.stellar.usdcIssuer : issuer;
+
+    if (normalizedAsset !== 'XLM' && !resolvedIssuer) {
       return res.status(400).json({
         error: 'BadRequest',
         message: `An issuer address is required for non-native asset '${normalizedAsset}'`,
@@ -127,7 +164,7 @@ router.post(
       patientId,
       status: 'pending',
       assetCode: normalizedAsset,
-      assetIssuer: normalizedAsset === 'XLM' ? null : issuer,
+      assetIssuer: normalizedAsset === 'XLM' ? null : resolvedIssuer,
     });
 
     return res.status(201).json({
@@ -204,6 +241,16 @@ router.patch(
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
+
+    // Send confirmation email to clinic (non-blocking)
+    try {
+      const { ClinicModel } = await import('../clinics/clinic.model');
+      const clinic = await ClinicModel.findById(updatedPayment!.clinicId).lean();
+      if (clinic?.email) {
+        sendPaymentConfirmationEmail(clinic.email, updatedPayment!.amount, updatedPayment!.assetCode, txHash);
+      }
+    } catch { /* non-critical */ }
+
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   }),
 );

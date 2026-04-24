@@ -37,6 +37,10 @@ export const config = {
     horizonUrl,
     secretKey: process.env.STELLAR_SECRET_KEY || '',
     platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
+    usdcIssuer:
+      network === 'mainnet'
+        ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+        : 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   },
 
   // Payment Assets
@@ -55,6 +59,20 @@ export const config = {
 
   // PHI Field-Level Encryption
   fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || '',
+
+  // Email Configuration
+  email: {
+    provider: (process.env.EMAIL_PROVIDER || 'smtp') as 'smtp' | 'sendgrid',
+    from: process.env.EMAIL_FROM || 'noreply@healthwatchers.com',
+    smtp: {
+      host: process.env.SMTP_HOST || 'localhost',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',
+    },
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+  },
 };
 
 if (['development', 'staging'].includes(process.env.NODE_ENV || 'development')) {

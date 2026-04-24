@@ -30,6 +30,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.54.0",
+    "recharts": "^3.8.1",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
@@ -53,6 +54,6 @@
     "fast-check": "^4.7.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "typescript": "6.0.2"
+    "typescript": "^5.0.0"
   }
 }

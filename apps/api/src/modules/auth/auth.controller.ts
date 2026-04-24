@@ -32,7 +32,7 @@ import {
 } from './token.service';
 import { RefreshTokenModel } from './models/refresh-token.model';
 import { totpService } from './totp.service';
-import { sendVerificationEmail } from '@api/lib/email.service';
+import { sendVerificationEmail, sendWelcomeEmail } from '@api/lib/email.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -101,6 +101,7 @@ router.post(
     user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     await user.save();
     await sendVerificationEmail(user.email, rawToken);
+    sendWelcomeEmail(user.email, user.fullName);
 
     const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });

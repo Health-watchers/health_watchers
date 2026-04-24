@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-import { fundAccount, createIntent, verifyIntent, getAccountBalance } from './stellar.js';
+import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 
@@ -81,6 +81,20 @@ app.get('/balance/:publicKey', requireSecret, async (req, res) => {
   try {
     const { publicKey } = req.params;
     const result = await getAccountBalance(publicKey);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /trustline/usdc (requires secret)
+app.post('/trustline/usdc', requireSecret, async (req, res) => {
+  try {
+    const { publicKey, usdcIssuer } = req.body;
+    if (!publicKey || !usdcIssuer) {
+      return res.status(400).json({ error: 'publicKey and usdcIssuer are required' });
+    }
+    const result = await createUsdcTrustline(publicKey, usdcIssuer);
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message });

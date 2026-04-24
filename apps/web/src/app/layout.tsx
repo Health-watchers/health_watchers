@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { QueryProvider } from '@/lib/QueryProvider';
+
+import { Toaster } from '@/components/ui';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -77,7 +79,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale}>
       <body className="min-h-screen bg-neutral-50 font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <QueryProvider>{children}</QueryProvider>
+
+          <Toaster />
         </NextIntlClientProvider>
       </body>
     </html>

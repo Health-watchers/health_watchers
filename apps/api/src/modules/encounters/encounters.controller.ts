@@ -12,15 +12,30 @@ import {
   listEncountersQuerySchema,
   ListEncountersQuery,
 } from './encounter.validation';
+import { ICD10Model } from '../icd10/icd10.model';
+
+async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
+  if (!diagnoses || diagnoses.length === 0) return null;
+  for (const d of diagnoses) {
+    const exists = await ICD10Model.exists({ code: d.code.toUpperCase(), isValid: true });
+    if (!exists) return d.code;
+  }
+  return null;
+}
 
 const router = Router();
 router.use(authenticate);
 
+<<<<<<< fix/198-encounters-list-endpoint
 // GET /encounters
+=======
+// GET /encounters — paginated list scoped to the authenticated clinic
+>>>>>>> main
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
+<<<<<<< fix/198-encounters-list-endpoint
     const { page, limit, patientId, status } = req.query as unknown as ListEncountersQuery;
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
     if (patientId) filter.patientId = patientId;
@@ -34,6 +49,28 @@ router.get(
         .skip(skip)
         .limit(limit)
         .lean(),
+=======
+    const { patientId, doctorId, status, date, page, limit } =
+      req.query as unknown as ListEncountersQuery;
+
+    const filter: Record<string, unknown> = {
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    };
+    if (patientId) filter.patientId = patientId;
+    if (doctorId) filter.attendingDoctorId = doctorId;
+    if (status) filter.status = status;
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1);
+      filter.createdAt = { $gte: start, $lt: end };
+    }
+
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      EncounterModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+>>>>>>> main
       EncounterModel.countDocuments(filter),
     ]);
 
@@ -48,8 +85,13 @@ router.get(
 // POST /encounters
 router.post(
   '/',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'NURSE'),
   validateRequest({ body: createEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    const invalidCode = await validateDiagnosisCodes(req.body.diagnosis);
+    if (invalidCode) {
+      return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
+    }
     const doc = await EncounterModel.create(req.body);
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   }),
@@ -60,41 +102,59 @@ router.get(
   '/:id',
   validateRequest({ params: encounterIdParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const doc = await EncounterModel.findOne({ 
-      _id: req.params.id, 
-      isActive: true 
+    const doc = await EncounterModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
     });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
   }),
 );
 
-// PATCH /encounters/:id
-// Restricted to DOCTOR and CLINIC_ADMIN roles
-// Only allows updating: chiefComplaint, notes, aiSummary, diagnosis, treatmentPlan
+// PATCH /encounters/:id — only DOCTOR (own) or CLINIC_ADMIN; closed encounters → 409
 router.patch(
   '/:id',
   requireRoles('DOCTOR', 'CLINIC_ADMIN'),
   validateRequest({ params: encounterIdParamSchema, body: patchEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    // Ensure caller can only update encounters in their clinic
     const encounter = await EncounterModel.findOne({
       _id: req.params.id,
       clinicId: req.user!.clinicId,
       isActive: true,
     });
-    
+
     if (!encounter) {
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
-    // Update only allowed fields
-    const allowedFields = ['chiefComplaint', 'notes', 'aiSummary', 'diagnosis', 'treatmentPlan'] as const;
-    const updateData: Record<string, any> = {};
-    
+    if (encounter.status === 'closed' || encounter.status === 'cancelled') {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: `Cannot edit a ${encounter.status} encounter`,
+      });
+    }
+
+    // DOCTOR can only edit their own encounters
+    if (
+      req.user!.role === 'DOCTOR' &&
+      String(encounter.attendingDoctorId) !== req.user!.userId
+    ) {
+      return res.status(403).json({ error: 'Forbidden', message: 'You can only edit your own encounters' });
+    }
+
+    const allowedFields = ['chiefComplaint', 'notes', 'aiSummary', 'diagnosis', 'treatmentPlan', 'vitalSigns', 'prescriptions', 'followUpDate', 'status'] as const;
+    const updateData: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in req.body && req.body[field] !== undefined) {
         updateData[field] = req.body[field];
+      }
+    }
+
+    if (updateData.diagnosis) {
+      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis);
+      if (invalidCode) {
+        return res.status(400).json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
       }
     }
 
@@ -102,42 +162,34 @@ router.patch(
       new: true,
       runValidators: true,
     });
-    
-    if (!doc) {
-      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
-    }
-    
-    return res.json({ status: 'success', data: toEncounterResponse(doc) });
+
+    return res.json({ status: 'success', data: toEncounterResponse(doc!) });
   }),
 );
 
-// DELETE /encounters/:id
-// Soft-delete: marks encounter as inactive
-// Restricted to CLINIC_ADMIN role only
+// DELETE /encounters/:id — soft-delete via status:'cancelled'; CLINIC_ADMIN or SUPER_ADMIN only
 router.delete(
   '/:id',
-  requireRoles('CLINIC_ADMIN'),
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ params: encounterIdParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    // Ensure caller can only delete encounters in their clinic
     const encounter = await EncounterModel.findOne({
       _id: req.params.id,
       clinicId: req.user!.clinicId,
       isActive: true,
     });
-    
+
     if (!encounter) {
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
-    // Soft-delete by setting isActive to false
     const doc = await EncounterModel.findByIdAndUpdate(
       req.params.id,
-      { isActive: false },
-      { new: true }
+      { status: 'cancelled', isActive: false },
+      { new: true },
     );
-    
-    return res.json({ status: 'success', message: 'Encounter deleted', data: toEncounterResponse(doc!) });
+
+    return res.json({ status: 'success', message: 'Encounter cancelled', data: toEncounterResponse(doc!) });
   }),
 );
 
@@ -146,9 +198,10 @@ router.get(
   '/patient/:patientId',
   validateRequest({ params: patientIdParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const docs = await EncounterModel.find({ 
+    const docs = await EncounterModel.find({
       patientId: req.params.patientId,
-      isActive: true 
+      clinicId: req.user!.clinicId,
+      isActive: true,
     }).sort({ createdAt: -1 });
     return res.json({ status: 'success', data: docs.map(toEncounterResponse) });
   }),

@@ -15,6 +15,14 @@ export interface UserPreferences {
   language: string;
   emailNotifications: boolean;
   inAppNotifications: boolean;
+  notificationTypes: {
+    referral_received: boolean;
+    payment_confirmed: boolean;
+    appointment_reminder: boolean;
+    ai_summary_ready: boolean;
+    lab_result_ready: boolean;
+    system: boolean;
+  };
 }
 
 export interface User {
@@ -82,6 +90,14 @@ const userSchema = new Schema(
       language: { type: String, default: "en" },
       emailNotifications: { type: Boolean, default: true },
       inAppNotifications: { type: Boolean, default: true },
+      notificationTypes: {
+        referral_received:    { type: Boolean, default: true },
+        payment_confirmed:    { type: Boolean, default: true },
+        appointment_reminder: { type: Boolean, default: true },
+        ai_summary_ready:     { type: Boolean, default: true },
+        lab_result_ready:     { type: Boolean, default: true },
+        system:               { type: Boolean, default: true },
+      },
     },
   },
   { timestamps: true, versionKey: false },

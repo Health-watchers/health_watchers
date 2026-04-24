@@ -61,6 +61,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Run database migrations
+        run: npm run migrate:up --workspace=api
+        env:
+          MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers_test?authSource=admin
+          NODE_ENV: test
+
       - name: Run tests
         run: npm test
         env:

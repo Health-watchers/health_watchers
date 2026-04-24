@@ -7,6 +7,8 @@ export const createPaymentIntentSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'amount must be a positive numeric string'),
   destination: z.string().min(1, 'destination is required'),
   memo: z.string().optional(),
+  /** 'XLM' | 'USDC' — defaults to 'XLM' */
+  currency: z.enum(['XLM', 'USDC']).optional(),
   assetCode: z.string().optional().default('XLM'),
   issuer: z.string().optional(),
 });

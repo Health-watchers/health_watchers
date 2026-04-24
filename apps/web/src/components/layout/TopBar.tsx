@@ -1,6 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -8,10 +10,16 @@ interface TopBarProps {
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
   const { user, setUser } = useAuth();
+  const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // best-effort
+    }
     setUser(null);
-    // TODO: clear session/token and redirect to /login
+    router.push('/login');
   };
 
   return (
@@ -35,14 +43,15 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
       {/* Center: clinic name */}
       <span className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-neutral-700 hidden sm:block">
-        {user?.clinicName ?? 'Health Watchers Clinic'}
+        {user?.clinicName ?? 'Health Watchers'}
       </span>
 
-      {/* Right: avatar + logout */}
+      {/* Right: notification bell + avatar + logout */}
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div
           className="w-8 h-8 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center select-none"
-          aria-label={`Logged in as ${user?.name}`}
+          aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}
           title={user?.name}
         >
           {user?.avatarInitials ?? '?'}
