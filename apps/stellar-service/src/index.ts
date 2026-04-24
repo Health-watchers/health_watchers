@@ -1,5 +1,6 @@
 // apps/stellar-service/src/index.ts
 
+import './tracing'; // must be first — initialises OpenTelemetry SDK
 import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';

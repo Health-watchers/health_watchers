@@ -20,6 +20,10 @@
   "dependencies": {
     "@google/generative-ai": "^0.3.0",
     "@health-watchers/config": "*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
+    "@opentelemetry/sdk-node": "^0.215.0",
     "@sentry/node": "^8.0.0",
     "@sentry/profiling-node": "^8.0.0",
     "@types/nodemailer": "^7.0.11",

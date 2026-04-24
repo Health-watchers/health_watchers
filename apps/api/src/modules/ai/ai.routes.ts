@@ -11,6 +11,7 @@ import {
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
 import { sendAISummaryNotification } from '@api/lib/email.service';
+import { withSpan } from '@api/utils/tracer';
 
 const router = Router();
 
@@ -51,7 +52,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
           message: 'text must be a non-empty string with at least 10 characters',
         });
       }
-      summary = await generateRawTextSummary(text);
+      summary = await withSpan('ai.summarize', { 'ai.input': 'text' }, async () => generateRawTextSummary(text));
     } else {
       // encounterId input
       if (!isValidObjectId(encounterId)) {
@@ -81,12 +82,14 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         });
       }
 
-      summary = await generateClinicalSummary({
-        chiefComplaint: encounter.chiefComplaint,
-        notes: encounter.notes,
-        diagnosis: encounter.diagnosis,
-        vitalSigns: encounter.vitalSigns,
-      });
+      summary = await withSpan('ai.summarize', { 'ai.input': 'encounter', 'encounter.id': String(encounterId) }, async () =>
+        generateClinicalSummary({
+          chiefComplaint: encounter.chiefComplaint,
+          notes: encounter.notes,
+          diagnosis: encounter.diagnosis,
+          vitalSigns: encounter.vitalSigns,
+        })
+      );
 
       // Store the summary in the encounter
       encounter.aiSummary = summary;

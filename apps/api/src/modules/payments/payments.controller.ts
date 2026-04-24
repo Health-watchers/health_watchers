@@ -16,6 +16,7 @@ import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
+import { withSpan } from '@api/utils/tracer';
 
 const router = Router();
 router.use(authenticate);
@@ -242,7 +243,11 @@ router.post(
       });
     }
 
-    const record = await PaymentRecordModel.create({
+    const record = await withSpan('payment.intent.create', {
+      'payment.asset': normalizedAsset,
+      'payment.amount': amount,
+      'clinic.id': String(clinicId),
+    }, async () => PaymentRecordModel.create({
       intentId,
       amount,
       destination,
@@ -258,7 +263,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
-    });
+    }));
 
     return res.status(201).json({
       status: 'success',
@@ -294,7 +299,9 @@ router.patch(
         .json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
     }
 
-    const verification = await stellarClient.verifyTransaction(txHash);
+    const verification = await withSpan('stellar.transaction.verify', { 'stellar.tx_hash': txHash }, async () =>
+      stellarClient.verifyTransaction(txHash)
+    );
 
     if (!verification.found || !verification.transaction) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });

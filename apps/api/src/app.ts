@@ -1,4 +1,5 @@
-import './config/env'; // must be first — validates env vars
+import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
 import express from 'express';
@@ -33,6 +34,7 @@ import { appointmentRoutes } from './modules/appointments/appointments.controlle
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { apiVersionHeader } from './middlewares/versioning.middleware';
+import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import { notificationRoutes } from './modules/notifications/notifications.controller';
 import { referralRoutes } from './modules/referrals/referrals.controller';
@@ -156,6 +158,7 @@ app.get('/health', (_req, res) =>
 
 // ── API version header on all /api/* responses ────────────────────────────────
 app.use('/api', apiVersionHeader('1.0'));
+app.use('/api', traceIdHeader);
 
 // ── API versions endpoint ─────────────────────────────────────────────────────
 app.get('/api/versions', (_req, res) =>

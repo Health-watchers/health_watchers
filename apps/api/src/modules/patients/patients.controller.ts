@@ -19,6 +19,7 @@ import {
 } from './patients.validation';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { auditLog } from '../audit/audit.service';
+import { withSpan } from '@api/utils/tracer';
 
 const router = Router();
 router.use(authenticate);
@@ -126,18 +127,20 @@ router.post(
     const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
     const searchName = `${firstName} ${lastName}`.toLowerCase();
     const systemId = await nextSystemId(clinicId || req.user!.clinicId);
-    const doc = await PatientModel.create({
-      systemId,
-      firstName,
-      lastName,
-      dateOfBirth: new Date(dateOfBirth),
-      sex,
-      contactNumber,
-      address,
-      clinicId: clinicId || req.user!.clinicId,
-      isActive: true,
-      searchName,
-    });
+    const doc = await withSpan('patient.create', { 'clinic.id': clinicId || req.user!.clinicId }, async () =>
+      PatientModel.create({
+        systemId,
+        firstName,
+        lastName,
+        dateOfBirth: new Date(dateOfBirth),
+        sex,
+        contactNumber,
+        address,
+        clinicId: clinicId || req.user!.clinicId,
+        isActive: true,
+        searchName,
+      })
+    );
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   })
 );
