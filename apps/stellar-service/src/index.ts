@@ -58,6 +58,37 @@ app.get("/verify/:hash", async (req: Request, res: Response) => {
   }
 });
 
+// POST /refund — issue a refund transaction (clinic -> patient, reverse direction)
+app.post("/refund", async (req: Request, res: Response) => {
+  const { fromSecret, toPublic, amount, memo } = req.body;
+  if (!fromSecret || !toPublic || !amount) {
+    return res.status(400).json({ error: "fromSecret, toPublic, amount required" });
+  }
+  try {
+    const fromKeypair = Keypair.fromSecret(fromSecret);
+    const account = await horizon.loadAccount(fromKeypair.publicKey());
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE.toString(),
+      networkPassphrase: config.stellarNetwork === "mainnet"
+        ? "Public Global Stellar Network ; September 2015"
+        : "Test SDF Network ; September 2015",
+    })
+      .addOperation(Operation.payment({ destination: toPublic, asset: Asset.native(), amount: amount.toString() }))
+      .addMemo(memo ? require("@stellar/stellar-sdk").Memo.text(memo) : require("@stellar/stellar-sdk").Memo.none())
+      .setTimeout(30)
+      .build();
+
+    tx.sign(fromKeypair);
+    const result = await horizon.submitTransaction(tx);
+    const refundIntentId = `refund-${result.hash.slice(0, 16)}`;
+    res.json({ success: true, transactionHash: result.hash, refundIntentId });
+  } catch (error: unknown) {
+    const err = error as Error;
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const port = process.env.STELLAR_PORT || 3002;
 app.listen(Number(port), () => {
   console.log(`Health Watchers Stellar Service on port ${port}, network: ${config.stellarNetwork}`);
