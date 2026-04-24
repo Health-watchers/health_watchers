@@ -28,6 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 
 const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), { ssr: false });
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
+const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientReferralsTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -335,6 +336,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
           <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
+          <TabsTrigger value="referrals">Referrals</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -508,6 +510,11 @@ export default function PatientDetailClient({
               <p className="text-sm text-neutral-400">{labels.aiSummaryPlaceholder}</p>
             )}
           </div>
+        </TabsContent>
+
+        {/* Referrals tab */}
+        <TabsContent value="referrals">
+          <PatientReferralsTab patientId={patientId} />
         </TabsContent>
       </Tabs>
 

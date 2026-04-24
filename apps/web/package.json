@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
-    "test:run": "jest --passWithNoTests --forceExit"
+    "test:run": "jest --passWithNoTests --forceExit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@health-watchers/types": "*",
@@ -38,6 +40,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@playwright/test": "^1.44.0",
     "@babel/preset-env": "^7.29.2",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",

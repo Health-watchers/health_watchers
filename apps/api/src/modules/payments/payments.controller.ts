@@ -242,6 +242,15 @@ router.patch(
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
 
+    // Auto-update linked invoice if any (non-blocking)
+    try {
+      const { InvoiceModel } = await import('../invoices/invoice.model');
+      await InvoiceModel.findOneAndUpdate(
+        { paymentIntentId: intentId, status: { $ne: 'paid' } },
+        { status: 'paid', paidAt: new Date(), paidTxHash: txHash },
+      );
+    } catch { /* non-critical */ }
+
     // Send confirmation email to clinic (non-blocking)
     try {
       const { ClinicModel } = await import('../clinics/clinic.model');
