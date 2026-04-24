@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { EncounterModel } from './encounter.model';
+import { EncounterModel, Prescription } from './encounter.model';
 import { toEncounterResponse } from './encounters.transformer';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -12,6 +12,7 @@ import {
   listEncountersQuerySchema,
   ListEncountersQuery,
 } from './encounter.validation';
+import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
@@ -26,16 +27,12 @@ async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<s
 const router = Router();
 router.use(authenticate);
 
-<<<<<<< fix/198-encounters-list-endpoint
 // GET /encounters
-=======
 // GET /encounters — paginated list scoped to the authenticated clinic
->>>>>>> main
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-<<<<<<< fix/198-encounters-list-endpoint
     const { page, limit, patientId, status } = req.query as unknown as ListEncountersQuery;
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
     if (patientId) filter.patientId = patientId;
@@ -49,7 +46,6 @@ router.get(
         .skip(skip)
         .limit(limit)
         .lean(),
-=======
     const { patientId, doctorId, status, date, page, limit } =
       req.query as unknown as ListEncountersQuery;
 
@@ -70,7 +66,6 @@ router.get(
     const skip = (page - 1) * limit;
     const [docs, total] = await Promise.all([
       EncounterModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
->>>>>>> main
       EncounterModel.countDocuments(filter),
     ]);
 
@@ -204,6 +199,106 @@ router.get(
       isActive: true,
     }).sort({ createdAt: -1 });
     return res.json({ status: 'success', data: docs.map(toEncounterResponse) });
+  }),
+);
+
+// ============================================================================
+// PRESCRIPTION ENDPOINTS
+// ============================================================================
+
+// POST /encounters/:id/prescriptions - Add prescription to encounter
+router.post(
+  '/:id/prescriptions',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  validateRequest({ params: encounterIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+
+    if (!encounter) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
+
+    const prescription: Prescription = {
+      ...req.body,
+      prescribedBy: req.user!._id,
+      prescribedAt: new Date(),
+    };
+
+    encounter.prescriptions = encounter.prescriptions || [];
+    encounter.prescriptions.push(prescription);
+    await encounter.save();
+
+    return res.status(201).json({ 
+      status: 'success', 
+      data: toEncounterResponse(encounter),
+      message: 'Prescription added successfully'
+    });
+  }),
+);
+
+// GET /encounters/:id/prescriptions - List prescriptions for encounter
+router.get(
+  '/:id/prescriptions',
+  validateRequest({ params: encounterIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.findOne({
+      _id: req.params.id,
+      isActive: true,
+    }).populate('prescriptions.prescribedBy', 'firstName lastName');
+
+    if (!encounter) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
+
+    return res.json({ 
+      status: 'success', 
+      data: encounter.prescriptions || []
+    });
+  }),
+);
+
+// DELETE /encounters/:id/prescriptions/:prescriptionId - Remove prescription
+router.delete(
+  '/:id/prescriptions/:prescriptionId',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  validateRequest({ params: encounterIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+
+    if (!encounter) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
+
+    if (!encounter.prescriptions || encounter.prescriptions.length === 0) {
+      return res.status(404).json({ error: 'NotFound', message: 'No prescriptions found' });
+    }
+
+    const prescriptionId = req.params.prescriptionId;
+    const initialLength = encounter.prescriptions.length;
+    
+    encounter.prescriptions = encounter.prescriptions.filter(
+      (p: any) => p._id.toString() !== prescriptionId
+    );
+
+    if (encounter.prescriptions.length === initialLength) {
+      return res.status(404).json({ error: 'NotFound', message: 'Prescription not found' });
+    }
+
+    await encounter.save();
+
+    return res.json({ 
+      status: 'success', 
+      message: 'Prescription removed successfully',
+      data: toEncounterResponse(encounter)
+    });
   }),
 );
 
