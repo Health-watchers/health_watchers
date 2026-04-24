@@ -78,14 +78,14 @@ export function SlideOver({
         tabIndex={-1}
         aria-labelledby={title ? 'slide-over-title' : undefined}
       >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 px-6 py-4">
           <div>
             {title && (
               <h2 id="slide-over-title" className="text-lg font-semibold text-neutral-900">
                 {title}
               </h2>
             )}
-            {subtitle && <p className="text-sm text-neutral-500">{subtitle}</p>}
+            {subtitle && <p className="text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}

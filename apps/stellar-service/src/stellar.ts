@@ -286,3 +286,30 @@ export async function getOrderbook(
     throw error;
   }
 }
+
+const STROOPS_PER_XLM = 10_000_000;
+
+function stroopsToXlm(stroops: string): string {
+  return (parseInt(stroops, 10) / STROOPS_PER_XLM).toFixed(7);
+}
+
+/** Fetch fee statistics from Horizon */
+export async function getFeeStats() {
+  const server = getServer();
+  const stats = await server.feeStats();
+  const { fee_charged } = stats;
+  return {
+    slow:     { stroops: fee_charged.p10,  xlm: stroopsToXlm(fee_charged.p10),  confirmationTime: '~60s' },
+    standard: { stroops: fee_charged.p50,  xlm: stroopsToXlm(fee_charged.p50),  confirmationTime: '~30s' },
+    fast:     { stroops: fee_charged.p90,  xlm: stroopsToXlm(fee_charged.p90),  confirmationTime: '~10s' },
+    raw: {
+      min:  fee_charged.min,
+      mode: fee_charged.mode,
+      max:  fee_charged.max,
+      p10:  fee_charged.p10,
+      p50:  fee_charged.p50,
+      p90:  fee_charged.p90,
+      p99:  fee_charged.p99,
+    },
+  };
+}

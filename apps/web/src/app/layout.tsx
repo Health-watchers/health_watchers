@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
+import { ThemeProvider } from 'next-themes';
 import { QueryProvider } from '@/lib/QueryProvider';
 
 import { Toaster } from '@/components/ui';

@@ -26,6 +26,19 @@ function canReadPayments(role: string): boolean {
   );
 }
 
+// GET /payments/fee-estimate — fetch Stellar fee statistics
+router.get(
+  '/fee-estimate',
+  asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      const data = await stellarClient.getFeeEstimate();
+      return res.json({ status: 'success', data });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
 // GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
 router.get(
   '/balance',
@@ -218,11 +231,23 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
+      feeStrategy = 'standard',
     } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
     // `currency` takes precedence over `assetCode` for convenience
     const normalizedAsset = (currency ?? String(assetCode)).toUpperCase().trim();
+
+    // Generate standardized memo: HW:{8-char-intentId}
+    const memo = `HW:${intentId.slice(0, 8).toUpperCase()}`;
+    
+    // Validate memo length (Stellar limit is 28 bytes)
+    if (Buffer.byteLength(memo, 'utf8') > 28) {
+      return res.status(400).json({
+        error: 'MemoTooLong',
+        message: `Generated memo exceeds Stellar's 28-byte limit`,
+      });
+    }
 
     if (normalizedAsset !== 'XLM' && !config.supportedAssets.includes(normalizedAsset)) {
       return res.status(400).json({
@@ -258,7 +283,10 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
+      feeStrategy,
     });
+
+    logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
 
     return res.status(201).json({
       status: 'success',
@@ -294,10 +322,21 @@ router.patch(
         .json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
     }
 
+    // Check for double-confirmation: if txHash is already linked to another confirmed payment
+    const existingPayment = await PaymentRecordModel.findOne({ txHash, status: 'confirmed' });
+    if (existingPayment && existingPayment.intentId !== intentId) {
+      logger.warn({ intentId, txHash, existingIntentId: existingPayment.intentId }, 'Attempted double-confirmation');
+      return res.status(409).json({
+        error: 'TransactionAlreadyUsed',
+        message: `Transaction ${txHash} is already linked to payment intent ${existingPayment.intentId}`,
+      });
+    }
+
     const verification = await stellarClient.verifyTransaction(txHash);
 
     if (!verification.found || !verification.transaction) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+      logger.error({ intentId, txHash }, 'Transaction not found on Stellar');
       return res.status(400).json({
         error: 'TransactionNotFound',
         message: verification.error || 'Transaction not found on Stellar blockchain',
@@ -306,31 +345,66 @@ router.patch(
 
     const tx = verification.transaction;
 
+    // Validate memo matches expected format
+    if (payment.memo) {
+      const txMemo = tx.memo || '';
+      if (txMemo !== payment.memo) {
+        await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+        logger.error({ intentId, txHash, expectedMemo: payment.memo, actualMemo: txMemo }, 'Memo mismatch');
+        return res.status(400).json({
+          error: 'MemoMismatch',
+          message: `Transaction memo '${txMemo}' does not match expected '${payment.memo}'`,
+        });
+      }
+    }
+
+    // Validate destination
     if (tx.to.toLowerCase() !== payment.destination.toLowerCase()) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+      logger.error({ intentId, txHash, expectedDest: payment.destination, actualDest: tx.to }, 'Destination mismatch');
       return res.status(400).json({
         error: 'DestinationMismatch',
         message: `Transaction destination ${tx.to} does not match expected ${payment.destination}`,
       });
     }
 
+    // Validate amount
     const expectedAmount = parseFloat(payment.amount).toFixed(7);
     const txAmount = parseFloat(tx.amount).toFixed(7);
     if (txAmount !== expectedAmount) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+      logger.error({ intentId, txHash, expectedAmount, actualAmount: tx.amount }, 'Amount mismatch');
       return res.status(400).json({
         error: 'AmountMismatch',
         message: `Transaction amount ${tx.amount} does not match expected ${payment.amount}`,
       });
     }
 
+    // Validate asset
     const txAssetCode = tx.asset.split(':')[0].toUpperCase();
     if (txAssetCode !== payment.assetCode.toUpperCase()) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+      logger.error({ intentId, txHash, expectedAsset: payment.assetCode, actualAsset: tx.asset }, 'Asset mismatch');
       return res.status(400).json({
         error: 'AssetMismatch',
         message: `Transaction asset ${tx.asset} does not match expected ${payment.assetCode}`,
       });
+    }
+
+    // Validate network passphrase (if available from verification)
+    if (verification.networkPassphrase && config.stellar.network) {
+      const expectedPassphrase = config.stellar.network === 'mainnet' 
+        ? 'Public Global Stellar Network ; September 2015'
+        : 'Test SDF Network ; September 2015';
+      
+      if (verification.networkPassphrase !== expectedPassphrase) {
+        await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
+        logger.error({ intentId, txHash, expectedNetwork: config.stellar.network, actualPassphrase: verification.networkPassphrase }, 'Network mismatch');
+        return res.status(400).json({
+          error: 'NetworkMismatch',
+          message: `Transaction is on wrong network. Expected ${config.stellar.network}`,
+        });
+      }
     }
 
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
@@ -467,6 +541,36 @@ router.get(
       },
     });
   })
+);
+
+// GET /payments/by-memo/:memo — Look up payment intent by Stellar memo
+router.get(
+  '/by-memo/:memo',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
+    }
+
+    const { memo } = req.params;
+    
+    // Normalize memo to uppercase for case-insensitive lookup
+    const normalizedMemo = memo.toUpperCase();
+
+    const payment = await PaymentRecordModel.findOne({ 
+      memo: normalizedMemo,
+      clinicId: req.user!.clinicId 
+    });
+
+    if (!payment) {
+      return res.status(404).json({ 
+        error: 'NotFound', 
+        message: `No payment intent found with memo '${memo}'` 
+      });
+    }
+
+    logger.info({ memo: normalizedMemo, intentId: payment.intentId }, 'Payment looked up by memo');
+    return res.json({ status: 'success', data: toPaymentResponse(payment) });
+  }),
 );
 
 export const paymentRoutes = router;

@@ -281,8 +281,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                   'border-l-4',
                   isActive
-                    ? 'border-primary-500 bg-primary-50 text-primary-500'
-                    : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-500'
+                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100',
                 ].join(' ')}
               >
                 {item.icon}

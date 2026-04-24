@@ -129,6 +129,28 @@ class StellarClient {
   }
 
   /**
+   * Get fee statistics from stellar-service
+   * Calls GET /fee-stats (public endpoint)
+   */
+  async getFeeEstimate(): Promise<{
+    slow: { stroops: string; xlm: string; confirmationTime: string };
+    standard: { stroops: string; xlm: string; confirmationTime: string };
+    fast: { stroops: string; xlm: string; confirmationTime: string };
+    raw: Record<string, string>;
+  }> {
+    try {
+      const response = await this.client.get('/fee-stats');
+      const { success: _s, ...data } = response.data;
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(error.response?.data?.message ?? `Fee stats unavailable: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {

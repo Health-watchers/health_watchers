@@ -19,6 +19,7 @@ export const config = {
 
   // Database Configuration
   mongoUri: process.env.MONGO_URI || '',
+  mongoMaxPool: parseInt(process.env.MONGO_MAX_POOL_SIZE || '10', 10),
 
   // JWT Authentication
   jwt: {
@@ -76,6 +77,9 @@ export const config = {
     },
     sendgridApiKey: process.env.SENDGRID_API_KEY || '',
   },
+
+  // Redis (used by BullMQ)
+  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 };
 
 if (['development', 'staging'].includes(process.env.NODE_ENV || 'development')) {

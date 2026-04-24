@@ -72,7 +72,13 @@ export default function PaymentsClient() {
     const res = await fetchWithAuth(`${API}/payments/intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        patientId: data.patientId,
+        amount: data.amount,
+        assetCode: data.asset,
+        memo: data.memo,
+        feeStrategy: data.feeStrategy,
+      }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

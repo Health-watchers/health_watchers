@@ -1,5 +1,6 @@
 // apps/stellar-service/src/index.ts
 
+import './tracing'; // must be first — initialises OpenTelemetry SDK
 import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
@@ -12,6 +13,8 @@ import {
   createUsdcTrustline,
   findPaths,
   getOrderbook,
+  checkHorizon,
+  getFeeStats,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -69,6 +72,21 @@ app.get('/network', (_req, res) => {
   });
 });
 
+// ✅ PUBLIC: GET /health - Health check endpoint
+app.get('/health', async (req, res) => {
+  const horizon = await checkHorizon();
+  const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
+  
+  res.json({
+    status,
+    network: stellarConfig.network,
+    horizonUrl: stellarConfig.horizonUrl,
+    horizonStatus: horizon.status,
+    horizonLatency: horizon.latency,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ✅ PROTECTED: POST /fund (requires secret, testnet only)
 app.post('/fund', requireSecret, async (req, res) => {
   // Return 403 on mainnet - Friendbot is testnet-only
@@ -96,6 +114,16 @@ app.post('/intent', requireSecret, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fee-stats (no auth needed)
+app.get('/fee-stats', async (_req, res) => {
+  try {
+    const stats = await getFeeStats();
+    res.json({ success: true, ...stats });
+  } catch (error: any) {
+    res.status(502).json({ error: 'HorizonUnavailable', message: error.message });
   }
 });
 

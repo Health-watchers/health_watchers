@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/Button';
 import { AssetSelector } from '@/components/ui/AssetSelector';
 import { useState, useEffect, useCallback } from 'react';
 import { API_V1 } from '@/lib/api';
+import { FeeEstimateDisplay } from "@/components/payments/FeeEstimateDisplay";
+
+type FeeStrategy = 'slow' | 'standard' | 'fast';
 
 const schema = z.object({
   patientId: z.string().min(1, 'Patient is required'),
@@ -24,6 +27,7 @@ export type PaymentIntentData = z.infer<typeof schema> & {
   destinationAmount?: string;
   maxSourceAmount?: string;
   path?: string[];
+  feeStrategy: FeeStrategy;
 };
 
 interface Props {
@@ -35,6 +39,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   const [pathEstimate, setPathEstimate] = useState<any>(null);
   const [loadingPath, setLoadingPath] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [feeStrategy, setFeeStrategy] = useState<FeeStrategy>('standard');
 
   const {
     register,
@@ -43,7 +48,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     setValue,
     formState: { errors, isSubmitting },
     setError,
-  } = useForm<PaymentIntentData>({
+  } = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: { asset: 'XLM', payWithAsset: 'XLM', slippage: '1' },
   });
@@ -94,7 +99,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     return () => clearInterval(interval);
   }, [fetchPath]);
 
-  const submit = async (data: PaymentIntentData) => {
+  const submit = async (data: z.infer<typeof schema>) => {
     try {
       if (pathEstimate) {
         // Apply slippage to source amount
@@ -107,7 +112,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         data.maxSourceAmount = maxSourceAmount;
         data.path = pathEstimate.path;
       }
-      await onSubmit(data);
+      await onSubmit({ ...data, feeStrategy });
     } catch (err) {
       setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create payment intent.',
@@ -189,6 +194,15 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         helperText="Visible on the Stellar network"
       />
 
+      {/* Fee estimate — only shown for XLM payments */}
+      {asset === 'XLM' && (
+        <FeeEstimateDisplay
+          selected={feeStrategy}
+          onChange={setFeeStrategy}
+          amount={amount}
+        />
+      )}
+
       {/* Summary box — shown once amount + patient are filled */}
       {amount && patientId && (
         <div className="space-y-1 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
@@ -203,7 +217,6 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               {amount} {destinationAsset}
             </span>
           </div>
-          <p className="pt-1 text-xs text-neutral-500">
           {pathEstimate && (
             <div className="flex justify-between text-neutral-600">
               <span>Patient Pays (Estimated)</span>
@@ -212,7 +225,13 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               </span>
             </div>
           )}
-          <p className="pt-1 text-xs text-neutral-400">
+          {asset === 'XLM' && (
+            <div className="flex justify-between text-neutral-600">
+              <span>Fee speed</span>
+              <span className="capitalize">{feeStrategy}</span>
+            </div>
+          )}
+          <p className="text-xs text-neutral-400 pt-1">
             Review carefully — Stellar transactions cannot be reversed.
           </p>
         </div>

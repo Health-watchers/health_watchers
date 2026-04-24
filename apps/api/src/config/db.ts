@@ -7,6 +7,8 @@ export async function connectDB(): Promise<void> {
     logger.error('MONGO_URI is not set');
     process.exit(1);
   }
-  await mongoose.connect(config.mongoUri);
+  await mongoose.connect(config.mongoUri, {
+    maxPoolSize: config.mongoMaxPool ?? 10,
+  });
   logger.info('MongoDB connected');
 }
