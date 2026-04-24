@@ -18,6 +18,7 @@ export interface PaymentRecord {
   destinationAmount?: string;
   maxSourceAmount?: string;
   path?: string[];
+  feeStrategy?: 'slow' | 'standard' | 'fast';
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -44,6 +45,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     destinationAmount: { type: String },
     maxSourceAmount: { type: String },
     path: { type: [String], default: undefined },
+    feeStrategy: { type: String, enum: ['slow', 'standard', 'fast'], default: 'standard' },
   },
   { timestamps: true, versionKey: false }
 );

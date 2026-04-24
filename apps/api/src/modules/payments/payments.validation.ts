@@ -17,6 +17,8 @@ export const createPaymentIntentSchema = z.object({
   destinationAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
   maxSourceAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
   path: z.array(z.string()).optional(),
+  /** Fee speed tier — defaults to 'standard' */
+  feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
 });
 
 export const confirmPaymentSchema = z.object({

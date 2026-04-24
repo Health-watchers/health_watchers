@@ -26,6 +26,19 @@ function canReadPayments(role: string): boolean {
   );
 }
 
+// GET /payments/fee-estimate — fetch Stellar fee statistics
+router.get(
+  '/fee-estimate',
+  asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      const data = await stellarClient.getFeeEstimate();
+      return res.json({ status: 'success', data });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  }),
+);
+
 // GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
 router.get(
   '/balance',
@@ -218,6 +231,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
+      feeStrategy = 'standard',
     } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
@@ -269,6 +283,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
+      feeStrategy,
     });
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
