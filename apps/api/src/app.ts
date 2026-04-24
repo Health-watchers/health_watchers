@@ -21,6 +21,7 @@ import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
+import { healthRoutes } from './modules/health/health.controller';
 import {
   authLimiter,
   forgotPasswordLimiter,
@@ -120,7 +121,7 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && req.url === '/health' },
+    autoLogging: { ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready') },
     redact: ['req.headers.authorization'],
   })
 );
@@ -144,14 +145,7 @@ app.use((req, res, next) => {
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) =>
-  res.json({
-    status: 'ok',
-    service: 'health-watchers-api',
-    timestamp: new Date().toISOString(),
-    cache: getCacheMetrics(),
-  })
-);
+app.use('/health', healthRoutes);
 
 // ── API version header on all /api/* responses ────────────────────────────────
 app.use('/api', apiVersionHeader('1.0'));
