@@ -151,6 +151,24 @@ class StellarClient {
   }
 
   /**
+   * Issue a refund transaction (platform -> patient)
+   * Calls the stellar-service POST /refund endpoint
+   */
+  async issueRefund(
+    toPublicKey: string,
+    amount: string,
+    memo: string,
+  ): Promise<{ transactionHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/refund',
+      { toPublicKey, amount, memo },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {

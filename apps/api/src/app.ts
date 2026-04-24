@@ -16,7 +16,7 @@ import { userManagementRoutes } from './modules/users/user-management.controller
 import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
-import { paymentRoutes } from './modules/payments/payments.controller';
+import paymentsRouter from './modules/payments/payments.routes';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
@@ -184,7 +184,7 @@ app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
-app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);

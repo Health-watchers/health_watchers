@@ -289,13 +289,50 @@ export async function getOrderbook(
 
 const STROOPS_PER_XLM = 10_000_000;
 
+/**
+ * Issue a refund by sending XLM from the platform account to a destination
+ */
+export async function issueRefund(toPublicKey: string, amount: string, memo: string) {
+  assertTransactionLimit(parseFloat(amount));
+
+  const server = getHorizonServer();
+  const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+  const account = await server.loadAccount(sourceKeypair.publicKey());
+  const fee = await server.fetchBaseFee();
+
+  const transaction = new TransactionBuilder(account, {
+    fee: String(fee),
+    networkPassphrase: getNetworkPassphrase(),
+  })
+    .addOperation(
+      Operation.payment({
+        destination: toPublicKey,
+        asset: Asset.native(),
+        amount,
+      })
+    )
+    .addMemo({ type: 'text', value: memo.slice(0, 28) } as any)
+    .setTimeout(300)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  if (stellarConfig.dryRun) {
+    return { transactionHash: 'dry-run-' + transaction.hash().toString('hex'), dryRun: true };
+  }
+
+  const result = await server.submitTransaction(transaction);
+  logger.info({ hash: result.hash, to: toPublicKey, amount }, 'Refund issued');
+  return { transactionHash: result.hash };
+}
+
 function stroopsToXlm(stroops: string): string {
   return (parseInt(stroops, 10) / STROOPS_PER_XLM).toFixed(7);
 }
 
 /** Fetch fee statistics from Horizon */
 export async function getFeeStats() {
-  const server = getServer();
+  const server = getHorizonServer();
   const stats = await server.feeStats();
   const { fee_charged } = stats;
   return {
