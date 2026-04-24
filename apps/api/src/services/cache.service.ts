@@ -86,4 +86,16 @@ export const cache = {
       logger.warn({ err, pattern }, '[cache] delPattern error');
     }
   },
+
+  async ping(): Promise<{ status: string; latency?: number }> {
+    const redis = getClient();
+    if (!redis) return { status: 'disabled' };
+    try {
+      const start = Date.now();
+      await redis.ping();
+      return { status: 'healthy', latency: Date.now() - start };
+    } catch (err) {
+      return { status: 'unhealthy' };
+    }
+  },
 };

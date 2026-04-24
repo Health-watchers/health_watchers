@@ -10,6 +10,7 @@ import {
   verifyIntent,
   getAccountBalance,
   createUsdcTrustline,
+  checkHorizon,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -64,6 +65,21 @@ app.get('/network', (req, res) => {
     platformPublicKey: stellarConfig.platformPublicKey,
     mainnetMode: stellarConfig.network === 'mainnet',
     dryRun: stellarConfig.dryRun,
+  });
+});
+
+// ✅ PUBLIC: GET /health - Health check endpoint
+app.get('/health', async (req, res) => {
+  const horizon = await checkHorizon();
+  const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
+  
+  res.json({
+    status,
+    network: stellarConfig.network,
+    horizonUrl: stellarConfig.horizonUrl,
+    horizonStatus: horizon.status,
+    horizonLatency: horizon.latency,
+    timestamp: new Date().toISOString(),
   });
 });
 
