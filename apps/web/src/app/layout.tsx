@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
+import { ThemeProvider } from 'next-themes';
 import { QueryProvider } from '@/lib/QueryProvider';
 
 import { Toaster } from '@/components/ui';
@@ -83,12 +84,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={inter.variable}>
-      <body className="min-h-screen bg-neutral-50 font-sans antialiased">
-        <NextIntlClientProvider locale={locale} messages={messages}>
-
-          <Toaster />
-        </NextIntlClientProvider>
+    <html lang={locale} className={inter.variable} suppressHydrationWarning>
+      <body className="min-h-screen bg-neutral-50 dark:bg-neutral-900 font-sans antialiased">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <QueryProvider>
+              {children}
+              <Toaster />
+            </QueryProvider>
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

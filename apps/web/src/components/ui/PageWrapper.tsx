@@ -37,11 +37,11 @@ export function PageHeader({
       ].join(" ")}
     >
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900">
+        <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>
         )}
       </div>
       {actions && <div className="shrink-0">{actions}</div>}

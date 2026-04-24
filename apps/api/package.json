@@ -11,8 +11,7 @@
     "lint": "eslint src",
     "test": "jest --passWithNoTests",
     "test:coverage": "jest --coverage --passWithNoTests",
-    "test:watch": "jest --watch"
-    "test": "echo \"Tests temporarily disabled due to TypeScript 6.0 compatibility issues with Jest/Babel\" && exit 0",
+    "test:watch": "jest --watch",
     "migrate:up": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo up",
     "migrate:down": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo down",
     "migrate:status": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo status",

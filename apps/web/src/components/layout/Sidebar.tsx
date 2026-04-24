@@ -136,10 +136,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     <nav
       ref={sidebarRef}
       aria-label="Main navigation"
-      className="flex flex-col h-full w-60 bg-neutral-0 border-r border-neutral-200"
+      className="flex flex-col h-full w-60 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700"
     >
       {/* Logo area */}
-      <div className="flex items-center gap-2 px-5 h-14 border-b border-neutral-200 shrink-0">
+      <div className="flex items-center gap-2 px-5 h-14 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
         <span className="text-primary-500 font-bold text-lg tracking-tight">HealthWatchers</span>
       </div>
 
@@ -157,8 +157,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
                   'border-l-4',
                   isActive
-                    ? 'border-primary-500 bg-primary-50 text-primary-500'
-                    : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-500'
+                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100',
                 ].join(' ')}
               >
                 {item.icon}

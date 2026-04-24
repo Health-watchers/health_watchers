@@ -68,7 +68,7 @@ export function Modal({
         aria-describedby={description ? "modal-description" : undefined}
         className={[
           "fixed left-1/2 top-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2",
-          "bg-white rounded-lg shadow-lg p-6 focus:outline-none",
+          "bg-white dark:bg-neutral-800 rounded-lg shadow-lg p-6 focus:outline-none",
           sizeMap[size],
           className ?? "",
         ].join(" ")}
@@ -79,7 +79,7 @@ export function Modal({
             {title && (
               <h2
                 id="modal-title"
-                className="text-lg font-semibold text-neutral-800"
+                className="text-lg font-semibold text-neutral-800 dark:text-neutral-100"
               >
                 {title}
               </h2>
@@ -87,7 +87,7 @@ export function Modal({
             {description && (
               <p
                 id="modal-description"
-                className="mt-1 text-sm text-neutral-500"
+                className="mt-1 text-sm text-neutral-500 dark:text-neutral-400"
               >
                 {description}
               </p>
@@ -100,7 +100,7 @@ export function Modal({
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-md p-1 text-neutral-400 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="absolute right-4 top-4 rounded-md p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
           aria-label="Close"
         >
           <svg

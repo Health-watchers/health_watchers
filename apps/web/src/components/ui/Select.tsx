@@ -21,7 +21,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="flex flex-col gap-1">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-neutral-700">
+          <label htmlFor={inputId} className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
             {label}
           </label>
         )}
@@ -34,10 +34,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             className={[
-              'w-full appearance-none rounded-md border bg-neutral-0 px-3 py-2 pr-8 text-sm text-neutral-900',
+              'w-full appearance-none rounded-md border bg-white dark:bg-neutral-800 px-3 py-2 pr-8 text-sm text-neutral-900 dark:text-neutral-100',
               'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              hasError ? 'border-danger-500' : 'border-neutral-200',
+              hasError ? 'border-danger-500' : 'border-neutral-200 dark:border-neutral-600',
               className ?? '',
             ].join(' ')}
             {...props}
@@ -58,7 +58,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <p id={`${inputId}-error`} className="text-xs text-danger-500">{error}</p>
         )}
         {!hasError && helperText && (
-          <p id={`${inputId}-helper`} className="text-xs text-neutral-500">{helperText}</p>
+          <p id={`${inputId}-helper`} className="text-xs text-neutral-500 dark:text-neutral-400">{helperText}</p>
         )}
       </div>
     );

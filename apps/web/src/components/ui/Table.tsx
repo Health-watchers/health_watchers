@@ -2,8 +2,8 @@ import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 
 export function Table({ className, children, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto rounded-lg border border-neutral-200">
-      <table className={['w-full text-sm text-neutral-700', className ?? ''].join(' ')} {...props}>
+    <div className="w-full overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-700">
+      <table className={['w-full text-sm text-neutral-700 dark:text-neutral-300', className ?? ''].join(' ')} {...props}>
         {children}
       </table>
     </div>
@@ -12,7 +12,7 @@ export function Table({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function TableHead({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <thead className={['bg-neutral-50 border-b border-neutral-200', className ?? ''].join(' ')} {...props}>
+    <thead className={['bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700', className ?? ''].join(' ')} {...props}>
       {children}
     </thead>
   );
@@ -20,7 +20,7 @@ export function TableHead({ className, children, ...props }: HTMLAttributes<HTML
 
 export function TableBody({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <tbody className={['divide-y divide-neutral-100', className ?? ''].join(' ')} {...props}>
+    <tbody className={['divide-y divide-neutral-100 dark:divide-neutral-700', className ?? ''].join(' ')} {...props}>
       {children}
     </tbody>
   );
@@ -28,7 +28,7 @@ export function TableBody({ className, children, ...props }: HTMLAttributes<HTML
 
 export function TableRow({ className, children, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
-    <tr className={['hover:bg-neutral-50 transition-colors', className ?? ''].join(' ')} {...props}>
+    <tr className={['hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors', className ?? ''].join(' ')} {...props}>
       {children}
     </tr>
   );
@@ -38,7 +38,7 @@ export function TableTh({ className, children, ...props }: ThHTMLAttributes<HTML
   return (
     <th
       scope="col"
-      className={['px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide', className ?? ''].join(' ')}
+      className={['px-4 py-3 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide', className ?? ''].join(' ')}
       {...props}
     >
       {children}
@@ -48,7 +48,7 @@ export function TableTh({ className, children, ...props }: ThHTMLAttributes<HTML
 
 export function TableTd({ className, children, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={['px-4 py-3 text-neutral-700', className ?? ''].join(' ')} {...props}>
+    <td className={['px-4 py-3 text-neutral-700 dark:text-neutral-300', className ?? ''].join(' ')} {...props}>
       {children}
     </td>
   );

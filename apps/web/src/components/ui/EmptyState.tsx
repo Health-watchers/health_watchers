@@ -27,9 +27,9 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className="text-base font-semibold text-neutral-700">{title}</p>
+      <p className="text-base font-semibold text-neutral-700 dark:text-neutral-300">{title}</p>
       {description && (
-        <p className="text-sm text-neutral-500 max-w-xs">{description}</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 max-w-xs">{description}</p>
       )}
       {action && <div className="mt-2">{action}</div>}
     </div>
