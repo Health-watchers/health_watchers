@@ -52,6 +52,8 @@ import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import logger from './utils/logger';
+import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+
 
 const app = express();
 const PORT = process.env.PORT || 4000;
