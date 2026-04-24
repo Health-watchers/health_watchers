@@ -29,8 +29,8 @@ describe('clinicId cross-collection type consistency', () => {
   });
 
   it('all three models agree on the same clinicId type', () => {
-    const types = [EncounterModel, PatientModel, UserModel].map(
-      (m) => getClinicIdSchemaType(m as unknown as { schema: Schema })
+    const types = [EncounterModel, PatientModel, UserModel].map((m) =>
+      getClinicIdSchemaType(m as unknown as { schema: Schema })
     );
     expect(new Set(types).size).toBe(1);
   });

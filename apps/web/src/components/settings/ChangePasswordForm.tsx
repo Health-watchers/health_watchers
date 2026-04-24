@@ -1,22 +1,22 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import PasswordStrengthBar from "./PasswordStrengthBar";
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import PasswordStrengthBar from './PasswordStrengthBar';
 
 const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, "Current password is required"),
-    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string(),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
   });
 
 type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
@@ -34,22 +34,22 @@ export default function ChangePasswordForm() {
   } = useForm<ChangePasswordFormData>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: {
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
     },
   });
 
-  const newPassword = useWatch({ control, name: "newPassword" });
+  const newPassword = useWatch({ control, name: 'newPassword' });
 
   const onSubmit = async (data: ChangePasswordFormData) => {
     setSuccessMessage(null);
     setApiError(null);
 
     try {
-      const res = await fetch("/api/settings/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/settings/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentPassword: data.currentPassword,
           newPassword: data.newPassword,
@@ -58,16 +58,14 @@ export default function ChangePasswordForm() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setApiError(
-          body?.message ?? "Failed to change password. Please try again.",
-        );
+        setApiError(body?.message ?? 'Failed to change password. Please try again.');
         return;
       }
 
-      setSuccessMessage("Password changed successfully");
+      setSuccessMessage('Password changed successfully');
       reset();
     } catch {
-      setApiError("An unexpected error occurred. Please try again.");
+      setApiError('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -78,7 +76,7 @@ export default function ChangePasswordForm() {
         type="password"
         autoComplete="current-password"
         error={errors.currentPassword?.message}
-        {...register("currentPassword")}
+        {...register('currentPassword')}
       />
 
       <div>
@@ -87,7 +85,7 @@ export default function ChangePasswordForm() {
           type="password"
           autoComplete="new-password"
           error={errors.newPassword?.message}
-          {...register("newPassword")}
+          {...register('newPassword')}
         />
         <PasswordStrengthBar password={newPassword} />
       </div>
@@ -97,7 +95,7 @@ export default function ChangePasswordForm() {
         type="password"
         autoComplete="new-password"
         error={errors.confirmPassword?.message}
-        {...register("confirmPassword")}
+        {...register('confirmPassword')}
       />
 
       {successMessage && (
@@ -107,7 +105,7 @@ export default function ChangePasswordForm() {
       )}
 
       {apiError && (
-        <p role="alert" className="text-sm text-danger-500">
+        <p role="alert" className="text-danger-500 text-sm">
           {apiError}
         </p>
       )}

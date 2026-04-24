@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
-    "test:run": "jest --passWithNoTests --forceExit"
+    "test:run": "jest --passWithNoTests --forceExit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@health-watchers/types": "*",
@@ -30,6 +32,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.54.0",
+    "recharts": "^3.8.1",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@playwright/test": "^1.44.0",
     "@babel/preset-env": "^7.29.2",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
@@ -53,6 +57,6 @@
     "fast-check": "^4.7.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "typescript": "6.0.2"
+    "typescript": "^5.0.0"
   }
 }

@@ -78,7 +78,7 @@ function makeToken(role: string, clinicId: string) {
       expiresIn: '15m',
       issuer: 'health-watchers-api',
       audience: 'health-watchers-client',
-    },
+    }
   );
 }
 

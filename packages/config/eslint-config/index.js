@@ -2,6 +2,7 @@
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import security from 'eslint-plugin-security';
+import prettier from 'eslint-config-prettier';
 
 /** @type {import('eslint').Linter.FlatConfig[]} */
 const baseConfig = [
@@ -26,6 +27,8 @@ const baseConfig = [
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  // Must be last — disables ESLint rules that conflict with Prettier
+  prettier,
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.js'],
   },

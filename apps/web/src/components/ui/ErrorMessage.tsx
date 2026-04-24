@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 interface ErrorMessageProps {
   message: string;
@@ -9,7 +9,7 @@ export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
   return (
     <div
       role="alert"
-      className="rounded-md bg-danger-50 border border-danger-200 px-4 py-3 text-sm text-danger-600 flex items-center justify-between gap-4"
+      className="bg-danger-50 border-danger-200 text-danger-600 flex items-center justify-between gap-4 rounded-md border px-4 py-3 text-sm"
     >
       <span>{message}</span>
       {onRetry && (

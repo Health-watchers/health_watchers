@@ -26,28 +26,99 @@ import { PatientModel } from '../apps/api/src/modules/patients/models/patient.mo
 import { PatientCounterModel } from '../apps/api/src/modules/patients/models/patient-counter.model';
 import { EncounterModel } from '../apps/api/src/modules/encounters/encounter.model';
 import { PaymentRecordModel } from '../apps/api/src/modules/payments/models/payment-record.model';
+import { EncounterTemplateModel } from '../apps/api/src/modules/encounters/encounter-template.model';
 
 // ── constants ──────────────────────────────────────────────────────────────
 const CLINIC_ID = new Types.ObjectId('aaaaaaaaaaaaaaaaaaaaaaaa');
 const SEED_PASSWORD = 'Seed@1234!';
 
 const USERS = [
-  { fullName: 'Super Admin',   email: 'superadmin@seed.dev',  role: 'SUPER_ADMIN'  },
-  { fullName: 'Clinic Admin',  email: 'clinicadmin@seed.dev', role: 'CLINIC_ADMIN' },
-  { fullName: 'Dr. Seed User', email: 'doctor@seed.dev',      role: 'DOCTOR'       },
+  { fullName: 'Super Admin', email: 'superadmin@seed.dev', role: 'SUPER_ADMIN' },
+  { fullName: 'Clinic Admin', email: 'clinicadmin@seed.dev', role: 'CLINIC_ADMIN' },
+  { fullName: 'Dr. Seed User', email: 'doctor@seed.dev', role: 'DOCTOR' },
 ] as const;
 
 const PATIENTS = [
-  { firstName: 'Alice',   lastName: 'Johnson',   dob: '1985-03-12', sex: 'F', phone: '555-0101', address: '1 Maple St' },
-  { firstName: 'Bob',     lastName: 'Williams',  dob: '1990-07-22', sex: 'M', phone: '555-0102', address: '2 Oak Ave' },
-  { firstName: 'Carol',   lastName: 'Martinez',  dob: '1978-11-05', sex: 'F', phone: '555-0103', address: '3 Pine Rd' },
-  { firstName: 'David',   lastName: 'Brown',     dob: '2000-01-30', sex: 'M', phone: '555-0104', address: '4 Elm Blvd' },
-  { firstName: 'Eva',     lastName: 'Davis',     dob: '1995-06-18', sex: 'F', phone: '555-0105', address: '5 Cedar Ln' },
-  { firstName: 'Frank',   lastName: 'Garcia',    dob: '1982-09-09', sex: 'M', phone: '555-0106', address: '6 Birch Dr' },
-  { firstName: 'Grace',   lastName: 'Wilson',    dob: '1970-04-25', sex: 'F', phone: '555-0107', address: '7 Walnut Ct' },
-  { firstName: 'Henry',   lastName: 'Anderson',  dob: '1988-12-14', sex: 'M', phone: '555-0108', address: '8 Spruce Way' },
-  { firstName: 'Iris',    lastName: 'Thomas',    dob: '2003-08-03', sex: 'F', phone: '555-0109', address: '9 Ash Pl' },
-  { firstName: 'James',   lastName: 'Jackson',   dob: '1965-02-20', sex: 'M', phone: '555-0110', address: '10 Poplar St' },
+  {
+    firstName: 'Alice',
+    lastName: 'Johnson',
+    dob: '1985-03-12',
+    sex: 'F',
+    phone: '555-0101',
+    address: '1 Maple St',
+  },
+  {
+    firstName: 'Bob',
+    lastName: 'Williams',
+    dob: '1990-07-22',
+    sex: 'M',
+    phone: '555-0102',
+    address: '2 Oak Ave',
+  },
+  {
+    firstName: 'Carol',
+    lastName: 'Martinez',
+    dob: '1978-11-05',
+    sex: 'F',
+    phone: '555-0103',
+    address: '3 Pine Rd',
+  },
+  {
+    firstName: 'David',
+    lastName: 'Brown',
+    dob: '2000-01-30',
+    sex: 'M',
+    phone: '555-0104',
+    address: '4 Elm Blvd',
+  },
+  {
+    firstName: 'Eva',
+    lastName: 'Davis',
+    dob: '1995-06-18',
+    sex: 'F',
+    phone: '555-0105',
+    address: '5 Cedar Ln',
+  },
+  {
+    firstName: 'Frank',
+    lastName: 'Garcia',
+    dob: '1982-09-09',
+    sex: 'M',
+    phone: '555-0106',
+    address: '6 Birch Dr',
+  },
+  {
+    firstName: 'Grace',
+    lastName: 'Wilson',
+    dob: '1970-04-25',
+    sex: 'F',
+    phone: '555-0107',
+    address: '7 Walnut Ct',
+  },
+  {
+    firstName: 'Henry',
+    lastName: 'Anderson',
+    dob: '1988-12-14',
+    sex: 'M',
+    phone: '555-0108',
+    address: '8 Spruce Way',
+  },
+  {
+    firstName: 'Iris',
+    lastName: 'Thomas',
+    dob: '2003-08-03',
+    sex: 'F',
+    phone: '555-0109',
+    address: '9 Ash Pl',
+  },
+  {
+    firstName: 'James',
+    lastName: 'Jackson',
+    dob: '1965-02-20',
+    sex: 'M',
+    phone: '555-0110',
+    address: '10 Poplar St',
+  },
 ] as const;
 
 const COMPLAINTS = [
@@ -59,9 +130,27 @@ const COMPLAINTS = [
 ];
 
 const PAYMENT_RECORDS = [
-  { intentId: 'seed-intent-001', amount: '150.00', destination: 'GBSEED1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Consultation fee',   status: 'confirmed' },
-  { intentId: 'seed-intent-002', amount: '75.50',  destination: 'GBSEED2XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Lab work payment',   status: 'confirmed' },
-  { intentId: 'seed-intent-003', amount: '200.00', destination: 'GBSEED3XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', memo: 'Specialist referral', status: 'pending'   },
+  {
+    intentId: 'seed-intent-001',
+    amount: '150.00',
+    destination: 'GBSEED1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Consultation fee',
+    status: 'confirmed',
+  },
+  {
+    intentId: 'seed-intent-002',
+    amount: '75.50',
+    destination: 'GBSEED2XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Lab work payment',
+    status: 'confirmed',
+  },
+  {
+    intentId: 'seed-intent-003',
+    amount: '200.00',
+    destination: 'GBSEED3XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    memo: 'Specialist referral',
+    status: 'pending',
+  },
 ] as const;
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -100,7 +189,15 @@ async function seed() {
   for (const u of USERS) {
     await UserModel.findOneAndUpdate(
       { email: u.email },
-      { $setOnInsert: { ...u, password: hashedPassword, clinicId: CLINIC_ID, isActive: true, mfaEnabled: false } },
+      {
+        $setOnInsert: {
+          ...u,
+          password: hashedPassword,
+          clinicId: CLINIC_ID,
+          isActive: true,
+          mfaEnabled: false,
+        },
+      },
       { upsert: true, new: true }
     );
     console.log(`   ✔ ${u.role}: ${u.email}`);
@@ -140,7 +237,10 @@ async function seed() {
   console.log('\n📋  Seeding encounters...');
   for (let i = 0; i < 5; i++) {
     const patient = patientDocs[i] as any;
-    const existing = await EncounterModel.findOne({ patientId: patient._id, chiefComplaint: COMPLAINTS[i] });
+    const existing = await EncounterModel.findOne({
+      patientId: patient._id,
+      chiefComplaint: COMPLAINTS[i],
+    });
     if (existing) {
       console.log(`   ↩ skipped (exists): encounter for ${patient.firstName}`);
       continue;
@@ -160,9 +260,55 @@ async function seed() {
     await PaymentRecordModel.findOneAndUpdate(
       { intentId: pr.intentId },
       { $setOnInsert: { ...pr, clinicId: CLINIC_ID.toString() } },
-      { upsert: true, new: true }
-    );
+      { upsert: true, new: true }\n    );
     console.log(`   ✔ ${pr.intentId}: ${pr.amount} XLM (${pr.status})`);
+  }
+
+  // 5. Default encounter templates
+  console.log('\n📝  Seeding encounter templates...');
+  const doctorUser = await UserModel.findOne({ email: 'doctor@seed.dev' });
+  const createdBy = doctorUser?._id ?? new Types.ObjectId();
+  const DEFAULT_TEMPLATES = [
+    {
+      name: 'Annual Physical Exam',
+      category: 'Preventive Care',
+      description: 'Routine annual wellness visit',
+      defaultChiefComplaint: 'Annual physical exam',
+      suggestedTests: ['CBC', 'CMP', 'Lipid Panel', 'HbA1c', 'TSH'],
+    },
+    {
+      name: 'Hypertension Follow-up',
+      category: 'Chronic Disease Management',
+      defaultChiefComplaint: 'Blood pressure check and medication review',
+      suggestedTests: ['BMP', 'EKG'],
+      suggestedDiagnoses: [{ code: 'I10', description: 'Essential hypertension' }],
+    },
+    {
+      name: 'Pediatric Well Visit',
+      category: 'Preventive Care',
+      defaultChiefComplaint: 'Well child visit',
+      suggestedTests: ['Height/Weight', 'Vision Screen', 'Developmental Assessment'],
+    },
+    {
+      name: 'Diabetes Management',
+      category: 'Chronic Disease Management',
+      defaultChiefComplaint: 'Diabetes follow-up and glucose management',
+      suggestedTests: ['HbA1c', 'Fasting Glucose', 'Urine Microalbumin', 'Foot Exam'],
+      suggestedDiagnoses: [{ code: 'E11', description: 'Type 2 diabetes mellitus' }],
+    },
+    {
+      name: 'Acute Respiratory Illness',
+      category: 'Acute Care',
+      defaultChiefComplaint: 'Cough, fever, or shortness of breath',
+      suggestedTests: ['Rapid Flu', 'COVID-19 Test', 'Chest X-Ray'],
+    },
+  ] as const;
+
+  for (const t of DEFAULT_TEMPLATES) {
+    const exists = await EncounterTemplateModel.findOne({ name: t.name, clinicId: CLINIC_ID });
+    if (exists) { console.log(`   ↩ skipped (exists): ${t.name}`); continue; }
+    await EncounterTemplateModel.create({ ...t, clinicId: CLINIC_ID, createdBy, isActive: true });
+    console.log(`   ✔ Template: ${t.name}`);
   }
 
   console.log('\n🎉  Seed complete!\n');

@@ -1,7 +1,7 @@
 /**
  * Simple verification script to test JWT implementation
  * Run with: node verify-jwt-implementation.js
- * 
+ *
  * This script demonstrates that the JWT implementation correctly:
  * 1. Signs tokens with issuer and audience claims
  * 2. Rejects tokens without correct issuer
@@ -54,16 +54,12 @@ console.log('='.repeat(70));
 console.log('\n📋 Test Group: Token Signing with Claims\n');
 
 test('Token is signed with issuer and audience claims', () => {
-  const token = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      issuer: config.issuer,
-      audience: config.audience,
-    }
-  );
-  
+  const token = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    issuer: config.issuer,
+    audience: config.audience,
+  });
+
   const decoded = jwt.decode(token);
   assertEqual(decoded.iss, config.issuer, 'Issuer claim mismatch');
   assertEqual(decoded.aud, config.audience, 'Audience claim mismatch');
@@ -74,21 +70,17 @@ test('Token is signed with issuer and audience claims', () => {
 console.log('\n📋 Test Group: Valid Token Verification\n');
 
 test('Valid token with correct iss and aud is accepted', () => {
-  const token = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      issuer: config.issuer,
-      audience: config.audience,
-    }
-  );
-  
+  const token = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    issuer: config.issuer,
+    audience: config.audience,
+  });
+
   const verified = jwt.verify(token, config.accessTokenSecret, {
     issuer: config.issuer,
     audience: config.audience,
   });
-  
+
   assertEqual(verified.userId, mockPayload.userId, 'Verified payload mismatch');
 });
 
@@ -96,16 +88,12 @@ test('Valid token with correct iss and aud is accepted', () => {
 console.log('\n📋 Test Group: Issuer Validation\n');
 
 test('Token WITHOUT issuer claim is REJECTED', () => {
-  const tokenWithoutIssuer = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      audience: config.audience,
-      // No issuer!
-    }
-  );
-  
+  const tokenWithoutIssuer = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    audience: config.audience,
+    // No issuer!
+  });
+
   try {
     jwt.verify(tokenWithoutIssuer, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -122,16 +110,12 @@ test('Token WITHOUT issuer claim is REJECTED', () => {
 });
 
 test('Token with WRONG issuer is REJECTED', () => {
-  const tokenWithWrongIssuer = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      issuer: 'malicious-service',  // Wrong issuer!
-      audience: config.audience,
-    }
-  );
-  
+  const tokenWithWrongIssuer = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    issuer: 'malicious-service', // Wrong issuer!
+    audience: config.audience,
+  });
+
   try {
     jwt.verify(tokenWithWrongIssuer, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -151,16 +135,12 @@ test('Token with WRONG issuer is REJECTED', () => {
 console.log('\n📋 Test Group: Audience Validation\n');
 
 test('Token WITHOUT audience claim is REJECTED', () => {
-  const tokenWithoutAudience = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      issuer: config.issuer,
-      // No audience!
-    }
-  );
-  
+  const tokenWithoutAudience = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    issuer: config.issuer,
+    // No audience!
+  });
+
   try {
     jwt.verify(tokenWithoutAudience, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -177,16 +157,12 @@ test('Token WITHOUT audience claim is REJECTED', () => {
 });
 
 test('Token with WRONG audience is REJECTED', () => {
-  const tokenWithWrongAudience = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      issuer: config.issuer,
-      audience: 'wrong-audience',  // Wrong audience!
-    }
-  );
-  
+  const tokenWithWrongAudience = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    issuer: config.issuer,
+    audience: 'wrong-audience', // Wrong audience!
+  });
+
   try {
     jwt.verify(tokenWithWrongAudience, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -209,14 +185,14 @@ test('Token from OTHER SERVICE (same secret, different iss/aud) is REJECTED', ()
   // Simulate another service using the same secret
   const otherServiceToken = jwt.sign(
     { userId: 'user123', role: 'ADMIN', clinicId: 'clinic789' },
-    config.accessTokenSecret,  // Same secret!
+    config.accessTokenSecret, // Same secret!
     {
       expiresIn: '15m',
-      issuer: 'other-service-api',      // Different issuer
-      audience: 'other-service-client',  // Different audience
+      issuer: 'other-service-api', // Different issuer
+      audience: 'other-service-client', // Different audience
     }
   );
-  
+
   try {
     jwt.verify(otherServiceToken, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -233,15 +209,11 @@ test('Token from OTHER SERVICE (same secret, different iss/aud) is REJECTED', ()
 });
 
 test('Token with NO claims (legacy format) is REJECTED', () => {
-  const legacyToken = jwt.sign(
-    mockPayload,
-    config.accessTokenSecret,
-    {
-      expiresIn: '15m',
-      // No issuer or audience claims
-    }
-  );
-  
+  const legacyToken = jwt.sign(mockPayload, config.accessTokenSecret, {
+    expiresIn: '15m',
+    // No issuer or audience claims
+  });
+
   try {
     jwt.verify(legacyToken, config.accessTokenSecret, {
       issuer: config.issuer,
@@ -249,7 +221,10 @@ test('Token with NO claims (legacy format) is REJECTED', () => {
     });
     throw new Error('Token should have been rejected but was accepted!');
   } catch (error) {
-    if (error.message.includes('jwt issuer invalid') || error.message.includes('jwt audience invalid')) {
+    if (
+      error.message.includes('jwt issuer invalid') ||
+      error.message.includes('jwt audience invalid')
+    ) {
       // Expected - token was rejected
       return;
     }

@@ -10,7 +10,7 @@ console.log('🔍 Verifying Audit Logging Implementation...\n');
 const checks = {
   passed: 0,
   failed: 0,
-  total: 0
+  total: 0,
 };
 
 function check(name, condition, message) {
@@ -28,50 +28,43 @@ function check(name, condition, message) {
 
 // Check 1: Verify audit model file exists
 const auditModelPath = path.join(__dirname, '../apps/api/src/modules/audit/audit.model.ts');
-check(
-  'Audit Model File',
-  fs.existsSync(auditModelPath),
-  'audit.model.ts exists'
-);
+check('Audit Model File', fs.existsSync(auditModelPath), 'audit.model.ts exists');
 
 // Check 2: Verify audit service file exists
 const auditServicePath = path.join(__dirname, '../apps/api/src/modules/audit/audit.service.ts');
-check(
-  'Audit Service File',
-  fs.existsSync(auditServicePath),
-  'audit.service.ts exists'
-);
+check('Audit Service File', fs.existsSync(auditServicePath), 'audit.service.ts exists');
 
 // Check 3: Verify audit controller file exists
-const auditControllerPath = path.join(__dirname, '../apps/api/src/modules/audit/audit.controller.ts');
-check(
-  'Audit Controller File',
-  fs.existsSync(auditControllerPath),
-  'audit.controller.ts exists'
+const auditControllerPath = path.join(
+  __dirname,
+  '../apps/api/src/modules/audit/audit.controller.ts'
 );
+check('Audit Controller File', fs.existsSync(auditControllerPath), 'audit.controller.ts exists');
 
 // Check 4: Verify audit middleware file exists
 const auditMiddlewarePath = path.join(__dirname, '../apps/api/src/middlewares/audit.middleware.ts');
-check(
-  'Audit Middleware File',
-  fs.existsSync(auditMiddlewarePath),
-  'audit.middleware.ts exists'
-);
+check('Audit Middleware File', fs.existsSync(auditMiddlewarePath), 'audit.middleware.ts exists');
 
 // Check 5: Verify auth middleware file exists
 const authMiddlewarePath = path.join(__dirname, '../apps/api/src/middlewares/auth.middleware.ts');
-check(
-  'Auth Middleware File',
-  fs.existsSync(authMiddlewarePath),
-  'auth.middleware.ts exists'
-);
+check('Auth Middleware File', fs.existsSync(authMiddlewarePath), 'auth.middleware.ts exists');
 
 // Check 6: Verify audit model has required fields
 if (fs.existsSync(auditModelPath)) {
   const modelContent = fs.readFileSync(auditModelPath, 'utf8');
-  const requiredFields = ['userId', 'clinicId', 'action', 'resourceType', 'resourceId', 'ipAddress', 'userAgent', 'outcome', 'timestamp'];
-  
-  requiredFields.forEach(field => {
+  const requiredFields = [
+    'userId',
+    'clinicId',
+    'action',
+    'resourceType',
+    'resourceId',
+    'ipAddress',
+    'userAgent',
+    'outcome',
+    'timestamp',
+  ];
+
+  requiredFields.forEach((field) => {
     check(
       `Model Field: ${field}`,
       modelContent.includes(field),
@@ -94,15 +87,11 @@ if (fs.existsSync(auditModelPath)) {
     'ENCOUNTER_CREATE',
     'ENCOUNTER_UPDATE',
     'PAYMENT_CREATE',
-    'EXPORT_PATIENT_DATA'
+    'EXPORT_PATIENT_DATA',
   ];
-  
-  requiredActions.forEach(action => {
-    check(
-      `Action: ${action}`,
-      modelContent.includes(action),
-      `Action '${action}' defined in enum`
-    );
+
+  requiredActions.forEach((action) => {
+    check(`Action: ${action}`, modelContent.includes(action), `Action '${action}' defined in enum`);
   });
 }
 
@@ -159,7 +148,10 @@ if (fs.existsSync(authControllerPath)) {
 }
 
 // Check 11: Verify patient controller exists with audit logging
-const patientControllerPath = path.join(__dirname, '../apps/api/src/modules/patients/patients.controller.ts');
+const patientControllerPath = path.join(
+  __dirname,
+  '../apps/api/src/modules/patients/patients.controller.ts'
+);
 if (fs.existsSync(patientControllerPath)) {
   const patientContent = fs.readFileSync(patientControllerPath, 'utf8');
   check(

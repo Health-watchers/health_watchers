@@ -16,5 +16,8 @@ COPY . .
 # Expose API port
 EXPOSE 3001
 
+# Set stop signal for graceful shutdown
+STOPSIGNAL SIGTERM
+
 # Start development server
 CMD ["npm", "run", "dev", "--workspace=api"]

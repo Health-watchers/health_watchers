@@ -7,7 +7,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 export const stellarConfig = {
   network: process.env.STELLAR_NETWORK || 'testnet',
-  mainnetConfirmed: process.env.STELLAR_MAINNET_CONFIRMED === 'true',
+  mainnetConfirmed: process.env.MAINNET_CONFIRMED === 'true',
   dryRun: process.env.STELLAR_DRY_RUN === 'true',
   maxTransactionXlm: parseFloat(process.env.STELLAR_MAX_TRANSACTION_XLM || '1000'),
   // Prefer STELLAR_PORT, keep STELLAR_SERVICE_PORT for backward compatibility.
@@ -15,4 +15,7 @@ export const stellarConfig = {
   platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
   // Server-side signing key — never exposed to clients
   stellarSecretKey: process.env.STELLAR_SECRET_KEY || '',
+  horizonUrl: process.env.STELLAR_NETWORK === 'mainnet' 
+    ? 'https://horizon.stellar.org' 
+    : 'https://horizon-testnet.stellar.org',
 };

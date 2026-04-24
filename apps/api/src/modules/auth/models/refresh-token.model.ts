@@ -10,13 +10,13 @@ export interface RefreshToken {
 
 const refreshTokenSchema = new Schema<RefreshToken>(
   {
-    jti:       { type: String, required: true, unique: true, index: true },
-    userId:    { type: String, required: true, index: true },
-    family:    { type: String, required: true, index: true },
-    consumed:  { type: Boolean, default: false },
+    jti: { type: String, required: true, unique: true, index: true },
+    userId: { type: String, required: true, index: true },
+    family: { type: String, required: true, index: true },
+    consumed: { type: Boolean, default: false },
     expiresAt: { type: Date, required: true },
   },
-  { timestamps: false, versionKey: false },
+  { timestamps: false, versionKey: false }
 );
 
 // TTL index — MongoDB auto-removes expired documents

@@ -12,6 +12,12 @@ export interface PaymentRecord {
   patientId?: string;
   assetCode: string;
   assetIssuer?: string | null;
+  // Path payment fields
+  sourceAssetCode?: string;
+  sourceAssetIssuer?: string | null;
+  destinationAmount?: string;
+  maxSourceAmount?: string;
+  path?: string[];
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -32,8 +38,14 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     patientId: { type: String, index: true },
     assetCode: { type: String, required: true, default: 'XLM', uppercase: true, trim: true },
     assetIssuer: { type: String, default: null },
+    // Path payment fields
+    sourceAssetCode: { type: String, uppercase: true, trim: true },
+    sourceAssetIssuer: { type: String, default: null },
+    destinationAmount: { type: String },
+    maxSourceAmount: { type: String },
+    path: { type: [String], default: undefined },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 paymentRecordSchema.index({ status: 1, createdAt: 1 });

@@ -1,5 +1,5 @@
-import { io, Socket } from "socket.io-client";
-import { API_URL } from "@/lib/api";
+import { io, Socket } from 'socket.io-client';
+import { API_URL } from '@/lib/api';
 
 const SOCKET_URL = API_URL;
 

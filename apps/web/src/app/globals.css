@@ -43,3 +43,10 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@layer base {
+  .dark body {
+    background-color: var(--color-neutral-900);
+    color: var(--color-neutral-50);
+  }
+}

@@ -1,5 +1,5 @@
-import { Schema, model, models } from "mongoose";
-import { sanitizeText } from "../../utils/sanitize";
+import { Schema, model, models } from 'mongoose';
+import { sanitizeText } from '../../utils/sanitize';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -12,25 +12,32 @@ export interface VitalSigns {
 }
 
 export interface Diagnosis {
-  code: string;       // ICD-10 code
+  code: string; // ICD-10 code
   description: string;
   isPrimary?: boolean;
 }
 
 export interface Prescription {
-  medication: string;
+  drugName: string;
+  genericName?: string;
   dosage: string;
   frequency: string;
-  duration?: string;
-  notes?: string;
+  duration: string;
+  route: 'oral' | 'topical' | 'injection' | 'inhaled' | 'other';
+  instructions?: string;
+  prescribedBy: Schema.Types.ObjectId;
+  prescribedAt: Date;
+  refillsAllowed: number;
+  allergyOverride?: { allergyId: string; reason: string };
 }
 
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
+  encounteredBy?: Schema.Types.ObjectId; // alias for attendingDoctorId (spec compat)
   chiefComplaint: string;
-  status: "open" | "closed" | "follow-up";
+  status: 'open' | 'closed' | 'follow-up' | 'cancelled';
   notes?: string;
   diagnosis?: Diagnosis[];
   treatmentPlan?: string;
@@ -43,43 +50,54 @@ export interface Encounter {
 
 const vitalSignsSchema = new Schema<VitalSigns>(
   {
-    bloodPressure:    { type: String },
-    heartRate:        { type: Number },
-    temperature:      { type: Number },
-    respiratoryRate:  { type: Number },
+    bloodPressure: { type: String },
+    heartRate: { type: Number },
+    temperature: { type: Number },
+    respiratoryRate: { type: Number },
     oxygenSaturation: { type: Number },
-    weight:           { type: Number },
-    height:           { type: Number },
+    weight: { type: Number },
+    height: { type: Number },
   },
   { _id: false }
 );
 
 const diagnosisSchema = new Schema<Diagnosis>(
   {
-    code:        { type: String, required: true },
+    code: { type: String, required: true },
     description: { type: String, required: true },
-    isPrimary:   { type: Boolean, default: false },
+    isPrimary: { type: Boolean, default: false },
   },
   { _id: false }
 );
 
 const prescriptionSchema = new Schema<Prescription>(
   {
-    medication: { type: String, required: true },
-    dosage:     { type: String, required: true },
-    frequency:  { type: String, required: true },
-    duration:   { type: String },
-    notes:      { type: String },
+    drugName:        { type: String, required: true },
+    genericName:     { type: String },
+    dosage:          { type: String, required: true },
+    frequency:       { type: String, required: true },
+    duration:        { type: String, required: true },
+    route:           { type: String, enum: ['oral', 'topical', 'injection', 'inhaled', 'other'], required: true },
+    instructions:    { type: String },
+    prescribedBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    prescribedAt:    { type: Date, default: Date.now },
+    refillsAllowed:  { type: Number, default: 0 },
+    allergyOverride: {
+      type: new Schema({ allergyId: String, reason: String }, { _id: false }),
+      default: undefined,
+    },
   },
+  { timestamps: true }
 );
 
 const encounterSchema = new Schema<Encounter>(
   {
-    patientId:         { type: Schema.Types.ObjectId, ref: "Patient",  required: true, index: true },
-    clinicId:          { type: Schema.Types.ObjectId, ref: "Clinic",   required: true, index: true },
-    attendingDoctorId: { type: Schema.Types.ObjectId, ref: "User",     required: true, index: true },
+    patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
+    clinicId:          { type: Schema.Types.ObjectId, ref: 'Clinic',   required: true, index: true },
+    attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
+    encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ["open", "closed", "follow-up"], default: "open", index: true },
+    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
     notes:             { type: String },
     treatmentPlan:     { type: String },
     diagnosis:         { type: [diagnosisSchema], default: undefined },
@@ -92,13 +110,16 @@ const encounterSchema = new Schema<Encounter>(
   { timestamps: true, versionKey: false }
 );
 
-const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan", "aiSummary"] as const;
+// Compound index for paginated clinic-scoped queries
+encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
 
-encounterSchema.pre("save", function () {
+const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
+
+encounterSchema.pre('save', function () {
   for (const field of FREE_TEXT_FIELDS) {
     const val = this[field];
     if (val) (this as any)[field] = sanitizeText(val);
   }
 });
 
-export const EncounterModel = models.Encounter || model<Encounter>("Encounter", encounterSchema);
+export const EncounterModel = models.Encounter || model<Encounter>('Encounter', encounterSchema);

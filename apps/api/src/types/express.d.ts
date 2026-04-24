@@ -1,10 +1,11 @@
 export type AppRole =
-  | "SUPER_ADMIN"
-  | "CLINIC_ADMIN"
-  | "DOCTOR"
-  | "NURSE"
-  | "ASSISTANT"
-  | "READ_ONLY";
+  | 'SUPER_ADMIN'
+  | 'CLINIC_ADMIN'
+  | 'DOCTOR'
+  | 'NURSE'
+  | 'ASSISTANT'
+  | 'READ_ONLY'
+  | 'PATIENT';
 
 declare global {
   namespace Express {
@@ -13,14 +14,15 @@ declare global {
         userId: string;
         role: AppRole;
         clinicId: string;
+        patientId?: string;
       };
     }
   }
 }
 
 // Typed request helpers
-import { Request } from "express";
-import { z } from "zod";
+import { Request } from 'express';
+import { z } from 'zod';
 
 export type TypedRequest<
   B = unknown,

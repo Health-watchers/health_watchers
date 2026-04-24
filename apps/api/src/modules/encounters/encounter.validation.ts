@@ -27,21 +27,25 @@ const prescriptionSchema = z.object({
   frequency: z.string().min(1, 'Frequency is required'),
   duration: z.string().optional(),
   notes: z.string().max(1000).optional(),
+  allergyOverride: z.object({
+    allergyId: z.string(),
+    reason: z.string().min(1, 'Override reason is required'),
+  }).optional(),
 });
 
 export const createEncounterSchema = z.object({
-  patientId:         z.string().regex(objectIdRegex, 'Invalid patientId'),
-  clinicId:          z.string().regex(objectIdRegex, 'Invalid clinicId'),
+  patientId: z.string().regex(objectIdRegex, 'Invalid patientId'),
+  clinicId: z.string().regex(objectIdRegex, 'Invalid clinicId'),
   attendingDoctorId: z.string().regex(objectIdRegex, 'Invalid attendingDoctorId'),
-  chiefComplaint:    z.string().min(3, 'chiefComplaint must be at least 3 characters'),
-  status:            z.enum(['open', 'closed', 'follow-up']).optional(),
-  notes:             z.string().max(5000).optional(),
-  treatmentPlan:     z.string().max(5000).optional(),
-  diagnosis:         z.array(diagnosisSchema).optional(),
-  vitalSigns:        vitalSignsSchema,
-  prescriptions:     z.array(prescriptionSchema).optional(),
-  followUpDate:      z.string().datetime({ offset: true }).optional(),
-  aiSummary:         z.string().max(5000).optional(),
+  chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters'),
+  status: z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
+  notes: z.string().max(5000).optional(),
+  treatmentPlan: z.string().max(5000).optional(),
+  diagnosis: z.array(diagnosisSchema).optional(),
+  vitalSigns: vitalSignsSchema,
+  prescriptions: z.array(prescriptionSchema).optional(),
+  followUpDate: z.string().datetime({ offset: true }).optional(),
+  aiSummary: z.string().max(5000).optional(),
 });
 
 export const encounterIdParamSchema = z.object({
@@ -53,16 +57,15 @@ export const patientIdParamSchema = z.object({
 });
 
 export const prescriptionIdParamSchema = z.object({
-  id:             objectId,
+  id: objectId,
   prescriptionId: objectId,
 });
 
 export { prescriptionSchema };
 
-export const updateEncounterSchema = createEncounterSchema.partial().refine(
-  (d) => Object.keys(d).length > 0,
-  'At least one field is required',
-);
+export const updateEncounterSchema = createEncounterSchema
+  .partial()
+  .refine((d) => Object.keys(d).length > 0, 'At least one field is required');
 
 export const patchEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters').optional(),
@@ -70,6 +73,10 @@ export const patchEncounterSchema = z.object({
   aiSummary: z.string().max(5000).optional(),
   diagnosis: z.array(diagnosisSchema).optional(),
   treatmentPlan: z.string().max(5000).optional(),
+  vitalSigns: vitalSignsSchema,
+  prescriptions: z.array(prescriptionSchema).optional(),
+  followUpDate: z.string().datetime({ offset: true }).optional(),
+  status: z.enum(['open', 'closed', 'follow-up']).optional(), // 'cancelled' only via DELETE
 }).refine(
   (d) => Object.keys(d).length > 0,
   'At least one field is required',
@@ -78,7 +85,7 @@ export const patchEncounterSchema = z.object({
 export const listEncountersQuerySchema = z.object({
   patientId: objectId.optional(),
   doctorId: objectId.optional(),
-  status: z.enum(['open', 'closed', 'follow-up']).optional(),
+  status: z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')

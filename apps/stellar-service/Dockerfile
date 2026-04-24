@@ -16,5 +16,8 @@ COPY . .
 # Expose stellar service port
 EXPOSE 3002
 
+# Set stop signal for graceful shutdown
+STOPSIGNAL SIGTERM
+
 # Start development server
 CMD ["npm", "run", "dev", "--workspace=stellar-service"]

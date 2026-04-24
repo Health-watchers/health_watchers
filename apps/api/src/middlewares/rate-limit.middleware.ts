@@ -16,11 +16,13 @@ async function buildStore() {
   if (!redisUrl) return undefined; // in-memory fallback
 
   try {
+    // @ts-expect-error -- 'redis' is an optional peer dependency; not installed in all environments
     const { createClient } = await import('redis');
+    // @ts-expect-error -- 'rate-limit-redis' is an optional peer dependency; not installed in all environments
     const { RedisStore } = await import('rate-limit-redis');
     const client = createClient({ url: redisUrl });
     client.on('error', (err: Error) =>
-      console.error('[rate-limit] Redis error, falling back to in-memory:', err.message),
+      console.error('[rate-limit] Redis error, falling back to in-memory:', err.message)
     );
     await client.connect();
     return new RedisStore({ sendCommand: (...args: string[]) => client.sendCommand(args) });
@@ -53,24 +55,22 @@ storePromise.then((store) => {
       (limiter) => {
         // express-rate-limit exposes the store on the handler object
         (limiter as any).store = store;
-      },
+      }
     );
   }
 });
 
 // ── Auth: 10 req / 15 min per IP ──────────────────────────────────────────────
-export const authLimiter: RateLimitRequestHandler = make(
-  15 * 60 * 1000,
-  10,
-  { error: 'TooManyRequests', message: 'Too many login attempts. Try again in 15 minutes.' },
-);
+export const authLimiter: RateLimitRequestHandler = make(15 * 60 * 1000, 10, {
+  error: 'TooManyRequests',
+  message: 'Too many login attempts. Try again in 15 minutes.',
+});
 
 // ── Forgot-password: 5 req / 1 hour per IP ───────────────────────────────────
-export const forgotPasswordLimiter: RateLimitRequestHandler = make(
-  60 * 60 * 1000,
-  5,
-  { error: 'TooManyRequests', message: 'Too many password reset requests. Try again in 1 hour.' },
-);
+export const forgotPasswordLimiter: RateLimitRequestHandler = make(60 * 60 * 1000, 5, {
+  error: 'TooManyRequests',
+  message: 'Too many password reset requests. Try again in 1 hour.',
+});
 
 // ── AI endpoints: 10 req / 1 min per clinic ──────────────────────────────────
 export const aiLimiter: RateLimitRequestHandler = rateLimit({
@@ -104,8 +104,7 @@ export const paymentLimiter: RateLimitRequestHandler = rateLimit({
 });
 
 // ── General: 300 req / 15 min per IP ─────────────────────────────────────────
-export const generalLimiter: RateLimitRequestHandler = make(
-  15 * 60 * 1000,
-  300,
-  { error: 'TooManyRequests', message: 'Too many requests. Try again in 15 minutes.' },
-);
+export const generalLimiter: RateLimitRequestHandler = make(15 * 60 * 1000, 300, {
+  error: 'TooManyRequests',
+  message: 'Too many requests. Try again in 15 minutes.',
+});

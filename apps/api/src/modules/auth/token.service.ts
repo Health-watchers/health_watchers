@@ -6,6 +6,7 @@ export interface TokenPayload {
   userId: string;
   role: string;
   clinicId: string;
+  patientId?: string;
 }
 
 interface JwtPayload extends TokenPayload {
@@ -23,15 +24,11 @@ export const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const TEMP_TOKEN_EXPIRY = '5m';
 
 export function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(
-    payload,
-    config.jwt.accessTokenSecret,
-    {
-      expiresIn: ACCESS_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign(payload, config.jwt.accessTokenSecret, {
+    expiresIn: ACCESS_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 export interface RefreshTokenMeta {
@@ -43,28 +40,20 @@ export interface RefreshTokenMeta {
 export function signRefreshToken(payload: TokenPayload, family?: string): RefreshTokenMeta {
   const jti = crypto.randomUUID();
   const tokenFamily = family ?? crypto.randomUUID();
-  const token = jwt.sign(
-    { ...payload, jti, family: tokenFamily },
-    config.jwt.refreshTokenSecret,
-    {
-      expiresIn: REFRESH_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  const token = jwt.sign({ ...payload, jti, family: tokenFamily }, config.jwt.refreshTokenSecret, {
+    expiresIn: REFRESH_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
   return { token, jti, family: tokenFamily };
 }
 
 export function signTempToken(userId: string): string {
-  return jwt.sign(
-    { userId },
-    config.jwt.accessTokenSecret,
-    {
-      expiresIn: TEMP_TOKEN_EXPIRY,
-      issuer: JWT_ISSUER,
-      audience: JWT_AUDIENCE,
-    }
-  );
+  return jwt.sign({ userId }, config.jwt.accessTokenSecret, {
+    expiresIn: TEMP_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
 }
 
 export function verifyAccessToken(token: string): TokenPayload | null {
@@ -77,6 +66,7 @@ export function verifyAccessToken(token: string): TokenPayload | null {
       userId: decoded.userId,
       role: decoded.role,
       clinicId: decoded.clinicId,
+      patientId: decoded.patientId,
     };
   } catch (error) {
     return null;
