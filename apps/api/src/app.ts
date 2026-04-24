@@ -52,6 +52,7 @@ import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import logger from './utils/logger';
+import { apiKeyRoutes } from './modules/api-keys/api-keys.routes';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -199,6 +200,7 @@ app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
+app.use('/api/v1/api-keys', apiKeyRoutes);
 
 setupSwagger(app);
 
