@@ -11,13 +11,14 @@ interface MongoServerError extends Error {
   keyValue?: Record<string, unknown>;
 }
 
-export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   // Zod validation errors → 400
   if (err instanceof ZodError) {
     res.status(400).json({
       error: 'ValidationError',
       message: 'Request validation failed',
       details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
+      requestId: req.requestId,
     });
     return;
   }
@@ -28,7 +29,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       path: e.path,
       message: e.message,
     }));
-    res.status(400).json({ error: 'ValidationError', message: err.message, details });
+    res.status(400).json({ error: 'ValidationError', message: err.message, details, requestId: req.requestId });
     return;
   }
 
@@ -37,6 +38,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(400).json({
       error: 'BadRequest',
       message: `Invalid value for field: ${err.path}`,
+      requestId: req.requestId,
     });
     return;
   }
@@ -49,19 +51,20 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       error: 'Conflict',
       message: `Duplicate value for field: ${field}`,
       field,
+      requestId: req.requestId,
     });
     return;
   }
 
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
-    res.status(401).json({ error: 'TokenExpired', message: 'Token has expired' });
+    res.status(401).json({ error: 'TokenExpired', message: 'Token has expired', requestId: req.requestId });
     return;
   }
 
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
-    res.status(401).json({ error: 'InvalidToken', message: 'Invalid token' });
+    res.status(401).json({ error: 'InvalidToken', message: 'Invalid token', requestId: req.requestId });
     return;
   }
 
@@ -73,6 +76,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   res.status(500).json({
     error: 'InternalServerError',
     message: 'An unexpected error occurred',
+    requestId: req.requestId,
     ...(stack ? { stack } : {}),
   });
 }
+
+// Alias for backward compatibility
+export const errorMiddleware = errorHandler;

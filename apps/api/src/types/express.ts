@@ -10,7 +10,8 @@ export type AppRole =
 declare global {
   namespace Express {
     interface Request {
-      user?: { userId: string; role: AppRole; clinicId: string };
+      user?:      { userId: string; role: AppRole; clinicId: string };
+      requestId?: string;
     }
   }
 }
