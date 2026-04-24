@@ -50,6 +50,7 @@ import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
+import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
 import logger from './utils/logger';
 
 const app = express();
@@ -197,6 +198,7 @@ app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
+app.use('/api/v1/subscriptions', subscriptionRoutes);
 
 setupSwagger(app);
 

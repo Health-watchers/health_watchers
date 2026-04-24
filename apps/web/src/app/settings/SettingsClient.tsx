@@ -6,8 +6,9 @@ import { SubNavigation } from '@/components/settings/SubNavigation';
 import { ProfileSection } from '@/components/settings/ProfileSection';
 import { SecuritySection } from '@/components/settings/SecuritySection';
 import { PreferencesSection } from '@/components/settings/PreferencesSection';
+import { SubscriptionSection } from '@/components/settings/SubscriptionSection';
 
-type Section = 'profile' | 'security' | 'preferences';
+type Section = 'profile' | 'security' | 'preferences' | 'subscription';
 
 interface MeResponse {
   status: 'success';
@@ -82,6 +83,7 @@ export default function SettingsClient() {
             />
           )}
           {active === 'preferences' && <PreferencesSection preferences={data.preferences} />}
+          {active === 'subscription' && <SubscriptionSection />}
         </main>
       </div>
     </div>
