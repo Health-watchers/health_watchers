@@ -28,6 +28,13 @@ export default function HomePage() {
         >
           Payments
         </a>
+        <span className="text-secondary-400">|</span>
+        <a 
+          href="/settings" 
+          className="text-primary-600 hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-md px-2 py-1 transition-colors"
+        >
+          Settings
+        </a>
       </nav>
     </PageWrapper>
   );
