@@ -15,6 +15,7 @@ import {
   getOrderbook,
   checkHorizon,
   getFeeStats,
+  buildFeeBumpTransaction,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -207,6 +208,20 @@ app.get('/orderbook', async (req, res) => {
       counterAssetIssuer as string
     );
     return res.json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /fee-bump — wrap inner XDR in a platform-sponsored fee bump tx
+app.post('/fee-bump', requireSecret, async (req, res) => {
+  try {
+    const { innerXdr } = req.body;
+    if (!innerXdr) {
+      return res.status(400).json({ error: 'innerXdr is required' });
+    }
+    const result = await buildFeeBumpTransaction(innerXdr);
+    return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
