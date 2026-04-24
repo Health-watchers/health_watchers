@@ -1,0 +1,40 @@
+# CODEOWNERS file for Health Watchers
+# This file defines code ownership and automatic PR review assignment
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @Health-watchers/core-team
+
+# Security-critical paths require security team review
+/apps/api/src/modules/auth/ @Health-watchers/security-team
+/apps/api/src/lib/encrypt.ts @Health-watchers/security-team
+/apps/api/src/utils/sanitize.ts @Health-watchers/security-team
+/apps/web/src/app/api/auth/ @Health-watchers/security-team
+
+# Payment processing requires finance and security team review
+/apps/stellar-service/ @Health-watchers/finance-team @Health-watchers/security-team
+/apps/web/src/app/payments/ @Health-watchers/finance-team
+/apps/api/src/modules/payments/ @Health-watchers/finance-team
+
+# Infrastructure and CI/CD
+/.github/workflows/ @Health-watchers/devops-team
+/apps/*/Dockerfile @Health-watchers/devops-team
+/.github/dependabot.yml @Health-watchers/devops-team
+/turbo.json @Health-watchers/devops-team
+
+# Frontend components and UI
+/apps/web/src/components/ @Health-watchers/frontend-team
+/apps/web/src/app/ @Health-watchers/frontend-team
+
+# Database models and schemas
+/apps/api/src/modules/*/models/ @Health-watchers/backend-team
+/apps/api/src/modules/*/*.model.ts @Health-watchers/backend-team
+
+# Configuration and environment
+/.env.example @Health-watchers/devops-team
+/package.json @Health-watchers/core-team
+/**/package.json @Health-watchers/core-team
+
+# Documentation
+/*.md @Health-watchers/core-team
+/SECURITY.md @Health-watchers/security-team

@@ -1,24 +1,54 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import { Schema, model, models } from 'mongoose';
 
-export interface IPaymentRecord extends Document {
+export interface PaymentRecord {
   intentId: string;
-  clinicId: string;
   amount: string;
   destination: string;
-  memo: string;
+  memo?: string;
   status: 'pending' | 'confirmed' | 'failed';
+  txHash?: string;
+  confirmedAt?: Date;
+  clinicId: string;
+  patientId?: string;
+  assetCode: string;
+  assetIssuer?: string | null;
+  // Path payment fields
+  sourceAssetCode?: string;
+  sourceAssetIssuer?: string | null;
+  destinationAmount?: string;
+  maxSourceAmount?: string;
+  path?: string[];
 }
 
-const PaymentRecordSchema = new Schema<IPaymentRecord>(
+const paymentRecordSchema = new Schema<PaymentRecord>(
   {
     intentId: { type: String, required: true, unique: true },
-    clinicId: { type: String, required: true },
     amount: { type: String, required: true },
     destination: { type: String, required: true },
-    memo: { type: String, required: true },
-    status: { type: String, enum: ['pending', 'confirmed', 'failed'], default: 'pending' },
+    memo: { type: String },
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'failed'],
+      default: 'pending',
+      index: true,
+    },
+    txHash: { type: String },
+    confirmedAt: { type: Date },
+    clinicId: { type: String, required: true, index: true },
+    patientId: { type: String, index: true },
+    assetCode: { type: String, required: true, default: 'XLM', uppercase: true, trim: true },
+    assetIssuer: { type: String, default: null },
+    // Path payment fields
+    sourceAssetCode: { type: String, uppercase: true, trim: true },
+    sourceAssetIssuer: { type: String, default: null },
+    destinationAmount: { type: String },
+    maxSourceAmount: { type: String },
+    path: { type: [String], default: undefined },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
-export const PaymentRecordModel = mongoose.model<IPaymentRecord>('PaymentRecord', PaymentRecordSchema);
+paymentRecordSchema.index({ status: 1, createdAt: 1 });
+
+export const PaymentRecordModel =
+  models.PaymentRecord || model<PaymentRecord>('PaymentRecord', paymentRecordSchema);

@@ -1,0 +1,49 @@
+# Sentry Alert Rules for Health Watchers
+# Apply via: sentry-cli alerts import .sentry/alerts.yml
+#
+# These rules enforce the acceptance criteria:
+#   - Alert if error rate exceeds 1%
+#   - Alert if p95 response time exceeds 2 seconds
+#   - Alert if /health uptime monitor misses a check
+
+version: 1
+
+alerts:
+  - name: "High Error Rate (>1%)"
+    environment: production
+    dataset: errors
+    query: ""
+    aggregate: "percentage(sessions_crashed, sessions)"
+    timeWindow: 5          # minutes
+    thresholdType: above
+    alertThreshold: 1      # 1%
+    resolveThreshold: 0.5
+    triggers:
+      - label: critical
+        alertThreshold: 1
+        actions:
+          - type: email
+            targetType: team
+          - type: slack
+            targetType: specific_members
+
+  - name: "Slow p95 Response Time (>2s)"
+    environment: production
+    dataset: transactions
+    query: "transaction.op:http.server"
+    aggregate: "p95(transaction.duration)"
+    timeWindow: 5
+    thresholdType: above
+    alertThreshold: 2000   # milliseconds
+    resolveThreshold: 1500
+    triggers:
+      - label: critical
+        alertThreshold: 2000
+        actions:
+          - type: email
+            targetType: team
+
+  - name: "API Uptime Monitor — /health"
+    type: crons
+    monitorSlug: health-watchers-api-uptime
+    # Alert fires within 5 minutes of a missed check-in (checkinMargin: 5 set in code)

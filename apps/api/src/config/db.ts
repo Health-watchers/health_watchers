@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 import { config } from '@health-watchers/config';
+import logger from '../utils/logger';
 
-export const connectDB = async () => {
-  try {
-    await mongoose.connect(config.mongoUri);
-    console.log('✅ MongoDB Connected');
-  } catch (err) {
-    console.error('❌ Database connection error:', err);
+export async function connectDB(): Promise<void> {
+  if (!config.mongoUri) {
+    logger.error('MONGO_URI is not set');
     process.exit(1);
   }
-};
+  await mongoose.connect(config.mongoUri);
+  logger.info('MongoDB connected');
+}

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Validate commit message follows Conventional Commits format
+# https://www.conventionalcommits.org/
+
+commit_msg=$(cat "$1")
+pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?(!)?: .{1,}"
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo ""
+  echo "❌ Invalid commit message format."
+  echo ""
+  echo "   Expected: <type>(<scope>): <description>"
+  echo "   Example:  fix: resolve patient search ReDoS vulnerability"
+  echo ""
+  echo "   Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo ""
+  exit 1
+fi

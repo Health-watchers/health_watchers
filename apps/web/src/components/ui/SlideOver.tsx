@@ -1,119 +1,115 @@
-import React, { useEffect } from 'react'
-import { cn } from '@/lib/utils'
-import { Button } from './button'
+'use client';
 
-export interface SlideOverProps extends React.HTMLAttributes<HTMLDivElement> {
-  isOpen: boolean
-  onClose: () => void
-  title: string
-  subtitle?: string
-  children: React.ReactNode
-  width?: string
-  footer?: React.ReactNode
+import { useEffect, useRef, type ReactNode } from 'react';
+
+interface SlideOverProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  subtitle?: string;
+  children: ReactNode;
+  width?: string;
 }
 
-const SlideOver = React.forwardRef<HTMLDivElement, SlideOverProps>(
-  (
-    {
-      isOpen,
-      onClose,
-      title,
-      subtitle,
-      children,
-      width = 'w-full sm:w-96',
-      footer,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    // Close on Escape key
-    useEffect(() => {
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && isOpen) {
-          onClose()
+export function SlideOver({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  children,
+  width = 'w-full sm:w-96',
+}: SlideOverProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Focus management
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      if (containerRef.current) containerRef.current.focus();
+
+      const handleTab = (e: KeyboardEvent) => {
+        if (e.key !== 'Tab' || !containerRef.current) return;
+        const focusable = containerRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0] as HTMLElement;
+        const last = focusable[focusable.length - 1] as HTMLElement;
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last?.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
         }
-      }
+      };
 
-      if (isOpen) {
-        document.addEventListener('keydown', handleEscape)
-        document.body.style.overflow = 'hidden'
-      }
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
 
+      document.addEventListener('keydown', handleTab);
+      document.addEventListener('keydown', handleEscape);
       return () => {
-        document.removeEventListener('keydown', handleEscape)
-        document.body.style.overflow = 'unset'
-      }
-    }, [isOpen, onClose])
+        document.removeEventListener('keydown', handleTab);
+        document.removeEventListener('keydown', handleEscape);
+        previousFocusRef.current?.focus();
+      };
+    }
+  }, [isOpen, onClose]);
 
-    if (!isOpen) return null
+  if (!isOpen) return null;
 
-    return (
-      <>
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 z-40 bg-black/50 transition-opacity duration-300"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-
-        {/* Slide Over Panel */}
-        <div
-          ref={ref}
-          className={cn(
-            'fixed right-0 top-0 z-50 h-full flex flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out',
-            width,
-            isOpen ? 'translate-x-0' : 'translate-x-full',
-            className
-          )}
-          {...props}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-secondary-200 px-6 py-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold text-secondary-900">{title}</h2>
-              {subtitle && (
-                <p className="text-sm text-secondary-600">{subtitle}</p>
-              )}
-            </div>
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center rounded-md hover:bg-secondary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-              aria-label="Close panel"
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} aria-hidden="true" />
+      {/* Panel */}
+      <div
+        ref={containerRef}
+        className={`fixed inset-y-0 right-0 z-50 flex flex-col bg-white shadow-xl focus:outline-none ${width}`}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        aria-labelledby={title ? 'slide-over-title' : undefined}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
+          <div>
+            {title && (
+              <h2 id="slide-over-title" className="text-lg font-semibold text-neutral-900">
+                {title}
+              </h2>
+            )}
+            {subtitle && <p className="text-sm text-neutral-500">{subtitle}</p>}
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="focus:ring-primary-500 rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:ring-2 focus:outline-none"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-              <svg
-                className="h-6 w-6 text-secondary-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {children}
-          </div>
-
-          {/* Footer */}
-          {footer && (
-            <div className="border-t border-secondary-200 px-6 py-4">
-              {footer}
-            </div>
-          )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
-      </>
-    )
-  }
-)
-
-SlideOver.displayName = 'SlideOver'
-
-export { SlideOver }
+        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+      </div>
+    </>
+  );
+}

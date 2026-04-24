@@ -1,17 +1,97 @@
 {
   "name": "health-watchers",
+  "version": "1.0.0",
+  "description": "A comprehensive healthcare management platform for patient records, encounters, and payments with Stellar blockchain integration",
   "private": true,
+  "license": "MIT",
+  "author": "Health Watchers Team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Health-watchers/health_watchers.git"
+  },
+  "keywords": [
+    "healthcare",
+    "patient-management",
+    "stellar",
+    "blockchain",
+    "medical-records",
+    "monorepo"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "packageManager": "npm@10.9.2",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev":   "turbo run dev",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "start": "turbo run start",
-    "lint":  "turbo run lint"
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "husky",
+    "seed": "ts-node -r tsconfig-paths/register --project scripts/tsconfig.seed.json scripts/seed.ts",
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only",
+    "release": "changeset publish"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
-    "turbo": "latest",
-    "typescript": "latest",
-    "@types/node": "latest"
+    "@changesets/cli": "^2.27.1",
+    "@types/compression": "^1.8.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "25.5.0",
+    "@types/supertest": "^7.2.0",
+    "color-convert": "^2.0.1",
+    "delayed-stream": "^1.0.0",
+    "escape-html": "^1.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "fresh": "^0.5.2",
+    "husky": "^9.1.7",
+    "ipaddr.js": "^2.3.0",
+    "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.0.0-insiders.f7d2598",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.9",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "turbo": "2.8.20",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@types/qrcode": "^1.5.6",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "delayed-stream": "^1.0.0",
+    "dotenv": "^16.0.0",
+    "escape-html": "^1.0.3",
+    "forwarded": "^0.2.0",
+    "forwarded-parse": "^2.1.2",
+    "fresh": "^0.5.2",
+    "helmet": "^8.1.0",
+    "ipaddr.js": "^2.3.0",
+    "mongoose": "^8.0.0",
+    "otplib": "^13.4.0",
+    "qrcode": "^1.5.4",
+    "react-hook-form": "^7.72.0",
+    "socket.io": "^4.8.1",
+    "zod": "^4.3.6"
   }
 }

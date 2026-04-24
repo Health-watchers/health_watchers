@@ -1,0 +1,39 @@
+name: Changeset Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: Check for Changeset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Check for changesets
+        run: |
+          if [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README.md)" ]; then
+            echo "⚠️ No changeset found. If this PR includes user-facing changes, please run 'npm run changeset' to create one."
+            echo ""
+            echo "Skip this check if:"
+            echo "  - This is a documentation-only change"
+            echo "  - This is a CI/build configuration change"
+            echo "  - This is a refactor with no user-facing impact"
+            exit 0
+          else
+            echo "✅ Changeset found"
+          fi
