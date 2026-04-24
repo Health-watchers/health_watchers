@@ -100,7 +100,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               {amount} {asset}
             </span>
           </div>
-          <p className="pt-1 text-xs text-neutral-400">
+          <p className="pt-1 text-xs text-neutral-500">
             Review carefully — Stellar transactions cannot be reversed.
           </p>
         </div>

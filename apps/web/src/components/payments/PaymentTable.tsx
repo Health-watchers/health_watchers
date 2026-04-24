@@ -176,7 +176,7 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
           <tbody className="divide-y divide-neutral-100 bg-white">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
                   No payments match the current filters.
                 </td>
               </tr>
@@ -192,7 +192,7 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                   <td className="px-4 py-3 text-neutral-700">{p.patientId}</td>
                   <td className="px-4 py-3 font-medium text-neutral-900">
                     {p.amount}{' '}
-                    <span className="font-normal text-neutral-400">{p.asset ?? 'XLM'}</span>
+                    <span className="font-normal text-neutral-500">{p.asset ?? 'XLM'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <StatusIndicator status={p.status} />

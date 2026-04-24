@@ -26,7 +26,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <span className="pointer-events-none absolute left-3 text-neutral-400">{leftIcon}</span>
+            <span className="pointer-events-none absolute left-3 text-neutral-500">{leftIcon}</span>
           )}
           <input
             ref={ref}
@@ -36,7 +36,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             className={[
-              'bg-neutral-0 w-full rounded-md border px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400',
+              'bg-neutral-0 w-full rounded-md border px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-500',
               'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
               hasError ? 'border-danger-500' : 'border-neutral-200',
@@ -46,7 +46,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ].join(' ')}
             {...props}
           />
-          {rightIcon && <span className="absolute right-3 text-neutral-400">{rightIcon}</span>}
+          {rightIcon && <span className="absolute right-3 text-neutral-500">{rightIcon}</span>}
         </div>
         {hasError && (
           <p id={`${inputId}-error`} role={errorRole} className="text-danger-500 text-xs">

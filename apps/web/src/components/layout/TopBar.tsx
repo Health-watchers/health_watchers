@@ -49,6 +49,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
       <div className="flex items-center gap-3">
         <NotificationBell />
         <div
+          role="img"
           className="bg-primary-500 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
           aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}
           title={user?.name}

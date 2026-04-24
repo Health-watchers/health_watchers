@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export interface ModalProps {
   open: boolean;
@@ -27,6 +27,44 @@ export function Modal({
   className,
   size = 'md',
 }: ModalProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Focus management
+  useEffect(() => {
+    if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      if (containerRef.current) containerRef.current.focus();
+
+      const handleTab = (e: KeyboardEvent) => {
+        if (e.key !== 'Tab' || !containerRef.current) return;
+        const focusable = containerRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0] as HTMLElement;
+        const last = focusable[focusable.length - 1] as HTMLElement;
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last?.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleTab);
+      return () => {
+        document.removeEventListener('keydown', handleTab);
+        previousFocusRef.current?.focus();
+      };
+    }
+  }, [open]);
+
   // Close on Escape key
   useEffect(() => {
     if (!open) return;
@@ -58,8 +96,10 @@ export function Modal({
 
       {/* Panel */}
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-labelledby={title ? 'modal-title' : undefined}
         aria-describedby={description ? 'modal-description' : undefined}
         className={[
@@ -90,7 +130,7 @@ export function Modal({
         {/* Close button */}
         <button
           onClick={onClose}
-          className="focus:ring-primary-500 absolute top-4 right-4 rounded-md p-1 text-neutral-400 hover:text-neutral-700 focus:ring-2 focus:outline-none"
+          className="focus:ring-primary-500 absolute top-4 right-4 rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:ring-2 focus:outline-none"
           aria-label="Close"
         >
           <svg

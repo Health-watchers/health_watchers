@@ -50,7 +50,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ))}
           </select>
           {/* Chevron icon */}
-          <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-neutral-400">
+          <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-neutral-500">
             <svg
               className="h-4 w-4"
               fill="none"

@@ -300,7 +300,7 @@ export default function PatientDetailClient({
               <Badge variant={patient.gender === 'inactive' ? 'danger' : 'success'}>
                 {labels.active}
               </Badge>
-              <span className="text-xs text-neutral-400">
+              <span className="text-xs text-neutral-500">
                 {labels.registeredOn}: {formatDate((patient as any).createdAt)}
               </span>
             </div>
@@ -318,37 +318,37 @@ export default function PatientDetailClient({
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.systemId}
             </dt>
             <dd className="mt-0.5 font-mono text-neutral-900">{patient.systemId}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.dob}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{formatDate(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.age}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{calcAge(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.sex}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.sex}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.contact}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.contactNumber || 'N/A'}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.address}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.address || 'N/A'}</dd>
@@ -406,7 +406,7 @@ export default function PatientDetailClient({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-neutral-900">{enc.chiefComplaint}</p>
-                      <p className="mt-0.5 text-xs text-neutral-400">{formatDate(enc.createdAt)}</p>
+                      <p className="mt-0.5 text-xs text-neutral-500">{formatDate(enc.createdAt)}</p>
                     </div>
                     <Badge variant={statusVariant(enc.status)}>{enc.status}</Badge>
                   </div>
@@ -467,9 +467,9 @@ export default function PatientDetailClient({
                     <div>
                       <p className="font-medium text-neutral-900">
                         {p.amount}{' '}
-                        <span className="font-normal text-neutral-400">{p.assetCode ?? 'XLM'}</span>
+                        <span className="font-normal text-neutral-500">{p.assetCode ?? 'XLM'}</span>
                       </p>
-                      <p className="mt-0.5 text-xs text-neutral-400">
+                      <p className="mt-0.5 text-xs text-neutral-500">
                         {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                       </p>
                     </div>
@@ -538,13 +538,13 @@ export default function PatientDetailClient({
               <>
                 <p className="text-sm leading-relaxed text-neutral-600">{aiSummary}</p>
                 {aiLastRun && (
-                  <p className="mt-3 text-xs text-neutral-400">
+                  <p className="mt-3 text-xs text-neutral-500">
                     {labels.lastAnalysis}: {aiLastRun.toLocaleString()}
                   </p>
                 )}
               </>
             ) : (
-              <p className="text-sm text-neutral-400">{labels.aiSummaryPlaceholder}</p>
+              <p className="text-sm text-neutral-500">{labels.aiSummaryPlaceholder}</p>
             )}
           </div>
         </TabsContent>

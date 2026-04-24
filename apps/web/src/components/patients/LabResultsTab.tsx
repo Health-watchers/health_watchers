@@ -206,10 +206,10 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                     <p className="font-medium text-neutral-900">
                       {lab.testName}
                       {lab.testCode && (
-                        <span className="ml-2 text-xs text-neutral-400 font-mono">{lab.testCode}</span>
+                        <span className="ml-2 text-xs text-neutral-500 font-mono">{lab.testCode}</span>
                       )}
                     </p>
-                    <p className="text-xs text-neutral-400 mt-0.5">
+                    <p className="text-xs text-neutral-500 mt-0.5">
                       Ordered: {new Date(lab.orderedAt).toLocaleDateString()}
                       {lab.resultedAt && ` · Resulted: ${new Date(lab.resultedAt).toLocaleDateString()}`}
                     </p>

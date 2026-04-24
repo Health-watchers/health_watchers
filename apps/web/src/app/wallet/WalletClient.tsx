@@ -290,7 +290,7 @@ export default function WalletClient() {
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
                 <span className="shrink-0 text-sm text-neutral-500">Public Key</span>
                 <StellarAddressDisplay value={wallet.publicKey} className="text-sm" />
-                <span className="hidden truncate font-mono text-xs text-neutral-400 sm:block">
+                <span className="hidden truncate font-mono text-xs text-neutral-500 sm:block">
                   {wallet.publicKey}
                 </span>
               </div>
@@ -316,7 +316,7 @@ export default function WalletClient() {
                   <span className="mb-0.5 text-base text-neutral-500">USDC</span>
                 </div>
               ) : (
-                <p className="text-sm text-neutral-400">
+                <p className="text-sm text-neutral-500">
                   No USDC trustline — create one to receive USDC payments.
                 </p>
               )}
@@ -379,7 +379,7 @@ export default function WalletClient() {
           <Card>
             <CardHeader>
               <CardTitle>Recent Transactions</CardTitle>
-              <span className="text-xs text-neutral-400">Last 10</span>
+              <span className="text-xs text-neutral-500">Last 10</span>
             </CardHeader>
 
             {wallet.transactions.length === 0 ? (

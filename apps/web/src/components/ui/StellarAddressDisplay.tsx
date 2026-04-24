@@ -37,7 +37,7 @@ export function StellarAddressDisplay({
         </a>
         {/* external link icon */}
         <svg
-          className="h-3 w-3 text-neutral-400"
+          className="h-3 w-3 text-neutral-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
