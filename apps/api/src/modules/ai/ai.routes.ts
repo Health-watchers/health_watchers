@@ -460,4 +460,126 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
   }
 );
 
+// POST /api/v1/ai/risk-assessment
+// Body: { patientId: string }
+router.post('/risk-assessment', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured.' });
+    }
+
+    const { patientId } = req.body;
+    if (!patientId || !isValidObjectId(patientId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Valid patientId is required' });
+    }
+
+    const clinicId = req.user!.clinicId;
+
+    const { PatientModel } = await import('../patients/models/patient.model');
+    const { EncounterModel } = await import('../encounters/encounter.model');
+    const { LabResultModel } = await import('../lab-results/lab-result.model');
+    const { AppointmentModel } = await import('../appointments/appointment.model');
+    const { RiskScoreHistoryModel } = await import('../patients/models/risk-score-history.model');
+    const { calculateRiskScore } = await import('./risk-calculator');
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('@health-watchers/config');
+
+    const patient = await PatientModel.findOne({ _id: patientId, clinicId }).lean();
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+    const [encounters, labResults, missedAppts] = await Promise.all([
+      EncounterModel.find({ patientId, clinicId }).sort({ createdAt: -1 }).limit(20).lean(),
+      LabResultModel.find({ patientId, clinicId, status: 'resulted' }).sort({ createdAt: -1 }).limit(10).lean(),
+      AppointmentModel.countDocuments({ patientId, clinicId, status: 'no-show', scheduledAt: { $gte: ninetyDaysAgo } }),
+    ]);
+
+    // Compute age (DOB is encrypted — use stored string)
+    const dobStr = (patient as any).dateOfBirth as string;
+    const ageYears = dobStr ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
+
+    const allDiagnoses = encounters.flatMap((e) => (e.diagnosis ?? []).map((d: any) => d.description ?? d.code ?? ''));
+    const recentHospitalization = encounters.some((e) => {
+      const d = (e as any).createdAt as Date;
+      return d && new Date(d) >= ninetyDaysAgo && e.status === 'closed';
+    });
+    const abnormalLabCount = labResults.reduce((n, lr) => n + (lr.results ?? []).filter((r: any) => r.flag && r.flag !== 'N').length, 0);
+    const highBP = encounters.some((e) => {
+      const bp = e.vitalSigns?.bloodPressure;
+      if (!bp) return false;
+      const [sys] = bp.split('/').map(Number);
+      return sys >= 140;
+    });
+    const latestWeight = encounters.find((e) => e.vitalSigns?.weight)?.vitalSigns?.weight;
+    const latestHeight = encounters.find((e) => e.vitalSigns?.height)?.vitalSigns?.height;
+    const bmiOver30 = latestWeight && latestHeight ? (latestWeight / ((latestHeight / 100) ** 2)) > 30 : false;
+    const smokingHistory = allDiagnoses.some((d) => d.toLowerCase().includes('smok'));
+
+    const { score, level, factors } = calculateRiskScore({
+      ageYears,
+      diagnoses: allDiagnoses,
+      recentHospitalization,
+      missedAppointments: missedAppts,
+      abnormalLabCount,
+      highBloodPressure: highBP,
+      bmiOver30: !!bmiOver30,
+      smokingHistory,
+    });
+
+    // Ask Gemini for recommendations (PII-stripped)
+    const anonymizedSummary = stripPII(JSON.stringify({
+      ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
+      sex: (patient as any).sex,
+      riskFactors: factors,
+      recentDiagnoses: allDiagnoses.slice(0, 5),
+      abnormalLabCount,
+      missedAppointments: missedAppts,
+    }));
+
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `You are a clinical decision support AI. Based on the following anonymized patient risk profile, provide 2-3 concise clinical recommendations. Respond in plain text only.\n\nRisk Score: ${score}/100 (${level})\nRisk Factors: ${factors.join(', ')}\nPatient Profile: ${anonymizedSummary}`;
+
+    let recommendations = '';
+    try {
+      const result = await aiModel.generateContent(prompt);
+      recommendations = result.response.text().trim();
+    } catch {
+      recommendations = 'AI recommendations unavailable.';
+    }
+
+    // Persist to patient + history
+    const now = new Date();
+    const nextReview = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    await PatientModel.findByIdAndUpdate(patientId, {
+      riskScore: score,
+      riskLevel: level,
+      riskFactors: factors,
+      lastRiskCalculatedAt: now,
+      nextRiskReviewDate: nextReview,
+    });
+
+    await RiskScoreHistoryModel.create({
+      patientId,
+      clinicId,
+      riskScore: score,
+      riskLevel: level,
+      riskFactors: factors,
+      recommendations,
+      calculatedAt: now,
+      source: 'ai',
+    });
+
+    return res.json({
+      status: 'success',
+      data: { patientId, riskScore: score, riskLevel: level, riskFactors: factors, recommendations, disclaimer: AI_DISCLAIMER },
+    });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI risk-assessment error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
 export default router;

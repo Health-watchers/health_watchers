@@ -578,3 +578,17 @@ router.delete(
 );
 
 export const patientRoutes = router;
+
+// GET /api/v1/patients/:id/risk-history
+router.get(
+  '/:id/risk-history',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    const history = await RiskScoreHistoryModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
+      .sort({ calculatedAt: -1 })
+      .limit(20)
+      .lean();
+    return res.json({ status: 'success', data: history });
+  }),
+);

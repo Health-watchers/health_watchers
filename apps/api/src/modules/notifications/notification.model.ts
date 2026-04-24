@@ -6,6 +6,7 @@ export const NOTIFICATION_TYPES = [
   'appointment_reminder',
   'ai_summary_ready',
   'lab_result_ready',
+  'high_risk_patient',
   'system',
 ] as const;
 

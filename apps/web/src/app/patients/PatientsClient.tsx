@@ -4,8 +4,9 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { type Patient, formatDate } from '@health-watchers/types';
-import { ErrorMessage, TableSkeleton, ModuleEmptyState } from '@/components/ui';
+import { ErrorMessage, TableSkeleton, ModuleEmptyState, Badge } from '@/components/ui';
 import { queryKeys } from '@/lib/queryKeys';
+import { API_URL } from '@/lib/api';
 
 interface Labels {
   title: string;
@@ -21,17 +22,22 @@ interface Labels {
   registerNew: string;
 }
 
-import { API_URL } from '@/lib/api';
+type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+function riskVariant(level?: RiskLevel) {
+  if (level === 'critical') return 'danger';
+  if (level === 'high') return 'danger';
+  if (level === 'medium') return 'warning';
+  if (level === 'low') return 'success';
+  return 'default';
+}
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState('');
   const debounceTimer = useRef<NodeJS.Timeout>();
+  const [inputValue, setInputValue] = useState('');
 
-  const {
-    data: patients = [],
-    isLoading,
-    error,
-  } = useQuery({
+  const { data: patients = [], isLoading, error } = useQuery({
     queryKey: queryKeys.patients.list(searchQuery || undefined),
     queryFn: async () => {
       const url = searchQuery
@@ -44,8 +50,6 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
     },
   });
 
-  const [inputValue, setInputValue] = useState('');
-
   const handleSearch = (value: string) => {
     setInputValue(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -54,7 +58,6 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* ── Page header ───────────────────────────────────── */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{labels.title}</h1>
         <Link
@@ -67,7 +70,6 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         </Link>
       </div>
 
-      {/* ── Search bar ────────────────────────────────────── */}
       <div className="mb-6">
         <input
           id="patient-search"
@@ -79,8 +81,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           aria-label={labels.search}
         />
       </div>
+
       {isLoading ? (
-        <TableSkeleton columns={6} rows={5} />
+        <TableSkeleton columns={7} rows={5} />
       ) : error ? (
         <ErrorMessage
           message={error instanceof Error ? error.message : 'Failed to load patients.'}
@@ -102,23 +105,25 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         />
       ) : (
         <>
+          {/* Mobile cards */}
           <div className="flex flex-col gap-4 md:hidden">
-            {patients.map((p: Patient) => (
+            {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
                 <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.name}</p>
-                <p className="font-medium text-gray-900">
-                  {p.firstName} {p.lastName}
-                </p>
+                <p className="font-medium text-gray-900">{p.firstName} {p.lastName}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.dob}</p>
                 <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.sex}</p>
                 <p className="text-gray-700">{p.sex}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">
-                  {labels.contact}
-                </p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.contact}</p>
                 <p className="text-gray-700">{p.contactNumber || 'N/A'}</p>
+                {p.riskLevel && (
+                  <div className="mt-2">
+                    <Badge variant={riskVariant(p.riskLevel)}>{p.riskLevel} risk</Badge>
+                  </div>
+                )}
                 <Link
                   href={`/patients/${p._id}`}
                   className="mt-3 inline-block rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
@@ -129,42 +134,37 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             ))}
           </div>
 
+          {/* Desktop table */}
           <div className="hidden overflow-x-auto md:block">
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.id}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.name}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.dob}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.sex}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.contact}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.view}
-                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.id}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.name}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.dob}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.sex}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.contact}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Risk</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.view}</th>
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p: Patient) => (
+                {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
                   <tr key={p._id} className="even:bg-gray-50">
                     <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.firstName} {p.lastName}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {formatDate(p.dateOfBirth)}
-                    </td>
+                    <td className="border border-gray-200 px-4 py-2">{p.firstName} {p.lastName}</td>
+                    <td className="border border-gray-200 px-4 py-2">{formatDate(p.dateOfBirth)}</td>
                     <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
                     <td className="border border-gray-200 px-4 py-2">{p.contactNumber || 'N/A'}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {p.riskLevel ? (
+                        <Badge variant={riskVariant(p.riskLevel)}>
+                          {p.riskLevel}{p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
+                        </Badge>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="border border-gray-200 px-4 py-2">
                       <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
                         {labels.view}
