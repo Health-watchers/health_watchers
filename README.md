@@ -2,7 +2,7 @@
 
 > **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
 
-[![CI Status](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)

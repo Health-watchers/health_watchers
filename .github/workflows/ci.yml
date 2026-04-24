@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
@@ -6,33 +6,47 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+env:
+  NODE_VERSION: 18
+
 jobs:
-  lint:
-    name: Lint
+  # Stage 1: Quality Checks (parallel)
+  quality-checks:
+    name: Quality Checks
     runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        check: [typecheck, lint, format]
+        node-version: [18, 20]
+    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
       
       - name: Install dependencies
         run: npm ci
       
-      - name: Run linting
-        run: npm run lint
-
-      - name: Check formatting
+      - name: TypeScript type checking
+        if: matrix.check == 'typecheck'
+        run: npm run typecheck
+      
+      - name: ESLint (zero-warning policy)
+        if: matrix.check == 'lint'
+        run: npm run lint -- --max-warnings 0
+      
+      - name: Prettier format check
+        if: matrix.check == 'format'
         run: npm run format:check
 
-      - name: Typecheck API
-        run: npm run typecheck --workspace=api
-
-  test:
-    name: Test
+  # Stage 2: Security Scanning (parallel)
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
     
     steps:
@@ -41,12 +55,58 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       
       - name: Install dependencies
         run: npm ci
       
+      - name: npm audit (fail on high/critical)
+        run: npm audit --audit-level=high
+      
+      - name: Check dependency licenses
+        run: |
+          npx license-checker --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" || echo "License check failed - review manually"
+        continue-on-error: true
+      
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # Stage 3: Test Suite
+      - name: Typecheck API
+        run: npm run typecheck --workspace=api
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: [quality-checks]
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run unit tests
+        run: npm test
+        env:
+          MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers_test?authSource=admin
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-min-32-chars-long
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-min-32-chars-long
+          API_PORT: 3001
       - name: Run database migrations
         run: npm run migrate:up --workspace=api
         env:
@@ -63,10 +123,19 @@ jobs:
           NODE_ENV: test
       
       - name: Generate coverage report
+        run: npm run test:coverage || echo "Coverage script not configured"
         run: npm run test:coverage --workspace=apps/api || echo "Coverage script not found, skipping"
         continue-on-error: true
+        env:
+          MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers_test?authSource=admin
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-min-32-chars-long
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-min-32-chars-long
+          API_PORT: 3001
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
       
       - name: Upload coverage to Codecov
+        if: matrix.node-version == 18
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -75,37 +144,59 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
+  # Stage 4: Build
   build:
-    name: Build
+    name: Build Applications
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [quality-checks, security-scan, test]
     
     strategy:
       matrix:
         app: [web, api, stellar-service]
+        node-version: [18, 20]
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
       
       - name: Install dependencies
         run: npm ci
+      
+      - name: Setup Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
       
       - name: Build ${{ matrix.app }}
         run: npm run build --workspace=${{ matrix.app }}
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
+      
+      - name: Upload build artifacts
+        if: matrix.node-version == 18
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.app }}
+          path: |
+            apps/${{ matrix.app }}/dist
+            apps/${{ matrix.app }}/.next
+          retention-days: 7
 
+  # Docker Build
   docker:
-    name: Docker Build
+    name: Docker Build & Test
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [build]
+    if: github.event_name == 'push'
     
     steps:
       - uses: actions/checkout@v4
@@ -125,29 +216,72 @@ jobs:
           docker-compose ps
           docker-compose logs
           docker-compose down
+      
+      - name: Login to Docker Hub
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Push Docker images
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker-compose push || echo "Docker push skipped - configure DOCKER_USERNAME and DOCKER_PASSWORD secrets"
 
-  security:
-    name: Security Scan
+  # Stage 5: Deploy (main branch only)
+  deploy-staging:
+    name: Deploy to Staging
     runs-on: ubuntu-latest
+    needs: [build, docker]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.health-watchers.app
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
+          path: artifacts
       
-      - name: Install dependencies
-        run: npm ci
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "This is a placeholder for actual deployment"
+          echo "Configure your deployment strategy:"
+          echo "  - AWS: Use aws-actions/configure-aws-credentials + aws deploy"
+          echo "  - Vercel: Use vercel-action"
+          echo "  - Kubernetes: Use kubectl or helm"
+          echo "  - Docker: Use docker-compose or docker stack deploy"
       
-      - name: Run npm audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests against staging..."
+          echo "Placeholder for smoke tests"
+          echo "Example: curl https://staging.health-watchers.app/health"
+  
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://health-watchers.app
+    
+    steps:
+      - uses: actions/checkout@v4
       
-      - name: Run Snyk security scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          echo "This requires manual approval in GitHub Actions"
+          echo "Configure your production deployment strategy"
