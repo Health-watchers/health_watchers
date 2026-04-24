@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
+import { userManagementRoutes } from './modules/users/user-management.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
@@ -177,7 +178,8 @@ app.use('/api/v1', generalLimiter);
 app.use('/api/v1/auth/forgot-password', forgotPasswordLimiter);
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/clinics', clinicRoutes);
-app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/users', userManagementRoutes); // User management endpoints
+app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);

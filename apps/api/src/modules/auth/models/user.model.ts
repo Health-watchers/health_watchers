@@ -44,6 +44,7 @@ export interface User {
   failedLoginAttempts: number;
   failedMfaAttempts: number;
   lockedUntil?: Date; // brute-force protection
+  mustChangePassword?: boolean; // Force password change on next login
   preferences: UserPreferences;
 }
 
@@ -103,6 +104,7 @@ const userSchema = new Schema(
       default: undefined,
       index: true,
     },
+    mustChangePassword: { type: Boolean, default: false },
     preferences: {
       language: { type: String, default: 'en' },
       emailNotifications: { type: Boolean, default: true },
