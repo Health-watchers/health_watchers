@@ -14,6 +14,7 @@ import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
+import { medicalHistoryRoutes } from './modules/patients/medical-history.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
 import paymentsRouter from './modules/payments/payments.routes';
@@ -194,6 +195,7 @@ app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
