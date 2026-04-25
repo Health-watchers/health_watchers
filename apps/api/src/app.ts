@@ -73,6 +73,7 @@ import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import { mongodbConnectionPoolSize } from './services/metrics.service';
+import scheduleRoutes from './modules/schedules/schedules.routes';
 
 
 const app = express();
@@ -230,6 +231,7 @@ app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
+app.use('/api/v1/schedules', scheduleRoutes);
 
 setupSwagger(app);
 
