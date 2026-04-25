@@ -23,6 +23,7 @@ import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
 import { assertMainnetSafety } from './guards.js';
+import { metricsMiddleware, metricsHandler } from './metrics.js';
 
 dotenv.config();
 
@@ -63,6 +64,10 @@ app.use(
     redact: ['req.headers.authorization'],
   })
 );
+app.use(metricsMiddleware);
+
+// ✅ PUBLIC: GET /metrics — Prometheus metrics
+app.get('/metrics', metricsHandler);
 
 // ✅ PUBLIC: GET /network - Network status endpoint
 app.get('/network', (_req, res) => {
