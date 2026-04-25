@@ -64,6 +64,7 @@ import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
+import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 
@@ -213,6 +214,8 @@ app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
+app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 
 setupSwagger(app);
 

@@ -1,0 +1,45 @@
+# ============================================================
+# Production environment overrides
+# Apply with: helm upgrade --install health-watchers ./helm/health-watchers \
+#   -f helm/health-watchers/values.yaml \
+#   -f helm/health-watchers/values-production.yaml \
+#   --namespace health-watchers
+# ============================================================
+
+api:
+  replicaCount: 2
+  hpa:
+    minReplicas: 2
+    maxReplicas: 10
+  env:
+    NODE_ENV: "production"
+    LOG_LEVEL: "info"
+    OTEL_SAMPLING_RATE: "0.1"
+
+web:
+  replicaCount: 2
+  env:
+    NODE_ENV: "production"
+    NEXT_PUBLIC_STELLAR_NETWORK: "mainnet"
+
+stellarService:
+  replicaCount: 1
+  env:
+    NODE_ENV: "production"
+    STELLAR_NETWORK: "mainnet"
+    MAINNET_CONFIRMED: "true"
+    STELLAR_DRY_RUN: "false"
+
+ingress:
+  host: app.healthwatchers.example.com
+  tls:
+    secretName: health-watchers-tls
+
+secrets:
+  # Use External Secrets Operator in production
+  useExternalSecrets: true
+  externalSecretStore: health-watchers-secret-store
+  externalSecretRefreshInterval: 1h
+
+redis:
+  enabled: true
