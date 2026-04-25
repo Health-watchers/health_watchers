@@ -18,6 +18,7 @@ import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
+import { emitToClinic } from '@api/realtime/socket';
 
 const router = Router();
 router.use(authenticate);
@@ -472,6 +473,12 @@ router.patch(
       /* non-critical */
     }
 
+    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
+      paymentId: String(updatedPayment!._id),
+      txHash,
+      amount: updatedPayment!.amount,
+      assetCode: updatedPayment!.assetCode,
+    });
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   })
 );

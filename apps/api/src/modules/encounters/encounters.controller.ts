@@ -17,6 +17,7 @@ import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { auditLog } from '../audit/audit.service';
+import { emitToClinic } from '@api/realtime/socket';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -132,6 +133,7 @@ router.post(
     }
 
     const doc = await EncounterModel.create(req.body);
+    emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   })
 );
@@ -204,6 +206,7 @@ router.patch(
       runValidators: true,
     });
 
+    emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
     return res.json({ status: 'success', data: toEncounterResponse(doc!) });
   }),
 );
