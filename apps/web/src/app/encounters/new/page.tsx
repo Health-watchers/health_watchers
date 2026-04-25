@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { Input, Button, Textarea } from '@/components/ui';
+import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
 
@@ -18,10 +18,29 @@ interface PatientHit {
   dateOfBirth: string;
 }
 
+interface FullPatient extends PatientHit {
+  sex: 'M' | 'F' | 'O';
+}
+
 interface DiagnosisEntry {
   code: string;
   description: string;
   isPrimary: boolean;
+}
+
+interface AiDifferential {
+  diagnosis: string;
+  icdCode: string;
+  probability: 'high' | 'medium' | 'low';
+  reasoning: string;
+  recommendedTests: string[];
+}
+
+interface AiResponse {
+  success: boolean;
+  differentials: AiDifferential[];
+  urgency: 'routine' | 'urgent' | 'emergency';
+  disclaimer: string;
 }
 
 // ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
@@ -104,6 +123,27 @@ export default function NewEncounterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  // AI Suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<AiResponse | null>(null);
+  const [fetchingAi, setFetchingAi] = useState(false);
+  const [fullPatient, setFullPatient] = useState<FullPatient | null>(null);
+
+  // Fetch full patient data when selected
+  const fetchFullPatient = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_V1}/patients/${id}`);
+      const data = await res.json();
+      if (data.success) setFullPatient(data.data);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Effect to fetch prefilled patient
+  useState(() => {
+    if (prefilledPatientId) fetchFullPatient(prefilledPatientId);
+  });
+
   // ── Patient search ──────────────────────────────────────────────────────────
 
   const searchPatients = useCallback((q: string) => {
@@ -177,6 +217,67 @@ export default function NewEncounterPage() {
       e.followUpDate = 'Follow-up date must be in the future';
     setErrors(e);
     return Object.keys(e).length === 0;
+  }
+
+  // ── AI Suggestions ─────────────────────────────────────────────────────────
+
+  async function getAiSuggestions() {
+    if (!chiefComplaint.trim()) {
+      setErrors((prev) => ({ ...prev, chiefComplaint: 'Enter a chief complaint first' }));
+      return;
+    }
+
+    const patientId = selectedPatient?._id ?? prefilledPatientId;
+    if (!patientId) {
+      setErrors((prev) => ({ ...prev, patient: 'Select a patient first' }));
+      return;
+    }
+
+    setFetchingAi(true);
+    setAiSuggestions(null);
+    setSubmitError('');
+
+    try {
+      // Extract symptoms from notes (simple comma split for now)
+      const symptoms = notes
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 2);
+
+      const vitalSigns: Record<string, number | string> = {};
+      if (bp) vitalSigns.bloodPressure = bp;
+      if (hr) vitalSigns.heartRate = parseFloat(hr);
+      if (temp) vitalSigns.temperature = parseFloat(toC(temp).toFixed(1));
+      if (spo2) vitalSigns.oxygenSaturation = parseFloat(spo2);
+
+      const age = fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined;
+
+      const res = await fetch(`${API_V1.replace('/api/v1', '')}/api/v1/ai/differential-diagnosis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chiefComplaint: chiefComplaint.trim(),
+          symptoms: symptoms.length > 0 ? symptoms : [chiefComplaint.trim()],
+          vitalSigns: Object.keys(vitalSigns).length > 0 ? vitalSigns : undefined,
+          patientAge: age,
+          patientSex: fullPatient?.sex,
+          relevantHistory: notes.slice(0, 500), // simplistic history extraction
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Failed to get suggestions');
+      setAiSuggestions(data);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'AI suggestion failed');
+    } finally {
+      setFetchingAi(false);
+    }
+  }
+
+  function calcAge(dob: string): number {
+    const diff = Date.now() - new Date(dob).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
   }
 
   // ── Submit ──────────────────────────────────────────────────────────────────
@@ -337,13 +438,18 @@ export default function NewEncounterPage() {
                       tabIndex={0}
                       onClick={() => {
                         setSelectedPatient(p);
+                        fetchFullPatient(p._id);
                         setPatientHits([]);
                         setPatientQuery('');
                       }}
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' &&
-                        (setSelectedPatient(p), setPatientHits([]), setPatientQuery(''))
-                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setSelectedPatient(p);
+                          fetchFullPatient(p._id);
+                          setPatientHits([]);
+                          setPatientQuery('');
+                        }
+                      }}
                     >
                       <span className="font-medium">
                         {p.firstName} {p.lastName}
@@ -381,6 +487,104 @@ export default function NewEncounterPage() {
               {chiefComplaint.length}/500
             </span>
           </div>
+
+          <div className="mt-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={getAiSuggestions}
+              loading={fetchingAi}
+              disabled={fetchingAi || !chiefComplaint.trim()}
+              className="border-blue-200 text-blue-700 hover:bg-blue-50"
+            >
+              <span className="mr-2">✨</span>
+              Get AI Suggestions
+            </Button>
+          </div>
+
+          {/* AI Suggestions Panel */}
+          {aiSuggestions && (
+            <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white uppercase">
+                    Differential Diagnosis AI
+                  </span>
+                  <Badge
+                    variant={
+                      aiSuggestions.urgency === 'emergency'
+                        ? 'danger'
+                        : aiSuggestions.urgency === 'urgent'
+                          ? 'warning'
+                          : 'success'
+                    }
+                  >
+                    {aiSuggestions.urgency} urgency
+                  </Badge>
+                </div>
+                <button
+                  onClick={() => setAiSuggestions(null)}
+                  className="text-neutral-400 hover:text-neutral-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {aiSuggestions.differentials.map((diff, i) => (
+                  <div key={i} className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-neutral-900">{diff.diagnosis}</h3>
+                          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500">
+                            {diff.icdCode}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                          {diff.reasoning}
+                        </p>
+                        {diff.recommendedTests?.length > 0 && (
+                          <p className="mt-2 text-[10px] text-neutral-400">
+                            Recommended: {diff.recommendedTests.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            diff.probability === 'high'
+                              ? 'bg-red-50 text-red-700'
+                              : diff.probability === 'medium'
+                                ? 'bg-orange-50 text-orange-700'
+                                : 'bg-green-50 text-green-700'
+                          }`}
+                        >
+                          {diff.probability} probability
+                        </span>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() =>
+                            addDiagnosis({
+                              code: diff.icdCode,
+                              description: diff.diagnosis,
+                              isPrimary: diagnoses.length === 0,
+                            })
+                          }
+                          disabled={diagnoses.some((d) => d.code === diff.icdCode)}
+                        >
+                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-4 text-[10px] italic text-neutral-400">{aiSuggestions.disclaimer}</p>
+            </div>
+          )}
         </section>
 
         {/* ── Vital Signs (collapsible) ── */}
