@@ -26,6 +26,12 @@ export interface PaymentRecord {
   claimed?: boolean;
   claimedAt?: Date;
   encounterId?: string;
+  // Receipt fields
+  receiptNumber?: string;
+  receiptUrl?: string;
+  usdEquivalent?: string;
+  exchangeRate?: string;
+  receiptGeneratedAt?: Date;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -60,6 +66,12 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     claimed: { type: Boolean, default: false, index: true },
     claimedAt: { type: Date },
     encounterId: { type: String, index: true },
+    // Receipt fields
+    receiptNumber: { type: String, index: true },
+    receiptUrl: { type: String },
+    usdEquivalent: { type: String },
+    exchangeRate: { type: String },
+    receiptGeneratedAt: { type: Date },
   },
   { timestamps: true, versionKey: false }
 );

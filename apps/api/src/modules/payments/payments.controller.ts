@@ -721,4 +721,85 @@ router.get(
   })
 );
 
+// GET /payments/:intentId/receipt — Download receipt PDF
+router.get(
+  '/:intentId/receipt',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
+    }
+
+    if (!payment.receiptUrl) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Receipt not yet generated for this payment',
+      });
+    }
+
+    try {
+      // Return pre-signed S3 URL or receipt data
+      return res.json({
+        status: 'success',
+        data: {
+          receiptUrl: payment.receiptUrl,
+          receiptNumber: payment.receiptNumber,
+          generatedAt: payment.receiptGeneratedAt,
+        },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to retrieve receipt');
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: 'Failed to retrieve receipt',
+      });
+    }
+  })
+);
+
+// GET /payments/:intentId/receipt/url — Get pre-signed S3 URL
+router.get(
+  '/:intentId/receipt/url',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
+    }
+
+    if (!payment.receiptUrl) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Receipt not yet generated for this payment',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        receiptUrl: payment.receiptUrl,
+        receiptNumber: payment.receiptNumber,
+        expiresIn: 3600, // 1 hour
+      },
+    });
+  })
+);
+
 export const paymentRoutes = router;
