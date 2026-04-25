@@ -15,6 +15,15 @@ export interface IAllergy {
   isActive: boolean;
 }
 
+export interface IEmergencyContact {
+  name: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  isPrimary: boolean;
+}
+
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Patient {
@@ -29,6 +38,7 @@ export interface Patient {
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
   allergies: IAllergy[];
+  emergencyContacts?: IEmergencyContact[];
   riskScore?: number;
   riskLevel?: RiskLevel;
   riskFactors?: string[];
@@ -38,16 +48,36 @@ export interface Patient {
 
 const allergySchema = new Schema<IAllergy>(
   {
-    allergen:     { type: String, required: true, trim: true },
-    allergenType: { type: String, enum: ['drug', 'food', 'environmental', 'other'], required: true },
-    reaction:     { type: String, required: true },
-    severity:     { type: String, enum: ['mild', 'moderate', 'severe', 'life-threatening'], required: true },
-    onsetDate:    { type: Date },
-    recordedBy:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    recordedAt:   { type: Date, default: () => new Date() },
-    isActive:     { type: Boolean, default: true },
+    allergen: { type: String, required: true, trim: true },
+    allergenType: {
+      type: String,
+      enum: ['drug', 'food', 'environmental', 'other'],
+      required: true,
+    },
+    reaction: { type: String, required: true },
+    severity: {
+      type: String,
+      enum: ['mild', 'moderate', 'severe', 'life-threatening'],
+      required: true,
+    },
+    onsetDate: { type: Date },
+    recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedAt: { type: Date, default: () => new Date() },
+    isActive: { type: Boolean, default: true },
   },
-  { _id: true },
+  { _id: true }
+);
+
+const emergencyContactSchema = new Schema<IEmergencyContact>(
+  {
+    name: { type: String, required: true, trim: true },
+    relationship: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    email: { type: String, trim: true },
+    address: { type: String, trim: true },
+    isPrimary: { type: Boolean, default: false },
+  },
+  { _id: true }
 );
 
 const patientSchema = new Schema<Patient>(
@@ -59,15 +89,16 @@ const patientSchema = new Schema<Patient>(
     dateOfBirth: { type: String, required: true },
     sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
-    address:       { type: String },
-    clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    isActive:      { type: Boolean, default: true, index: true },
-    allergies:     { type: [allergySchema], default: [] },
-    riskScore:              { type: Number, min: 0, max: 100 },
-    riskLevel:              { type: String, enum: ['low', 'medium', 'high', 'critical'] },
-    riskFactors:            { type: [String], default: undefined },
-    lastRiskCalculatedAt:   { type: Date },
-    nextRiskReviewDate:     { type: Date },
+    address: { type: String },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    isActive: { type: Boolean, default: true, index: true },
+    allergies: { type: [allergySchema], default: [] },
+    emergencyContacts: { type: [emergencyContactSchema], default: [] },
+    riskScore: { type: Number, min: 0, max: 100 },
+    riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+    riskFactors: { type: [String], default: undefined },
+    lastRiskCalculatedAt: { type: Date },
+    nextRiskReviewDate: { type: Date },
   },
   { timestamps: true, versionKey: false }
 );
