@@ -49,6 +49,10 @@ import {
   startReconciliationJob,
   stopReconciliationJob,
 } from './modules/payments/services/reconciliation-job';
+import {
+  startRiskRecalculationJob,
+  stopRiskRecalculationJob,
+} from './modules/patients/risk-recalculation-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
@@ -223,6 +227,7 @@ async function startServer() {
 
   startPaymentExpirationJob();
   startReconciliationJob();
+  startRiskRecalculationJob();
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -236,6 +241,7 @@ async function startServer() {
         // Stop payment expiration job
         stopPaymentExpirationJob();
         stopReconciliationJob();
+        stopRiskRecalculationJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection

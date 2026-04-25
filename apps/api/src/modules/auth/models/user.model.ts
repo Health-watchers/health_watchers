@@ -22,6 +22,7 @@ export interface UserPreferences {
     appointment_reminder: boolean;
     ai_summary_ready: boolean;
     lab_result_ready: boolean;
+    high_risk_patient: boolean;
     system: boolean;
   };
 }
@@ -115,6 +116,7 @@ const userSchema = new Schema(
         appointment_reminder: { type: Boolean, default: true },
         ai_summary_ready:     { type: Boolean, default: true },
         lab_result_ready:     { type: Boolean, default: true },
+        high_risk_patient:    { type: Boolean, default: true },
         system:               { type: Boolean, default: true },
       },
     },
