@@ -20,6 +20,8 @@ import paymentsRouter from './modules/payments/payments.routes';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
+import { auditRoutes } from './modules/audit/audit.controller';
+import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
 import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
@@ -202,6 +204,7 @@ app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
+app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
@@ -234,6 +237,10 @@ async function startServer() {
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
   });
+
+  // Initialise Socket.IO on the same HTTP server
+  initSocket(server);
+  logger.info('Socket.IO initialised');
 
   startPaymentExpirationJob();
   startReconciliationJob();
