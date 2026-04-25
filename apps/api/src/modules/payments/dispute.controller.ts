@@ -1,34 +1,20 @@
 import { Request, Response, Router } from 'express';
-import axios from 'axios';
-import { authenticate } from '../../middlewares/auth.middleware';
-import { authorize, Roles } from '../../middlewares/rbac.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { PaymentDisputeModel } from './models/payment-dispute.model';
 import { PaymentRecordModel } from './models/payment-record.model';
-import { config } from '@health-watchers/config';
+import { auditLog } from '../audit/audit.service';
+import { sendDisputeOpenedEmail, sendDisputeResolvedEmail } from '@api/lib/email.service';
+import { stellarClient } from './services/stellar-client';
+import { randomUUID } from 'crypto';
 
 const router = Router();
+router.use(authenticate);
 
+const ADMIN_ROLES = requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN');
 const REFUND_WINDOW_DAYS = 30;
 
-// --- Email notification stubs ---
-async function notifyDisputeOpened(disputeId: string, clinicId: string) {
-  // TODO: integrate email provider (e.g. SendGrid)
-  console.log(`[EMAIL] Dispute opened: ${disputeId} for clinic ${clinicId}`);
-}
-
-async function notifyDisputeResolved(disputeId: string, status: string) {
-  // TODO: integrate email provider
-  console.log(`[EMAIL] Dispute ${disputeId} resolved with status: ${status}`);
-}
-
-// --- Audit log stub ---
-function auditLog(action: string, userId: string, meta: Record<string, unknown>) {
-  // TODO: persist to AuditLog collection
-  console.log(`[AUDIT] ${action} by ${userId}`, meta);
-}
-
 // POST /api/v1/payments/:intentId/dispute — Open dispute
-router.post('/:intentId/dispute', authenticate, async (req: Request, res: Response) => {
+router.post('/:intentId/dispute', async (req: Request, res: Response) => {
   try {
     const { intentId } = req.params;
     const { patientId, reason, description } = req.body;
@@ -51,8 +37,8 @@ router.post('/:intentId/dispute', authenticate, async (req: Request, res: Respon
       openedAt: new Date(),
     });
 
-    auditLog('DISPUTE_OPENED', userId, { disputeId: dispute._id, intentId });
-    await notifyDisputeOpened(String(dispute._id), clinicId);
+    await auditLog({ action: 'DISPUTE_OPENED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: String(dispute._id), metadata: { intentId } }, req);
+    sendDisputeOpenedEmail(`clinic-${clinicId}@healthwatchers.com`, String(dispute._id), intentId, reason);
 
     return res.status(201).json({ status: 'success', data: dispute });
   } catch (error: any) {
@@ -61,7 +47,7 @@ router.post('/:intentId/dispute', authenticate, async (req: Request, res: Respon
 });
 
 // GET /api/v1/payments/disputes — List disputes (CLINIC_ADMIN+)
-router.get('/disputes', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_ADMIN]), async (req: Request, res: Response) => {
+router.get('/disputes', ADMIN_ROLES, async (req: Request, res: Response) => {
   try {
     const clinicId = req.user!.clinicId;
     const disputes = await PaymentDisputeModel.find({ clinicId }).sort({ openedAt: -1 }).lean();
@@ -72,7 +58,7 @@ router.get('/disputes', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_ADMIN]), asyn
 });
 
 // PUT /api/v1/payments/disputes/:id/resolve — Resolve dispute
-router.put('/disputes/:id/resolve', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_ADMIN]), async (req: Request, res: Response) => {
+router.put('/disputes/:id/resolve', ADMIN_ROLES, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, resolutionNotes } = req.body;
@@ -94,8 +80,8 @@ router.put('/disputes/:id/resolve', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_A
     dispute.resolutionNotes = resolutionNotes;
     await dispute.save();
 
-    auditLog('DISPUTE_RESOLVED', userId, { disputeId: id, status });
-    await notifyDisputeResolved(id, status);
+    await auditLog({ action: 'DISPUTE_RESOLVED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: id, metadata: { status } }, req);
+    sendDisputeResolvedEmail(`clinic-${clinicId}@healthwatchers.com`, id, status, resolutionNotes);
 
     return res.json({ status: 'success', data: dispute });
   } catch (error: any) {
@@ -104,7 +90,7 @@ router.put('/disputes/:id/resolve', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_A
 });
 
 // POST /api/v1/payments/disputes/:id/refund — Issue refund
-router.post('/disputes/:id/refund', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_ADMIN]), async (req: Request, res: Response) => {
+router.post('/disputes/:id/refund', ADMIN_ROLES, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount, destinationPublicKey } = req.body;
@@ -115,7 +101,6 @@ router.post('/disputes/:id/refund', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_A
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
     if (dispute.refundIntentId) return res.status(409).json({ error: 'Refund already issued for this dispute' });
 
-    // Validate original payment and 30-day window
     const payment = await PaymentRecordModel.findOne({ intentId: dispute.paymentIntentId }).lean();
     if (!payment) return res.status(404).json({ error: 'Original payment not found' });
 
@@ -131,36 +116,33 @@ router.post('/disputes/:id/refund', authorize([Roles.CLINIC_ADMIN, Roles.SUPER_A
       return res.status(400).json({ error: `Refund amount must be between 0 and ${originalAmount}` });
     }
 
-    // Submit refund transaction via stellar-service
-    const stellarResponse = await axios.post(`${config.stellar.serviceUrl}/refund`, {
-      fromSecret: config.stellar.secretKey,
-      toPublic: destinationPublicKey,
-      amount: refundAmount.toString(),
-      memo: `refund-${dispute.paymentIntentId.slice(0, 8)}`,
-    });
+    const memo = `refund-${dispute.paymentIntentId.slice(0, 16)}`;
+    const { transactionHash } = await stellarClient.issueRefund(destinationPublicKey, refundAmount.toString(), memo);
 
-    const { transactionHash, refundIntentId } = stellarResponse.data;
-
-    // Record refund as a new payment record
-    const refundRecord = await PaymentRecordModel.create({
+    const refundIntentId = randomUUID();
+    await PaymentRecordModel.create({
       intentId: refundIntentId,
       clinicId,
+      patientId: dispute.patientId,
       amount: refundAmount.toString(),
       destination: destinationPublicKey,
-      memo: `refund-${dispute.paymentIntentId.slice(0, 8)}`,
+      memo,
       status: 'confirmed',
+      txHash: transactionHash,
+      confirmedAt: new Date(),
+      assetCode: payment.assetCode || 'XLM',
     });
 
-    dispute.refundIntentId = refundRecord.intentId;
+    dispute.refundIntentId = refundIntentId;
     dispute.status = 'resolved_refund';
     dispute.resolvedBy = userId;
     dispute.resolvedAt = new Date();
     await dispute.save();
 
-    auditLog('REFUND_ISSUED', userId, { disputeId: id, refundIntentId: refundRecord.intentId, amount, transactionHash });
-    await notifyDisputeResolved(id, 'resolved_refund');
+    await auditLog({ action: 'REFUND_ISSUED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: id, metadata: { refundIntentId, amount: refundAmount, transactionHash } }, req);
+    sendDisputeResolvedEmail(`clinic-${clinicId}@healthwatchers.com`, id, 'resolved_refund');
 
-    return res.json({ status: 'success', data: { dispute, transactionHash, refundIntentId: refundRecord.intentId } });
+    return res.json({ status: 'success', data: { dispute, transactionHash, refundIntentId } });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

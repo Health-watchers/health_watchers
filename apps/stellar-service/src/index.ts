@@ -16,6 +16,7 @@ import {
   checkHorizon,
   getFeeStats,
   buildFeeBumpTransaction,
+  issueRefund,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -112,6 +113,20 @@ app.post('/intent', requireSecret, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount } = req.body;
     const result = await createIntent(fromPublicKey, toPublicKey, amount);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /refund (requires secret)
+app.post('/refund', requireSecret, async (req, res) => {
+  try {
+    const { toPublicKey, amount, memo } = req.body;
+    if (!toPublicKey || !amount) {
+      return res.status(400).json({ error: 'toPublicKey and amount are required' });
+    }
+    const result = await issueRefund(toPublicKey, amount, memo || 'refund');
     return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

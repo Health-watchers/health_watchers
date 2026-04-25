@@ -17,7 +17,10 @@ export type AuditAction =
   | 'ALLERGY_DELETE'
   | 'ALLERGY_OVERRIDE'
   | 'KEYPAIR_CREATE'
-  | 'KEYPAIR_ROTATE';
+  | 'KEYPAIR_ROTATE'
+  | 'DISPUTE_OPENED'
+  | 'DISPUTE_RESOLVED'
+  | 'REFUND_ISSUED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -57,6 +60,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'ALLERGY_OVERRIDE',
         'KEYPAIR_CREATE',
         'KEYPAIR_ROTATE',
+        'DISPUTE_OPENED',
+        'DISPUTE_RESOLVED',
+        'REFUND_ISSUED',
       ],
       index: true,
     },
