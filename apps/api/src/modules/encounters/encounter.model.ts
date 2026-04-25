@@ -37,7 +37,7 @@ export interface Encounter {
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId; // alias for attendingDoctorId (spec compat)
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled';
+  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
   diagnosis?: Diagnosis[];
   treatmentPlan?: string;
@@ -46,6 +46,12 @@ export interface Encounter {
   followUpDate?: Date;
   aiSummary?: string;
   isActive?: boolean;
+  // Co-signature fields
+  requiresCoSignature?: boolean;
+  coSignedBy?: Schema.Types.ObjectId;
+  coSignedAt?: Date;
+  coSignatureNotes?: string;
+  coSignatureStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -97,7 +103,7 @@ const encounterSchema = new Schema<Encounter>(
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
+    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
     treatmentPlan:     { type: String },
     diagnosis:         { type: [diagnosisSchema], default: undefined },
@@ -106,6 +112,12 @@ const encounterSchema = new Schema<Encounter>(
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
     isActive:          { type: Boolean, default: true, index: true },
+    // Co-signature fields
+    requiresCoSignature: { type: Boolean, default: false },
+    coSignedBy:          { type: Schema.Types.ObjectId, ref: 'User' },
+    coSignedAt:          { type: Date },
+    coSignatureNotes:    { type: String },
+    coSignatureStatus:   { type: String, enum: ['pending', 'approved', 'rejected'] },
   },
   { timestamps: true, versionKey: false }
 );

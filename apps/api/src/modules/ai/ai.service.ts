@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '@health-watchers/config';
+import { anonymize, type PatientData } from '@health-watchers/anonymize';
 
 let clientInstance: GoogleGenerativeAI | null = null;
 
@@ -16,17 +17,25 @@ export function isAIServiceAvailable(): boolean {
 export const AI_DISCLAIMER =
   'AI-generated summary for clinical assistance only. Not a substitute for professional medical judgment.';
 
-// ── PII stripping ─────────────────────────────────────────────────────────────
-// Remove common PII patterns before sending to external AI API
-const PII_PATTERNS: [RegExp, string][] = [
-  [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],                          // phone numbers
-  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],                 // email addresses
-  [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],                                         // SSN
-  [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'], // dates of birth
-  [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],                                             // zip codes
-];
-
-export function stripPII(text: string): string {
+// ── PII stripping using anonymization service ─────────────────────────────────
+export function stripPII(text: string, patientData?: Partial<PatientData>): string {
+  if (patientData) {
+    const anonymized = anonymize(
+      { ...patientData, clinicalNotes: text } as PatientData,
+      { level: 'de-identification', purpose: 'ai' }
+    );
+    return anonymized.clinicalNotes || text;
+  }
+  
+  // Fallback to basic PII patterns
+  const PII_PATTERNS: [RegExp, string][] = [
+    [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],
+    [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],
+    [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],
+    [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'],
+    [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],
+  ];
+  
   let sanitized = text;
   for (const [pattern, replacement] of PII_PATTERNS) {
     sanitized = sanitized.replace(pattern, replacement);

@@ -27,6 +27,10 @@ export interface Patient {
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
   allergies: IAllergy[];
+  // Duplicate detection fields
+  potentialDuplicates?: Schema.Types.ObjectId[];
+  isDuplicate?: boolean;
+  mergedInto?: Schema.Types.ObjectId;
 }
 
 const allergySchema = new Schema<IAllergy>(
@@ -56,6 +60,10 @@ const patientSchema = new Schema<Patient>(
     clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     isActive:      { type: Boolean, default: true, index: true },
     allergies:     { type: [allergySchema], default: [] },
+    // Duplicate detection fields
+    potentialDuplicates: { type: [Schema.Types.ObjectId], ref: 'Patient', default: [] },
+    isDuplicate:         { type: Boolean, default: false, index: true },
+    mergedInto:          { type: Schema.Types.ObjectId, ref: 'Patient' },
   },
   { timestamps: true, versionKey: false }
 );
