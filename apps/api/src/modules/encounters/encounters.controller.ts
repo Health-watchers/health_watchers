@@ -19,6 +19,7 @@ import { PatientModel } from '../patients/models/patient.model';
 import { auditLog } from '../audit/audit.service';
 import { emitToClinic } from '@api/realtime/socket';
 import { encountersCreatedTotal } from '../../services/metrics.service';
+import crypto from 'crypto';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -27,6 +28,24 @@ async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<s
     if (!exists) return d.code;
   }
   return null;
+}
+
+async function triggerSurveyAfterEncounter(encounterId: string, encounter: any): Promise<void> {
+  // Schedule survey to be sent 2 hours after encounter closes
+  const { SurveyModel } = await import('../surveys/survey.model');
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  await SurveyModel.create({
+    encounterId,
+    patientId: encounter.patientId,
+    clinicId: encounter.clinicId,
+    doctorId: encounter.attendingDoctorId,
+    token,
+    sentAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
+    status: 'pending',
+    expiresAt,
+  });
 }
 
 const router = Router();
@@ -158,7 +177,7 @@ router.get(
       })),
       meta: { total, page, limit },
     });
-  }),
+  })
 );
 
 // POST /encounters
@@ -184,7 +203,10 @@ router.post(
           req.body.vitalSigns = template.defaultVitalSigns;
         }
         if (!req.body.diagnosis?.length && template.suggestedDiagnoses?.length) {
-          req.body.diagnosis = template.suggestedDiagnoses.map((d, i) => ({ ...d, isPrimary: i === 0 }));
+          req.body.diagnosis = template.suggestedDiagnoses.map((d, i) => ({
+            ...d,
+            isPrimary: i === 0,
+          }));
         }
         if (!req.body.notes && template.notes) {
           req.body.notes = template.notes;
@@ -204,16 +226,23 @@ router.post(
     // Allergy check for prescriptions
     if (req.body.prescriptions?.length && req.body.patientId) {
       const patient = await PatientModel.findById(req.body.patientId).select('allergies').lean();
-      const activeAllergies = (patient?.allergies ?? []).filter((a: any) => a.isActive && a.allergenType === 'drug');
+      const activeAllergies = (patient?.allergies ?? []).filter(
+        (a: any) => a.isActive && a.allergenType === 'drug'
+      );
 
-      for (const rx of req.body.prescriptions as Array<{ drugName: string; allergyOverride?: { allergyId: string; reason: string } }>) {
-        const match = activeAllergies.find((a: any) =>
-          rx.drugName.toLowerCase().includes(a.allergen.toLowerCase()) ||
-          a.allergen.toLowerCase().includes(rx.drugName.toLowerCase()),
+      for (const rx of req.body.prescriptions as Array<{
+        drugName: string;
+        allergyOverride?: { allergyId: string; reason: string };
+      }>) {
+        const match = activeAllergies.find(
+          (a: any) =>
+            rx.drugName.toLowerCase().includes(a.allergen.toLowerCase()) ||
+            a.allergen.toLowerCase().includes(rx.drugName.toLowerCase())
         );
         if (match) {
           const overrideId = rx.allergyOverride?.allergyId;
-          const hasOverride = overrideId && String((match as any)._id) === overrideId && rx.allergyOverride?.reason;
+          const hasOverride =
+            overrideId && String((match as any)._id) === overrideId && rx.allergyOverride?.reason;
           if (!hasOverride) {
             return res.status(409).json({
               error: 'AllergyConflict',
@@ -221,7 +250,21 @@ router.post(
               allergy: match,
             });
           }
-          auditLog({ action: 'ALLERGY_OVERRIDE', resourceType: 'Patient', resourceId: String(req.body.patientId), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergen: match.allergen, medication: rx.drugName, reason: rx.allergyOverride!.reason } }, req);
+          auditLog(
+            {
+              action: 'ALLERGY_OVERRIDE',
+              resourceType: 'Patient',
+              resourceId: String(req.body.patientId),
+              userId: req.user!.userId,
+              clinicId: req.user!.clinicId,
+              metadata: {
+                allergen: match.allergen,
+                medication: rx.drugName,
+                reason: rx.allergyOverride!.reason,
+              },
+            },
+            req
+          );
         }
       }
     }
@@ -272,14 +315,24 @@ router.patch(
     }
 
     // DOCTOR can only edit their own encounters
-    if (
-      req.user!.role === 'DOCTOR' &&
-      String(encounter.attendingDoctorId) !== req.user!.userId
-    ) {
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only edit your own encounters' });
+    if (req.user!.role === 'DOCTOR' && String(encounter.attendingDoctorId) !== req.user!.userId) {
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'You can only edit your own encounters' });
     }
 
-    const allowedFields = ['chiefComplaint', 'notes', 'soapNotes', 'aiSummary', 'diagnosis', 'treatmentPlan', 'vitalSigns', 'prescriptions', 'followUpDate', 'status'] as const;
+    const allowedFields = [
+      'chiefComplaint',
+      'notes',
+      'soapNotes',
+      'aiSummary',
+      'diagnosis',
+      'treatmentPlan',
+      'vitalSigns',
+      'prescriptions',
+      'followUpDate',
+      'status',
+    ] as const;
     const updateData: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in req.body && req.body[field] !== undefined) {
@@ -302,8 +355,12 @@ router.patch(
     });
 
     emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
+    // Trigger survey if encounter is being closed
+    if (updateData.status === 'closed' && encounter.status !== 'closed') {
+      await triggerSurveyAfterEncounter(req.params.id, doc!);
+    }
     return res.json({ status: 'success', data: toEncounterResponse(doc!) });
-  }),
+  })
 );
 
 // DELETE /encounters/:id — soft-delete via status:'cancelled'; CLINIC_ADMIN or SUPER_ADMIN only
@@ -325,11 +382,15 @@ router.delete(
     const doc = await EncounterModel.findByIdAndUpdate(
       req.params.id,
       { status: 'cancelled', isActive: false },
-      { new: true },
+      { new: true }
     );
 
-    return res.json({ status: 'success', message: 'Encounter cancelled', data: toEncounterResponse(doc!) });
-  }),
+    return res.json({
+      status: 'success',
+      message: 'Encounter cancelled',
+      data: toEncounterResponse(doc!),
+    });
+  })
 );
 
 // GET /encounters/patient/:patientId
@@ -376,12 +437,12 @@ router.post(
     encounter.prescriptions.push(prescription);
     await encounter.save();
 
-    return res.status(201).json({ 
-      status: 'success', 
+    return res.status(201).json({
+      status: 'success',
       data: toEncounterResponse(encounter),
-      message: 'Prescription added successfully'
+      message: 'Prescription added successfully',
     });
-  }),
+  })
 );
 
 // GET /encounters/:id/prescriptions - List prescriptions for encounter
@@ -398,11 +459,11 @@ router.get(
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
-    return res.json({ 
-      status: 'success', 
-      data: encounter.prescriptions || []
+    return res.json({
+      status: 'success',
+      data: encounter.prescriptions || [],
     });
-  }),
+  })
 );
 
 // DELETE /encounters/:id/prescriptions/:prescriptionId - Remove prescription
@@ -427,7 +488,7 @@ router.delete(
 
     const prescriptionId = req.params.prescriptionId;
     const initialLength = encounter.prescriptions.length;
-    
+
     encounter.prescriptions = encounter.prescriptions.filter(
       (p: any) => p._id.toString() !== prescriptionId
     );
@@ -438,12 +499,12 @@ router.delete(
 
     await encounter.save();
 
-    return res.json({ 
-      status: 'success', 
+    return res.json({
+      status: 'success',
       message: 'Prescription removed successfully',
-      data: toEncounterResponse(encounter)
+      data: toEncounterResponse(encounter),
     });
-  }),
+  })
 );
 
 export const encounterRoutes = router;
