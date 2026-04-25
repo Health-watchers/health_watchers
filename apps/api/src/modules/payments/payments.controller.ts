@@ -687,4 +687,78 @@ router.get(
   })
 );
 
+// GET /payments/:intentId/qr — Generate QR code for payment intent
+router.get(
+  '/:intentId/qr',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+    const { format = 'png' } = req.query;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
+    }
+
+    try {
+      const { QRCodeService } = await import('./services/qr-code.service');
+      const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination, payment.amount, payment.assetCode, payment.memo
+      );
+
+      if (format === 'svg') {
+        const svg = await QRCodeService.generateQRCodeSVG(paymentURI);
+        res.setHeader('Content-Type', 'image/svg+xml');
+        return res.send(svg);
+      } else if (format === 'data-url') {
+        const dataUrl = await QRCodeService.generateQRCodeDataURL(paymentURI);
+        return res.json({ status: 'success', data: { qrCode: dataUrl, paymentURI } });
+      } else {
+        const buffer = await QRCodeService.generateQRCodePNG(paymentURI);
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Length', buffer.length);
+        return res.send(buffer);
+      }
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate QR code');
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate QR code' });
+    }
+  })
+);
+
+// GET /payments/:intentId/payment-uri — Get Stellar payment URI
+router.get(
+  '/:intentId/payment-uri',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
+    }
+
+    try {
+      const { QRCodeService } = await import('./services/qr-code.service');
+      const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination, payment.amount, payment.assetCode, payment.memo
+      );
+
+      return res.json({
+        status: 'success',
+        data: { paymentURI, destination: payment.destination, amount: payment.amount, assetCode: payment.assetCode, memo: payment.memo },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate payment URI');
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate payment URI' });
+    }
+  })
+);
+
 export const paymentRoutes = router;
