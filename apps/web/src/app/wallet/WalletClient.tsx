@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
 import {
@@ -22,6 +23,7 @@ import {
 
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const IS_TESTNET = NETWORK === 'testnet';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface Transaction {
   id: string;
@@ -43,6 +45,19 @@ interface WalletBalance {
   transactions: Transaction[];
 }
 
+interface BalanceSnapshot {
+  date: string;
+  xlmBalance: string;
+  usdcBalance: string | null;
+}
+
+interface BalanceAlerts {
+  lowBalanceWarningXlm: number;
+  criticalBalanceXlm: number;
+  largeTransactionXlm: number;
+  alertsEnabled: boolean;
+}
+
 function useWalletBalance() {
   return useQuery<WalletBalance>({
     queryKey: queryKeys.wallet.balance(),
@@ -56,6 +71,36 @@ function useWalletBalance() {
       return body.data;
     },
     retry: 1,
+  });
+}
+
+function useBalanceSnapshots() {
+  return useQuery<BalanceSnapshot[]>({
+    queryKey: queryKeys.wallet.snapshots(),
+    queryFn: async () => {
+      const res = await fetch('/api/payments/balance-snapshots');
+      if (!res.ok) return [];
+      const body = await res.json();
+      return body.data ?? [];
+    },
+    retry: 1,
+  });
+}
+
+function useBalanceAlerts() {
+  return useQuery<BalanceAlerts>({
+    queryKey: ['wallet', 'alert-settings'],
+    queryFn: async () => {
+      const res = await fetch(`${API}/api/v1/settings`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load settings');
+      const body = await res.json();
+      return body.data?.balanceAlerts ?? {
+        lowBalanceWarningXlm: 100,
+        criticalBalanceXlm: 10,
+        largeTransactionXlm: 1000,
+        alertsEnabled: true,
+      };
+    },
   });
 }
 
@@ -174,9 +219,123 @@ function ConfirmPaymentModal({
   );
 }
 
+function BalanceTrendChart({ snapshots }: { snapshots: BalanceSnapshot[] }) {
+  if (!snapshots || snapshots.length === 0) {
+    return (
+      <p className="py-4 text-center text-sm text-neutral-500">
+        No balance history yet. Data will appear after the first monitoring cycle.
+      </p>
+    );
+  }
+
+  const chartData = snapshots.map((s) => ({
+    date: new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    xlm: parseFloat(s.xlmBalance),
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} width={50} />
+        <Tooltip formatter={(v: number) => [`${v.toFixed(2)} XLM`, 'Balance']} />
+        <Line
+          type="monotone"
+          dataKey="xlm"
+          stroke="#2563eb"
+          strokeWidth={2}
+          dot={false}
+          activeDot={{ r: 4 }}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function AlertThresholdSettings({
+  settings,
+  onSave,
+  saving,
+}: {
+  settings: BalanceAlerts;
+  onSave: (data: BalanceAlerts) => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState<BalanceAlerts>(settings);
+
+  const handleChange = (key: keyof BalanceAlerts, value: number | boolean) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(form);
+      }}
+      className="space-y-4"
+    >
+      <div className="flex items-center gap-3">
+        <input
+          id="alertsEnabled"
+          type="checkbox"
+          checked={form.alertsEnabled}
+          onChange={(e) => handleChange('alertsEnabled', e.target.checked)}
+          className="h-4 w-4 rounded border-neutral-300 text-primary-600"
+        />
+        <label htmlFor="alertsEnabled" className="text-sm font-medium text-neutral-700">
+          Enable balance alerts
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Input
+          label="Low Balance Warning (XLM)"
+          type="number"
+          min="0"
+          step="1"
+          value={String(form.lowBalanceWarningXlm)}
+          onChange={(e) => handleChange('lowBalanceWarningXlm', Number(e.target.value))}
+          helperText="Alert when balance drops below this"
+          disabled={!form.alertsEnabled}
+        />
+        <Input
+          label="Critical Balance (XLM)"
+          type="number"
+          min="0"
+          step="1"
+          value={String(form.criticalBalanceXlm)}
+          onChange={(e) => handleChange('criticalBalanceXlm', Number(e.target.value))}
+          helperText="Critical alert threshold"
+          disabled={!form.alertsEnabled}
+        />
+        <Input
+          label="Large Transaction (XLM)"
+          type="number"
+          min="0"
+          step="1"
+          value={String(form.largeTransactionXlm)}
+          onChange={(e) => handleChange('largeTransactionXlm', Number(e.target.value))}
+          helperText="Alert for transactions above this"
+          disabled={!form.alertsEnabled}
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="submit" loading={saving} disabled={!form.alertsEnabled && !settings.alertsEnabled}>
+          Save Alert Settings
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function WalletClient() {
   const queryClient = useQueryClient();
   const { data: wallet, isLoading, error, refetch } = useWalletBalance();
+  const { data: snapshots } = useBalanceSnapshots();
+  const { data: alertSettings } = useBalanceAlerts();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showSendForm, setShowSendForm] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<{
@@ -184,6 +343,29 @@ export default function WalletClient() {
     amount: string;
     memo?: string;
   } | null>(null);
+
+  const saveAlertsMutation = useMutation({
+    mutationFn: async (data: BalanceAlerts) => {
+      const res = await fetch(`${API}/api/v1/settings`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ balanceAlerts: data }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `Error ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setToast({ message: 'Alert settings saved.', type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['wallet', 'alert-settings'] });
+    },
+    onError: (err: Error) => {
+      setToast({ message: err.message, type: 'error' });
+    },
+  });
 
   const fundMutation = useMutation({
     mutationFn: async () => {
@@ -442,6 +624,31 @@ export default function WalletClient() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </Card>
+
+          {/* Balance Trend Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Balance Trend</CardTitle>
+              <span className="text-xs text-neutral-500">Last 30 days</span>
+            </CardHeader>
+            <BalanceTrendChart snapshots={snapshots ?? []} />
+          </Card>
+
+          {/* Alert Threshold Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Balance Alert Settings</CardTitle>
+            </CardHeader>
+            {alertSettings ? (
+              <AlertThresholdSettings
+                settings={alertSettings}
+                onSave={(data) => saveAlertsMutation.mutate(data)}
+                saving={saveAlertsMutation.isPending}
+              />
+            ) : (
+              <p className="text-sm text-neutral-500">Loading alert settings…</p>
             )}
           </Card>
         </>

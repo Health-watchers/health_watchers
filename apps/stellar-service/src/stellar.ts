@@ -394,17 +394,64 @@ export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
   return { xdr, hash, feeStroops };
 }
 
-/**
- * Check if the Horizon server is reachable
- */
-export async function checkHorizon() {
+/** Check Horizon connectivity and latency */
+export async function checkHorizon(): Promise<{ status: 'healthy' | 'unhealthy'; latency?: number }> {
   const server = getHorizonServer();
   const start = Date.now();
   try {
-    await server.root(); // Basic root request to check connectivity
+    await server.feeStats();
     return { status: 'healthy', latency: Date.now() - start };
-  } catch (err) {
-    logger.error({ err }, 'Horizon health check failed');
-    return { status: 'unhealthy' };
+  } catch {
+    return { status: 'unhealthy', latency: Date.now() - start };
   }
+}
+
+export interface StreamedTransaction {
+  hash: string;
+  amount: string;
+  asset: string;
+  from: string;
+  to: string;
+  type: string;
+  createdAt: string;
+}
+
+/**
+ * Stream real-time transactions for an account via Horizon SSE.
+ * Calls onTransaction for each new payment/create_account record.
+ * Returns a close() function to stop the stream.
+ */
+export function streamAccountTransactions(
+  publicKey: string,
+  onTransaction: (tx: StreamedTransaction) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const server = getHorizonServer();
+
+  logger.info({ publicKey }, 'Starting account transaction stream');
+
+  const close = server
+    .payments()
+    .forAccount(publicKey)
+    .cursor('now')
+    .stream({
+      onmessage: (record: any) => {
+        if (record.type !== 'payment' && record.type !== 'create_account') return;
+        onTransaction({
+          hash: record.transaction_hash,
+          amount: record.amount ?? record.starting_balance ?? '0',
+          asset: record.asset_type === 'native' ? 'XLM' : `${record.asset_code}:${record.asset_issuer}`,
+          from: record.from ?? record.funder ?? '',
+          to: record.to ?? record.account ?? '',
+          type: record.type,
+          createdAt: record.created_at,
+        });
+      },
+      onerror: (err: unknown) => {
+        logger.error({ err, publicKey }, 'Account transaction stream error');
+        onError?.(err);
+      },
+    });
+
+  return close as () => void;
 }

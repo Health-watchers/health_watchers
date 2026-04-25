@@ -17,6 +17,7 @@ import {
   getFeeStats,
   buildFeeBumpTransaction,
   issueRefund,
+  streamAccountTransactions,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -240,6 +241,35 @@ app.post('/fee-bump', requireSecret, async (req, res) => {
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
+});
+
+// ✅ PROTECTED: GET /monitor/stream?publicKey=G... — SSE stream of account transactions
+app.get('/monitor/stream', requireSecret, (req, res) => {
+  const { publicKey } = req.query;
+
+  if (!publicKey || typeof publicKey !== 'string') {
+    return res.status(400).json({ error: 'publicKey query parameter is required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const close = streamAccountTransactions(
+    publicKey,
+    (tx) => {
+      res.write(`data: ${JSON.stringify(tx)}\n\n`);
+    },
+    (err) => {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`);
+    }
+  );
+
+  req.on('close', () => {
+    close();
+    logger.info({ publicKey }, 'SSE client disconnected, stream closed');
+  });
 });
 
 const server: Server = app.listen(PORT, () => {

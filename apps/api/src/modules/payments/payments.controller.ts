@@ -605,4 +605,22 @@ router.get(
   }),
 );
 
+// GET /payments/balance-snapshots — fetch daily balance history for the clinic
+router.get(
+  '/balance-snapshots',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const clinicId = req.user!.clinicId;
+    const limit = Math.min(parseInt((req.query.limit as string) ?? '30', 10), 90);
+    const { BalanceSnapshotModel } = await import('./models/balance-snapshot.model');
+    const snapshots = await BalanceSnapshotModel.find({ clinicId })
+      .sort({ date: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ status: 'success', data: snapshots.reverse() });
+  })
+);
+
 export const paymentRoutes = router;
