@@ -25,6 +25,7 @@ import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
+import { healthRoutes } from './modules/health/health.controller';
 import {
   authLimiter,
   forgotPasswordLimiter,
@@ -132,7 +133,7 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && req.url === '/health' },
+    autoLogging: { ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready') },
     redact: ['req.headers.authorization'],
   })
 );

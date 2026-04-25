@@ -79,7 +79,7 @@ app.get('/health', async (req, res) => {
   const horizon = await checkHorizon();
   const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
   
-  res.json({
+  return res.json({
     status,
     network: stellarConfig.network,
     horizonUrl: stellarConfig.horizonUrl,

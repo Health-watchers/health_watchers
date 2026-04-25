@@ -393,3 +393,18 @@ export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
 
   return { xdr, hash, feeStroops };
 }
+
+/**
+ * Check if the Horizon server is reachable
+ */
+export async function checkHorizon() {
+  const server = getHorizonServer();
+  const start = Date.now();
+  try {
+    await server.root(); // Basic root request to check connectivity
+    return { status: 'healthy', latency: Date.now() - start };
+  } catch (err) {
+    logger.error({ err }, 'Horizon health check failed');
+    return { status: 'unhealthy' };
+  }
+}
