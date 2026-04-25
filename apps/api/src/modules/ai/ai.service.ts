@@ -161,3 +161,85 @@ Respond ONLY with valid JSON in this exact format (no markdown):
     throw new Error(`Failed to parse drug interaction response: ${text}`);
   }
 }
+
+// ── Differential Diagnosis ───────────────────────────────────────────────────
+export interface DifferentialDiagnosisInput {
+  chiefComplaint: string;
+  symptoms: string[];
+  vitalSigns?: {
+    heartRate?: number;
+    bloodPressure?: string;
+    oxygenSaturation?: number;
+    temperature?: number;
+  };
+  patientAge?: number;
+  patientSex?: string;
+  relevantHistory?: string;
+}
+
+export interface DifferentialSuggestion {
+  diagnosis: string;
+  icdCode: string;
+  probability: 'high' | 'medium' | 'low';
+  reasoning: string;
+  recommendedTests: string[];
+}
+
+export interface DifferentialDiagnosisResponse {
+  differentials: DifferentialSuggestion[];
+  urgency: 'routine' | 'urgent' | 'emergency';
+  disclaimer: string;
+}
+
+export async function generateDifferentialDiagnosis(
+  input: DifferentialDiagnosisInput
+): Promise<DifferentialDiagnosisResponse> {
+  const client = getGeminiClient();
+
+  const context = [
+    `Chief Complaint: ${input.chiefComplaint}`,
+    `Symptoms: ${input.symptoms.join(', ')}`,
+    input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
+    input.patientAge ? `Patient Age: ${input.patientAge}` : '',
+    input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
+    input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const safeContext = stripPII(context);
+
+  const prompt = `You are a clinical decision support AI. Based on the following patient presentation, suggest the top 3-5 differential diagnoses.
+
+Patient Presentation:
+${safeContext}
+
+Respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):
+{
+  "differentials": [
+    {
+      "diagnosis": "string",
+      "icdCode": "string (ICD-10 format)",
+      "probability": "high" | "medium" | "low",
+      "reasoning": "string (1-2 sentences explain why based on the presentation)",
+      "recommendedTests": ["string", "string"]
+    }
+  ],
+  "urgency": "routine" | "urgent" | "emergency"
+}`;
+
+  try {
+    const model = client.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    const data = JSON.parse(jsonStr);
+    return { ...data, disclaimer: AI_DISCLAIMER };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to generate differential diagnosis: ${msg}`);
+  }
+}

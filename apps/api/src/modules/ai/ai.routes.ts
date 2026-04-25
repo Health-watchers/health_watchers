@@ -4,6 +4,7 @@ import {
   generateClinicalSummary,
   generateRawTextSummary,
   generatePatientInsights,
+  generateDifferentialDiagnosis,
   isAIServiceAvailable,
   AI_DISCLAIMER,
   checkDrugInteractions,
@@ -502,7 +503,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       AppointmentModel.countDocuments({ patientId, clinicId, status: 'no-show', scheduledAt: { $gte: ninetyDaysAgo } }),
     ]);
 
-    // Compute age (DOB is encrypted — use stored string)
     const dobStr = (patient as any).dateOfBirth as string;
     const ageYears = dobStr ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
 
@@ -534,7 +534,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       smokingHistory,
     });
 
-    // Ask Gemini for recommendations (PII-stripped)
     const anonymizedSummary = stripPII(JSON.stringify({
       ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
       sex: (patient as any).sex,
@@ -556,7 +555,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       recommendations = 'AI recommendations unavailable.';
     }
 
-    // Persist to patient + history
     const now = new Date();
     const nextReview = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -592,7 +590,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
 // POST /api/v1/ai/differential-diagnosis
 // Body: { chiefComplaint, symptoms, vitalSigns?, patientAge?, patientSex?, relevantHistory? }
 // Returns: { differentials, urgency, disclaimer }
-// Rate-limited to 20 req/min per clinic (aiLimiter applied at app.ts level)
 router.post(
   '/differential-diagnosis',
   authenticate,
@@ -618,7 +615,6 @@ router.post(
         relevantHistory,
       } = req.body as DifferentialDiagnosisInput;
 
-      // Input validation
       if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 3) {
         return res.status(400).json({
           error: 'ValidationError',
@@ -681,5 +677,4 @@ router.post(
     }
   },
 );
-
 export default router;
