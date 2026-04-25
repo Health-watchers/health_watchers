@@ -20,6 +20,7 @@ import { auditLog } from '../audit/audit.service';
 import { emitToClinic } from '@api/realtime/socket';
 import { encountersCreatedTotal } from '../../services/metrics.service';
 import crypto from 'crypto';
+import cdsRulesEngine from '../cds/cds-rules-engine.js';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -272,7 +273,21 @@ router.post(
     const doc = await EncounterModel.create(req.body);
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
-    return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
+
+    // Evaluate CDS rules for encounter creation
+    const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);
+    const cdsAlerts = await cdsRulesEngine.evaluateRules('encounter_create', {
+      patientId: req.body.patientId,
+      clinicId: req.user!.clinicId,
+      vitalSigns: req.body.vitalSigns,
+      ...patientContext,
+    });
+
+    return res.status(201).json({
+      status: 'success',
+      data: toEncounterResponse(doc),
+      cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
+    });
   })
 );
 
@@ -433,6 +448,25 @@ router.post(
       prescribedAt: new Date(),
     };
 
+    // Evaluate CDS rules for prescription addition
+    const patientContext = await cdsRulesEngine.getPatientContext(encounter.patientId, req.user!.clinicId);
+    const cdsAlerts = await cdsRulesEngine.evaluateRules('prescription_add', {
+      patientId: encounter.patientId,
+      clinicId: req.user!.clinicId,
+      prescription,
+      ...patientContext,
+    });
+
+    // Block if critical alert
+    const criticalAlert = cdsAlerts.find(a => a.severity === 'critical' && a.action === 'block');
+    if (criticalAlert) {
+      return res.status(409).json({
+        error: 'CDSBlockingAlert',
+        message: criticalAlert.message,
+        alert: criticalAlert,
+      });
+    }
+
     encounter.prescriptions = encounter.prescriptions || [];
     encounter.prescriptions.push(prescription);
     await encounter.save();
@@ -440,6 +474,7 @@ router.post(
     return res.status(201).json({
       status: 'success',
       data: toEncounterResponse(encounter),
+      cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
       message: 'Prescription added successfully',
     });
   })

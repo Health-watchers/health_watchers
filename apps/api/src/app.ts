@@ -74,6 +74,8 @@ import metricsRouter from './modules/metrics/metrics.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import { mongodbConnectionPoolSize } from './services/metrics.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
+import cdsRoutes from './modules/cds/cds.controller';
+import { seedBuiltInRules } from './modules/cds/cds-seed';
 
 
 const app = express();
@@ -232,6 +234,7 @@ app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 app.use('/api/v1/schedules', scheduleRoutes);
+app.use('/api/v1/cds', cdsRoutes);
 
 setupSwagger(app);
 
@@ -244,6 +247,9 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
+  
+  // Seed built-in CDS rules
+  await seedBuiltInRules();
 
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
