@@ -23,6 +23,14 @@ import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
 import { assertMainnetSafety } from './guards.js';
+import {
+  parseHorizonError,
+  retryWithBackoff,
+  checkCircuitBreaker,
+  recordSuccess,
+  recordFailure,
+  getCircuitBreakerState,
+} from './error-handler.js';
 
 dotenv.config();
 
@@ -55,6 +63,19 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
   return next();
 };
 
+// Middleware: Check circuit breaker
+const checkCircuitBreakerMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!checkCircuitBreaker()) {
+    return res.status(503).json({
+      error: 'Stellar network unavailable',
+      message: 'Circuit breaker is open due to repeated failures',
+      retryable: true,
+      suggestedAction: 'Retry after 30 seconds',
+    });
+  }
+  next();
+};
+
 app.use(express.json());
 app.use(
   pinoHttp({
@@ -79,6 +100,7 @@ app.get('/network', (_req, res) => {
 app.get('/health', async (req, res) => {
   const horizon = await checkHorizon();
   const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
+  const cbState = getCircuitBreakerState();
   
   return res.json({
     status,
@@ -86,12 +108,13 @@ app.get('/health', async (req, res) => {
     horizonUrl: stellarConfig.horizonUrl,
     horizonStatus: horizon.status,
     horizonLatency: horizon.latency,
+    circuitBreaker: cbState,
     timestamp: new Date().toISOString(),
   });
 });
 
 // ✅ PROTECTED: POST /fund (requires secret, testnet only)
-app.post('/fund', requireSecret, async (req, res) => {
+app.post('/fund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   // Return 403 on mainnet - Friendbot is testnet-only
   if (stellarConfig.network === 'mainnet') {
     return res.status(403).json({ 
@@ -102,67 +125,85 @@ app.post('/fund', requireSecret, async (req, res) => {
 
   try {
     const { publicKey, amount } = req.body;
-    const result = await fundAccount(publicKey, amount);
+    const result = await retryWithBackoff(() => fundAccount(publicKey, amount), 3, 1000);
+    recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
 // ✅ PROTECTED: POST /intent (requires secret)
-app.post('/intent', requireSecret, async (req, res) => {
+app.post('/intent', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount } = req.body;
-    const result = await createIntent(fromPublicKey, toPublicKey, amount);
+    const result = await retryWithBackoff(() => createIntent(fromPublicKey, toPublicKey, amount), 3, 1000);
+    recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
 // ✅ PROTECTED: POST /refund (requires secret)
-app.post('/refund', requireSecret, async (req, res) => {
+app.post('/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { toPublicKey, amount, memo } = req.body;
     if (!toPublicKey || !amount) {
       return res.status(400).json({ error: 'toPublicKey and amount are required' });
     }
-    const result = await issueRefund(toPublicKey, amount, memo || 'refund');
+    const result = await retryWithBackoff(() => issueRefund(toPublicKey, amount, memo || 'refund'), 3, 1000);
+    recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
 // ✅ PUBLIC: GET /fee-stats (no auth needed)
-app.get('/fee-stats', async (_req, res) => {
+app.get('/fee-stats', checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
-    const stats = await getFeeStats();
+    const stats = await retryWithBackoff(() => getFeeStats(), 3, 1000);
+    recordSuccess();
     res.json({ success: true, ...stats });
   } catch (error: any) {
-    res.status(502).json({ error: 'HorizonUnavailable', message: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
 // ✅ PUBLIC: GET /verify/:hash (no auth needed)
-app.get('/verify/:hash', async (req, res) => {
+app.get('/verify/:hash', checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { hash } = req.params;
-    const result = await verifyIntent(hash);
+    const result = await retryWithBackoff(() => verifyIntent(hash), 3, 1000);
+    recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
 // ✅ PROTECTED: GET /balance/:publicKey (requires secret)
-app.get('/balance/:publicKey', requireSecret, async (req, res) => {
+app.get('/balance/:publicKey', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { publicKey } = req.params;
-    const result = await getAccountBalance(publicKey);
+    const result = await retryWithBackoff(() => getAccountBalance(publicKey), 3, 1000);
+    recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 

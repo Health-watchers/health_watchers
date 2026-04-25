@@ -59,6 +59,8 @@ export interface Encounter {
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
+  type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
+  appointmentId?: Schema.Types.ObjectId;
   chiefComplaint: string;
   status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
@@ -158,6 +160,8 @@ const encounterSchema = new Schema<Encounter>(
     clinicId:          { type: Schema.Types.ObjectId, ref: 'Clinic',   required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
+    type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
+    appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
     chiefComplaint:    { type: String, required: true },
     status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
