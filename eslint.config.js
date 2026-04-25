@@ -1,5 +1,5 @@
-// Root ESLint config for lint-staged
-// Delegates to app-specific configs
+// Root ESLint config — delegates to per-package configs via extends
+// Also used by lint-staged for pre-commit checks
 
 export default [
   {
