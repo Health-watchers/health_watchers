@@ -60,7 +60,7 @@ export interface Encounter {
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled';
+  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
   soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
@@ -159,7 +159,7 @@ const encounterSchema = new Schema<Encounter>(
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
+    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
     soapNotes:         { type: soapNotesSchema },
     treatmentPlan:     { type: String },
