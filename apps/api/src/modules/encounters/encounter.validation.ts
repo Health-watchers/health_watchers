@@ -33,6 +33,13 @@ const prescriptionSchema = z.object({
   }).optional(),
 });
 
+const soapNotesSchema = z.object({
+  subjective: z.string().max(10000).optional(),
+  objective:  z.string().max(10000).optional(),
+  assessment: z.string().max(10000).optional(),
+  plan:       z.string().max(10000).optional(),
+}).optional();
+
 export const createEncounterSchema = z.object({
   patientId: z.string().regex(objectIdRegex, 'Invalid patientId'),
   clinicId: z.string().regex(objectIdRegex, 'Invalid clinicId'),
@@ -40,6 +47,7 @@ export const createEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters'),
   status: z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
   notes: z.string().max(5000).optional(),
+  soapNotes: soapNotesSchema,
   treatmentPlan: z.string().max(5000).optional(),
   diagnosis: z.array(diagnosisSchema).optional(),
   vitalSigns: vitalSignsSchema,
@@ -70,6 +78,7 @@ export const updateEncounterSchema = createEncounterSchema
 export const patchEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters').optional(),
   notes: z.string().max(5000).optional(),
+  soapNotes: soapNotesSchema,
   aiSummary: z.string().max(5000).optional(),
   diagnosis: z.array(diagnosisSchema).optional(),
   treatmentPlan: z.string().max(5000).optional(),

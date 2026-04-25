@@ -16,6 +16,8 @@ import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
+import { withSpan } from '@api/utils/tracer';
+import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 
 const router = Router();
 router.use(authenticate);
@@ -217,6 +219,7 @@ router.get(
 router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
+  feeBudgetCheck,
   asyncHandler(async (req: Request, res: Response) => {
     const { 
       amount, 
@@ -232,6 +235,7 @@ router.post(
       maxSourceAmount,
       path,
       feeStrategy = 'standard',
+      sponsorFee = false,
     } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
@@ -267,7 +271,11 @@ router.post(
       });
     }
 
-    const record = await PaymentRecordModel.create({
+    const record = await withSpan('payment.intent.create', {
+      'payment.asset': normalizedAsset,
+      'payment.amount': amount,
+      'clinic.id': String(clinicId),
+    }, async () => PaymentRecordModel.create({
       intentId,
       amount,
       destination,
@@ -284,13 +292,35 @@ router.post(
       maxSourceAmount,
       path,
       feeStrategy,
-    });
+    }));
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
 
+    let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
+    if (sponsorFee) {
+      try {
+        const { checkFeeBudget, recordSponsoredFee } = await import('./services/fee-budget.service');
+        const BASE_FEE_STROOPS = 100;
+        const feeStroops = BASE_FEE_STROOPS * 10;
+        const allowed = await checkFeeBudget(String(clinicId), feeStroops);
+        if (allowed) {
+          feeBump = await stellarClient.sponsorFeeBump(record.intentId);
+          await recordSponsoredFee(String(clinicId), record.intentId, feeStroops);
+        } else {
+          logger.warn({ clinicId }, 'Fee sponsorship skipped: budget exceeded');
+        }
+      } catch (err: any) {
+        logger.warn({ err }, 'Fee bump failed, returning unsigned intent');
+      }
+    }
+
     return res.status(201).json({
       status: 'success',
-      data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
+      data: {
+        ...toPaymentResponse(record),
+        platformPublicKey: config.stellar.platformPublicKey,
+        ...(feeBump ? { feeBump } : {}),
+      },
     });
   })
 );
@@ -332,7 +362,9 @@ router.patch(
       });
     }
 
-    const verification = await stellarClient.verifyTransaction(txHash);
+    const verification = await withSpan('stellar.transaction.verify', { 'stellar.tx_hash': txHash }, async () =>
+      stellarClient.verifyTransaction(txHash)
+    );
 
     if (!verification.found || !verification.transaction) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });

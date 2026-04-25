@@ -313,3 +313,46 @@ export async function getFeeStats() {
     },
   };
 }
+
+/**
+ * Wrap an inner transaction XDR in a fee bump transaction signed by the platform keypair.
+ * The platform pays the fee; the inner transaction signer pays nothing.
+ */
+export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
+  xdr: string;
+  hash: string;
+  feeStroops: number;
+}> {
+  if (!stellarConfig.stellarSecretKey) {
+    throw new Error('Platform secret key not configured for fee sponsorship');
+  }
+
+  const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+  const { Transaction, FeeBumpTransaction } = await import('@stellar/stellar-sdk');
+
+  // Deserialise the inner transaction
+  const innerTx = new Transaction(innerXdr, getNetworkPassphrase());
+
+  const feeStroops = parseInt(BASE_FEE, 10) * 10; // 10× base fee for priority
+
+  const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+    platformKeypair,
+    String(feeStroops),
+    innerTx,
+    getNetworkPassphrase(),
+  );
+
+  feeBumpTx.sign(platformKeypair);
+
+  const xdr = feeBumpTx.toXDR();
+  const hash = feeBumpTx.hash().toString('hex');
+
+  logger.info({ hash, feeStroops }, 'Fee bump transaction built');
+
+  if (!stellarConfig.dryRun) {
+    const server = getHorizonServer();
+    await server.submitTransaction(feeBumpTx);
+  }
+
+  return { xdr, hash, feeStroops };
+}

@@ -22,6 +22,7 @@ interface Labels {
 }
 
 import { API_URL } from '@/lib/api';
+import PatientImport from '@/components/patients/PatientImport';
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,6 +66,11 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           <span aria-hidden="true">+</span>
           {labels.registerNew}
         </Link>
+      </div>
+
+      {/* ── CSV Import ────────────────────────────────────── */}
+      <div className="mb-6">
+        <PatientImport />
       </div>
 
       {/* ── Search bar ────────────────────────────────────── */}

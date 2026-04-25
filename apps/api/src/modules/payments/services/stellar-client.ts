@@ -151,8 +151,21 @@ class StellarClient {
   }
 
   /**
-   * Check if the stellar-service is healthy
+   * Wrap an inner transaction in a platform-sponsored fee bump tx
+   * Calls the stellar-service POST /fee-bump endpoint
    */
+  async sponsorFeeBump(innerXdr: string): Promise<{ xdr: string; hash: string; feeStroops: number }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fee-bump',
+      { innerXdr },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    const { success: _s, ...data } = response.data;
+    return data;
+  }
+
+  /**
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {
     try {
       const response = await this.client.get('/health');

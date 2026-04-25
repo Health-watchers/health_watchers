@@ -1,5 +1,5 @@
 import { Schema, model, models } from 'mongoose';
-import { sanitizeText } from '../../utils/sanitize';
+import { sanitizeText, sanitizeHtml } from '../../utils/sanitize';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -47,14 +47,22 @@ export interface BillingInfo {
   paidAt?: Date;
 }
 
+export interface SoapNotes {
+  subjective?: string;  // Patient's reported symptoms (rich HTML)
+  objective?: string;   // Physical examination findings (rich HTML)
+  assessment?: string;  // Doctor's clinical assessment (rich HTML)
+  plan?: string;        // Treatment plan (rich HTML)
+}
+
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
-  encounteredBy?: Schema.Types.ObjectId; // alias for attendingDoctorId (spec compat)
+  encounteredBy?: Schema.Types.ObjectId;
   chiefComplaint: string;
   status: 'open' | 'closed' | 'follow-up' | 'cancelled';
   notes?: string;
+  soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
   treatmentPlan?: string;
   vitalSigns?: VitalSigns;
@@ -134,6 +142,16 @@ const billingInfoSchema = new Schema<BillingInfo>(
   { _id: false }
 );
 
+const soapNotesSchema = new Schema<SoapNotes>(
+  {
+    subjective: { type: String },
+    objective:  { type: String },
+    assessment: { type: String },
+    plan:       { type: String },
+  },
+  { _id: false }
+);
+
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
@@ -143,6 +161,7 @@ const encounterSchema = new Schema<Encounter>(
     chiefComplaint:    { type: String, required: true },
     status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
     notes:             { type: String },
+    soapNotes:         { type: soapNotesSchema },
     treatmentPlan:     { type: String },
     diagnosis:         { type: [diagnosisSchema], default: undefined },
     vitalSigns:        { type: vitalSignsSchema },
@@ -157,13 +176,22 @@ const encounterSchema = new Schema<Encounter>(
 
 // Compound index for paginated clinic-scoped queries
 encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
+encounterSchema.index({ '$**': 'text' }); // full-text search across all string fields
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
+const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
 
 encounterSchema.pre('save', function () {
   for (const field of FREE_TEXT_FIELDS) {
     const val = this[field];
     if (val) (this as any)[field] = sanitizeText(val);
+  }
+  // Sanitize SOAP rich-text HTML fields (strip dangerous tags/attrs)
+  if (this.soapNotes) {
+    for (const field of SOAP_FIELDS) {
+      const val = (this.soapNotes as any)[field];
+      if (val) (this.soapNotes as any)[field] = sanitizeHtml(val);
+    }
   }
 });
 

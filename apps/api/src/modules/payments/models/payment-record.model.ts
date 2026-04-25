@@ -19,6 +19,13 @@ export interface PaymentRecord {
   maxSourceAmount?: string;
   path?: string[];
   feeStrategy?: 'slow' | 'standard' | 'fast';
+  // Claimable balance fields
+  claimableBalanceId?: string;
+  claimableAfter?: Date;
+  claimableUntil?: Date;
+  claimed?: boolean;
+  claimedAt?: Date;
+  encounterId?: string;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -46,6 +53,13 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     maxSourceAmount: { type: String },
     path: { type: [String], default: undefined },
     feeStrategy: { type: String, enum: ['slow', 'standard', 'fast'], default: 'standard' },
+    // Claimable balance fields
+    claimableBalanceId: { type: String, index: true },
+    claimableAfter: { type: Date },
+    claimableUntil: { type: Date },
+    claimed: { type: Boolean, default: false, index: true },
+    claimedAt: { type: Date },
+    encounterId: { type: String, index: true },
   },
   { timestamps: true, versionKey: false }
 );
