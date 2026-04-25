@@ -20,17 +20,31 @@ const baseConfig = [
       security,
     },
     rules: {
+      // TypeScript-ESLint recommended rules
       ...tseslint.configs.recommended.rules,
+
+      // Security plugin rules
       ...security.configs.recommended.rules,
-      'no-console': process.env.NODE_ENV === 'production' ? 'error' : 'warn',
-      'no-unused-vars': 'off',
+      'security/detect-object-injection': 'error',
+      'security/detect-non-literal-regexp': 'error',
+
+      // TypeScript strictness
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/explicit-function-return-type': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+
+      // General safety
+      'no-console': 'warn',
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-unused-vars': 'off', // Handled by @typescript-eslint/no-unused-vars
     },
   },
   // Must be last — disables ESLint rules that conflict with Prettier
   prettier,
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.js'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
   },
 ];
 
