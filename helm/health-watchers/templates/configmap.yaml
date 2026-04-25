@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-watchers-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  # API config
+  {{- range $key, $val := .Values.api.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+  # Stellar service config
+  STELLAR_SERVICE_URL: "http://stellar-service:{{ .Values.stellarService.service.port }}"
+  API_WEBHOOK_URL: "http://api:{{ .Values.api.service.port }}/api/v1/webhooks/stellar"
+  REDIS_URL: {{ if .Values.redis.enabled }}"redis://redis:{{ .Values.redis.service.port }}"{{ else }}""{{ end }}
+  ALLOWED_ORIGINS: "https://{{ .Values.ingress.host }}"
