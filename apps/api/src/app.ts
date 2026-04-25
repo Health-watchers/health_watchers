@@ -66,6 +66,7 @@ import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 
 
 const app = express();
@@ -146,6 +147,7 @@ app.use(
 app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
+app.use(requestAuditMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
