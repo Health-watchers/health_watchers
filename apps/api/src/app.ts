@@ -66,6 +66,8 @@ import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import cdsRoutes from './modules/cds/cds.controller';
+import { seedBuiltInRules } from './modules/cds/cds-seed';
 
 
 const app = express();
@@ -213,6 +215,7 @@ app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/cds', cdsRoutes);
 
 setupSwagger(app);
 
@@ -225,6 +228,9 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
+  
+  // Seed built-in CDS rules
+  await seedBuiltInRules();
 
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
