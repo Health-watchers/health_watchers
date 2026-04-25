@@ -19,6 +19,7 @@ import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { emitToClinic } from '@api/realtime/socket';
 
 const router = Router();
 router.use(authenticate);
@@ -475,6 +476,12 @@ router.patch(
       /* non-critical */
     }
 
+    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
+      paymentId: String(updatedPayment!._id),
+      txHash,
+      amount: updatedPayment!.amount,
+      assetCode: updatedPayment!.assetCode,
+    });
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   })
 );
@@ -623,6 +630,60 @@ router.get(
       .limit(limit)
       .lean();
     return res.json({ status: 'success', data: snapshots.reverse() });
+  })
+);
+
+// GET /payments/analytics — fetch payment analytics
+router.get(
+  '/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const { from, to, groupBy } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'from and to query parameters are required (ISO 8601 format)',
+      });
+    }
+
+    const fromDate = new Date(from as string);
+    const toDate = new Date(to as string);
+    const groupByPeriod = (groupBy as 'day' | 'week' | 'month') || 'month';
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid date format. Use ISO 8601 format (e.g., 2026-01-01)',
+      });
+    }
+
+    const { getPaymentAnalytics } = await import('./services/analytics.service');
+    const analytics = await getPaymentAnalytics(clinicId, fromDate, toDate, groupByPeriod);
+
+    return res.json({ status: 'success', data: analytics });
+  })
+);
+
+// GET /payments/revenue-dashboard — fetch revenue dashboard data
+router.get(
+  '/revenue-dashboard',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const months = Math.min(parseInt((req.query.months as string) ?? '12', 10), 36);
+
+    const { getRevenueDashboard } = await import('./services/analytics.service');
+    const dashboard = await getRevenueDashboard(clinicId, months);
+
+    return res.json({ status: 'success', data: dashboard });
   })
 );
 

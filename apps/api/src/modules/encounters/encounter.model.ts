@@ -59,8 +59,10 @@ export interface Encounter {
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
+  type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
+  appointmentId?: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled';
+  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
   soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
@@ -158,8 +160,10 @@ const encounterSchema = new Schema<Encounter>(
     clinicId:          { type: Schema.Types.ObjectId, ref: 'Clinic',   required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
+    type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
+    appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
+    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
     soapNotes:         { type: soapNotesSchema },
     treatmentPlan:     { type: String },
@@ -180,6 +184,8 @@ encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
 encounterSchema.index({ clinicId: 1, createdAt: -1, status: 1 });
 // Targeted text index on searchable fields (replaces wildcard $** index)
 encounterSchema.index({ chiefComplaint: 'text', notes: 'text' }, { name: 'encounter_text_search' });
+encounterSchema.index({ patientId: 1, createdAt: -1 });          // Patient encounter history
+encounterSchema.index({ encounteredBy: 1, createdAt: -1 });      // Doctor's encounters
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;

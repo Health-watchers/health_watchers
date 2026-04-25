@@ -4,6 +4,7 @@ import { cache } from '../../services/cache.service';
 import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
+import { getDbStatus } from '../../config/db';
 
 const router = Router();
 
@@ -13,7 +14,9 @@ const router = Router();
 router.get('/live', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'alive',
-    uptime: process.uptime(),
+    service: 'health-watchers-api',
+    database: getDbStatus(),
+    uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
 });
