@@ -66,6 +66,7 @@ import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import scheduleRoutes from './modules/schedules/schedules.routes';
 
 
 const app = express();
@@ -213,6 +214,7 @@ app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/schedules', scheduleRoutes);
 
 setupSwagger(app);
 
