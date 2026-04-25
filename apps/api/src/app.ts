@@ -28,7 +28,6 @@ import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
-import { healthRoutes } from './modules/health/health.controller';
 import {
   authLimiter,
   forgotPasswordLimiter,
@@ -71,6 +70,9 @@ import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immu
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+import metricsRouter from './modules/metrics/metrics.routes';
+import { metricsMiddleware } from './middlewares/metrics.middleware';
+import { mongodbConnectionPoolSize } from './services/metrics.service';
 
 
 const app = express();
@@ -173,6 +175,11 @@ app.use((req, res, next) => {
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
+// ── Prometheus metrics ────────────────────────────────────────────────────────
+// Must be registered before API routes so all requests are measured
+app.use(metricsMiddleware);
+app.use('/metrics', metricsRouter);
+
 // ── API version header on all /api/* responses ────────────────────────────────
 app.use('/api', apiVersionHeader('1.0'));
 app.use('/api', traceIdHeader);
@@ -248,6 +255,12 @@ async function startServer() {
   startReconciliationJob();
   startRiskRecalculationJob();
   startBalanceMonitoringJob();
+
+  // Track MongoDB connection pool size for Prometheus
+  setInterval(() => {
+    const poolSize = mongoose.connection.pool?.totalConnectionCount ?? 0;
+    mongodbConnectionPoolSize.set(poolSize);
+  }, 15_000);
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {

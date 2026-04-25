@@ -11,6 +11,45 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: health-watchers-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    environment:
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: health-watchers-grafana
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3003
+    depends_on:
+      - prometheus
+
   mongodb:
     image: mongo:7.0
     container_name: health-watchers-mongodb
@@ -52,6 +91,8 @@ services:
       LOG_LEVEL: info
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       OTEL_SAMPLING_RATE: "1.0"
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
     ports:
       - "3001:3001"
     volumes:
@@ -96,6 +137,8 @@ services:
       LOG_LEVEL: info
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       OTEL_SAMPLING_RATE: "1.0"
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
     ports:
       - "3002:3002"
     volumes:
@@ -106,6 +149,10 @@ services:
 
 volumes:
   mongodb_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

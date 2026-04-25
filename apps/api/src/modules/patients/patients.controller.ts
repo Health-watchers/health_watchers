@@ -19,6 +19,7 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
+import { patientsCreatedTotal } from '../../services/metrics.service';
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 
@@ -197,6 +198,7 @@ router.post(
       })
     );
     emitToClinic(String(clinicId || req.user!.clinicId), 'patient:created', { patientId: String(doc._id) });
+    patientsCreatedTotal.inc({ clinicId: clinicId || req.user!.clinicId });
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   })
 );

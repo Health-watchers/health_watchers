@@ -19,6 +19,7 @@ import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
+import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
 
 const router = Router();
 router.use(authenticate);
@@ -296,6 +297,7 @@ router.post(
     }));
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
+    paymentsInitiatedTotal.inc({ currency: normalizedAsset });
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
@@ -447,6 +449,7 @@ router.patch(
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
+    paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
 
     // Auto-update linked invoice if any (non-blocking)
     try {

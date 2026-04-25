@@ -8,10 +8,16 @@ import {
   AI_DISCLAIMER,
   checkDrugInteractions,
 } from './ai.service';
+import {
+  generateDifferentialDiagnosis,
+  DIFFERENTIAL_DISCLAIMER,
+  type DifferentialDiagnosisInput,
+} from './differential-diagnosis.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
 import { sendAISummaryNotification } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
+import { aiRequestsTotal } from '../../services/metrics.service';
 
 const router = Router();
 
@@ -23,6 +29,7 @@ router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 // Returns: { success: boolean, summary: string, disclaimer: string }
 router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
+  aiRequestsTotal.inc({ endpoint: 'summarize' });
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({
@@ -581,5 +588,98 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
+
+// POST /api/v1/ai/differential-diagnosis
+// Body: { chiefComplaint, symptoms, vitalSigns?, patientAge?, patientSex?, relevantHistory? }
+// Returns: { differentials, urgency, disclaimer }
+// Rate-limited to 20 req/min per clinic (aiLimiter applied at app.ts level)
+router.post(
+  '/differential-diagnosis',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'NURSE', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    aiRequestsTotal.inc({ endpoint: 'differential-diagnosis' });
+
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      const {
+        chiefComplaint,
+        symptoms,
+        vitalSigns,
+        patientAge,
+        patientSex,
+        relevantHistory,
+      } = req.body as DifferentialDiagnosisInput;
+
+      // Input validation
+      if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 3) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'chiefComplaint is required and must be at least 3 characters',
+        });
+      }
+      if (!Array.isArray(symptoms) || symptoms.length === 0) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'symptoms must be a non-empty array of strings',
+        });
+      }
+      if (patientAge !== undefined && (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'patientAge must be a number between 0 and 150',
+        });
+      }
+
+      const result = await withSpan(
+        'ai.differential-diagnosis',
+        { 'ai.chiefComplaint': chiefComplaint },
+        () =>
+          generateDifferentialDiagnosis({
+            chiefComplaint: chiefComplaint.trim(),
+            symptoms: symptoms.map((s: string) => String(s).trim()).filter(Boolean),
+            vitalSigns,
+            patientAge,
+            patientSex,
+            relevantHistory,
+          }),
+      );
+
+      const duration = Date.now() - startTime;
+      logger.info(
+        { clinicId: req.user!.clinicId, duration, differentialCount: result.differentials.length },
+        'AI differential diagnosis generated',
+      );
+
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      logger.error({ err: error, duration }, 'AI differential-diagnosis error');
+
+      if (error instanceof Error && error.message.includes('unparseable')) {
+        return res.status(502).json({
+          error: 'AIParseError',
+          message: 'AI returned an unparseable response. Please try again.',
+          disclaimer: DIFFERENTIAL_DISCLAIMER,
+        });
+      }
+
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+      });
+    }
+  },
+);
 
 export default router;

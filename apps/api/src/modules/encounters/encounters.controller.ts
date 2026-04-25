@@ -18,6 +18,7 @@ import { ICD10Model } from '../icd10/icd10.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { auditLog } from '../audit/audit.service';
 import { emitToClinic } from '@api/realtime/socket';
+import { encountersCreatedTotal } from '../../services/metrics.service';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -32,36 +33,129 @@ const router = Router();
 router.use(authenticate);
 
 // GET /encounters — paginated list scoped to the authenticated clinic
+// Supports: q (full-text), patientId, doctorId, status, date, dateFrom, dateTo,
+//           diagnosisCode, hasAiSummary, hasPrescriptions, sort, page, limit
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { patientId, doctorId, status, date, page, limit } =
-      req.query as unknown as ListEncountersQuery;
+    const {
+      patientId,
+      doctorId,
+      status,
+      date,
+      q,
+      diagnosisCode,
+      dateFrom,
+      dateTo,
+      hasAiSummary,
+      hasPrescriptions,
+      sort,
+      page,
+      limit,
+    } = req.query as unknown as ListEncountersQuery;
 
-    const filter: Record<string, unknown> = {
-      clinicId: req.user!.clinicId,
+    const clinicId = req.user!.clinicId;
+
+    // ── Build aggregation pipeline ────────────────────────────────────────────
+    const matchStage: Record<string, unknown> = {
+      clinicId: new Types.ObjectId(clinicId),
       isActive: true,
     };
-    if (patientId) filter.patientId = patientId;
-    if (doctorId) filter.attendingDoctorId = doctorId;
-    if (status) filter.status = status;
+
+    if (patientId) matchStage.patientId = new Types.ObjectId(patientId);
+    if (doctorId) matchStage.attendingDoctorId = new Types.ObjectId(doctorId);
+    if (status) matchStage.status = status;
+
+    // Single-day filter (legacy `date` param)
     if (date) {
       const start = new Date(date);
       const end = new Date(date);
       end.setDate(end.getDate() + 1);
-      filter.createdAt = { $gte: start, $lt: end };
+      matchStage.createdAt = { $gte: start, $lt: end };
+    }
+
+    // Date range filter (dateFrom / dateTo)
+    if (dateFrom || dateTo) {
+      const range: Record<string, Date> = {};
+      if (dateFrom) range.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setDate(end.getDate() + 1);
+        range.$lt = end;
+      }
+      matchStage.createdAt = range;
+    }
+
+    // ICD-10 diagnosis code filter
+    if (diagnosisCode) {
+      matchStage['diagnosis.code'] = diagnosisCode.toUpperCase();
+    }
+
+    // Boolean filters
+    if (hasAiSummary === true) {
+      matchStage.aiSummary = { $exists: true, $ne: null, $ne: '' };
+    }
+    if (hasPrescriptions === true) {
+      matchStage['prescriptions.0'] = { $exists: true };
+    }
+
+    // Full-text search
+    if (q && q.trim().length > 0) {
+      matchStage.$text = { $search: q.trim() };
+    }
+
+    // ── Sort ──────────────────────────────────────────────────────────────────
+    let sortStage: Record<string, 1 | -1 | { $meta: string }> = { createdAt: -1 };
+    if (sort === 'createdAt_asc') sortStage = { createdAt: 1 };
+    else if (sort === 'patientName_asc') sortStage = { 'patientInfo.firstName': 1 };
+    // Add text score sort when doing full-text search
+    if (q && q.trim().length > 0) {
+      sortStage = { score: { $meta: 'textScore' }, ...sortStage };
     }
 
     const skip = (page - 1) * limit;
-    const [docs, total] = await Promise.all([
-      EncounterModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      EncounterModel.countDocuments(filter),
-    ]);
+
+    // ── Aggregation pipeline with patient name lookup ─────────────────────────
+    const pipeline: object[] = [
+      { $match: matchStage },
+      ...(q ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
+      {
+        $lookup: {
+          from: 'patients',
+          localField: 'patientId',
+          foreignField: '_id',
+          as: 'patientInfo',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, systemId: 1 } }],
+        },
+      },
+      { $unwind: { path: '$patientInfo', preserveNullAndEmpty: true } },
+      { $sort: sortStage },
+      {
+        $facet: {
+          data: [{ $skip: skip }, { $limit: limit }],
+          meta: [{ $count: 'total' }],
+        },
+      },
+    ];
+
+    const [result] = await EncounterModel.aggregate(pipeline).exec();
+    const docs = result?.data ?? [];
+    const total = result?.meta?.[0]?.total ?? 0;
 
     return res.json({
       status: 'success',
-      data: docs.map(toEncounterResponse),
+      data: docs.map((doc: any) => ({
+        ...toEncounterResponse(doc),
+        // Include patient name from lookup
+        patient: doc.patientInfo
+          ? {
+              firstName: doc.patientInfo.firstName,
+              lastName: doc.patientInfo.lastName,
+              systemId: doc.patientInfo.systemId,
+            }
+          : undefined,
+      })),
       meta: { total, page, limit },
     });
   }),
@@ -134,6 +228,7 @@ router.post(
 
     const doc = await EncounterModel.create(req.body);
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
+    encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   })
 );

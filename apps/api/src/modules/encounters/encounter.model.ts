@@ -184,7 +184,10 @@ encounterSchema.index({ clinicId: 1, createdAt: -1 });           // List encount
 encounterSchema.index({ patientId: 1, createdAt: -1 });          // Patient encounter history
 encounterSchema.index({ clinicId: 1, patientId: 1, status: 1 }); // Filter by status
 encounterSchema.index({ encounteredBy: 1, createdAt: -1 });      // Doctor's encounters
-encounterSchema.index({ '$**': 'text' }); // full-text search across all string fields
+// Compound index for search/filter performance (issue #394)
+encounterSchema.index({ clinicId: 1, createdAt: -1, status: 1 });
+// Targeted text index on searchable fields (replaces wildcard $** index)
+encounterSchema.index({ chiefComplaint: 'text', notes: 'text' }, { name: 'encounter_text_search' });
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
