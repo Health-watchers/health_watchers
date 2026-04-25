@@ -10,6 +10,11 @@ import {
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
 import logger from './logger.js';
+import ResilientHorizonClient from './horizon-client.js';
+
+// Initialize resilient Horizon client
+const horizonClient = new ResilientHorizonClient(stellarConfig.horizonUrls);
+horizonClient.startHealthChecks();
 
 /**
  * Get the appropriate network passphrase using SDK constants
@@ -22,7 +27,14 @@ export function getNetworkPassphrase(): string {
  * Get Horizon server instance
  */
 export function getHorizonServer(): Horizon.Server {
-  return new Horizon.Server(stellarConfig.horizonUrl);
+  return horizonClient.getServer();
+}
+
+/**
+ * Get network status
+ */
+export async function getNetworkStatus() {
+  return horizonClient.getNetworkStatus();
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   buildFeeBumpTransaction,
   issueRefund,
   streamAccountTransactions,
+  getNetworkStatus,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -68,11 +69,20 @@ app.use(
 app.get('/network', (_req, res) => {
   return res.json({
     network: stellarConfig.network,
-    horizonUrl: stellarConfig.horizonUrl,
     platformPublicKey: stellarConfig.platformPublicKey,
     mainnetMode: stellarConfig.network === 'mainnet',
     dryRun: stellarConfig.dryRun,
   });
+});
+
+// ✅ PUBLIC: GET /network-status - Detailed network status with failover info
+app.get('/network-status', async (_req, res) => {
+  try {
+    const status = await getNetworkStatus();
+    return res.json({ success: true, ...status });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // ✅ PUBLIC: GET /health - Health check endpoint
