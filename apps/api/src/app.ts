@@ -140,8 +140,11 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+// Bypass for multipart/form-data routes (e.g. CSV import)
+const MULTIPART_BYPASS = ['/api/v1/patients/import'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
         .status(415)

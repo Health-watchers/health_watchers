@@ -19,6 +19,8 @@ export const createPaymentIntentSchema = z.object({
   path: z.array(z.string()).optional(),
   /** Fee speed tier — defaults to 'standard' */
   feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
+  /** If true, platform wraps the inner tx in a fee bump and pays the fee */
+  sponsorFee: z.boolean().optional().default(false),
 });
 
 export const confirmPaymentSchema = z.object({
