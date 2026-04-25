@@ -22,7 +22,12 @@ export interface UserPreferences {
     appointment_reminder: boolean;
     ai_summary_ready: boolean;
     lab_result_ready: boolean;
+    high_risk_patient: boolean;
     system: boolean;
+    balance_low_warning: boolean;
+    balance_critical: boolean;
+    large_transaction: boolean;
+    unrecognized_transaction: boolean;
   };
 }
 
@@ -115,7 +120,12 @@ const userSchema = new Schema(
         appointment_reminder: { type: Boolean, default: true },
         ai_summary_ready:     { type: Boolean, default: true },
         lab_result_ready:     { type: Boolean, default: true },
+        high_risk_patient:    { type: Boolean, default: true },
         system:               { type: Boolean, default: true },
+        balance_low_warning:      { type: Boolean, default: true },
+        balance_critical:         { type: Boolean, default: true },
+        large_transaction:        { type: Boolean, default: true },
+        unrecognized_transaction: { type: Boolean, default: true },
       },
     },
   },

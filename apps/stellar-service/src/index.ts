@@ -15,6 +15,9 @@ import {
   getOrderbook,
   checkHorizon,
   getFeeStats,
+  buildFeeBumpTransaction,
+  issueRefund,
+  streamAccountTransactions,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -77,7 +80,7 @@ app.get('/health', async (req, res) => {
   const horizon = await checkHorizon();
   const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
   
-  res.json({
+  return res.json({
     status,
     network: stellarConfig.network,
     horizonUrl: stellarConfig.horizonUrl,
@@ -111,6 +114,20 @@ app.post('/intent', requireSecret, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount } = req.body;
     const result = await createIntent(fromPublicKey, toPublicKey, amount);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /refund (requires secret)
+app.post('/refund', requireSecret, async (req, res) => {
+  try {
+    const { toPublicKey, amount, memo } = req.body;
+    if (!toPublicKey || !amount) {
+      return res.status(400).json({ error: 'toPublicKey and amount are required' });
+    }
+    const result = await issueRefund(toPublicKey, amount, memo || 'refund');
     return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -210,6 +227,49 @@ app.get('/orderbook', async (req, res) => {
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
+});
+
+// ✅ PROTECTED: POST /fee-bump — wrap inner XDR in a platform-sponsored fee bump tx
+app.post('/fee-bump', requireSecret, async (req, res) => {
+  try {
+    const { innerXdr } = req.body;
+    if (!innerXdr) {
+      return res.status(400).json({ error: 'innerXdr is required' });
+    }
+    const result = await buildFeeBumpTransaction(innerXdr);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /monitor/stream?publicKey=G... — SSE stream of account transactions
+app.get('/monitor/stream', requireSecret, (req, res) => {
+  const { publicKey } = req.query;
+
+  if (!publicKey || typeof publicKey !== 'string') {
+    return res.status(400).json({ error: 'publicKey query parameter is required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const close = streamAccountTransactions(
+    publicKey,
+    (tx) => {
+      res.write(`data: ${JSON.stringify(tx)}\n\n`);
+    },
+    (err) => {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`);
+    }
+  );
+
+  req.on('close', () => {
+    close();
+    logger.info({ publicKey }, 'SSE client disconnected, stream closed');
+  });
 });
 
 const server: Server = app.listen(PORT, () => {

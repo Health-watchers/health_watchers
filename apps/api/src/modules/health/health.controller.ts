@@ -7,7 +7,9 @@ import { config } from '@health-watchers/config';
 
 const router = Router();
 
-// GET /health/live - Liveness check (Fast)
+/**
+ * GET /health/live - Fast liveness check
+ */
 router.get('/live', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'alive',
@@ -16,33 +18,44 @@ router.get('/live', (req: Request, res: Response) => {
   });
 });
 
-// GET /health/ready - Readiness check (Comprehensive)
+/**
+ * GET /health/ready - Comprehensive readiness check
+ */
 router.get('/ready', async (req: Request, res: Response) => {
   const checks: Record<string, any> = {};
   let isReady = true;
 
-  // 1. MongoDB Check (Critical)
+  // 1. MongoDB Check (CRITICAL)
   const mongoStart = Date.now();
   try {
     const mongoStatus = mongoose.connection.readyState;
     // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     if (mongoStatus === 1) {
-      await mongoose.connection.db.admin().ping();
+      // Perform a simple ping if connected
+      await mongoose.connection.db?.admin().ping();
       checks.mongodb = { status: 'healthy', latency: Date.now() - mongoStart };
     } else {
       isReady = false;
-      checks.mongodb = { status: 'unhealthy', message: `Mongoose state: ${mongoStatus}` };
+      checks.mongodb = { 
+        status: 'unhealthy', 
+        message: `Mongoose readyState: ${mongoStatus}`,
+        latency: Date.now() - mongoStart 
+      };
     }
   } catch (err) {
     isReady = false;
-    checks.mongodb = { status: 'unhealthy', message: err instanceof Error ? err.message : 'Unknown error' };
+    checks.mongodb = { 
+      status: 'unhealthy', 
+      message: err instanceof Error ? err.message : 'Unknown error',
+      latency: Date.now() - mongoStart 
+    };
   }
 
-  // 2. Redis Check (Optional - degraded if fails)
+  // 2. Redis Check (OPTIONAL - degraded if fails)
   const redisHealth = await cache.ping();
   checks.redis = redisHealth;
 
-  // 3. Stellar Horizon Check (Optional - degraded if fails)
+  // 3. Stellar Horizon Check (OPTIONAL - degraded if fails)
   const stellarStart = Date.now();
   try {
     const stellarHealth = await stellarClient.healthCheck();
@@ -52,10 +65,14 @@ router.get('/ready', async (req: Request, res: Response) => {
       network: stellarHealth.network,
     };
   } catch (err) {
-    checks.stellarHorizon = { status: 'degraded', message: err instanceof Error ? err.message : 'Unknown error' };
+    checks.stellarHorizon = { 
+      status: 'degraded', 
+      message: err instanceof Error ? err.message : 'Connection failed',
+      latency: Date.now() - stellarStart 
+    };
   }
 
-  // 4. Gemini API Check (Optional - degraded if fails)
+  // 4. Gemini API Check (OPTIONAL - degraded if fails)
   const hasGemini = isAIServiceAvailable();
   checks.geminiApi = {
     status: hasGemini ? 'healthy' : 'degraded',

@@ -17,6 +17,7 @@ import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
+import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 
 const router = Router();
 router.use(authenticate);
@@ -218,6 +219,7 @@ router.get(
 router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
+  feeBudgetCheck,
   asyncHandler(async (req: Request, res: Response) => {
     const { 
       amount, 
@@ -233,6 +235,7 @@ router.post(
       maxSourceAmount,
       path,
       feeStrategy = 'standard',
+      sponsorFee = false,
     } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
@@ -293,9 +296,31 @@ router.post(
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
 
+    let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
+    if (sponsorFee) {
+      try {
+        const { checkFeeBudget, recordSponsoredFee } = await import('./services/fee-budget.service');
+        const BASE_FEE_STROOPS = 100;
+        const feeStroops = BASE_FEE_STROOPS * 10;
+        const allowed = await checkFeeBudget(String(clinicId), feeStroops);
+        if (allowed) {
+          feeBump = await stellarClient.sponsorFeeBump(record.intentId);
+          await recordSponsoredFee(String(clinicId), record.intentId, feeStroops);
+        } else {
+          logger.warn({ clinicId }, 'Fee sponsorship skipped: budget exceeded');
+        }
+      } catch (err: any) {
+        logger.warn({ err }, 'Fee bump failed, returning unsigned intent');
+      }
+    }
+
     return res.status(201).json({
       status: 'success',
-      data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
+      data: {
+        ...toPaymentResponse(record),
+        platformPublicKey: config.stellar.platformPublicKey,
+        ...(feeBump ? { feeBump } : {}),
+      },
     });
   })
 );
@@ -578,6 +603,24 @@ router.get(
     logger.info({ memo: normalizedMemo, intentId: payment.intentId }, 'Payment looked up by memo');
     return res.json({ status: 'success', data: toPaymentResponse(payment) });
   }),
+);
+
+// GET /payments/balance-snapshots — fetch daily balance history for the clinic
+router.get(
+  '/balance-snapshots',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const clinicId = req.user!.clinicId;
+    const limit = Math.min(parseInt((req.query.limit as string) ?? '30', 10), 90);
+    const { BalanceSnapshotModel } = await import('./models/balance-snapshot.model');
+    const snapshots = await BalanceSnapshotModel.find({ clinicId })
+      .sort({ date: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ status: 'success', data: snapshots.reverse() });
+  })
 );
 
 export const paymentRoutes = router;

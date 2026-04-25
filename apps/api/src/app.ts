@@ -16,7 +16,7 @@ import { userManagementRoutes } from './modules/users/user-management.controller
 import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
-import { paymentRoutes } from './modules/payments/payments.controller';
+import paymentsRouter from './modules/payments/payments.routes';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
@@ -25,6 +25,7 @@ import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
+import { healthRoutes } from './modules/health/health.controller';
 import {
   authLimiter,
   forgotPasswordLimiter,
@@ -49,6 +50,14 @@ import {
   startReconciliationJob,
   stopReconciliationJob,
 } from './modules/payments/services/reconciliation-job';
+import {
+  startRiskRecalculationJob,
+  stopRiskRecalculationJob,
+} from './modules/patients/risk-recalculation-job';
+import {
+  startBalanceMonitoringJob,
+  stopBalanceMonitoringJob,
+} from './modules/payments/services/balance-monitoring-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
@@ -128,7 +137,7 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && req.url === '/health' },
+    autoLogging: { ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready') },
     redact: ['req.headers.authorization'],
   })
 );
@@ -140,8 +149,11 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+// Bypass for multipart/form-data routes (e.g. CSV import)
+const MULTIPART_BYPASS = ['/api/v1/patients/import'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
         .status(415)
@@ -184,7 +196,7 @@ app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
-app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
@@ -220,6 +232,8 @@ async function startServer() {
 
   startPaymentExpirationJob();
   startReconciliationJob();
+  startRiskRecalculationJob();
+  startBalanceMonitoringJob();
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -233,6 +247,8 @@ async function startServer() {
         // Stop payment expiration job
         stopPaymentExpirationJob();
         stopReconciliationJob();
+        stopRiskRecalculationJob();
+        stopBalanceMonitoringJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection

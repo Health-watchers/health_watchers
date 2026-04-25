@@ -577,4 +577,118 @@ router.delete(
   }),
 );
 
+// POST /patients/import — bulk CSV import (CLINIC_ADMIN only)
+import { parse } from 'csv-parse/sync';
+import { csvUploadMiddleware, handleCsvUploadError } from '@api/middlewares/csv-upload.middleware';
+import { ImportLogModel } from './models/import-log.model';
+
+const MAX_ROWS = 10_000;
+const MAX_ERRORS = 100;
+const BATCH_SIZE = 100;
+
+router.post(
+  '/import',
+  ADMIN_ROLES,
+  csvUploadMiddleware,
+  handleCsvUploadError,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'ValidationError', message: 'CSV file is required' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const userId = req.user!.userId;
+
+    let rows: Record<string, string>[];
+    try {
+      rows = parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+    } catch {
+      return res.status(400).json({ error: 'ParseError', message: 'Invalid CSV format' });
+    }
+
+    if (rows.length > MAX_ROWS) {
+      return res.status(400).json({ error: 'ValidationError', message: `Maximum ${MAX_ROWS} rows allowed` });
+    }
+
+    const errors: { row: number; field: string; error: string }[] = [];
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    // Process in batches of BATCH_SIZE
+    for (let batchStart = 0; batchStart < rows.length; batchStart += BATCH_SIZE) {
+      if (errors.length >= MAX_ERRORS) break;
+      const batch = rows.slice(batchStart, batchStart + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (row, idx) => {
+          const rowNum = batchStart + idx + 2; // 1-indexed + header row
+          if (errors.length >= MAX_ERRORS) { skippedCount++; return; }
+
+          // Validate with Zod
+          const parsed = createPatientSchema.safeParse({
+            firstName: row.firstName,
+            lastName: row.lastName,
+            dateOfBirth: row.dateOfBirth,
+            sex: row.sex,
+            contactNumber: row.contactNumber || undefined,
+            address: row.address || undefined,
+          });
+
+          if (!parsed.success) {
+            const issue = parsed.error.issues[0];
+            errors.push({ row: rowNum, field: issue.path[0] as string, error: issue.message });
+            skippedCount++;
+            return;
+          }
+
+          // Duplicate check: same name + DOB in this clinic
+          const searchName = `${parsed.data.firstName} ${parsed.data.lastName}`.toLowerCase();
+          const exists = await PatientModel.exists({ clinicId, searchName, dateOfBirth: parsed.data.dateOfBirth });
+          if (exists) { skippedCount++; return; }
+
+          const systemId = await nextSystemId(String(clinicId));
+          await PatientModel.create({
+            ...parsed.data,
+            systemId,
+            clinicId,
+            searchName,
+            isActive: true,
+          });
+          importedCount++;
+        })
+      );
+    }
+
+    await ImportLogModel.create({
+      clinicId,
+      importedBy: userId,
+      totalRows: rows.length,
+      importedCount,
+      skippedCount,
+      errorCount: errors.length,
+      fileName: req.file.originalname,
+      errors,
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      data: { total: rows.length, imported: importedCount, skipped: skippedCount, errors },
+    });
+  }),
+);
+
 export const patientRoutes = router;
+
+// GET /api/v1/patients/:id/risk-history
+router.get(
+  '/:id/risk-history',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    const history = await RiskScoreHistoryModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
+      .sort({ calculatedAt: -1 })
+      .limit(20)
+      .lean();
+    return res.json({ status: 'success', data: history });
+  }),
+);

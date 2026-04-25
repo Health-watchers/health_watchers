@@ -151,6 +151,39 @@ class StellarClient {
   }
 
   /**
+   * Issue a refund transaction (platform -> patient)
+   * Calls the stellar-service POST /refund endpoint
+   */
+  async issueRefund(
+    toPublicKey: string,
+    amount: string,
+    memo: string,
+  ): Promise<{ transactionHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/refund',
+      { toPublicKey, amount, memo },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Wrap an inner transaction in a platform-sponsored fee bump tx
+   * Calls the stellar-service POST /fee-bump endpoint
+   */
+  async sponsorFeeBump(innerXdr: string): Promise<{ xdr: string; hash: string; feeStroops: number }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fee-bump',
+      { innerXdr },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    const { success: _s, ...data } = response.data;
+    return data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {

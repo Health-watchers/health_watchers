@@ -15,6 +15,8 @@ export interface IAllergy {
   isActive: boolean;
 }
 
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 export interface Patient {
   systemId: string;
   firstName: string;
@@ -27,10 +29,11 @@ export interface Patient {
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
   allergies: IAllergy[];
-  // Duplicate detection fields
-  potentialDuplicates?: Schema.Types.ObjectId[];
-  isDuplicate?: boolean;
-  mergedInto?: Schema.Types.ObjectId;
+  riskScore?: number;
+  riskLevel?: RiskLevel;
+  riskFactors?: string[];
+  lastRiskCalculatedAt?: Date;
+  nextRiskReviewDate?: Date;
 }
 
 const allergySchema = new Schema<IAllergy>(
@@ -60,10 +63,11 @@ const patientSchema = new Schema<Patient>(
     clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     isActive:      { type: Boolean, default: true, index: true },
     allergies:     { type: [allergySchema], default: [] },
-    // Duplicate detection fields
-    potentialDuplicates: { type: [Schema.Types.ObjectId], ref: 'Patient', default: [] },
-    isDuplicate:         { type: Boolean, default: false, index: true },
-    mergedInto:          { type: Schema.Types.ObjectId, ref: 'Patient' },
+    riskScore:              { type: Number, min: 0, max: 100 },
+    riskLevel:              { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+    riskFactors:            { type: [String], default: undefined },
+    lastRiskCalculatedAt:   { type: Date },
+    nextRiskReviewDate:     { type: Date },
   },
   { timestamps: true, versionKey: false }
 );
