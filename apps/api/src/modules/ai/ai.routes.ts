@@ -570,7 +570,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       smokingHistory,
     });
 
-    // Ask Gemini for recommendations (PII-stripped)
     const anonymizedSummary = stripPII(
       JSON.stringify({
         ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
@@ -581,14 +580,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
         missedAppointments: missedAppts,
       })
     );
-    const anonymizedSummary = stripPII(JSON.stringify({
-      ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
-      sex: (patient as any).sex,
-      riskFactors: factors,
-      recentDiagnoses: allDiagnoses.slice(0, 5),
-      abnormalLabCount,
-      missedAppointments: missedAppts,
-    }));
 
     const genAI = new GoogleGenerativeAI(config.geminiApiKey);
     const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -641,18 +632,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
   }
 });
 
-// POST /api/v1/ai/predict-duration
-// Predict appointment duration based on appointment type, patient age, chief complaint, and doctor history
-router.post('/predict-duration', authenticate, async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured',
-      });
-    }
-
-    const { appointmentType, patientAge, chiefComplaint, doctorId } = req.body;
 // POST /api/v1/ai/differential-diagnosis
 // Body: { chiefComplaint, symptoms, vitalSigns?, patientAge?, patientSex?, relevantHistory? }
 // Returns: { differentials, urgency, disclaimer }
@@ -672,16 +651,14 @@ router.post(
         });
       }
 
-      const {
-        chiefComplaint,
-        symptoms,
-        vitalSigns,
-        patientAge,
-        patientSex,
-        relevantHistory,
-      } = req.body as DifferentialDiagnosisInput;
+      const { chiefComplaint, symptoms, vitalSigns, patientAge, patientSex, relevantHistory } =
+        req.body as DifferentialDiagnosisInput;
 
-      if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 3) {
+      if (
+        !chiefComplaint ||
+        typeof chiefComplaint !== 'string' ||
+        chiefComplaint.trim().length < 3
+      ) {
         return res.status(400).json({
           error: 'ValidationError',
           message: 'chiefComplaint is required and must be at least 3 characters',
@@ -693,7 +670,10 @@ router.post(
           message: 'symptoms must be a non-empty array of strings',
         });
       }
-      if (patientAge !== undefined && (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)) {
+      if (
+        patientAge !== undefined &&
+        (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)
+      ) {
         return res.status(400).json({
           error: 'ValidationError',
           message: 'patientAge must be a number between 0 and 150',
@@ -711,13 +691,13 @@ router.post(
             patientAge,
             patientSex,
             relevantHistory,
-          }),
+          })
       );
 
       const duration = Date.now() - startTime;
       logger.info(
         { clinicId: req.user!.clinicId, duration, differentialCount: result.differentials.length },
-        'AI differential diagnosis generated',
+        'AI differential diagnosis generated'
       );
 
       return res.json({ success: true, ...result });
@@ -738,14 +718,16 @@ router.post(
         message: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     }
-  },
+  }
 );
 
 // POST /api/v1/ai/predict-duration
 router.post('/predict-duration', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+      return res
+        .status(503)
+        .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
     }
 
     const { appointmentType, patientAge, chiefComplaint } = req.body;
@@ -757,7 +739,6 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
       });
     }
 
-    // Get historical encounter durations for similar cases
     const { EncounterModel } = await import('../encounters/encounter.model');
     const historicalEncounters = await EncounterModel.find({
       chiefComplaint: { $regex: chiefComplaint.split(' ')[0], $options: 'i' },
@@ -768,27 +749,19 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
       .limit(20)
       .lean();
 
-    // Calculate average duration from historical data
-    let baseDuration = 30; // default 30 minutes
+    let baseDuration = 30;
     if (historicalEncounters.length > 0) {
-      const durations = historicalEncounters.map((e: any) => {
-        const duration = Math.random() * 30 + 20; // Simulate 20-50 min range
-        return duration;
-      });
-      baseDuration = Math.round(
-        durations.reduce((a: number, b: number) => a + b, 0) / durations.length
-      );
+      const durations = historicalEncounters.map(() => Math.random() * 30 + 20);
+      baseDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
     }
 
-    // Adjust based on appointment type
     const typeMultipliers: Record<string, number> = {
       consultation: 1.0,
       'follow-up': 0.75,
       procedure: 1.5,
       emergency: 1.2,
     };
-    const multiplier = typeMultipliers[appointmentType] || 1.0;
-    const predictedDuration = Math.round(baseDuration * multiplier);
+    const predictedDuration = Math.round(baseDuration * (typeMultipliers[appointmentType] || 1.0));
 
     return res.json({
       status: 'success',
@@ -798,22 +771,6 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
         baselineDuration: baseDuration,
         disclaimer: AI_DISCLAIMER,
       },
-    }).select('createdAt').limit(20).lean();
-
-    let baseDuration = 30;
-    if (historicalEncounters.length > 0) {
-      const durations = historicalEncounters.map(() => Math.random() * 30 + 20);
-      baseDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
-    }
-
-    const typeMultipliers: Record<string, number> = {
-      consultation: 1.0, 'follow-up': 0.75, procedure: 1.5, emergency: 1.2,
-    };
-    const predictedDuration = Math.round(baseDuration * (typeMultipliers[appointmentType] || 1.0));
-
-    return res.json({
-      status: 'success',
-      data: { predictedDuration, confidence: 0.75, baselineDuration: baseDuration, disclaimer: AI_DISCLAIMER },
     });
   } catch (error: any) {
     logger.error({ err: error }, 'AI predict-duration error');
@@ -822,65 +779,45 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
 });
 
 // POST /api/v1/ai/no-show-risk
-// Predict no-show risk based on patient history
 router.post('/no-show-risk', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured',
-      });
-    }
-
-    const { patientId, appointmentDate, appointmentType } = req.body;
-
-    if (!patientId || !appointmentDate) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'patientId and appointmentDate are required',
-      });
-    }
-
-    // Get patient's appointment history
-router.post('/no-show-risk', authenticate, async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+      return res
+        .status(503)
+        .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
     }
 
     const { patientId, appointmentDate } = req.body;
 
     if (!patientId || !appointmentDate) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId and appointmentDate are required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'patientId and appointmentDate are required' });
     }
 
     const { AppointmentModel } = await import('../appointments/appointment.model');
     const appointments = await AppointmentModel.find({
       patientId,
       clinicId: req.user!.clinicId,
-      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) }, // Last 6 months
+      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
     })
       .select('status')
       .lean();
-      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
-    }).select('status').lean();
 
     const totalAppointments = appointments.length;
     const noShowCount = appointments.filter((a: any) => a.status === 'no-show').length;
     const cancelledCount = appointments.filter((a: any) => a.status === 'cancelled').length;
 
-    // Calculate risk score
     let riskScore = 0;
     if (totalAppointments > 0) {
-      const noShowRate = noShowCount / totalAppointments;
-      const cancelRate = cancelledCount / totalAppointments;
-      riskScore = Math.min(100, (noShowRate * 60 + cancelRate * 40) * 100);
+      riskScore = Math.min(
+        100,
+        ((noShowCount / totalAppointments) * 60 + (cancelledCount / totalAppointments) * 40) * 100
+      );
     }
 
-    // Determine risk level
-    let riskLevel: 'low' | 'medium' | 'high' = 'low';
-    if (riskScore > 60) riskLevel = 'high';
-    else if (riskScore > 30) riskLevel = 'medium';
+    const riskLevel: 'low' | 'medium' | 'high' =
+      riskScore > 60 ? 'high' : riskScore > 30 ? 'medium' : 'low';
 
     return res.json({
       status: 'success',
@@ -891,16 +828,6 @@ router.post('/no-show-risk', authenticate, async (req: Request, res: Response) =
         totalAppointments,
         disclaimer: AI_DISCLAIMER,
       },
-    let riskScore = 0;
-    if (totalAppointments > 0) {
-      riskScore = Math.min(100, ((noShowCount / totalAppointments) * 60 + (cancelledCount / totalAppointments) * 40) * 100);
-    }
-
-    const riskLevel: 'low' | 'medium' | 'high' = riskScore > 60 ? 'high' : riskScore > 30 ? 'medium' : 'low';
-
-    return res.json({
-      status: 'success',
-      data: { riskLevel, riskScore: Math.round(riskScore), noShowHistory: noShowCount, totalAppointments, disclaimer: AI_DISCLAIMER },
     });
   } catch (error: any) {
     logger.error({ err: error }, 'AI no-show-risk error');
@@ -916,11 +843,9 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       if (!isAIServiceAvailable()) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is not configured',
-        });
-        return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+        return res
+          .status(503)
+          .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
       }
 
       const { date, availableSlots, pendingAppointments } = req.body;
@@ -939,16 +864,6 @@ router.post(
         'follow-up': 3,
         procedure: 4,
       };
-
-      const optimized = pendingAppointments
-        .map((apt: any) => ({
-          ...apt,
-          score: typeScores[apt.type] || 5,
-        }))
-        .sort((a: any, b: any) => a.score - b.score);
-
-      // Assign to available slots
-      const typeScores: Record<string, number> = { emergency: 1, consultation: 2, 'follow-up': 3, procedure: 4 };
       const optimized = pendingAppointments
         .map((apt: any) => ({ ...apt, score: typeScores[apt.type] || 5 }))
         .sort((a: any, b: any) => a.score - b.score);
@@ -966,7 +881,6 @@ router.post(
           unscheduled: optimized.slice(availableSlots.length).length,
           disclaimer: AI_DISCLAIMER,
         },
-        data: { optimizedSchedule: scheduled, unscheduled: optimized.slice(availableSlots.length).length, disclaimer: AI_DISCLAIMER },
       });
     } catch (error: any) {
       logger.error({ err: error }, 'AI optimize-schedule error');

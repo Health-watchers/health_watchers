@@ -55,7 +55,6 @@ interface AiResponse {
   urgency: 'routine' | 'urgent' | 'emergency';
   disclaimer: string;
 }
-}
 
 // ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
 
@@ -136,7 +135,9 @@ export default function NewEncounterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [patientAllergies, setPatientAllergies] = useState<Array<{ _id: string; allergen: string; severity: string; reaction: string }>>([]);
+  const [patientAllergies, setPatientAllergies] = useState<
+    Array<{ _id: string; allergen: string; severity: string; reaction: string }>
+  >([]);
 
   // Templates
   const [templates, setTemplates] = useState<EncounterTemplate[]>([]);
@@ -145,8 +146,10 @@ export default function NewEncounterPage() {
 
   useEffect(() => {
     fetch(`${API_V1}/encounter-templates`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.data) setTemplates(d.data); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.data) setTemplates(d.data);
+      })
       .catch(() => {});
   }, []);
 
@@ -362,11 +365,14 @@ export default function NewEncounterPage() {
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await fetch(`${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message ?? `Error ${res.status}`);
@@ -438,8 +444,12 @@ export default function NewEncounterPage() {
               </div>
               <button
                 type="button"
-                onClick={() => { setSelectedPatient(null); setPatientQuery(''); setPatientAllergies([]); }}
-                className="text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                onClick={() => {
+                  setSelectedPatient(null);
+                  setPatientQuery('');
+                  setPatientAllergies([]);
+                }}
+                className="text-primary-600 focus-visible:ring-primary-500 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
               >
                 Change
               </button>
@@ -513,36 +523,48 @@ export default function NewEncounterPage() {
         {/* ── Template Selector ── */}
         {templates.length > 0 && (
           <section aria-labelledby="section-template">
-            <h2 id="section-template" className="text-sm font-semibold uppercase tracking-wide text-neutral-500 mb-3">
-              Start from Template <span className="font-normal normal-case text-neutral-400">(optional)</span>
+            <h2
+              id="section-template"
+              className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            >
+              Start from Template{' '}
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
             </h2>
 
             {selectedTemplateId ? (
-              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+              <div className="border-primary-200 bg-primary-50 flex items-center justify-between rounded-lg border px-4 py-3">
                 <p className="text-sm font-medium text-neutral-900">
-                  {templates.find(t => t._id === selectedTemplateId)?.name}
+                  {templates.find((t) => t._id === selectedTemplateId)?.name}
                 </p>
                 <button
                   type="button"
                   onClick={() => setSelectedTemplateId('')}
-                  className="text-xs text-primary-600 hover:underline focus:outline-none"
+                  className="text-primary-600 text-xs hover:underline focus:outline-none"
                 >
                   Remove
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {templates.map(t => (
-                  <div key={t._id} className="rounded-lg border border-neutral-200 bg-white p-3 flex items-start justify-between gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {templates.map((t) => (
+                  <div
+                    key={t._id}
+                    className="flex items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3"
+                  >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 truncate">{t.name}</p>
-                      <p className="text-xs text-neutral-400">{t.category}{t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}</p>
+                      <p className="truncate text-sm font-medium text-neutral-900">{t.name}</p>
+                      <p className="text-xs text-neutral-400">
+                        {t.category}
+                        {t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}
+                      </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex shrink-0 gap-1">
                       <button
                         type="button"
-                        onClick={() => setPreviewTemplate(previewTemplate?._id === t._id ? null : t)}
-                        className="text-xs text-neutral-500 hover:text-neutral-800 focus:outline-none px-2 py-1 rounded border border-neutral-200 hover:bg-neutral-50"
+                        onClick={() =>
+                          setPreviewTemplate(previewTemplate?._id === t._id ? null : t)
+                        }
+                        className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 focus:outline-none"
                         aria-expanded={previewTemplate?._id === t._id}
                       >
                         Preview
@@ -550,7 +572,7 @@ export default function NewEncounterPage() {
                       <button
                         type="button"
                         onClick={() => applyTemplate(t)}
-                        className="text-xs text-primary-600 hover:text-primary-800 focus:outline-none px-2 py-1 rounded border border-primary-200 hover:bg-primary-50"
+                        className="text-primary-600 hover:text-primary-800 border-primary-200 hover:bg-primary-50 rounded border px-2 py-1 text-xs focus:outline-none"
                       >
                         Apply
                       </button>
@@ -561,16 +583,21 @@ export default function NewEncounterPage() {
             )}
 
             {previewTemplate && (
-              <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm space-y-2">
+              <div className="mt-3 space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm">
                 <p className="font-semibold text-neutral-800">{previewTemplate.name}</p>
-                {previewTemplate.description && <p className="text-neutral-600">{previewTemplate.description}</p>}
+                {previewTemplate.description && (
+                  <p className="text-neutral-600">{previewTemplate.description}</p>
+                )}
                 {previewTemplate.defaultChiefComplaint && (
-                  <p className="text-neutral-600"><span className="font-medium">Chief complaint:</span> {previewTemplate.defaultChiefComplaint}</p>
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Chief complaint:</span>{' '}
+                    {previewTemplate.defaultChiefComplaint}
+                  </p>
                 )}
                 {previewTemplate.suggestedDiagnoses?.length ? (
                   <p className="text-neutral-600">
                     <span className="font-medium">Diagnoses:</span>{' '}
-                    {previewTemplate.suggestedDiagnoses.map(d => d.code).join(', ')}
+                    {previewTemplate.suggestedDiagnoses.map((d) => d.code).join(', ')}
                   </p>
                 ) : null}
                 {previewTemplate.suggestedTests?.length ? (
@@ -579,11 +606,15 @@ export default function NewEncounterPage() {
                     {previewTemplate.suggestedTests.join(', ')}
                   </p>
                 ) : null}
-                {previewTemplate.notes && <p className="text-neutral-600"><span className="font-medium">Notes:</span> {previewTemplate.notes}</p>}
+                {previewTemplate.notes && (
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Notes:</span> {previewTemplate.notes}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => applyTemplate(previewTemplate)}
-                  className="mt-1 text-xs font-medium text-primary-600 hover:underline focus:outline-none"
+                  className="text-primary-600 mt-1 text-xs font-medium hover:underline focus:outline-none"
                 >
                   Apply this template →
                 </button>
@@ -594,13 +625,16 @@ export default function NewEncounterPage() {
 
         {/* ── Allergy Alert ── */}
         {patientAllergies.length > 0 && (
-          <div role="alert" aria-live="assertive" className="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3">
-            <p className="text-sm font-semibold text-danger-800 mb-2">⚠ Known Allergies</p>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="border-danger-300 bg-danger-50 rounded-lg border px-4 py-3"
+          >
+            <p className="text-danger-800 mb-2 text-sm font-semibold">⚠ Known Allergies</p>
             <ul className="space-y-1">
               {patientAllergies.map((a) => (
-                <li key={a._id} className="text-sm text-danger-700">
-                  <span className="font-medium">{a.allergen}</span>
-                  {' '}— {a.severity} · {a.reaction}
+                <li key={a._id} className="text-danger-700 text-sm">
+                  <span className="font-medium">{a.allergen}</span> — {a.severity} · {a.reaction}
                 </li>
               ))}
             </ul>
@@ -683,7 +717,7 @@ export default function NewEncounterPage() {
                             {diff.icdCode}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
                           {diff.reasoning}
                         </p>
                         {diff.recommendedTests?.length > 0 && (
@@ -716,7 +750,9 @@ export default function NewEncounterPage() {
                           }
                           disabled={diagnoses.some((d) => d.code === diff.icdCode)}
                         >
-                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                          {diagnoses.some((d) => d.code === diff.icdCode)
+                            ? 'Added'
+                            : 'Add Diagnosis'}
                         </Button>
                       </div>
                     </div>
@@ -724,7 +760,7 @@ export default function NewEncounterPage() {
                 ))}
               </div>
 
-              <p className="mt-4 text-[10px] italic text-neutral-400">{aiSuggestions.disclaimer}</p>
+              <p className="mt-4 text-[10px] text-neutral-400 italic">{aiSuggestions.disclaimer}</p>
             </div>
           )}
         </section>
