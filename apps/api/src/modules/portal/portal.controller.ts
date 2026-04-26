@@ -1,10 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 import { UserModel } from '../auth/models/user.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { toPatientResponse } from '../patients/patients.transformer';
 import { AppointmentModel } from '../appointments/appointment.model';
+import { WaitlistModel } from '../appointments/waitlist.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
@@ -12,7 +14,6 @@ import { asyncHandler } from '@api/utils/asyncHandler';
 import { signAccessToken, signRefreshToken, REFRESH_TOKEN_EXPIRY_MS } from '../auth/token.service';
 import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import crypto from 'crypto';
-
 const router = Router();
 
 const loginSchema = z.object({
@@ -132,6 +133,106 @@ router.post(
     }
 
     return res.json({ status: 'success', data: invoice });
+  }),
+);
+
+// ── GET /api/v1/portal/waitlist/position ─────────────────────────────────────
+router.get(
+  '/waitlist/position',
+  authenticate,
+  requirePatient,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId, patientId } = req.user!;
+
+    const entry = await WaitlistModel.findOne({
+      patientId: new Types.ObjectId(patientId),
+      clinicId:  new Types.ObjectId(clinicId),
+      status:    { $in: ['waiting', 'notified'] },
+    }).lean();
+
+    if (!entry) return res.json({ status: 'success', data: null });
+
+    const ahead = await WaitlistModel.countDocuments({
+      clinicId:  new Types.ObjectId(clinicId),
+      status:    { $in: ['waiting', 'notified'] },
+      _id:       { $ne: entry._id },
+      $or: [
+        { priorityOrder: { $gt: (entry as any).priorityOrder ?? 0 } },
+        { priorityOrder: (entry as any).priorityOrder ?? 0, addedAt: { $lt: entry.addedAt } },
+      ],
+    });
+
+    return res.json({ status: 'success', data: { ...entry, position: ahead + 1 } });
+  }),
+);
+
+// ── POST /api/v1/portal/waitlist ──────────────────────────────────────────────
+const joinWaitlistSchema = z.object({
+  doctorId:        z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  requestedDate:   z.string().datetime({ offset: true }),
+  appointmentType: z.enum(['consultation', 'follow-up', 'procedure', 'emergency']),
+  priority:        z.enum(['routine', 'urgent']).default('routine'),
+});
+
+router.post(
+  '/waitlist',
+  authenticate,
+  requirePatient,
+  validateRequest({ body: joinWaitlistSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId, patientId } = req.user!;
+    const { priority, doctorId, requestedDate, appointmentType } = req.body;
+
+    const existing = await WaitlistModel.findOne({
+      patientId: new Types.ObjectId(patientId),
+      clinicId:  new Types.ObjectId(clinicId),
+      status:    { $in: ['waiting', 'notified'] },
+    });
+    if (existing) {
+      return res.status(409).json({ error: 'Conflict', message: 'Already on the waitlist' });
+    }
+
+    const priorityOrder = priority === 'urgent' ? 1 : 0;
+    const aheadCount = await WaitlistModel.countDocuments({
+      clinicId: new Types.ObjectId(clinicId),
+      status:   { $in: ['waiting', 'notified'] },
+      ...(priority === 'urgent' ? { priorityOrder: 1 } : {}),
+    });
+
+    const entry = await WaitlistModel.create({
+      patientId:       new Types.ObjectId(patientId),
+      clinicId:        new Types.ObjectId(clinicId),
+      doctorId:        doctorId ? new Types.ObjectId(doctorId) : undefined,
+      requestedDate:   new Date(requestedDate),
+      appointmentType,
+      priority,
+      priorityOrder,
+      position:        aheadCount + 1,
+    });
+
+    return res.status(201).json({ status: 'success', data: entry });
+  }),
+);
+
+// ── DELETE /api/v1/portal/waitlist/:id ────────────────────────────────────────
+router.delete(
+  '/waitlist/:id',
+  authenticate,
+  requirePatient,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId, patientId } = req.user!;
+
+    const entry = await WaitlistModel.findOneAndDelete({
+      _id:       new Types.ObjectId(req.params.id),
+      clinicId:  new Types.ObjectId(clinicId),
+      patientId: new Types.ObjectId(patientId),
+    });
+
+    if (!entry) {
+      return res.status(404).json({ error: 'NotFound', message: 'Waitlist entry not found' });
+    }
+
+    return res.json({ status: 'success', data: entry });
   }),
 );
 

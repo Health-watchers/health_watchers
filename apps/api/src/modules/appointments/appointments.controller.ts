@@ -12,6 +12,7 @@ import {
   appointmentIdParamsSchema,
   doctorIdParamsSchema,
 } from './appointments.validation';
+import { notifyNextOnWaitlist } from './waitlist.service';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -259,6 +260,13 @@ appointmentRoutes.delete(
         },
         { new: true },
       ).lean();
+
+      // Notify next patient on waitlist (fire-and-forget)
+      notifyNextOnWaitlist({
+        clinicId:    String(appointment.clinicId),
+        doctorId:    String(appointment.doctorId),
+        scheduledAt: appointment.scheduledAt,
+      }).catch(() => {});
 
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {

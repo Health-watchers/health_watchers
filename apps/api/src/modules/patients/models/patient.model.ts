@@ -44,6 +44,8 @@ export interface Patient {
   riskFactors?: string[];
   lastRiskCalculatedAt?: Date;
   nextRiskReviewDate?: Date;
+  photoUrl?: string;
+  thumbnailUrl?: string;
 }
 
 const allergySchema = new Schema<IAllergy>(
@@ -99,6 +101,8 @@ const patientSchema = new Schema<Patient>(
     riskFactors: { type: [String], default: undefined },
     lastRiskCalculatedAt: { type: Date },
     nextRiskReviewDate: { type: Date },
+    photoUrl: { type: String },
+    thumbnailUrl: { type: String },
   },
   { timestamps: true, versionKey: false }
 );

@@ -6,6 +6,7 @@ export interface IClinic {
   phone: string;
   email: string;
   stellarPublicKey?: string;
+  federationAddress?: string;
   subscriptionTier: 'free' | 'basic' | 'premium';
   isActive: boolean;
   createdBy: Types.ObjectId;
@@ -18,6 +19,7 @@ const clinicSchema = new Schema<IClinic>(
     phone: { type: String, required: true, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     stellarPublicKey: { type: String, sparse: true, index: true },
+    federationAddress: { type: String, sparse: true, unique: true, index: true },
     subscriptionTier: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
     isActive: { type: Boolean, default: true, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

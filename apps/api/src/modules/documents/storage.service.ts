@@ -1,6 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '@health-watchers/config';
 
@@ -13,7 +18,7 @@ function s3(): S3Client {
     _s3 = new S3Client({
       region: config.storage.s3Region,
       credentials: {
-        accessKeyId:     config.storage.s3AccessKey,
+        accessKeyId: config.storage.s3AccessKey,
         secretAccessKey: config.storage.s3SecretKey,
       },
     });
@@ -25,16 +30,22 @@ function s3(): S3Client {
 
 export async function uploadFile(params: {
   storageKey: string;
-  buffer:     Buffer;
-  mimeType:   string;
+  buffer: Buffer;
+  mimeType: string;
+  encrypt?: boolean;
 }): Promise<void> {
   if (config.storage.driver === 's3') {
-    await s3().send(new PutObjectCommand({
-      Bucket:      config.storage.s3Bucket,
-      Key:         params.storageKey,
-      Body:        params.buffer,
-      ContentType: params.mimeType,
-    }));
+    await s3().send(
+      new PutObjectCommand({
+        Bucket: config.storage.s3Bucket,
+        Key: params.storageKey,
+        Body: params.buffer,
+        ContentType: params.mimeType,
+        ...(params.encrypt !== false && {
+          ServerSideEncryption: 'AES256',
+        }),
+      })
+    );
   } else {
     // Local disk
     const dest = path.join(config.storage.localUploadDir, params.storageKey);
@@ -49,11 +60,27 @@ export async function getDownloadUrl(storageKey: string): Promise<string> {
   if (config.storage.driver === 's3') {
     const cmd = new GetObjectCommand({
       Bucket: config.storage.s3Bucket,
-      Key:    storageKey,
+      Key: storageKey,
     });
     return getSignedUrl(s3(), cmd, { expiresIn: PRESIGN_EXPIRES_SECONDS });
   }
 
   // Local: return a signed-style path (the controller will serve the file directly)
   return `/api/v1/documents/_local/${encodeURIComponent(storageKey)}`;
+}
+
+// ── Delete ───────────────────────────────────────────────────────────────────
+
+export async function deleteFile(storageKey: string): Promise<void> {
+  if (config.storage.driver === 's3') {
+    await s3().send(
+      new DeleteObjectCommand({
+        Bucket: config.storage.s3Bucket,
+        Key: storageKey,
+      })
+    );
+  } else {
+    const filePath = path.join(config.storage.localUploadDir, storageKey);
+    fs.rmSync(filePath, { force: true });
+  }
 }
