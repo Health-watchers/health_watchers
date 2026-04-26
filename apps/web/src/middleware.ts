@@ -6,16 +6,29 @@ const PORTAL_LOGIN = '/portal/login';
 const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
 const PORTAL_PUBLIC = ['/portal/login'];
 
-function isStaffPublic(p: string) {
-  return STAFF_PUBLIC.some((s) => p === s || p.startsWith(`${s}/`));
+const ADMIN_PATHS = ['/settings', '/reports', '/users'];
+const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function isAdminPath(pathname: string): boolean {
+  return ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+/** Decode JWT payload without verification (verification happens on the API). */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.includes('.')) {
-    return NextResponse.next();
-  }
 
   // ── Portal routes (/portal/*) ─────────────────────────────────────────────
   if (pathname.startsWith('/portal')) {
@@ -36,10 +49,20 @@ export function middleware(request: NextRequest) {
   const isPublic = isStaffPublic(pathname);
 
   if (!accessToken && !isPublic) {
-    return NextResponse.redirect(new URL(STAFF_LOGIN, request.url));
+    const loginUrl = new URL(LOGIN_PATH, request.url);
+    loginUrl.searchParams.set('returnTo', pathname);
+    return NextResponse.redirect(loginUrl);
   }
   if (accessToken && isPublic) {
     return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  if (accessToken && isAdminPath(pathname)) {
+    const payload = decodeJwtPayload(accessToken);
+    const role = payload?.role as string | undefined;
+    if (!role || !ADMIN_ROLES.includes(role)) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
   }
 
   return NextResponse.next();

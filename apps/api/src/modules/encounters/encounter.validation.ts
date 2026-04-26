@@ -27,7 +27,18 @@ const prescriptionSchema = z.object({
   frequency: z.string().min(1, 'Frequency is required'),
   duration: z.string().optional(),
   notes: z.string().max(1000).optional(),
+  allergyOverride: z.object({
+    allergyId: z.string(),
+    reason: z.string().min(1, 'Override reason is required'),
+  }).optional(),
 });
+
+const soapNotesSchema = z.object({
+  subjective: z.string().max(10000).optional(),
+  objective:  z.string().max(10000).optional(),
+  assessment: z.string().max(10000).optional(),
+  plan:       z.string().max(10000).optional(),
+}).optional();
 
 export const createEncounterSchema = z.object({
   patientId: z.string().regex(objectIdRegex, 'Invalid patientId'),
@@ -36,6 +47,7 @@ export const createEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters'),
   status: z.enum(['open', 'closed', 'follow-up', 'cancelled']).optional(),
   notes: z.string().max(5000).optional(),
+  soapNotes: soapNotesSchema,
   treatmentPlan: z.string().max(5000).optional(),
   diagnosis: z.array(diagnosisSchema).optional(),
   vitalSigns: vitalSignsSchema,
@@ -66,6 +78,7 @@ export const updateEncounterSchema = createEncounterSchema
 export const patchEncounterSchema = z.object({
   chiefComplaint: z.string().min(3, 'chiefComplaint must be at least 3 characters').optional(),
   notes: z.string().max(5000).optional(),
+  soapNotes: soapNotesSchema,
   aiSummary: z.string().max(5000).optional(),
   diagnosis: z.array(diagnosisSchema).optional(),
   treatmentPlan: z.string().max(5000).optional(),
@@ -86,6 +99,36 @@ export const listEncountersQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
     .optional(),
+  // Full-text search across chiefComplaint and notes
+  q: z.string().max(200).optional(),
+  // ICD-10 diagnosis code filter
+  diagnosisCode: z.string().max(20).optional(),
+  // Date range filters
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'dateFrom must be YYYY-MM-DD')
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'dateTo must be YYYY-MM-DD')
+    .optional(),
+  // Boolean filters
+  hasAiSummary: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  hasPrescriptions: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  hasLabResults: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  // Sort
+  sort: z
+    .enum(['createdAt_desc', 'createdAt_asc', 'patientName_asc'])
+    .default('createdAt_desc'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

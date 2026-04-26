@@ -20,9 +20,13 @@ const envSchema = z.object({
     .string({ required_error: 'Missing required env var: JWT_REFRESH_TOKEN_SECRET' })
     .min(32, 'JWT_REFRESH_TOKEN_SECRET must be at least 32 characters (too weak)'),
 
-  API_PORT: z
-    .string({ required_error: 'Missing required env var: API_PORT' })
-    .min(1, 'Missing required env var: API_PORT'),
+  API_PORT: z.string().default('3001'),
+
+  STELLAR_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
+
+  GEMINI_API_KEY: z.string().optional(),
+
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -53,3 +57,10 @@ if (!result.success) {
 }
 
 export const env = result.data;
+
+// Log non-secret config values at startup
+console.log('✅ Config validated:');
+console.log(`   API_PORT:        ${env.API_PORT}`);
+console.log(`   MONGO_URI:       ${env.MONGO_URI}`);
+console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
+console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);

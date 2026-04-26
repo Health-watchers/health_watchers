@@ -73,6 +73,7 @@ jest.mock('@api/modules/payments/services/stellar-client', () => ({
     verifyTransaction: jest.fn(),
     findPaths: jest.fn(),
     getOrderbook: jest.fn(),
+    getFeeEstimate: jest.fn(),
   },
 }));
 
@@ -221,6 +222,49 @@ describe('GET /api/v1/payments/paths', () => {
   });
 });
 
+describe('GET /api/v1/payments/fee-estimate', () => {
+  const token = makeToken();
+
+  const mockFeeData = {
+    slow:     { stroops: '100', xlm: '0.0000100', confirmationTime: '~60s' },
+    standard: { stroops: '200', xlm: '0.0000200', confirmationTime: '~30s' },
+    fast:     { stroops: '500', xlm: '0.0000500', confirmationTime: '~10s' },
+    raw: { min: '100', mode: '200', max: '1000', p10: '100', p50: '200', p90: '500', p99: '900' },
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('returns fee tiers from stellar-service', async () => {
+    (stellarClient.getFeeEstimate as jest.Mock).mockResolvedValue(mockFeeData);
+
+    const res = await request(app)
+      .get('/api/v1/payments/fee-estimate')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.slow).toMatchObject({ stroops: '100', confirmationTime: '~60s' });
+    expect(res.body.data.standard).toMatchObject({ stroops: '200', confirmationTime: '~30s' });
+    expect(res.body.data.fast).toMatchObject({ stroops: '500', confirmationTime: '~10s' });
+  });
+
+  it('returns 502 when stellar-service is unavailable', async () => {
+    (stellarClient.getFeeEstimate as jest.Mock).mockRejectedValue(new Error('Horizon timeout'));
+
+    const res = await request(app)
+      .get('/api/v1/payments/fee-estimate')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('StellarServiceError');
+  });
+
+  it('returns 401 without auth token', async () => {
+    const res = await request(app).get('/api/v1/payments/fee-estimate');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/v1/payments/stellar/orderbook', () => {
   const token = makeToken();
 
@@ -241,5 +285,68 @@ describe('GET /api/v1/payments/stellar/orderbook', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(res.body.data).toEqual(mockOrderbook);
+  });
+});
+
+describe('POST /api/v1/payments/intent — feeStrategy', () => {
+  const token = makeToken();
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('stores feeStrategy=fast on the payment record', async () => {
+    const created = {
+      _id: '507f1f77bcf86cd799439099',
+      intentId: 'intent-fee-1',
+      amount: '10.00',
+      destination: 'GDEST123',
+      assetCode: 'XLM',
+      clinicId: 'clinic-abc',
+      status: 'pending',
+      feeStrategy: 'fast',
+    };
+    (PaymentRecordModel.create as jest.Mock).mockResolvedValue(created);
+
+    const res = await request(app)
+      .post('/api/v1/payments/intent')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: '10.00', destination: 'GDEST123', feeStrategy: 'fast' });
+
+    expect(res.status).toBe(201);
+    expect(PaymentRecordModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ feeStrategy: 'fast' }),
+    );
+  });
+
+  it('defaults feeStrategy to standard when not provided', async () => {
+    const created = {
+      _id: '507f1f77bcf86cd799439098',
+      intentId: 'intent-fee-2',
+      amount: '5.00',
+      destination: 'GDEST456',
+      assetCode: 'XLM',
+      clinicId: 'clinic-abc',
+      status: 'pending',
+      feeStrategy: 'standard',
+    };
+    (PaymentRecordModel.create as jest.Mock).mockResolvedValue(created);
+
+    const res = await request(app)
+      .post('/api/v1/payments/intent')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: '5.00', destination: 'GDEST456' });
+
+    expect(res.status).toBe(201);
+    expect(PaymentRecordModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ feeStrategy: 'standard' }),
+    );
+  });
+
+  it('rejects invalid feeStrategy value', async () => {
+    const res = await request(app)
+      .post('/api/v1/payments/intent')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: '5.00', destination: 'GDEST456', feeStrategy: 'turbo' });
+
+    expect(res.status).toBe(400);
   });
 });

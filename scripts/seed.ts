@@ -26,6 +26,7 @@ import { PatientModel } from '../apps/api/src/modules/patients/models/patient.mo
 import { PatientCounterModel } from '../apps/api/src/modules/patients/models/patient-counter.model';
 import { EncounterModel } from '../apps/api/src/modules/encounters/encounter.model';
 import { PaymentRecordModel } from '../apps/api/src/modules/payments/models/payment-record.model';
+import { EncounterTemplateModel } from '../apps/api/src/modules/encounters/encounter-template.model';
 
 // ── constants ──────────────────────────────────────────────────────────────
 const CLINIC_ID = new Types.ObjectId('aaaaaaaaaaaaaaaaaaaaaaaa');
@@ -259,9 +260,55 @@ async function seed() {
     await PaymentRecordModel.findOneAndUpdate(
       { intentId: pr.intentId },
       { $setOnInsert: { ...pr, clinicId: CLINIC_ID.toString() } },
-      { upsert: true, new: true }
-    );
+      { upsert: true, new: true }\n    );
     console.log(`   ✔ ${pr.intentId}: ${pr.amount} XLM (${pr.status})`);
+  }
+
+  // 5. Default encounter templates
+  console.log('\n📝  Seeding encounter templates...');
+  const doctorUser = await UserModel.findOne({ email: 'doctor@seed.dev' });
+  const createdBy = doctorUser?._id ?? new Types.ObjectId();
+  const DEFAULT_TEMPLATES = [
+    {
+      name: 'Annual Physical Exam',
+      category: 'Preventive Care',
+      description: 'Routine annual wellness visit',
+      defaultChiefComplaint: 'Annual physical exam',
+      suggestedTests: ['CBC', 'CMP', 'Lipid Panel', 'HbA1c', 'TSH'],
+    },
+    {
+      name: 'Hypertension Follow-up',
+      category: 'Chronic Disease Management',
+      defaultChiefComplaint: 'Blood pressure check and medication review',
+      suggestedTests: ['BMP', 'EKG'],
+      suggestedDiagnoses: [{ code: 'I10', description: 'Essential hypertension' }],
+    },
+    {
+      name: 'Pediatric Well Visit',
+      category: 'Preventive Care',
+      defaultChiefComplaint: 'Well child visit',
+      suggestedTests: ['Height/Weight', 'Vision Screen', 'Developmental Assessment'],
+    },
+    {
+      name: 'Diabetes Management',
+      category: 'Chronic Disease Management',
+      defaultChiefComplaint: 'Diabetes follow-up and glucose management',
+      suggestedTests: ['HbA1c', 'Fasting Glucose', 'Urine Microalbumin', 'Foot Exam'],
+      suggestedDiagnoses: [{ code: 'E11', description: 'Type 2 diabetes mellitus' }],
+    },
+    {
+      name: 'Acute Respiratory Illness',
+      category: 'Acute Care',
+      defaultChiefComplaint: 'Cough, fever, or shortness of breath',
+      suggestedTests: ['Rapid Flu', 'COVID-19 Test', 'Chest X-Ray'],
+    },
+  ] as const;
+
+  for (const t of DEFAULT_TEMPLATES) {
+    const exists = await EncounterTemplateModel.findOne({ name: t.name, clinicId: CLINIC_ID });
+    if (exists) { console.log(`   ↩ skipped (exists): ${t.name}`); continue; }
+    await EncounterTemplateModel.create({ ...t, clinicId: CLINIC_ID, createdBy, isActive: true });
+    console.log(`   ✔ Template: ${t.name}`);
   }
 
   console.log('\n🎉  Seed complete!\n');

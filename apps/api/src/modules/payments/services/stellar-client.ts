@@ -112,6 +112,78 @@ class StellarClient {
   }
 
   /**
+   * Transfer all XLM from one account to another (used during keypair rotation)
+   * Calls the stellar-service POST /transfer endpoint
+   */
+  async transferBalance(
+    fromPublicKey: string,
+    toPublicKey: string,
+  ): Promise<{ transferred: boolean; amount?: string; hash?: string }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/transfer',
+      { fromPublicKey, toPublicKey },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Get fee statistics from stellar-service
+   * Calls GET /fee-stats (public endpoint)
+   */
+  async getFeeEstimate(): Promise<{
+    slow: { stroops: string; xlm: string; confirmationTime: string };
+    standard: { stroops: string; xlm: string; confirmationTime: string };
+    fast: { stroops: string; xlm: string; confirmationTime: string };
+    raw: Record<string, string>;
+  }> {
+    try {
+      const response = await this.client.get('/fee-stats');
+      const { success: _s, ...data } = response.data;
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(error.response?.data?.message ?? `Fee stats unavailable: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Issue a refund transaction (platform -> patient)
+   * Calls the stellar-service POST /refund endpoint
+   */
+  async issueRefund(
+    toPublicKey: string,
+    amount: string,
+    memo: string,
+  ): Promise<{ transactionHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/refund',
+      { toPublicKey, amount, memo },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Wrap an inner transaction in a platform-sponsored fee bump tx
+   * Calls the stellar-service POST /fee-bump endpoint
+   */
+  async sponsorFeeBump(innerXdr: string): Promise<{ xdr: string; hash: string; feeStroops: number }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fee-bump',
+      { innerXdr },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    const { success: _s, ...data } = response.data;
+    return data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {

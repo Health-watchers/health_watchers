@@ -52,7 +52,7 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
           return (
             <li
               key={r.label}
-              className={`flex items-center gap-1.5 text-xs ${ok ? 'text-success-600' : 'text-neutral-400'}`}
+              className={`flex items-center gap-1.5 text-xs ${ok ? 'text-success-600' : 'text-neutral-500'}`}
             >
               <span aria-hidden="true">{ok ? '✓' : '○'}</span>
               {r.label}

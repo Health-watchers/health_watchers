@@ -23,8 +23,8 @@ export function StatCard({ title, value, icon, color, label }: StatCardProps) {
         {icon}
       </div>
       <div>
-        <p className="text-sm text-neutral-500">{title}</p>
-        <p className="text-2xl font-bold text-neutral-900">{value}</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">{title}</p>
+        <p className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{value}</p>
       </div>
     </Card>
   );

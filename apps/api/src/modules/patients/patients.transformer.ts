@@ -10,6 +10,7 @@ export interface PatientResponse {
   sex: string;
   contactNumber?: string;
   address?: string;
+  allergies: unknown[];
   createdAt: string;
   updatedAt: string;
 }
@@ -24,8 +25,9 @@ export function toPatientResponse(doc: Document & Record<string, any>): PatientR
     dateOfBirth: doc.dateOfBirth instanceof Date ? doc.dateOfBirth.toISOString() : doc.dateOfBirth,
     sex: doc.sex,
     contactNumber: doc.contactNumber,
-    address: doc.address,
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    address:       doc.address,
+    allergies:     doc.allergies ?? [],
+    createdAt:     doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt:     doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   };
 }

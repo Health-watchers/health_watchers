@@ -34,6 +34,7 @@ const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsC
 });
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
 const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientReferralsTab'), { ssr: false });
+const RiskTab = dynamic(() => import('@/components/patients/RiskTab'), { ssr: false });
 
 interface EncounterResponse {
   id: string;
@@ -54,6 +55,23 @@ interface PaymentResponse {
   status: string;
   txHash?: string;
   createdAt?: string;
+}
+
+interface Allergy {
+  _id: string;
+  allergen: string;
+  allergenType: string;
+  reaction: string;
+  severity: 'mild' | 'moderate' | 'severe' | 'life-threatening';
+  onsetDate?: string;
+  isActive: boolean;
+}
+
+function severityVariant(severity: string) {
+  if (severity === 'life-threatening') return 'danger';
+  if (severity === 'severe') return 'danger';
+  if (severity === 'moderate') return 'warning';
+  return 'default';
 }
 
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
@@ -188,6 +206,41 @@ export default function PatientDetailClient({
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: allergies = [], isLoading: allergiesLoading, refetch: refetchAllergies } = useQuery<Allergy[]>({
+    queryKey: ['allergies', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/allergies`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.data ?? [];
+    },
+  });
+
+  const [showAllergyForm, setShowAllergyForm] = useState(false);
+  const [allergyForm, setAllergyForm] = useState({ allergen: '', allergenType: 'drug', reaction: '', severity: 'mild' });
+  const [allergySubmitting, setAllergySubmitting] = useState(false);
+
+  const handleAddAllergy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAllergySubmitting(true);
+    try {
+      const res = await fetch(`${API_V1}/patients/${patientId}/allergies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allergyForm),
+      });
+      if (!res.ok) throw new Error('Failed to add allergy');
+      setShowAllergyForm(false);
+      setAllergyForm({ allergen: '', allergenType: 'drug', reaction: '', severity: 'mild' });
+      refetchAllergies();
+      setToast({ message: 'Allergy recorded.', type: 'success' });
+    } catch {
+      setToast({ message: 'Failed to add allergy.', type: 'error' });
+    } finally {
+      setAllergySubmitting(false);
+    }
+  };
+
   const canEdit = user && EDIT_ROLES.has(user.role);
 
   const handleCreatePayment = async (data: CreatePaymentData) => {
@@ -301,7 +354,7 @@ export default function PatientDetailClient({
               <Badge variant={patient.gender === 'inactive' ? 'danger' : 'success'}>
                 {labels.active}
               </Badge>
-              <span className="text-xs text-neutral-400">
+              <span className="text-xs text-neutral-500">
                 {labels.registeredOn}: {formatDate((patient as any).createdAt)}
               </span>
             </div>
@@ -319,37 +372,37 @@ export default function PatientDetailClient({
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.systemId}
             </dt>
             <dd className="mt-0.5 font-mono text-neutral-900">{patient.systemId}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.dob}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{formatDate(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.age}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{calcAge(patient.dateOfBirth)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.sex}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.sex}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.contact}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.contactNumber || 'N/A'}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
               {labels.address}
             </dt>
             <dd className="mt-0.5 text-neutral-900">{patient.address || 'N/A'}</dd>
@@ -364,7 +417,14 @@ export default function PatientDetailClient({
           <TabsTrigger value="payments">{labels.payments}</TabsTrigger>
           <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
           <TabsTrigger value="vitals">Vitals & Analytics</TabsTrigger>
+          <TabsTrigger value="allergies">
+            Allergies
+            {allergies.some((a) => a.severity === 'life-threatening' || a.severity === 'severe') && (
+              <span className="ml-1.5 inline-flex h-2 w-2 rounded-full bg-danger-500" aria-label="Has severe allergies" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="ai">{labels.aiInsights}</TabsTrigger>
+          <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="consent">Consent</TabsTrigger>
           <TabsTrigger value="referrals">Referrals</TabsTrigger>
         </TabsList>
@@ -409,7 +469,7 @@ export default function PatientDetailClient({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-neutral-900">{enc.chiefComplaint}</p>
-                      <p className="mt-0.5 text-xs text-neutral-400">{formatDate(enc.createdAt)}</p>
+                      <p className="mt-0.5 text-xs text-neutral-500">{formatDate(enc.createdAt)}</p>
                     </div>
                     <Badge variant={statusVariant(enc.status)}>{enc.status}</Badge>
                   </div>
@@ -470,9 +530,9 @@ export default function PatientDetailClient({
                     <div>
                       <p className="font-medium text-neutral-900">
                         {p.amount}{' '}
-                        <span className="font-normal text-neutral-400">{p.assetCode ?? 'XLM'}</span>
+                        <span className="font-normal text-neutral-500">{p.assetCode ?? 'XLM'}</span>
                       </p>
-                      <p className="mt-0.5 text-xs text-neutral-400">
+                      <p className="mt-0.5 text-xs text-neutral-500">
                         {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                       </p>
                     </div>
@@ -504,6 +564,91 @@ export default function PatientDetailClient({
             </div>
           ) : (
             <VitalSignsCharts vitals={vitals} analytics={analytics} />
+          )}
+        </TabsContent>
+
+        {/* Allergies tab */}
+        <TabsContent value="allergies">
+          {canEdit && (
+            <div className="mb-4">
+              {showAllergyForm ? (
+                <form onSubmit={handleAddAllergy} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm space-y-3">
+                  <h3 className="font-medium text-neutral-900">Add Allergy</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      required
+                      placeholder="Allergen (e.g. Penicillin)"
+                      value={allergyForm.allergen}
+                      onChange={e => setAllergyForm(f => ({ ...f, allergen: e.target.value }))}
+                      className="col-span-2 rounded border border-neutral-300 px-3 py-2 text-sm"
+                    />
+                    <select
+                      value={allergyForm.allergenType}
+                      onChange={e => setAllergyForm(f => ({ ...f, allergenType: e.target.value }))}
+                      className="rounded border border-neutral-300 px-3 py-2 text-sm"
+                    >
+                      <option value="drug">Drug</option>
+                      <option value="food">Food</option>
+                      <option value="environmental">Environmental</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <select
+                      value={allergyForm.severity}
+                      onChange={e => setAllergyForm(f => ({ ...f, severity: e.target.value }))}
+                      className="rounded border border-neutral-300 px-3 py-2 text-sm"
+                    >
+                      <option value="mild">Mild</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="severe">Severe</option>
+                      <option value="life-threatening">Life-threatening</option>
+                    </select>
+                    <input
+                      required
+                      placeholder="Reaction (e.g. Anaphylaxis)"
+                      value={allergyForm.reaction}
+                      onChange={e => setAllergyForm(f => ({ ...f, reaction: e.target.value }))}
+                      className="col-span-2 rounded border border-neutral-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={allergySubmitting} className="rounded bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50">
+                      {allergySubmitting ? 'Saving…' : 'Save Allergy'}
+                    </button>
+                    <button type="button" onClick={() => setShowAllergyForm(false)} className="rounded border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <Button size="sm" onClick={() => setShowAllergyForm(true)}>+ Add Allergy</Button>
+              )}
+            </div>
+          )}
+          {allergiesLoading ? (
+            <div className="space-y-3" aria-busy="true">
+              {[1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-neutral-100" />)}
+            </div>
+          ) : allergies.length === 0 ? (
+            <EmptyState title="No known allergies recorded" icon="💊" />
+          ) : (
+            <ol className="space-y-3" aria-label="Allergies">
+              {allergies.map((a) => (
+                <li key={a._id} className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-neutral-900">{a.allergen}</p>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        {a.allergenType} · Reaction: {a.reaction}
+                        {a.onsetDate && ` · Onset: ${new Date(a.onsetDate).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                    <Badge variant={severityVariant(a.severity)}>
+                      {a.severity === 'life-threatening' ? '⚠ ' : ''}{a.severity}
+                    </Badge>
+                  </div>
+                </li>
+              ))}
+            </ol>
           )}
         </TabsContent>
 
@@ -541,13 +686,13 @@ export default function PatientDetailClient({
               <>
                 <p className="text-sm leading-relaxed text-neutral-600">{aiSummary}</p>
                 {aiLastRun && (
-                  <p className="mt-3 text-xs text-neutral-400">
+                  <p className="mt-3 text-xs text-neutral-500">
                     {labels.lastAnalysis}: {aiLastRun.toLocaleString()}
                   </p>
                 )}
               </>
             ) : (
-              <p className="text-sm text-neutral-400">{labels.aiSummaryPlaceholder}</p>
+              <p className="text-sm text-neutral-500">{labels.aiSummaryPlaceholder}</p>
             )}
           </div>
         </TabsContent>
@@ -555,6 +700,10 @@ export default function PatientDetailClient({
         {/* Consent tab */}
         <TabsContent value="consent">
           <ConsentTab patientId={patientId} canEdit={!!canEdit} />
+        {/* Risk tab */}
+        <TabsContent value="risk">
+          <RiskTab patient={patient} patientId={patientId} apiV1={API_V1} />
+        </TabsContent>
         {/* Referrals tab */}
         <TabsContent value="referrals">
           <PatientReferralsTab patientId={patientId} />

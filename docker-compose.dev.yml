@@ -5,6 +5,16 @@ version: '3.8'
 # Usage: docker-compose -f docker-compose.dev.yml up -d
 
 services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: health-watchers-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI — http://localhost:16686
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
   mongo:
     image: mongo:7
     container_name: health-watchers-mongo

@@ -25,7 +25,7 @@ export function RecentTable<T extends Record<string, unknown>>({
         <h2 className="text-base font-semibold text-neutral-900">{title}</h2>
       </div>
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
           <span className="mb-2 text-4xl" aria-hidden="true">
             📭
           </span>
@@ -33,6 +33,7 @@ export function RecentTable<T extends Record<string, unknown>>({
         </div>
       ) : (
         <Table>
+          <caption className="sr-only">{title}</caption>
           <TableHead>
             <TableRow>
               {columns.map((col) => (

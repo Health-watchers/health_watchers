@@ -1,4 +1,5 @@
-import './config/env'; // must be first — validates env vars
+import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
 import express from 'express';
@@ -11,17 +12,22 @@ import mongoose from 'mongoose';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
+import { userManagementRoutes } from './modules/users/user-management.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
+import { medicalHistoryRoutes } from './modules/patients/medical-history.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
-import { paymentRoutes } from './modules/payments/payments.controller';
+import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
+import paymentsRouter from './modules/payments/payments.routes';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
+import { auditRoutes } from './modules/audit/audit.controller';
+import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
+import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
-import { healthRoutes } from './modules/health/health.controller';
 import {
   authLimiter,
   forgotPasswordLimiter,
@@ -33,6 +39,7 @@ import { appointmentRoutes } from './modules/appointments/appointments.controlle
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { apiVersionHeader } from './middlewares/versioning.middleware';
+import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import { notificationRoutes } from './modules/notifications/notifications.controller';
 import { referralRoutes } from './modules/referrals/referrals.controller';
@@ -45,12 +52,32 @@ import {
   startReconciliationJob,
   stopReconciliationJob,
 } from './modules/payments/services/reconciliation-job';
+import {
+  startRiskRecalculationJob,
+  stopRiskRecalculationJob,
+} from './modules/patients/risk-recalculation-job';
+import {
+  startBalanceMonitoringJob,
+  stopBalanceMonitoringJob,
+} from './modules/payments/services/balance-monitoring-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
+import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
+import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
+import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import scheduleRoutes from './modules/schedules/schedules.routes';
+import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+import metricsRouter from './modules/metrics/metrics.routes';
+import { metricsMiddleware } from './middlewares/metrics.middleware';
+import { mongodbConnectionPoolSize } from './services/metrics.service';
+import scheduleRoutes from './modules/schedules/schedules.routes';
+import cdsRoutes from './modules/cds/cds.controller';
+import { seedBuiltInRules } from './modules/cds/cds-seed';
+
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -130,11 +157,15 @@ app.use(
 app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
+app.use(requestAuditMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+// Bypass for multipart/form-data routes (e.g. CSV import)
+const MULTIPART_BYPASS = ['/api/v1/patients/import'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
         .status(415)
@@ -144,11 +175,18 @@ app.use((req, res, next) => {
   next();
 });
 
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
+// ── Prometheus metrics ────────────────────────────────────────────────────────
+// Must be registered before API routes so all requests are measured
+app.use(metricsMiddleware);
+app.use('/metrics', metricsRouter);
+
 // ── API version header on all /api/* responses ────────────────────────────────
 app.use('/api', apiVersionHeader('1.0'));
+app.use('/api', traceIdHeader);
 
 // ── API versions endpoint ─────────────────────────────────────────────────────
 app.get('/api/versions', (_req, res) =>
@@ -170,12 +208,16 @@ app.use('/api/v1', generalLimiter);
 app.use('/api/v1/auth/forgot-password', forgotPasswordLimiter);
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/clinics', clinicRoutes);
-app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/users', userManagementRoutes); // User management endpoints
+app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
-app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
+app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
@@ -189,6 +231,12 @@ app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
+app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/schedules', scheduleRoutes);
+app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
+app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
+app.use('/api/v1/schedules', scheduleRoutes);
+app.use('/api/v1/cds', cdsRoutes);
 
 setupSwagger(app);
 
@@ -201,13 +249,28 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
+  
+  // Seed built-in CDS rules
+  await seedBuiltInRules();
 
   const server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
   });
 
+  // Initialise Socket.IO on the same HTTP server
+  initSocket(server);
+  logger.info('Socket.IO initialised');
+
   startPaymentExpirationJob();
   startReconciliationJob();
+  startRiskRecalculationJob();
+  startBalanceMonitoringJob();
+
+  // Track MongoDB connection pool size for Prometheus
+  setInterval(() => {
+    const poolSize = mongoose.connection.pool?.totalConnectionCount ?? 0;
+    mongodbConnectionPoolSize.set(poolSize);
+  }, 15_000);
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -221,6 +284,8 @@ async function startServer() {
         // Stop payment expiration job
         stopPaymentExpirationJob();
         stopReconciliationJob();
+        stopRiskRecalculationJob();
+        stopBalanceMonitoringJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection

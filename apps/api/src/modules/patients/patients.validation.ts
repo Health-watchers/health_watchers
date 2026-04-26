@@ -39,7 +39,22 @@ export const patientQuerySchema = z.object({
 });
 
 export const patientSearchQuerySchema = patientQuerySchema.extend({
-  q: z.string().optional(),
+  q: z.string().max(100, 'Search query must not exceed 100 characters').optional(),
+  sex: z.enum(['M', 'F', 'O']).optional(),
+  minAge: z.coerce.number().int().min(0).max(150).optional(),
+  maxAge: z.coerce.number().int().min(0).max(150).optional(),
+  active: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v !== 'false')),
+  registeredAfter: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid date' }),
+  registeredBefore: z
+    .string()
+    .optional()
+    .refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid date' }),
 });
 
 export type CreatePatientDto = z.infer<typeof createPatientSchema>;

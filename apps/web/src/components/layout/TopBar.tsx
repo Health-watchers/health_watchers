@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/context/AuthContext';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -45,10 +46,12 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         {user?.clinicName ?? 'Health Watchers'}
       </span>
 
-      {/* Right: notification bell + avatar + logout */}
+      {/* Right: theme toggle + notification bell + avatar + logout */}
       <div className="flex items-center gap-3">
+        <ThemeToggle />
         <NotificationBell />
         <div
+          role="img"
           className="bg-primary-500 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
           aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}
           title={user?.name}

@@ -31,9 +31,30 @@ export function Tabs({ value, onValueChange, children, className }: TabsProps) {
 }
 
 export function TabsList({ children, className }: { children: ReactNode; className?: string }) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.role !== 'tab') return;
+
+    const tabs = Array.from(e.currentTarget.querySelectorAll('[role="tab"]')) as HTMLElement[];
+    const index = tabs.indexOf(target);
+
+    let nextIndex: number | null = null;
+    if (e.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (e.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (e.key === 'Home') nextIndex = 0;
+    if (e.key === 'End') nextIndex = tabs.length - 1;
+
+    if (nextIndex !== null) {
+      e.preventDefault();
+      tabs[nextIndex].focus();
+      tabs[nextIndex].click();
+    }
+  };
+
   return (
     <div
       role="tablist"
+      onKeyDown={handleKeyDown}
       className={['flex gap-1 border-b border-neutral-200', className ?? ''].join(' ')}
     >
       {children}
@@ -54,7 +75,10 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
   return (
     <button
       role="tab"
+      id={`tab-trigger-${value}`}
       aria-selected={isActive}
+      aria-controls={`tab-panel-${value}`}
+      tabIndex={isActive ? 0 : -1}
       onClick={() => onChange(value)}
       className={[
         'focus-visible:ring-primary-500 -mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2',
@@ -79,7 +103,13 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
   const { active } = useTabsContext();
   if (active !== value) return null;
   return (
-    <div role="tabpanel" className={['pt-4', className ?? ''].join(' ')}>
+    <div
+      role="tabpanel"
+      id={`tab-panel-${value}`}
+      aria-labelledby={`tab-trigger-${value}`}
+      tabIndex={0}
+      className={['focus:outline-none pt-4', className ?? ''].join(' ')}
+    >
       {children}
     </div>
   );

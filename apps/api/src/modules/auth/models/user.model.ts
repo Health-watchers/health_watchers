@@ -22,7 +22,12 @@ export interface UserPreferences {
     appointment_reminder: boolean;
     ai_summary_ready: boolean;
     lab_result_ready: boolean;
+    high_risk_patient: boolean;
     system: boolean;
+    balance_low_warning: boolean;
+    balance_critical: boolean;
+    large_transaction: boolean;
+    unrecognized_transaction: boolean;
   };
 }
 
@@ -44,6 +49,7 @@ export interface User {
   failedLoginAttempts: number;
   failedMfaAttempts: number;
   lockedUntil?: Date; // brute-force protection
+  mustChangePassword?: boolean; // Force password change on next login
   preferences: UserPreferences;
 }
 
@@ -103,6 +109,7 @@ const userSchema = new Schema(
       default: undefined,
       index: true,
     },
+    mustChangePassword: { type: Boolean, default: false },
     preferences: {
       language: { type: String, default: 'en' },
       emailNotifications: { type: Boolean, default: true },
@@ -113,7 +120,12 @@ const userSchema = new Schema(
         appointment_reminder: { type: Boolean, default: true },
         ai_summary_ready:     { type: Boolean, default: true },
         lab_result_ready:     { type: Boolean, default: true },
+        high_risk_patient:    { type: Boolean, default: true },
         system:               { type: Boolean, default: true },
+        balance_low_warning:      { type: Boolean, default: true },
+        balance_critical:         { type: Boolean, default: true },
+        large_transaction:        { type: Boolean, default: true },
+        unrecognized_transaction: { type: Boolean, default: true },
       },
     },
   },
@@ -124,5 +136,8 @@ userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 12);
 });
+
+userSchema.index({ clinicId: 1, role: 1 });     // List users by clinic and role
+userSchema.index({ clinicId: 1, isActive: 1 }); // Active users per clinic
 
 export const UserModel = models.User || model('User', userSchema);
