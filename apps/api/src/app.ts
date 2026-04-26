@@ -66,7 +66,10 @@ import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
-import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import scheduleRoutes from './modules/schedules/schedules.routes';
@@ -77,7 +80,7 @@ import { mongodbConnectionPoolSize } from './services/metrics.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
-
+import onboardingRoutes from './modules/clinics/onboarding.routes';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -119,7 +122,7 @@ app.use(
       }
       return compression.filter(req, res);
     },
-  }),
+  })
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -148,7 +151,9 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready') },
+    autoLogging: {
+      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+    },
     redact: ['req.headers.authorization'],
   })
 );
@@ -175,7 +180,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
@@ -200,7 +204,7 @@ app.get('/api/versions', (_req, res) =>
       },
     ],
     current: 'v1',
-  }),
+  })
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -237,6 +241,7 @@ app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/cds', cdsRoutes);
+app.use('/api/v1/onboarding', onboardingRoutes);
 
 setupSwagger(app);
 
@@ -249,7 +254,7 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
-  
+
   // Seed built-in CDS rules
   await seedBuiltInRules();
 

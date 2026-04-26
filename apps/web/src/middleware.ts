@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const STAFF_LOGIN = '/login';
 const PORTAL_LOGIN = '/portal/login';
+const ONBOARDING_PATH = '/onboarding';
 
 const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
 const PORTAL_PUBLIC = ['/portal/login'];
@@ -9,8 +10,8 @@ const PORTAL_PUBLIC = ['/portal/login'];
 const ADMIN_PATHS = ['/settings', '/reports', '/users'];
 const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
 
-function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+function isStaffPublic(pathname: string): boolean {
+  return STAFF_PUBLIC.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 function isAdminPath(pathname: string): boolean {
@@ -32,7 +33,9 @@ export function middleware(request: NextRequest) {
 
   // ── Portal routes (/portal/*) ─────────────────────────────────────────────
   if (pathname.startsWith('/portal')) {
-    const isPortalPublic = PORTAL_PUBLIC.some((s) => pathname === s || pathname.startsWith(`${s}/`));
+    const isPortalPublic = PORTAL_PUBLIC.some(
+      (s) => pathname === s || pathname.startsWith(`${s}/`)
+    );
     const portalToken = request.cookies.get('portalAccessToken')?.value;
 
     if (!portalToken && !isPortalPublic) {
@@ -49,7 +52,7 @@ export function middleware(request: NextRequest) {
   const isPublic = isStaffPublic(pathname);
 
   if (!accessToken && !isPublic) {
-    const loginUrl = new URL(LOGIN_PATH, request.url);
+    const loginUrl = new URL(STAFF_LOGIN, request.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -57,11 +60,26 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  if (accessToken && isAdminPath(pathname)) {
+  if (accessToken) {
     const payload = decodeJwtPayload(accessToken);
-    const role = payload?.role as string | undefined;
-    if (!role || !ADMIN_ROLES.includes(role)) {
-      return NextResponse.redirect(new URL('/', request.url));
+
+    // ── Onboarding guard ────────────────────────────────────────────────────
+    // If onboarding is not complete, redirect to /onboarding (except when already there)
+    if (pathname !== ONBOARDING_PATH && !pathname.startsWith(`${ONBOARDING_PATH}/`)) {
+      const onboardingCompleted = payload?.onboardingCompleted as boolean | undefined;
+      // Only enforce for clinic staff (not SUPER_ADMIN who manages all clinics)
+      const role = payload?.role as string | undefined;
+      if (onboardingCompleted === false && role !== 'SUPER_ADMIN') {
+        return NextResponse.redirect(new URL(ONBOARDING_PATH, request.url));
+      }
+    }
+
+    // ── Admin path guard ────────────────────────────────────────────────────
+    if (isAdminPath(pathname)) {
+      const role = payload?.role as string | undefined;
+      if (!role || !ADMIN_ROLES.includes(role)) {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
     }
   }
 

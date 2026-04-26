@@ -9,6 +9,9 @@ export interface IClinic {
   subscriptionTier: 'free' | 'basic' | 'premium';
   isActive: boolean;
   createdBy: Types.ObjectId;
+  onboardingStep: number;
+  onboardingCompleted: boolean;
+  onboardingCompletedAt?: Date;
 }
 
 const clinicSchema = new Schema<IClinic>(
@@ -21,6 +24,9 @@ const clinicSchema = new Schema<IClinic>(
     subscriptionTier: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
     isActive: { type: Boolean, default: true, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    onboardingStep: { type: Number, default: 1, min: 1, max: 5 },
+    onboardingCompleted: { type: Boolean, default: false, index: true },
+    onboardingCompletedAt: { type: Date },
   },
   { timestamps: true, versionKey: false }
 );
