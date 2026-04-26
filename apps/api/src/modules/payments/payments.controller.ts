@@ -40,7 +40,7 @@ router.get(
     } catch (err: any) {
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
-  }),
+  })
 );
 
 // GET /payments/balance — fetch clinic's Stellar account balance from stellar-service
@@ -223,13 +223,12 @@ router.post(
   validateRequest({ body: createPaymentIntentSchema }),
   feeBudgetCheck,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      amount, 
-      destination, 
-      memo, 
-      patientId, 
-      assetCode = 'XLM', 
-      issuer, 
+    const {
+      amount,
+      destination,
+      patientId,
+      assetCode = 'XLM',
+      issuer,
       currency,
       sourceAssetCode,
       sourceAssetIssuer,
@@ -246,7 +245,7 @@ router.post(
 
     // Generate standardized memo: HW:{8-char-intentId}
     const memo = `HW:${intentId.slice(0, 8).toUpperCase()}`;
-    
+
     // Validate memo length (Stellar limit is 28 bytes)
     if (Buffer.byteLength(memo, 'utf8') > 28) {
       return res.status(400).json({
@@ -273,28 +272,33 @@ router.post(
       });
     }
 
-    const record = await withSpan('payment.intent.create', {
-      'payment.asset': normalizedAsset,
-      'payment.amount': amount,
-      'clinic.id': String(clinicId),
-    }, async () => PaymentRecordModel.create({
-      intentId,
-      amount,
-      destination,
-      memo,
-      clinicId,
-      patientId,
-      status: 'pending',
-      assetCode: normalizedAsset,
-      assetIssuer: normalizedAsset === 'XLM' ? null : resolvedIssuer,
-      // Path payment fields
-      sourceAssetCode,
-      sourceAssetIssuer,
-      destinationAmount,
-      maxSourceAmount,
-      path,
-      feeStrategy,
-    }));
+    const record = await withSpan(
+      'payment.intent.create',
+      {
+        'payment.asset': normalizedAsset,
+        'payment.amount': amount,
+        'clinic.id': String(clinicId),
+      },
+      async () =>
+        PaymentRecordModel.create({
+          intentId,
+          amount,
+          destination,
+          memo,
+          clinicId,
+          patientId,
+          status: 'pending',
+          assetCode: normalizedAsset,
+          assetIssuer: normalizedAsset === 'XLM' ? null : resolvedIssuer,
+          // Path payment fields
+          sourceAssetCode,
+          sourceAssetIssuer,
+          destinationAmount,
+          maxSourceAmount,
+          path,
+          feeStrategy,
+        })
+    );
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
     paymentsInitiatedTotal.inc({ currency: normalizedAsset });
@@ -302,7 +306,8 @@ router.post(
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
       try {
-        const { checkFeeBudget, recordSponsoredFee } = await import('./services/fee-budget.service');
+        const { checkFeeBudget, recordSponsoredFee } =
+          await import('./services/fee-budget.service');
         const BASE_FEE_STROOPS = 100;
         const feeStroops = BASE_FEE_STROOPS * 10;
         const allowed = await checkFeeBudget(String(clinicId), feeStroops);
@@ -325,6 +330,21 @@ router.post(
         ...(feeBump ? { feeBump } : {}),
       },
     });
+  })
+);
+
+// GET /payments/status/:intentId — get payment status by intentId
+router.get(
+  '/status/:intentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+    const payment = await PaymentRecordModel.findOne({ intentId, clinicId: req.user!.clinicId });
+    if (!payment) {
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
+    }
+    return res.json({ status: 'success', data: toPaymentResponse(payment) });
   })
 );
 
@@ -358,15 +378,20 @@ router.patch(
     // Check for double-confirmation: if txHash is already linked to another confirmed payment
     const existingPayment = await PaymentRecordModel.findOne({ txHash, status: 'confirmed' });
     if (existingPayment && existingPayment.intentId !== intentId) {
-      logger.warn({ intentId, txHash, existingIntentId: existingPayment.intentId }, 'Attempted double-confirmation');
+      logger.warn(
+        { intentId, txHash, existingIntentId: existingPayment.intentId },
+        'Attempted double-confirmation'
+      );
       return res.status(409).json({
         error: 'TransactionAlreadyUsed',
         message: `Transaction ${txHash} is already linked to payment intent ${existingPayment.intentId}`,
       });
     }
 
-    const verification = await withSpan('stellar.transaction.verify', { 'stellar.tx_hash': txHash }, async () =>
-      stellarClient.verifyTransaction(txHash)
+    const verification = await withSpan(
+      'stellar.transaction.verify',
+      { 'stellar.tx_hash': txHash },
+      async () => stellarClient.verifyTransaction(txHash)
     );
 
     if (!verification.found || !verification.transaction) {
@@ -385,7 +410,10 @@ router.patch(
       const txMemo = tx.memo || '';
       if (txMemo !== payment.memo) {
         await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
-        logger.error({ intentId, txHash, expectedMemo: payment.memo, actualMemo: txMemo }, 'Memo mismatch');
+        logger.error(
+          { intentId, txHash, expectedMemo: payment.memo, actualMemo: txMemo },
+          'Memo mismatch'
+        );
         return res.status(400).json({
           error: 'MemoMismatch',
           message: `Transaction memo '${txMemo}' does not match expected '${payment.memo}'`,
@@ -396,7 +424,10 @@ router.patch(
     // Validate destination
     if (tx.to.toLowerCase() !== payment.destination.toLowerCase()) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
-      logger.error({ intentId, txHash, expectedDest: payment.destination, actualDest: tx.to }, 'Destination mismatch');
+      logger.error(
+        { intentId, txHash, expectedDest: payment.destination, actualDest: tx.to },
+        'Destination mismatch'
+      );
       return res.status(400).json({
         error: 'DestinationMismatch',
         message: `Transaction destination ${tx.to} does not match expected ${payment.destination}`,
@@ -408,7 +439,10 @@ router.patch(
     const txAmount = parseFloat(tx.amount).toFixed(7);
     if (txAmount !== expectedAmount) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
-      logger.error({ intentId, txHash, expectedAmount, actualAmount: tx.amount }, 'Amount mismatch');
+      logger.error(
+        { intentId, txHash, expectedAmount, actualAmount: tx.amount },
+        'Amount mismatch'
+      );
       return res.status(400).json({
         error: 'AmountMismatch',
         message: `Transaction amount ${tx.amount} does not match expected ${payment.amount}`,
@@ -419,7 +453,10 @@ router.patch(
     const txAssetCode = tx.asset.split(':')[0].toUpperCase();
     if (txAssetCode !== payment.assetCode.toUpperCase()) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
-      logger.error({ intentId, txHash, expectedAsset: payment.assetCode, actualAsset: tx.asset }, 'Asset mismatch');
+      logger.error(
+        { intentId, txHash, expectedAsset: payment.assetCode, actualAsset: tx.asset },
+        'Asset mismatch'
+      );
       return res.status(400).json({
         error: 'AssetMismatch',
         message: `Transaction asset ${tx.asset} does not match expected ${payment.assetCode}`,
@@ -428,13 +465,22 @@ router.patch(
 
     // Validate network passphrase (if available from verification)
     if (verification.networkPassphrase && config.stellar.network) {
-      const expectedPassphrase = config.stellar.network === 'mainnet' 
-        ? 'Public Global Stellar Network ; September 2015'
-        : 'Test SDF Network ; September 2015';
-      
+      const expectedPassphrase =
+        config.stellar.network === 'mainnet'
+          ? 'Public Global Stellar Network ; September 2015'
+          : 'Test SDF Network ; September 2015';
+
       if (verification.networkPassphrase !== expectedPassphrase) {
         await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
-        logger.error({ intentId, txHash, expectedNetwork: config.stellar.network, actualPassphrase: verification.networkPassphrase }, 'Network mismatch');
+        logger.error(
+          {
+            intentId,
+            txHash,
+            expectedNetwork: config.stellar.network,
+            actualPassphrase: verification.networkPassphrase,
+          },
+          'Network mismatch'
+        );
         return res.status(400).json({
           error: 'NetworkMismatch',
           message: `Transaction is on wrong network. Expected ${config.stellar.network}`,
@@ -456,9 +502,11 @@ router.patch(
       const { InvoiceModel } = await import('../invoices/invoice.model');
       await InvoiceModel.findOneAndUpdate(
         { paymentIntentId: intentId, status: { $ne: 'paid' } },
-        { status: 'paid', paidAt: new Date(), paidTxHash: txHash },
+        { status: 'paid', paidAt: new Date(), paidTxHash: txHash }
       );
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
 
     // Send confirmation email to clinic (non-blocking)
     try {
@@ -499,7 +547,9 @@ router.post(
     const clinic = await ClinicModel.findById(clinicId).lean();
 
     if (!clinic?.stellarPublicKey) {
-      return res.status(404).json({ error: 'NotFound', message: 'No Stellar public key configured' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'No Stellar public key configured' });
     }
 
     // Fetch recent transactions from Horizon via stellar-service
@@ -520,7 +570,12 @@ router.post(
     // Unrecorded on-chain transactions
     for (const tx of onChainTxs) {
       if (!dbByHash.has(tx.hash)) {
-        discrepancies.push({ type: 'unrecorded', txHash: tx.hash, amount: tx.amount, date: tx.timestamp });
+        discrepancies.push({
+          type: 'unrecorded',
+          txHash: tx.hash,
+          amount: tx.amount,
+          date: tx.timestamp,
+        });
       }
     }
 
@@ -530,11 +585,25 @@ router.post(
       if (record.status === 'pending' && record.txHash && onChainHashes.has(record.txHash)) {
         await PaymentRecordModel.updateOne({ _id: record._id }, { status: 'confirmed' });
         discrepancies.push({ type: 'stale_pending_fixed', intentId: record.intentId });
-      } else if (record.status === 'confirmed' && record.txHash && !onChainHashes.has(record.txHash)) {
-        discrepancies.push({ type: 'confirmed_not_on_chain', intentId: record.intentId, txHash: record.txHash });
+      } else if (
+        record.status === 'confirmed' &&
+        record.txHash &&
+        !onChainHashes.has(record.txHash)
+      ) {
+        discrepancies.push({
+          type: 'confirmed_not_on_chain',
+          intentId: record.intentId,
+          txHash: record.txHash,
+        });
       } else if (record.status === 'pending' && new Date(record.createdAt as any) < staleCutoff) {
-        const age = Math.floor((Date.now() - new Date(record.createdAt as any).getTime()) / 86400000);
-        discrepancies.push({ type: 'stale_pending', intentId: record.intentId, age: `${age} days` });
+        const age = Math.floor(
+          (Date.now() - new Date(record.createdAt as any).getTime()) / 86400000
+        );
+        discrepancies.push({
+          type: 'stale_pending',
+          intentId: record.intentId,
+          age: `${age} days`,
+        });
       }
     }
 
@@ -590,29 +659,31 @@ router.get(
   '/by-memo/:memo',
   asyncHandler(async (req: Request, res: Response) => {
     if (!canReadPayments(req.user!.role)) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
     }
 
     const { memo } = req.params;
-    
+
     // Normalize memo to uppercase for case-insensitive lookup
     const normalizedMemo = memo.toUpperCase();
 
-    const payment = await PaymentRecordModel.findOne({ 
+    const payment = await PaymentRecordModel.findOne({
       memo: normalizedMemo,
-      clinicId: req.user!.clinicId 
+      clinicId: req.user!.clinicId,
     });
 
     if (!payment) {
-      return res.status(404).json({ 
-        error: 'NotFound', 
-        message: `No payment intent found with memo '${memo}'` 
+      return res.status(404).json({
+        error: 'NotFound',
+        message: `No payment intent found with memo '${memo}'`,
       });
     }
 
     logger.info({ memo: normalizedMemo, intentId: payment.intentId }, 'Payment looked up by memo');
     return res.json({ status: 'success', data: toPaymentResponse(payment) });
-  }),
+  })
 );
 
 // GET /payments/balance-snapshots — fetch daily balance history for the clinic
@@ -704,7 +775,6 @@ router.get(
         error: 'NotFound',
         message: 'Payment intent not found',
       });
-      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
@@ -714,7 +784,6 @@ router.get(
         payment.amount,
         payment.assetCode,
         payment.memo
-        payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
       if (format === 'svg') {
@@ -736,7 +805,6 @@ router.get(
         error: 'InternalServerError',
         message: 'Failed to generate QR code',
       });
-      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate QR code' });
     }
   })
 );
@@ -757,7 +825,6 @@ router.get(
         error: 'NotFound',
         message: 'Payment intent not found',
       });
-      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
@@ -767,7 +834,6 @@ router.get(
         payment.amount,
         payment.assetCode,
         payment.memo
-        payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
       return res.json({
@@ -786,11 +852,6 @@ router.get(
         error: 'InternalServerError',
         message: 'Failed to generate payment URI',
       });
-        data: { paymentURI, destination: payment.destination, amount: payment.amount, assetCode: payment.assetCode, memo: payment.memo },
-      });
-    } catch (err: any) {
-      logger.error({ intentId, error: err.message }, 'Failed to generate payment URI');
-      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate payment URI' });
     }
   })
 );

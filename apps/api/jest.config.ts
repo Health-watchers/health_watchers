@@ -12,11 +12,15 @@ const config: Config = {
     '^@api/(.*)$': `${srcRoot}/$1`,
     '^@/(.*)$': `${srcRoot}/$1`,
     // Mock the rate-limit middleware so tests don't need redis installed.
-    // Match both the @api alias and the resolved absolute path.
     '^@api/middlewares/rate-limit\\.middleware$': `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
     [`^${srcRoot.replace(/\\/g, '\\\\')}/middlewares/rate-limit\\.middleware$`]: `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
     // Mock pino-http so tests don't need a real pino logger with .child()
     '^pino-http$': `${srcRoot}/__mocks__/pino-http.ts`,
+    // Mock tracing.ts — OpenTelemetry SDK is incompatible with ts-jest/CommonJS
+    [`^${srcRoot.replace(/\\/g, '\\\\')}/tracing(\\.ts)?$`]: `${srcRoot}/__mocks__/tracing.ts`,
+    '^@api/tracing$': `${srcRoot}/__mocks__/tracing.ts`,
+    // Mock broken OpenTelemetry packages under ts-jest/CommonJS
+    '^@opentelemetry/resources$': `${srcRoot}/__mocks__/@opentelemetry/resources.js`,
   },
 
   // Tell Jest to look in the API workspace's node_modules first, then the root
@@ -27,10 +31,10 @@ const config: Config = {
   ],
 
   // Only pick up .test.ts files; exclude tests that require a live MongoDB
-  testMatch: ['**/*.test.ts'],
+  testMatch: ['**/*.test.ts', '**/*.integration.test.ts'],
   testPathIgnorePatterns: [
     '/node_modules/',
-    'src/modules/audit/audit.test.ts',          // requires live MongoDB
+    'src/modules/audit/audit.test.ts', // requires live MongoDB
     'src/__tests__/unit/clinicId-consistency.test.ts', // requires live MongoDB
   ],
 
@@ -54,17 +58,25 @@ const config: Config = {
     ],
   },
 
-  // Coverage: focus on the auth module
+  // Coverage: focus on the auth and payments modules
   collectCoverageFrom: [
     'src/modules/auth/**/*.ts',
+    'src/modules/payments/**/*.ts',
     '!src/modules/auth/**/*.test.ts',
     '!src/modules/auth/**/*.d.ts',
+    '!src/modules/payments/**/*.test.ts',
+    '!src/modules/payments/**/*.integration.test.ts',
+    '!src/modules/payments/**/*.d.ts',
   ],
 
   coverageThreshold: {
     global: {
       lines: 80,
       branches: 80,
+    },
+    './src/modules/payments/': {
+      lines: 85,
+      branches: 85,
     },
   },
 
