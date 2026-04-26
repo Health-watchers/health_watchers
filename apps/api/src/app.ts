@@ -79,6 +79,7 @@ import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
+import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import federationRouter from './modules/federation/federation.router';
 
 
@@ -240,6 +241,7 @@ app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/cds', cdsRoutes);
+app.use('/api/v1/peer-reviews', peerReviewsRouter);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
