@@ -25,6 +25,9 @@ export type AuditAction =
   | 'IMMUNIZATION_UPDATE'
   | 'IMMUNIZATION_DELETE'
   | 'IMMUNIZATION_CERTIFICATE'
+  | 'PATIENT_PHOTO_UPLOAD'
+  | 'PATIENT_PHOTO_ACCESS'
+  | 'PATIENT_PHOTO_DELETE';
   | 'PAYMENT_EXPORT';
 
 export interface AuditLog {
@@ -72,6 +75,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'IMMUNIZATION_UPDATE',
         'IMMUNIZATION_DELETE',
         'IMMUNIZATION_CERTIFICATE',
+        'PATIENT_PHOTO_UPLOAD',
+        'PATIENT_PHOTO_ACCESS',
+        'PATIENT_PHOTO_DELETE',
         'PAYMENT_EXPORT',
       ],
       index: true,

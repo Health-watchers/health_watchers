@@ -15,6 +15,7 @@ import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
 import { medicalHistoryRoutes } from './modules/patients/medical-history.controller';
+import { patientPhotoRoutes } from './modules/patients/photo.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
 import paymentsRouter from './modules/payments/payments.routes';
@@ -162,7 +163,7 @@ app.use(requestAuditMiddleware);
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
 // Bypass for multipart/form-data routes (e.g. CSV import)
-const MULTIPART_BYPASS = ['/api/v1/patients/import'];
+const MULTIPART_BYPASS = ['/api/v1/patients/import', '/api/v1/patients/'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
     if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
@@ -212,6 +213,7 @@ app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/patients', medicalHistoryRoutes);
+app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
