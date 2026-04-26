@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
+import DosageCalculator, { type DosageResult } from '@/components/encounters/DosageCalculator';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,6 @@ interface AiResponse {
   differentials: AiDifferential[];
   urgency: 'routine' | 'urgent' | 'emergency';
   disclaimer: string;
-}
 }
 
 // ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
@@ -132,11 +132,49 @@ export default function NewEncounterPage() {
   const [dxQuery, setDxQuery] = useState('');
   const [diagnoses, setDiagnoses] = useState<DiagnosisEntry[]>([]);
 
+  // Prescriptions
+  interface PrescriptionRow {
+    id: string;
+    drugName: string;
+    dosage: string;
+    frequency: string;
+    route: string;
+    notes: string;
+  }
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
+  const newRxRow = (): PrescriptionRow => ({
+    id: crypto.randomUUID(),
+    drugName: '',
+    dosage: '',
+    frequency: '',
+    route: '',
+    notes: '',
+  });
+  const addRxRow = () => setPrescriptions((p) => [...p, newRxRow()]);
+  const removeRxRow = (id: string) => setPrescriptions((p) => p.filter((r) => r.id !== id));
+  const updateRxRow = (id: string, field: keyof PrescriptionRow, value: string) =>
+    setPrescriptions((p) => p.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const applyDosageResult = (id: string, result: DosageResult) =>
+    setPrescriptions((p) =>
+      p.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              dosage: result.recommendedDose,
+              frequency: result.frequency,
+              route: result.route,
+            }
+          : r
+      )
+    );
+
   // Submission
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [patientAllergies, setPatientAllergies] = useState<Array<{ _id: string; allergen: string; severity: string; reaction: string }>>([]);
+  const [patientAllergies, setPatientAllergies] = useState<
+    Array<{ _id: string; allergen: string; severity: string; reaction: string }>
+  >([]);
 
   // Templates
   const [templates, setTemplates] = useState<EncounterTemplate[]>([]);
@@ -145,8 +183,10 @@ export default function NewEncounterPage() {
 
   useEffect(() => {
     fetch(`${API_V1}/encounter-templates`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.data) setTemplates(d.data); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.data) setTemplates(d.data);
+      })
       .catch(() => {});
   }, []);
 
@@ -357,16 +397,24 @@ export default function NewEncounterPage() {
       ...(diagnoses.length > 0 && { diagnosis: diagnoses }),
       ...(Object.keys(vitalSigns).length > 0 && { vitalSigns }),
       ...(followUpDate && { followUpDate: new Date(followUpDate).toISOString() }),
+      ...(prescriptions.filter((r) => r.drugName.trim()).length > 0 && {
+        prescriptions: prescriptions
+          .filter((r) => r.drugName.trim())
+          .map(({ id: _id, ...rest }) => rest),
+      }),
     };
 
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await fetch(`${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message ?? `Error ${res.status}`);
@@ -438,8 +486,12 @@ export default function NewEncounterPage() {
               </div>
               <button
                 type="button"
-                onClick={() => { setSelectedPatient(null); setPatientQuery(''); setPatientAllergies([]); }}
-                className="text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                onClick={() => {
+                  setSelectedPatient(null);
+                  setPatientQuery('');
+                  setPatientAllergies([]);
+                }}
+                className="text-primary-600 focus-visible:ring-primary-500 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
               >
                 Change
               </button>
@@ -513,36 +565,48 @@ export default function NewEncounterPage() {
         {/* ── Template Selector ── */}
         {templates.length > 0 && (
           <section aria-labelledby="section-template">
-            <h2 id="section-template" className="text-sm font-semibold uppercase tracking-wide text-neutral-500 mb-3">
-              Start from Template <span className="font-normal normal-case text-neutral-400">(optional)</span>
+            <h2
+              id="section-template"
+              className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            >
+              Start from Template{' '}
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
             </h2>
 
             {selectedTemplateId ? (
-              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+              <div className="border-primary-200 bg-primary-50 flex items-center justify-between rounded-lg border px-4 py-3">
                 <p className="text-sm font-medium text-neutral-900">
-                  {templates.find(t => t._id === selectedTemplateId)?.name}
+                  {templates.find((t) => t._id === selectedTemplateId)?.name}
                 </p>
                 <button
                   type="button"
                   onClick={() => setSelectedTemplateId('')}
-                  className="text-xs text-primary-600 hover:underline focus:outline-none"
+                  className="text-primary-600 text-xs hover:underline focus:outline-none"
                 >
                   Remove
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {templates.map(t => (
-                  <div key={t._id} className="rounded-lg border border-neutral-200 bg-white p-3 flex items-start justify-between gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {templates.map((t) => (
+                  <div
+                    key={t._id}
+                    className="flex items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3"
+                  >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 truncate">{t.name}</p>
-                      <p className="text-xs text-neutral-400">{t.category}{t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}</p>
+                      <p className="truncate text-sm font-medium text-neutral-900">{t.name}</p>
+                      <p className="text-xs text-neutral-400">
+                        {t.category}
+                        {t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}
+                      </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex shrink-0 gap-1">
                       <button
                         type="button"
-                        onClick={() => setPreviewTemplate(previewTemplate?._id === t._id ? null : t)}
-                        className="text-xs text-neutral-500 hover:text-neutral-800 focus:outline-none px-2 py-1 rounded border border-neutral-200 hover:bg-neutral-50"
+                        onClick={() =>
+                          setPreviewTemplate(previewTemplate?._id === t._id ? null : t)
+                        }
+                        className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 focus:outline-none"
                         aria-expanded={previewTemplate?._id === t._id}
                       >
                         Preview
@@ -550,7 +614,7 @@ export default function NewEncounterPage() {
                       <button
                         type="button"
                         onClick={() => applyTemplate(t)}
-                        className="text-xs text-primary-600 hover:text-primary-800 focus:outline-none px-2 py-1 rounded border border-primary-200 hover:bg-primary-50"
+                        className="text-primary-600 hover:text-primary-800 border-primary-200 hover:bg-primary-50 rounded border px-2 py-1 text-xs focus:outline-none"
                       >
                         Apply
                       </button>
@@ -561,16 +625,21 @@ export default function NewEncounterPage() {
             )}
 
             {previewTemplate && (
-              <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm space-y-2">
+              <div className="mt-3 space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm">
                 <p className="font-semibold text-neutral-800">{previewTemplate.name}</p>
-                {previewTemplate.description && <p className="text-neutral-600">{previewTemplate.description}</p>}
+                {previewTemplate.description && (
+                  <p className="text-neutral-600">{previewTemplate.description}</p>
+                )}
                 {previewTemplate.defaultChiefComplaint && (
-                  <p className="text-neutral-600"><span className="font-medium">Chief complaint:</span> {previewTemplate.defaultChiefComplaint}</p>
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Chief complaint:</span>{' '}
+                    {previewTemplate.defaultChiefComplaint}
+                  </p>
                 )}
                 {previewTemplate.suggestedDiagnoses?.length ? (
                   <p className="text-neutral-600">
                     <span className="font-medium">Diagnoses:</span>{' '}
-                    {previewTemplate.suggestedDiagnoses.map(d => d.code).join(', ')}
+                    {previewTemplate.suggestedDiagnoses.map((d) => d.code).join(', ')}
                   </p>
                 ) : null}
                 {previewTemplate.suggestedTests?.length ? (
@@ -579,11 +648,15 @@ export default function NewEncounterPage() {
                     {previewTemplate.suggestedTests.join(', ')}
                   </p>
                 ) : null}
-                {previewTemplate.notes && <p className="text-neutral-600"><span className="font-medium">Notes:</span> {previewTemplate.notes}</p>}
+                {previewTemplate.notes && (
+                  <p className="text-neutral-600">
+                    <span className="font-medium">Notes:</span> {previewTemplate.notes}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => applyTemplate(previewTemplate)}
-                  className="mt-1 text-xs font-medium text-primary-600 hover:underline focus:outline-none"
+                  className="text-primary-600 mt-1 text-xs font-medium hover:underline focus:outline-none"
                 >
                   Apply this template →
                 </button>
@@ -594,13 +667,16 @@ export default function NewEncounterPage() {
 
         {/* ── Allergy Alert ── */}
         {patientAllergies.length > 0 && (
-          <div role="alert" aria-live="assertive" className="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3">
-            <p className="text-sm font-semibold text-danger-800 mb-2">⚠ Known Allergies</p>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="border-danger-300 bg-danger-50 rounded-lg border px-4 py-3"
+          >
+            <p className="text-danger-800 mb-2 text-sm font-semibold">⚠ Known Allergies</p>
             <ul className="space-y-1">
               {patientAllergies.map((a) => (
-                <li key={a._id} className="text-sm text-danger-700">
-                  <span className="font-medium">{a.allergen}</span>
-                  {' '}— {a.severity} · {a.reaction}
+                <li key={a._id} className="text-danger-700 text-sm">
+                  <span className="font-medium">{a.allergen}</span> — {a.severity} · {a.reaction}
                 </li>
               ))}
             </ul>
@@ -683,7 +759,7 @@ export default function NewEncounterPage() {
                             {diff.icdCode}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
                           {diff.reasoning}
                         </p>
                         {diff.recommendedTests?.length > 0 && (
@@ -716,7 +792,9 @@ export default function NewEncounterPage() {
                           }
                           disabled={diagnoses.some((d) => d.code === diff.icdCode)}
                         >
-                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                          {diagnoses.some((d) => d.code === diff.icdCode)
+                            ? 'Added'
+                            : 'Add Diagnosis'}
                         </Button>
                       </div>
                     </div>
@@ -724,7 +802,7 @@ export default function NewEncounterPage() {
                 ))}
               </div>
 
-              <p className="mt-4 text-[10px] italic text-neutral-400">{aiSuggestions.disclaimer}</p>
+              <p className="mt-4 text-[10px] text-neutral-400 italic">{aiSuggestions.disclaimer}</p>
             </div>
           )}
         </section>
@@ -943,6 +1021,151 @@ export default function NewEncounterPage() {
                 </ul>
               )}
             </div>
+          )}
+        </section>
+
+        {/* ── Prescriptions ── */}
+        <section aria-labelledby="section-prescriptions">
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              id="section-prescriptions"
+              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            >
+              Prescriptions{' '}
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+            </h2>
+            <Button type="button" size="sm" variant="outline" onClick={addRxRow}>
+              + Add medication
+            </Button>
+          </div>
+
+          {prescriptions.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-400">
+              No prescriptions added.{' '}
+              <button
+                type="button"
+                onClick={addRxRow}
+                className="text-primary-600 hover:underline focus:outline-none"
+              >
+                Add one
+              </button>
+            </p>
+          ) : (
+            <ul className="space-y-4">
+              {prescriptions.map((rx) => (
+                <li
+                  key={rx.id}
+                  className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
+                >
+                  {/* Drug name row with Calculate Dose button */}
+                  <div className="mb-3 flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                        Drug name <span className="text-danger-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rx.drugName}
+                        onChange={(e) => updateRxRow(rx.id, 'drugName', e.target.value)}
+                        placeholder="e.g. Amoxicillin"
+                        className="focus:border-primary-400 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700 outline-none"
+                      />
+                    </div>
+                    <DosageCalculator
+                      drugName={rx.drugName}
+                      patientWeight={
+                        weight
+                          ? parseFloat(
+                              weightUnit === 'lbs'
+                                ? (parseFloat(weight) * 0.453592).toFixed(2)
+                                : weight
+                            )
+                          : undefined
+                      }
+                      patientAge={
+                        fullPatient?.dateOfBirth
+                          ? Math.floor(
+                              (Date.now() - new Date(fullPatient.dateOfBirth).getTime()) /
+                                (1000 * 60 * 60 * 24 * 365.25)
+                            )
+                          : undefined
+                      }
+                      patientSex={
+                        fullPatient?.sex === 'M' || fullPatient?.sex === 'F'
+                          ? fullPatient.sex
+                          : undefined
+                      }
+                      indication={diagnoses[0]?.description}
+                      onApply={(result) => applyDosageResult(rx.id, result)}
+                    />
+                  </div>
+
+                  {/* Dosage / frequency / route */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                        Dosage
+                      </span>
+                      <input
+                        type="text"
+                        value={rx.dosage}
+                        onChange={(e) => updateRxRow(rx.id, 'dosage', e.target.value)}
+                        placeholder="e.g. 500 mg"
+                        className="focus:border-primary-400 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700 outline-none"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                        Frequency
+                      </span>
+                      <input
+                        type="text"
+                        value={rx.frequency}
+                        onChange={(e) => updateRxRow(rx.id, 'frequency', e.target.value)}
+                        placeholder="e.g. twice daily"
+                        className="focus:border-primary-400 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700 outline-none"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                        Route
+                      </span>
+                      <input
+                        type="text"
+                        value={rx.route}
+                        onChange={(e) => updateRxRow(rx.id, 'route', e.target.value)}
+                        placeholder="e.g. oral"
+                        className="focus:border-primary-400 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700 outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Notes + remove */}
+                  <div className="mt-3 flex items-start gap-2">
+                    <label className="flex flex-1 flex-col gap-1">
+                      <span className="text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                        Notes
+                      </span>
+                      <input
+                        type="text"
+                        value={rx.notes}
+                        onChange={(e) => updateRxRow(rx.id, 'notes', e.target.value)}
+                        placeholder="e.g. take with food"
+                        className="focus:border-primary-400 rounded-md border border-neutral-200 px-3 py-2 text-sm text-neutral-700 outline-none"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeRxRow(rx.id)}
+                      className="mt-5 rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                      aria-label={`Remove ${rx.drugName || 'medication'}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
 
