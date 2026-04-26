@@ -13,6 +13,8 @@ export interface PatientResponse {
   allergies: unknown[];
   createdAt: string;
   updatedAt: string;
+  photoUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
@@ -29,5 +31,7 @@ export function toPatientResponse(doc: Document & Record<string, any>): PatientR
     allergies:     doc.allergies ?? [],
     createdAt:     doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt:     doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    photoUrl:      doc.photoUrl,
+    thumbnailUrl:  doc.thumbnailUrl,
   };
 }

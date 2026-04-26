@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { queryKeys } from '@/lib/queryKeys';
@@ -25,6 +25,48 @@ const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const IS_TESTNET = NETWORK === 'testnet';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+function FederationAddressCard({ address }: { address: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    import('qrcode').then((QRCode) => {
+      QRCode.toCanvas(canvasRef.current!, address, { width: 160, margin: 1 });
+    });
+  }, [address]);
+
+  const copy = () => {
+    navigator.clipboard.writeText(address).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Federation Address</CardTitle>
+        <Badge variant="default">Stellar</Badge>
+      </CardHeader>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <canvas ref={canvasRef} aria-label={`QR code for ${address}`} className="rounded border border-neutral-100" />
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-neutral-500">
+            Patients can send payments using this human-readable address instead of the full public key.
+          </p>
+          <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 font-mono text-sm font-medium text-neutral-800">
+            {address}
+          </div>
+          <Button variant="outline" onClick={copy} className="w-fit">
+            {copied ? '✓ Copied' : 'Copy Address'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 interface Transaction {
   id: string;
   type: string;
@@ -40,6 +82,7 @@ interface WalletBalance {
   publicKey: string;
   balance: string;
   xlmBalance?: string;
+  federationAddress?: string | null;
   usdcBalance: string | null;
   usdcIssuer?: string;
   transactions: Transaction[];
@@ -538,6 +581,11 @@ export default function WalletClient() {
               </div>
             </div>
           </Card>
+
+          {/* Federation Address */}
+          {wallet.federationAddress && (
+            <FederationAddressCard address={wallet.federationAddress} />
+          )}
 
           {/* Send Payment Form */}
           {showSendForm && !pendingPayment && (

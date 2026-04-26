@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { queryKeys } from '@/lib/queryKeys';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+import { PaymentExportButton } from '@/components/payments/PaymentExportButton';
 
 const API = `${API_URL}/api/v1`;
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
@@ -119,6 +120,7 @@ export default function PaymentsClient() {
             </span>
           )}
           <Button variant="outline" onClick={() => window.location.href = '/invoices'}>Invoices</Button>
+          <PaymentExportButton onError={(msg) => setToast({ message: msg, type: 'error' })} />
           <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
         </div>
       </div>
