@@ -14,6 +14,12 @@ export interface IAppointment extends Document {
   cancelledBy?: mongoose.Types.ObjectId;
   cancelledAt?: Date;
   cancellationReason?: string;
+  isTelemedicine?: boolean;
+  videoRoomId?: string;
+  videoProvider?: 'daily.co' | 'jitsi' | 'twilio_video';
+  videoStartedAt?: Date;
+  videoEndedAt?: Date;
+  videoDuration?: number; // minutes
 }
 
 const AppointmentSchema = new Schema<IAppointment>(
@@ -39,6 +45,16 @@ const AppointmentSchema = new Schema<IAppointment>(
     cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
+    isTelemedicine: { type: Boolean, default: false },
+    videoRoomId: { type: String },
+    videoProvider: {
+      type: String,
+      enum: ['daily.co', 'jitsi', 'twilio_video'],
+      default: 'daily.co',
+    },
+    videoStartedAt: { type: Date },
+    videoEndedAt: { type: Date },
+    videoDuration: { type: Number }, // minutes
   },
   { timestamps: true, versionKey: false }
 );

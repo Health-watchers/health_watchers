@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '@health-watchers/config';
+import { anonymize, type PatientData } from '@health-watchers/anonymize';
 
 let clientInstance: GoogleGenerativeAI | null = null;
 
@@ -16,17 +17,25 @@ export function isAIServiceAvailable(): boolean {
 export const AI_DISCLAIMER =
   'AI-generated summary for clinical assistance only. Not a substitute for professional medical judgment.';
 
-// ── PII stripping ─────────────────────────────────────────────────────────────
-// Remove common PII patterns before sending to external AI API
-const PII_PATTERNS: [RegExp, string][] = [
-  [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],                          // phone numbers
-  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],                 // email addresses
-  [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],                                         // SSN
-  [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'], // dates of birth
-  [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],                                             // zip codes
-];
-
-export function stripPII(text: string): string {
+// ── PII stripping using anonymization service ─────────────────────────────────
+export function stripPII(text: string, patientData?: Partial<PatientData>): string {
+  if (patientData) {
+    const anonymized = anonymize(
+      { ...patientData, clinicalNotes: text } as PatientData,
+      { level: 'de-identification', purpose: 'ai' }
+    );
+    return anonymized.clinicalNotes || text;
+  }
+  
+  // Fallback to basic PII patterns
+  const PII_PATTERNS: [RegExp, string][] = [
+    [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],
+    [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],
+    [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],
+    [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'],
+    [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],
+  ];
+  
   let sanitized = text;
   for (const [pattern, replacement] of PII_PATTERNS) {
     sanitized = sanitized.replace(pattern, replacement);
@@ -150,5 +159,87 @@ Respond ONLY with valid JSON in this exact format (no markdown):
     return JSON.parse(text) as DrugInteractionResult;
   } catch {
     throw new Error(`Failed to parse drug interaction response: ${text}`);
+  }
+}
+
+// ── Differential Diagnosis ───────────────────────────────────────────────────
+export interface DifferentialDiagnosisInput {
+  chiefComplaint: string;
+  symptoms: string[];
+  vitalSigns?: {
+    heartRate?: number;
+    bloodPressure?: string;
+    oxygenSaturation?: number;
+    temperature?: number;
+  };
+  patientAge?: number;
+  patientSex?: string;
+  relevantHistory?: string;
+}
+
+export interface DifferentialSuggestion {
+  diagnosis: string;
+  icdCode: string;
+  probability: 'high' | 'medium' | 'low';
+  reasoning: string;
+  recommendedTests: string[];
+}
+
+export interface DifferentialDiagnosisResponse {
+  differentials: DifferentialSuggestion[];
+  urgency: 'routine' | 'urgent' | 'emergency';
+  disclaimer: string;
+}
+
+export async function generateDifferentialDiagnosis(
+  input: DifferentialDiagnosisInput
+): Promise<DifferentialDiagnosisResponse> {
+  const client = getGeminiClient();
+
+  const context = [
+    `Chief Complaint: ${input.chiefComplaint}`,
+    `Symptoms: ${input.symptoms.join(', ')}`,
+    input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
+    input.patientAge ? `Patient Age: ${input.patientAge}` : '',
+    input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
+    input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const safeContext = stripPII(context);
+
+  const prompt = `You are a clinical decision support AI. Based on the following patient presentation, suggest the top 3-5 differential diagnoses.
+
+Patient Presentation:
+${safeContext}
+
+Respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):
+{
+  "differentials": [
+    {
+      "diagnosis": "string",
+      "icdCode": "string (ICD-10 format)",
+      "probability": "high" | "medium" | "low",
+      "reasoning": "string (1-2 sentences explain why based on the presentation)",
+      "recommendedTests": ["string", "string"]
+    }
+  ],
+  "urgency": "routine" | "urgent" | "emergency"
+}`;
+
+  try {
+    const model = client.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    const data = JSON.parse(jsonStr);
+    return { ...data, disclaimer: AI_DISCLAIMER };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to generate differential diagnosis: ${msg}`);
   }
 }

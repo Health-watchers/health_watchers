@@ -137,4 +137,7 @@ userSchema.pre('save', async function () {
   this.password = await bcrypt.hash(this.password, 12);
 });
 
+userSchema.index({ clinicId: 1, role: 1 });     // List users by clinic and role
+userSchema.index({ clinicId: 1, isActive: 1 }); // Active users per clinic
+
 export const UserModel = models.User || model('User', userSchema);

@@ -4,6 +4,7 @@ import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
+import { emitToClinic } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
@@ -18,8 +19,14 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
+import { patientsCreatedTotal } from '../../services/metrics.service';
+import {
+  createEmergencyContactSchema,
+  updateEmergencyContactSchema,
+} from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
+import { cache } from '@api/services/cache.service';
 
 const router = Router();
 router.use(authenticate);
@@ -82,7 +89,7 @@ router.get(
   })
 );
 
-// GET /patients/search?q=
+// GET /patients/search?q=&sex=M&minAge=18&maxAge=65&active=true&registeredAfter=2024-01-01&page=1&limit=20
 router.get(
   '/search',
   validateRequest({ query: patientSearchQuerySchema }),
@@ -94,15 +101,69 @@ router.get(
         .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
-    const q = String(req.query.q || '').trim();
-    const filter: Record<string, any> = { isActive: true };
-    if (q) filter.searchName = { $regex: q, $options: 'i' };
 
-    const result = await paginate(PatientModel, filter, page, limit);
+    // Sanitize: trim and cap at 100 chars (schema enforces max, this is belt-and-suspenders)
+    const q = String(req.query.q || '').trim().slice(0, 100);
+
+    const filter: Record<string, any> = { clinicId: req.user!.clinicId };
+
+    // Active filter — default true
+    const activeParam = req.query.active;
+    filter.isActive = activeParam === undefined ? true : activeParam !== 'false';
+
+    // Sex filter
+    if (req.query.sex) filter.sex = req.query.sex;
+
+    // Age range → date-of-birth range
+    const now = new Date();
+    if (req.query.minAge !== undefined || req.query.maxAge !== undefined) {
+      filter.dateOfBirth = {};
+      if (req.query.maxAge !== undefined) {
+        const minDob = new Date(now);
+        minDob.setFullYear(minDob.getFullYear() - Number(req.query.maxAge) - 1);
+        filter.dateOfBirth.$gte = minDob.toISOString().slice(0, 10);
+      }
+      if (req.query.minAge !== undefined) {
+        const maxDob = new Date(now);
+        maxDob.setFullYear(maxDob.getFullYear() - Number(req.query.minAge));
+        filter.dateOfBirth.$lte = maxDob.toISOString().slice(0, 10);
+      }
+    }
+
+    // Registration date range
+    if (req.query.registeredAfter || req.query.registeredBefore) {
+      filter.createdAt = {};
+      if (req.query.registeredAfter) filter.createdAt.$gte = new Date(req.query.registeredAfter as string);
+      if (req.query.registeredBefore) filter.createdAt.$lte = new Date(req.query.registeredBefore as string);
+    }
+
+    let data: any[];
+    let total: number;
+
+    if (q) {
+      // Use MongoDB text index for full-text search with relevance scoring
+      filter.$text = { $search: q };
+      const [docs, count] = await Promise.all([
+        PatientModel.find(filter, { score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+        PatientModel.countDocuments(filter),
+      ]);
+      data = docs;
+      total = count;
+    } else {
+      // No query — return paginated list sorted by lastName
+      const result = await paginate(PatientModel, filter, page, limit, { lastName: 1 });
+      data = result.data;
+      total = result.meta.total;
+    }
+
     return res.json({
       status: 'success',
-      data: result.data.map(toPatientResponse),
-      meta: result.meta,
+      data: data.map(toPatientResponse),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   })
 );
@@ -127,20 +188,25 @@ router.post(
     const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
     const searchName = `${firstName} ${lastName}`.toLowerCase();
     const systemId = await nextSystemId(clinicId || req.user!.clinicId);
-    const doc = await withSpan('patient.create', { 'clinic.id': clinicId || req.user!.clinicId }, async () =>
-      PatientModel.create({
-        systemId,
-        firstName,
-        lastName,
-        dateOfBirth: new Date(dateOfBirth),
-        sex,
-        contactNumber,
-        address,
-        clinicId: clinicId || req.user!.clinicId,
-        isActive: true,
-        searchName,
-      })
+    const doc = await withSpan(
+      'patient.create',
+      { 'clinic.id': clinicId || req.user!.clinicId },
+      async () =>
+        PatientModel.create({
+          systemId,
+          firstName,
+          lastName,
+          dateOfBirth: new Date(dateOfBirth),
+          sex,
+          contactNumber,
+          address,
+          clinicId: clinicId || req.user!.clinicId,
+          isActive: true,
+          searchName,
+        })
     );
+    emitToClinic(String(clinicId || req.user!.clinicId), 'patient:created', { patientId: String(doc._id) });
+    patientsCreatedTotal.inc({ clinicId: clinicId || req.user!.clinicId });
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   })
 );
@@ -319,19 +385,19 @@ router.get(
     // Flatten all prescriptions from all encounters
     const allPrescriptions = encounters.flatMap((encounter) => {
       return (encounter.prescriptions || []).map((prescription: any) => ({
-        ...prescription.toObject ? prescription.toObject() : prescription,
+        ...(prescription.toObject ? prescription.toObject() : prescription),
         encounterId: encounter._id,
         encounterDate: encounter.createdAt,
       }));
     });
 
-    return res.json({ 
-      status: 'success', 
+    return res.json({
+      status: 'success',
       data: allPrescriptions,
       meta: {
         total: allPrescriptions.length,
         encountersWithPrescriptions: encounters.length,
-      }
+      },
     });
   })
 );
@@ -346,7 +412,7 @@ router.get(
       clinicId: req.user!.clinicId,
       isActive: true,
     });
-    
+
     if (!patient) {
       return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     }
@@ -495,10 +561,12 @@ router.get(
     const sortField = ['orderedAt', 'testName'].includes(sort) ? sort : 'orderedAt';
     const sortOrder = order === 'asc' ? 1 : -1;
 
-    const docs = await LabResultModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
-      .sort({ [sortField]: sortOrder });
+    const docs = await LabResultModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).sort({ [sortField]: sortOrder });
     return res.json({ status: 'success', data: docs });
-  }),
+  })
 );
 
 // ── Allergy endpoints ─────────────────────────────────────────────────────────
@@ -507,10 +575,13 @@ router.get(
 router.get(
   '/:id/allergies',
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: patient.allergies.filter((a) => a.isActive) });
-  }),
+  })
 );
 
 // POST /patients/:id/allergies
@@ -519,7 +590,10 @@ router.post(
   WRITE_ROLES,
   validateRequest({ body: createAllergySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const allergy = {
@@ -533,9 +607,19 @@ router.post(
     await patient.save();
 
     const added = patient.allergies[patient.allergies.length - 1];
-    auditLog({ action: 'ALLERGY_CREATE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergen: allergy.allergen, severity: allergy.severity } }, req);
+    auditLog(
+      {
+        action: 'ALLERGY_CREATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergen: allergy.allergen, severity: allergy.severity },
+      },
+      req
+    );
     return res.status(201).json({ status: 'success', data: added });
-  }),
+  })
 );
 
 // PUT /patients/:id/allergies/:allergyId
@@ -544,7 +628,10 @@ router.put(
   WRITE_ROLES,
   validateRequest({ body: updateAllergySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const allergy = patient.allergies.id(req.params.allergyId);
@@ -553,9 +640,19 @@ router.put(
     Object.assign(allergy, req.body);
     await patient.save();
 
-    auditLog({ action: 'ALLERGY_UPDATE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergyId: req.params.allergyId } }, req);
+    auditLog(
+      {
+        action: 'ALLERGY_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergyId: req.params.allergyId },
+      },
+      req
+    );
     return res.json({ status: 'success', data: allergy });
-  }),
+  })
 );
 
 // DELETE /patients/:id/allergies/:allergyId — soft delete
@@ -563,7 +660,10 @@ router.delete(
   '/:id/allergies/:allergyId',
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const allergy = patient.allergies.id(req.params.allergyId);
@@ -572,9 +672,19 @@ router.delete(
     allergy.isActive = false;
     await patient.save();
 
-    auditLog({ action: 'ALLERGY_DELETE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergyId: req.params.allergyId } }, req);
+    auditLog(
+      {
+        action: 'ALLERGY_DELETE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergyId: req.params.allergyId },
+      },
+      req
+    );
     return res.json({ status: 'success', data: { id: req.params.allergyId, isActive: false } });
-  }),
+  })
 );
 
 // POST /patients/import — bulk CSV import (CLINIC_ADMIN only)
@@ -607,7 +717,9 @@ router.post(
     }
 
     if (rows.length > MAX_ROWS) {
-      return res.status(400).json({ error: 'ValidationError', message: `Maximum ${MAX_ROWS} rows allowed` });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: `Maximum ${MAX_ROWS} rows allowed` });
     }
 
     const errors: { row: number; field: string; error: string }[] = [];
@@ -622,7 +734,10 @@ router.post(
       await Promise.allSettled(
         batch.map(async (row, idx) => {
           const rowNum = batchStart + idx + 2; // 1-indexed + header row
-          if (errors.length >= MAX_ERRORS) { skippedCount++; return; }
+          if (errors.length >= MAX_ERRORS) {
+            skippedCount++;
+            return;
+          }
 
           // Validate with Zod
           const parsed = createPatientSchema.safeParse({
@@ -643,8 +758,15 @@ router.post(
 
           // Duplicate check: same name + DOB in this clinic
           const searchName = `${parsed.data.firstName} ${parsed.data.lastName}`.toLowerCase();
-          const exists = await PatientModel.exists({ clinicId, searchName, dateOfBirth: parsed.data.dateOfBirth });
-          if (exists) { skippedCount++; return; }
+          const exists = await PatientModel.exists({
+            clinicId,
+            searchName,
+            dateOfBirth: parsed.data.dateOfBirth,
+          });
+          if (exists) {
+            skippedCount++;
+            return;
+          }
 
           const systemId = await nextSystemId(String(clinicId));
           await PatientModel.create({
@@ -674,7 +796,153 @@ router.post(
       status: 'success',
       data: { total: rows.length, imported: importedCount, skipped: skippedCount, errors },
     });
-  }),
+  })
+);
+
+// GET /patients/:id/emergency-contacts
+router.get(
+  '/:id/emergency-contacts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id).select('emergencyContacts');
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: patient.emergencyContacts || [] });
+  })
+);
+
+// POST /patients/:id/emergency-contacts
+router.post(
+  '/:id/emergency-contacts',
+  WRITE_ROLES,
+  validateRequest({ body: createEmergencyContactSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, relationship, phone, email, address, isPrimary } = req.body;
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    if (!patient.emergencyContacts) patient.emergencyContacts = [];
+    if (patient.emergencyContacts.length >= 3) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Maximum 3 emergency contacts allowed per patient',
+      });
+    }
+
+    if (isPrimary) {
+      patient.emergencyContacts.forEach((c) => (c.isPrimary = false));
+    }
+
+    patient.emergencyContacts.push({
+      name,
+      relationship,
+      phone,
+      email,
+      address,
+      isPrimary: isPrimary || false,
+    });
+    await patient.save();
+
+    return res.status(201).json({
+      status: 'success',
+      data: patient.emergencyContacts[patient.emergencyContacts.length - 1],
+    });
+  })
+);
+
+// PUT /patients/:id/emergency-contacts/:contactId
+router.put(
+  '/:id/emergency-contacts/:contactId',
+  WRITE_ROLES,
+  validateRequest({ body: updateEmergencyContactSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, relationship, phone, email, address, isPrimary } = req.body;
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const contact = patient.emergencyContacts?.find((c) => String(c._id) === req.params.contactId);
+    if (!contact) {
+      return res.status(404).json({ error: 'NotFound', message: 'Emergency contact not found' });
+    }
+
+    if (name !== undefined) contact.name = name;
+    if (relationship !== undefined) contact.relationship = relationship;
+    if (phone !== undefined) contact.phone = phone;
+    if (email !== undefined) contact.email = email;
+    if (address !== undefined) contact.address = address;
+    if (isPrimary !== undefined) {
+      if (isPrimary) {
+        patient.emergencyContacts!.forEach((c) => (c.isPrimary = false));
+      }
+      contact.isPrimary = isPrimary;
+    }
+
+    await patient.save();
+    return res.json({ status: 'success', data: contact });
+  })
+);
+
+// DELETE /patients/:id/emergency-contacts/:contactId
+router.delete(
+  '/:id/emergency-contacts/:contactId',
+  WRITE_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const index = patient.emergencyContacts?.findIndex(
+      (c) => String(c._id) === req.params.contactId
+    );
+    if (index === undefined || index === -1) {
+      return res.status(404).json({ error: 'NotFound', message: 'Emergency contact not found' });
+    }
+
+    patient.emergencyContacts!.splice(index, 1);
+    await patient.save();
+    return res.json({ status: 'success', data: { id: req.params.contactId, deleted: true } });
+  })
+);
+
+// POST /patients/:id/emergency-alert (DOCTOR only)
+router.post(
+  '/:id/emergency-alert',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const primaryContact = patient.emergencyContacts?.find((c) => c.isPrimary);
+    if (!primaryContact) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'No primary emergency contact set',
+      });
+    }
+
+    const clinic = await (
+      await import('../clinics/clinic.model')
+    ).ClinicModel.findById(patient.clinicId);
+    const clinicName = clinic?.name || 'Our Clinic';
+    const clinicPhone = clinic?.phone || 'N/A';
+
+    const message = `Your family member ${patient.firstName} is receiving emergency care at ${clinicName}. Please call ${clinicPhone}.`;
+
+    // Log the alert (in production, would send SMS/email)
+    await auditLog(req.user!.id, 'EMERGENCY_ALERT_SENT', {
+      patientId: String(patient._id),
+      contactName: primaryContact.name,
+      contactPhone: primaryContact.phone,
+      message,
+    });
+
+    return res.json({
+      status: 'success',
+      data: {
+        contactName: primaryContact.name,
+        contactPhone: primaryContact.phone,
+        message,
+        sentAt: new Date(),
+      },
+    });
+  })
 );
 
 export const patientRoutes = router;
@@ -685,10 +953,13 @@ router.get(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
-    const history = await RiskScoreHistoryModel.find({ patientId: req.params.id, clinicId: req.user!.clinicId })
+    const history = await RiskScoreHistoryModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    })
       .sort({ calculatedAt: -1 })
       .limit(20)
       .lean();
     return res.json({ status: 'success', data: history });
-  }),
+  })
 );

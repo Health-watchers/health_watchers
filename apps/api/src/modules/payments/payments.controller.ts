@@ -18,6 +18,8 @@ import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
+import { emitToClinic } from '@api/realtime/socket';
+import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
 
 const router = Router();
 router.use(authenticate);
@@ -295,6 +297,7 @@ router.post(
     }));
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
+    paymentsInitiatedTotal.inc({ currency: normalizedAsset });
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
@@ -446,6 +449,7 @@ router.patch(
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
+    paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
 
     // Auto-update linked invoice if any (non-blocking)
     try {
@@ -472,6 +476,12 @@ router.patch(
       /* non-critical */
     }
 
+    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
+      paymentId: String(updatedPayment!._id),
+      txHash,
+      amount: updatedPayment!.amount,
+      assetCode: updatedPayment!.assetCode,
+    });
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   })
 );
@@ -620,6 +630,215 @@ router.get(
       .limit(limit)
       .lean();
     return res.json({ status: 'success', data: snapshots.reverse() });
+  })
+);
+
+// GET /payments/analytics — fetch payment analytics
+router.get(
+  '/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const { from, to, groupBy } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'from and to query parameters are required (ISO 8601 format)',
+      });
+    }
+
+    const fromDate = new Date(from as string);
+    const toDate = new Date(to as string);
+    const groupByPeriod = (groupBy as 'day' | 'week' | 'month') || 'month';
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid date format. Use ISO 8601 format (e.g., 2026-01-01)',
+      });
+    }
+
+    const { getPaymentAnalytics } = await import('./services/analytics.service');
+    const analytics = await getPaymentAnalytics(clinicId, fromDate, toDate, groupByPeriod);
+
+    return res.json({ status: 'success', data: analytics });
+  })
+);
+
+// GET /payments/revenue-dashboard — fetch revenue dashboard data
+router.get(
+  '/revenue-dashboard',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const months = Math.min(parseInt((req.query.months as string) ?? '12', 10), 36);
+
+    const { getRevenueDashboard } = await import('./services/analytics.service');
+    const dashboard = await getRevenueDashboard(clinicId, months);
+
+    return res.json({ status: 'success', data: dashboard });
+  })
+);
+
+// GET /payments/:intentId/qr — Generate QR code for payment intent
+router.get(
+  '/:intentId/qr',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+    const { format = 'png' } = req.query;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
+    }
+
+    try {
+      const { QRCodeService } = await import('./services/qr-code.service');
+      const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination, payment.amount, payment.assetCode, payment.memo
+      );
+
+      if (format === 'svg') {
+        const svg = await QRCodeService.generateQRCodeSVG(paymentURI);
+        res.setHeader('Content-Type', 'image/svg+xml');
+        return res.send(svg);
+      } else if (format === 'data-url') {
+        const dataUrl = await QRCodeService.generateQRCodeDataURL(paymentURI);
+        return res.json({ status: 'success', data: { qrCode: dataUrl, paymentURI } });
+      } else {
+        const buffer = await QRCodeService.generateQRCodePNG(paymentURI);
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Length', buffer.length);
+        return res.send(buffer);
+      }
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate QR code');
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate QR code' });
+    }
+  })
+);
+
+// GET /payments/:intentId/payment-uri — Get Stellar payment URI
+router.get(
+  '/:intentId/payment-uri',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
+    }
+
+    try {
+      const { QRCodeService } = await import('./services/qr-code.service');
+      const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination, payment.amount, payment.assetCode, payment.memo
+      );
+
+      return res.json({
+        status: 'success',
+        data: { paymentURI, destination: payment.destination, amount: payment.amount, assetCode: payment.assetCode, memo: payment.memo },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate payment URI');
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate payment URI' });
+    }
+  })
+);
+
+// GET /payments/:intentId/receipt — Download receipt PDF
+router.get(
+  '/:intentId/receipt',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
+    }
+
+    if (!payment.receiptUrl) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Receipt not yet generated for this payment',
+      });
+    }
+
+    try {
+      // Return pre-signed S3 URL or receipt data
+      return res.json({
+        status: 'success',
+        data: {
+          receiptUrl: payment.receiptUrl,
+          receiptNumber: payment.receiptNumber,
+          generatedAt: payment.receiptGeneratedAt,
+        },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to retrieve receipt');
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: 'Failed to retrieve receipt',
+      });
+    }
+  })
+);
+
+// GET /payments/:intentId/receipt/url — Get pre-signed S3 URL
+router.get(
+  '/:intentId/receipt/url',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId } = req.params;
+
+    const payment = await PaymentRecordModel.findOne({
+      intentId,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
+    }
+
+    if (!payment.receiptUrl) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Receipt not yet generated for this payment',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        receiptUrl: payment.receiptUrl,
+        receiptNumber: payment.receiptNumber,
+        expiresIn: 3600, // 1 hour
+      },
+    });
   })
 );
 

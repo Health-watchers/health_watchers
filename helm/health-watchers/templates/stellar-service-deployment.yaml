@@ -1,0 +1,74 @@
+{{- if .Values.stellarService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stellar-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stellar-service
+spec:
+  replicas: {{ .Values.stellarService.replicaCount }}
+  selector:
+    matchLabels:
+      app: stellar-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: stellar-service
+        {{- include "health-watchers.labels" . | nindent 8 }}
+        app.kubernetes.io/component: stellar-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: stellar-service
+          image: {{ include "health-watchers.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.stellarService.image.repository "tag" .Values.stellarService.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.stellarService.service.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.stellarService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.stellarService.livenessProbe.path }}
+              port: {{ .Values.stellarService.service.port }}
+            initialDelaySeconds: {{ .Values.stellarService.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.stellarService.livenessProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.stellarService.readinessProbe.path }}
+              port: {{ .Values.stellarService.service.port }}
+            initialDelaySeconds: {{ .Values.stellarService.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.stellarService.readinessProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: health-watchers-config
+            - secretRef:
+                name: health-watchers-secrets
+          env:
+            {{- range $key, $val := .Values.stellarService.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+{{- end }}

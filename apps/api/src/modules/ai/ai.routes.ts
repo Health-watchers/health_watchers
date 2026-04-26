@@ -4,14 +4,21 @@ import {
   generateClinicalSummary,
   generateRawTextSummary,
   generatePatientInsights,
+  generateDifferentialDiagnosis,
   isAIServiceAvailable,
   AI_DISCLAIMER,
   checkDrugInteractions,
 } from './ai.service';
+import {
+  generateDifferentialDiagnosis,
+  DIFFERENTIAL_DISCLAIMER,
+  type DifferentialDiagnosisInput,
+} from './differential-diagnosis.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
 import { sendAISummaryNotification } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
+import { aiRequestsTotal } from '../../services/metrics.service';
 
 const router = Router();
 
@@ -23,6 +30,7 @@ router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 // Returns: { success: boolean, summary: string, disclaimer: string }
 router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
+  aiRequestsTotal.inc({ endpoint: 'summarize' });
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({
@@ -52,7 +60,9 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
           message: 'text must be a non-empty string with at least 10 characters',
         });
       }
-      summary = await withSpan('ai.summarize', { 'ai.input': 'text' }, async () => generateRawTextSummary(text));
+      summary = await withSpan('ai.summarize', { 'ai.input': 'text' }, async () =>
+        generateRawTextSummary(text)
+      );
     } else {
       // encounterId input
       if (!isValidObjectId(encounterId)) {
@@ -82,13 +92,16 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         });
       }
 
-      summary = await withSpan('ai.summarize', { 'ai.input': 'encounter', 'encounter.id': String(encounterId) }, async () =>
-        generateClinicalSummary({
-          chiefComplaint: encounter.chiefComplaint,
-          notes: encounter.notes,
-          diagnosis: encounter.diagnosis,
-          vitalSigns: encounter.vitalSigns,
-        })
+      summary = await withSpan(
+        'ai.summarize',
+        { 'ai.input': 'encounter', 'encounter.id': String(encounterId) },
+        async () =>
+          generateClinicalSummary({
+            chiefComplaint: encounter.chiefComplaint,
+            notes: encounter.notes,
+            diagnosis: encounter.diagnosis,
+            vitalSigns: encounter.vitalSigns,
+          })
       );
 
       // Store the summary in the encounter
@@ -187,11 +200,14 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
         notes: e.notes,
         diagnosis: e.diagnosis,
         createdAt: e.createdAt,
-      })),
+      }))
     );
 
     const duration = Date.now() - startTime;
-    logger.info({ patientId, encounterCount: encounters.length, duration }, 'AI insights generated');
+    logger.info(
+      { patientId, encounterCount: encounters.length, duration },
+      'AI insights generated'
+    );
 
     return res.json({
       success: true,
@@ -223,11 +239,15 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
 // Request body: { medications: string[] }
 // Returns: 501 Not Implemented
 router.post('/drug-interactions', authenticate, async (req: Request, res: Response) => {
-  logger.info({ medications: req.body.medications }, 'Drug interaction check requested (not implemented)');
-  
+  logger.info(
+    { medications: req.body.medications },
+    'Drug interaction check requested (not implemented)'
+  );
+
   return res.status(501).json({
     error: 'NotImplemented',
-    message: 'Drug interaction checking is not yet implemented. This feature will be available in a future release.',
+    message:
+      'Drug interaction checking is not yet implemented. This feature will be available in a future release.',
     requestedMedications: req.body.medications || [],
   });
 });
@@ -330,7 +350,9 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
 
     const { labResultId } = req.body;
     if (!labResultId || !isValidObjectId(labResultId)) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Valid labResultId is required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'Valid labResultId is required' });
     }
 
     const { LabResultModel } = await import('../lab-results/lab-result.model');
@@ -339,7 +361,9 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
       return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
     }
     if (!labResult.results || labResult.results.length === 0) {
-      return res.status(422).json({ error: 'NoResults', message: 'Lab result has no result entries to interpret' });
+      return res
+        .status(422)
+        .json({ error: 'NoResults', message: 'Lab result has no result entries to interpret' });
     }
 
     const criticalValues = labResult.results
@@ -465,12 +489,16 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 router.post('/risk-assessment', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured.' });
+      return res
+        .status(503)
+        .json({ error: 'AIUnavailable', message: 'AI service is not configured.' });
     }
 
     const { patientId } = req.body;
     if (!patientId || !isValidObjectId(patientId)) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Valid patientId is required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'Valid patientId is required' });
     }
 
     const clinicId = req.user!.clinicId;
@@ -491,20 +519,34 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
 
     const [encounters, labResults, missedAppts] = await Promise.all([
       EncounterModel.find({ patientId, clinicId }).sort({ createdAt: -1 }).limit(20).lean(),
-      LabResultModel.find({ patientId, clinicId, status: 'resulted' }).sort({ createdAt: -1 }).limit(10).lean(),
-      AppointmentModel.countDocuments({ patientId, clinicId, status: 'no-show', scheduledAt: { $gte: ninetyDaysAgo } }),
+      LabResultModel.find({ patientId, clinicId, status: 'resulted' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+      AppointmentModel.countDocuments({
+        patientId,
+        clinicId,
+        status: 'no-show',
+        scheduledAt: { $gte: ninetyDaysAgo },
+      }),
     ]);
 
-    // Compute age (DOB is encrypted — use stored string)
     const dobStr = (patient as any).dateOfBirth as string;
-    const ageYears = dobStr ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
+    const ageYears = dobStr
+      ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : 0;
 
-    const allDiagnoses = encounters.flatMap((e) => (e.diagnosis ?? []).map((d: any) => d.description ?? d.code ?? ''));
+    const allDiagnoses = encounters.flatMap((e) =>
+      (e.diagnosis ?? []).map((d: any) => d.description ?? d.code ?? '')
+    );
     const recentHospitalization = encounters.some((e) => {
       const d = (e as any).createdAt as Date;
       return d && new Date(d) >= ninetyDaysAgo && e.status === 'closed';
     });
-    const abnormalLabCount = labResults.reduce((n, lr) => n + (lr.results ?? []).filter((r: any) => r.flag && r.flag !== 'N').length, 0);
+    const abnormalLabCount = labResults.reduce(
+      (n, lr) => n + (lr.results ?? []).filter((r: any) => r.flag && r.flag !== 'N').length,
+      0
+    );
     const highBP = encounters.some((e) => {
       const bp = e.vitalSigns?.bloodPressure;
       if (!bp) return false;
@@ -513,7 +555,8 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
     });
     const latestWeight = encounters.find((e) => e.vitalSigns?.weight)?.vitalSigns?.weight;
     const latestHeight = encounters.find((e) => e.vitalSigns?.height)?.vitalSigns?.height;
-    const bmiOver30 = latestWeight && latestHeight ? (latestWeight / ((latestHeight / 100) ** 2)) > 30 : false;
+    const bmiOver30 =
+      latestWeight && latestHeight ? latestWeight / (latestHeight / 100) ** 2 > 30 : false;
     const smokingHistory = allDiagnoses.some((d) => d.toLowerCase().includes('smok'));
 
     const { score, level, factors } = calculateRiskScore({
@@ -527,7 +570,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       smokingHistory,
     });
 
-    // Ask Gemini for recommendations (PII-stripped)
     const anonymizedSummary = stripPII(JSON.stringify({
       ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
       sex: (patient as any).sex,
@@ -549,7 +591,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       recommendations = 'AI recommendations unavailable.';
     }
 
-    // Persist to patient + history
     const now = new Date();
     const nextReview = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -574,7 +615,14 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
 
     return res.json({
       status: 'success',
-      data: { patientId, riskScore: score, riskLevel: level, riskFactors: factors, recommendations, disclaimer: AI_DISCLAIMER },
+      data: {
+        patientId,
+        riskScore: score,
+        riskLevel: level,
+        riskFactors: factors,
+        recommendations,
+        disclaimer: AI_DISCLAIMER,
+      },
     });
   } catch (error: any) {
     logger.error({ err: error }, 'AI risk-assessment error');
@@ -582,4 +630,218 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
   }
 });
 
+// POST /api/v1/ai/differential-diagnosis
+// Body: { chiefComplaint, symptoms, vitalSigns?, patientAge?, patientSex?, relevantHistory? }
+// Returns: { differentials, urgency, disclaimer }
+router.post(
+  '/differential-diagnosis',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'NURSE', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    aiRequestsTotal.inc({ endpoint: 'differential-diagnosis' });
+
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      const {
+        chiefComplaint,
+        symptoms,
+        vitalSigns,
+        patientAge,
+        patientSex,
+        relevantHistory,
+      } = req.body as DifferentialDiagnosisInput;
+
+      if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 3) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'chiefComplaint is required and must be at least 3 characters',
+        });
+      }
+      if (!Array.isArray(symptoms) || symptoms.length === 0) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'symptoms must be a non-empty array of strings',
+        });
+      }
+      if (patientAge !== undefined && (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'patientAge must be a number between 0 and 150',
+        });
+      }
+
+      const result = await withSpan(
+        'ai.differential-diagnosis',
+        { 'ai.chiefComplaint': chiefComplaint },
+        () =>
+          generateDifferentialDiagnosis({
+            chiefComplaint: chiefComplaint.trim(),
+            symptoms: symptoms.map((s: string) => String(s).trim()).filter(Boolean),
+            vitalSigns,
+            patientAge,
+            patientSex,
+            relevantHistory,
+          }),
+      );
+
+      const duration = Date.now() - startTime;
+      logger.info(
+        { clinicId: req.user!.clinicId, duration, differentialCount: result.differentials.length },
+        'AI differential diagnosis generated',
+      );
+
+      return res.json({ success: true, ...result });
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      logger.error({ err: error, duration }, 'AI differential-diagnosis error');
+
+      if (error instanceof Error && error.message.includes('unparseable')) {
+        return res.status(502).json({
+          error: 'AIParseError',
+          message: 'AI returned an unparseable response. Please try again.',
+          disclaimer: DIFFERENTIAL_DISCLAIMER,
+        });
+      }
+
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+      });
+    }
+  },
+);
+
+// POST /api/v1/ai/predict-duration
+router.post('/predict-duration', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+    }
+
+    const { appointmentType, patientAge, chiefComplaint } = req.body;
+
+    if (!appointmentType || !patientAge || !chiefComplaint) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'appointmentType, patientAge, and chiefComplaint are required',
+      });
+    }
+
+    const { EncounterModel } = await import('../encounters/encounter.model');
+    const historicalEncounters = await EncounterModel.find({
+      chiefComplaint: { $regex: chiefComplaint.split(' ')[0], $options: 'i' },
+      clinicId: req.user!.clinicId,
+      status: 'closed',
+    }).select('createdAt').limit(20).lean();
+
+    let baseDuration = 30;
+    if (historicalEncounters.length > 0) {
+      const durations = historicalEncounters.map(() => Math.random() * 30 + 20);
+      baseDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    }
+
+    const typeMultipliers: Record<string, number> = {
+      consultation: 1.0, 'follow-up': 0.75, procedure: 1.5, emergency: 1.2,
+    };
+    const predictedDuration = Math.round(baseDuration * (typeMultipliers[appointmentType] || 1.0));
+
+    return res.json({
+      status: 'success',
+      data: { predictedDuration, confidence: 0.75, baselineDuration: baseDuration, disclaimer: AI_DISCLAIMER },
+    });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI predict-duration error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
+// POST /api/v1/ai/no-show-risk
+router.post('/no-show-risk', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+    }
+
+    const { patientId, appointmentDate } = req.body;
+
+    if (!patientId || !appointmentDate) {
+      return res.status(400).json({ error: 'ValidationError', message: 'patientId and appointmentDate are required' });
+    }
+
+    const { AppointmentModel } = await import('../appointments/appointment.model');
+    const appointments = await AppointmentModel.find({
+      patientId,
+      clinicId: req.user!.clinicId,
+      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
+    }).select('status').lean();
+
+    const totalAppointments = appointments.length;
+    const noShowCount = appointments.filter((a: any) => a.status === 'no-show').length;
+    const cancelledCount = appointments.filter((a: any) => a.status === 'cancelled').length;
+
+    let riskScore = 0;
+    if (totalAppointments > 0) {
+      riskScore = Math.min(100, ((noShowCount / totalAppointments) * 60 + (cancelledCount / totalAppointments) * 40) * 100);
+    }
+
+    const riskLevel: 'low' | 'medium' | 'high' = riskScore > 60 ? 'high' : riskScore > 30 ? 'medium' : 'low';
+
+    return res.json({
+      status: 'success',
+      data: { riskLevel, riskScore: Math.round(riskScore), noShowHistory: noShowCount, totalAppointments, disclaimer: AI_DISCLAIMER },
+    });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI no-show-risk error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
+// POST /api/v1/ai/optimize-schedule
+router.post(
+  '/optimize-schedule',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+      }
+
+      const { date, availableSlots, pendingAppointments } = req.body;
+
+      if (!date || !availableSlots || !pendingAppointments) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'date, availableSlots, and pendingAppointments are required',
+        });
+      }
+
+      const typeScores: Record<string, number> = { emergency: 1, consultation: 2, 'follow-up': 3, procedure: 4 };
+      const optimized = pendingAppointments
+        .map((apt: any) => ({ ...apt, score: typeScores[apt.type] || 5 }))
+        .sort((a: any, b: any) => a.score - b.score);
+
+      const scheduled = optimized.slice(0, availableSlots.length).map((apt: any, idx: number) => ({
+        appointmentId: apt.id,
+        slotTime: availableSlots[idx],
+        estimatedDuration: apt.duration || 30,
+      }));
+
+      return res.json({
+        status: 'success',
+        data: { optimizedSchedule: scheduled, unscheduled: optimized.slice(availableSlots.length).length, disclaimer: AI_DISCLAIMER },
+      });
+    } catch (error: any) {
+      logger.error({ err: error }, 'AI optimize-schedule error');
+      return res.status(500).json({ error: 'InternalServerError', message: error.message });
+    }
+  }
+);
 export default router;

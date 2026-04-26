@@ -1,0 +1,19 @@
+{{- if .Values.stellarService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: stellar-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stellar-service
+spec:
+  type: {{ .Values.stellarService.service.type }}
+  selector:
+    app: stellar-service
+  ports:
+    - name: http
+      port: {{ .Values.stellarService.service.port }}
+      targetPort: {{ .Values.stellarService.service.port }}
+      protocol: TCP
+{{- end }}
