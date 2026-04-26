@@ -4,10 +4,11 @@ import {
   generateClinicalSummary,
   generateRawTextSummary,
   generatePatientInsights,
-  generateDifferentialDiagnosis,
   isAIServiceAvailable,
   AI_DISCLAIMER,
   checkDrugInteractions,
+  calculateDosage,
+  stripPII,
 } from './ai.service';
 import {
   generateDifferentialDiagnosis,
@@ -26,8 +27,6 @@ const router = Router();
 router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 
 // POST /api/v1/ai/summarize
-// Request body: { encounterId?: string, text?: string }
-// Returns: { success: boolean, summary: string, disclaimer: string }
 router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   aiRequestsTotal.inc({ endpoint: 'summarize' });
@@ -41,7 +40,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
 
     const { encounterId, text } = req.body;
 
-    // Accept either encounterId or raw text
     if (!encounterId && !text) {
       return res.status(400).json({
         error: 'ValidationError',
@@ -53,7 +51,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     let encounter: any;
 
     if (text) {
-      // Raw text input
       if (typeof text !== 'string' || text.trim().length < 10) {
         return res.status(400).json({
           error: 'ValidationError',
@@ -64,7 +61,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         generateRawTextSummary(text)
       );
     } else {
-      // encounterId input
       if (!isValidObjectId(encounterId)) {
         return res.status(400).json({
           error: 'ValidationError',
@@ -78,7 +74,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
       }
 
-      // Check ai_analysis consent
       const { hasConsent } = await import('../consent/consent.controller');
       const consentGranted = await hasConsent(
         String(encounter.patientId),
@@ -104,7 +99,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
           })
       );
 
-      // Store the summary in the encounter
       encounter.aiSummary = summary;
       await encounter.save();
     }
@@ -112,7 +106,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     const duration = Date.now() - startTime;
     logger.info({ encounterId, duration, textLength: text?.length }, 'AI summary generated');
 
-    // Notify attending doctor (non-blocking)
     if (encounter) {
       try {
         const { UserModel } = await import('../auth/models/user.model');
@@ -139,14 +132,12 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   } catch (error: unknown) {
     const duration = Date.now() - startTime;
     logger.error({ err: error, duration }, 'AI summarize error');
-
     if (error instanceof Error && error.message.includes('Failed to generate AI summary')) {
       return res.status(503).json({
         error: 'AIServiceError',
         message: 'Failed to generate AI summary. Please try again later.',
       });
     }
-
     return res.status(500).json({
       error: 'InternalServerError',
       message: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -155,8 +146,6 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /api/v1/ai/insights
-// Request body: { patientId: string }
-// Returns: { success: boolean, insights: string, disclaimer: string }
 router.post('/insights', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
@@ -176,8 +165,6 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
     }
 
     const { EncounterModel } = await import('../encounters/encounter.model');
-
-    // Fetch last 10 encounters for the patient
     const encounters = await EncounterModel.find({
       patientId,
       clinicId: req.user!.clinicId,
@@ -219,14 +206,12 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
   } catch (error: unknown) {
     const duration = Date.now() - startTime;
     logger.error({ err: error, duration }, 'AI insights error');
-
     if (error instanceof Error && error.message.includes('Failed to generate patient insights')) {
       return res.status(503).json({
         error: 'AIServiceError',
         message: 'Failed to generate patient insights. Please try again later.',
       });
     }
-
     return res.status(500).json({
       error: 'InternalServerError',
       message: error instanceof Error ? error.message : 'An unexpected error occurred',
@@ -235,26 +220,27 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /api/v1/ai/drug-interactions
-// Stub endpoint for future drug interaction checking
-// Request body: { medications: string[] }
-// Returns: 501 Not Implemented
 router.post('/drug-interactions', authenticate, async (req: Request, res: Response) => {
-  logger.info(
-    { medications: req.body.medications },
-    'Drug interaction check requested (not implemented)'
-  );
-
-  return res.status(501).json({
-    error: 'NotImplemented',
-    message:
-      'Drug interaction checking is not yet implemented. This feature will be available in a future release.',
-    requestedMedications: req.body.medications || [],
-  });
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable' });
+    }
+    const { currentMedications, newDrug } = req.body;
+    if (!newDrug || typeof newDrug !== 'string') {
+      return res.status(400).json({ error: 'ValidationError', message: 'newDrug is required' });
+    }
+    const result = await checkDrugInteractions({
+      currentMedications: Array.isArray(currentMedications) ? currentMedications : [],
+      newDrug,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI drug-interactions error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
 });
 
 // POST /api/v1/ai/health-trends
-// Request body: { patientId: string }
-// Returns: { success: boolean, summary: string }
 router.post('/health-trends', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
@@ -283,7 +269,6 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
       return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     }
 
-    // Anonymize: strip PII, keep only vitals + dates
     const anonymizedVitals = encounters
       .filter((e) => e.vitalSigns && Object.keys(e.vitalSigns).length > 0)
       .map((e) => ({ date: (e as any).createdAt, vitals: e.vitalSigns }));
@@ -300,12 +285,7 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
     const genAI = new GoogleGenerativeAI(config.geminiApiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `You are a medical AI assistant. Analyze the following anonymized vital sign history and provide a concise health trend summary in 2-3 sentences. Focus on notable patterns, improvements, or concerns.
-
-Vital Signs History (chronological):
-${JSON.stringify(anonymizedVitals, null, 2)}
-
-Provide a professional health trend summary:`;
+    const prompt = `You are a medical AI assistant. Analyze the following anonymized vital sign history and provide a concise health trend summary in 2-3 sentences. Focus on notable patterns, improvements, or concerns.\n\nVital Signs History (chronological):\n${JSON.stringify(anonymizedVitals, null, 2)}\n\nProvide a professional health trend summary:`;
 
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
@@ -317,31 +297,7 @@ Provide a professional health trend summary:`;
   }
 });
 
-// POST /api/v1/ai/drug-interactions
-// Body: { currentMedications: string[], newDrug: string }
-router.post('/drug-interactions', authenticate, async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable' });
-    }
-    const { currentMedications, newDrug } = req.body;
-    if (!newDrug || typeof newDrug !== 'string') {
-      return res.status(400).json({ error: 'ValidationError', message: 'newDrug is required' });
-    }
-    const result = await checkDrugInteractions({
-      currentMedications: Array.isArray(currentMedications) ? currentMedications : [],
-      newDrug,
-    });
-    return res.json({ success: true, ...result });
-  } catch (error: any) {
-    logger.error({ err: error }, 'AI drug-interactions error');
-    return res.status(500).json({ error: 'InternalServerError', message: error.message });
-  }
-});
-
 // POST /api/v1/ai/interpret-labs
-// Request body: { labResultId: string }
-// Returns: { success: boolean, interpretation: string, criticalValues: string[] }
 router.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
@@ -375,14 +331,7 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
     const genAI = new GoogleGenerativeAI(config.geminiApiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `You are a medical AI assistant. Interpret the following lab results in plain language for a clinician.
-Highlight any abnormal values and flag critical values (HH/LL) for immediate attention. Keep the response to 3-4 sentences.
-
-Test: ${labResult.testName}${labResult.testCode ? ` (${labResult.testCode})` : ''}
-Results:
-${labResult.results.map((r) => `- ${r.parameter}: ${r.value} ${r.unit} (ref: ${r.referenceRange})${r.flag ? ` [${r.flag}]` : ''}`).join('\n')}
-
-Provide a plain-language clinical interpretation:`;
+    const prompt = `You are a medical AI assistant. Interpret the following lab results in plain language for a clinician.\nHighlight any abnormal values and flag critical values (HH/LL) for immediate attention. Keep the response to 3-4 sentences.\n\nTest: ${labResult.testName}${labResult.testCode ? ` (${labResult.testCode})` : ''}\nResults:\n${labResult.results.map((r) => `- ${r.parameter}: ${r.value} ${r.unit} (ref: ${r.referenceRange})${r.flag ? ` [${r.flag}]` : ''}`).join('\n')}\n\nProvide a plain-language clinical interpretation:`;
 
     const result = await model.generateContent(prompt);
     const interpretation = result.response.text();
@@ -395,8 +344,6 @@ Provide a plain-language clinical interpretation:`;
 });
 
 // POST /api/v1/ai/generate-care-plan
-// Input: { patientId, condition, icdCode? }
-// Returns: AI-suggested care plan (not saved — doctor must approve via POST /care-plans)
 router.post(
   '/generate-care-plan',
   authenticate,
@@ -438,11 +385,7 @@ router.post(
       const genAI = new GoogleGenerativeAI(config.geminiApiKey);
       const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-      const prompt = `You are a clinical decision support AI. Generate a structured chronic disease care plan for a patient with the following profile.
-
-Condition: ${condition}${icdCode ? ` (ICD-10: ${icdCode})` : ''}
-Patient sex: ${(patient as any).sex}
-Recent encounters (last 5): ${JSON.stringify(
+      const prompt = `You are a clinical decision support AI. Generate a structured chronic disease care plan for a patient with the following profile.\n\nCondition: ${condition}${icdCode ? ` (ICD-10: ${icdCode})` : ''}\nPatient sex: ${(patient as any).sex}\nRecent encounters (last 5): ${JSON.stringify(
         recentEncounters.map((e) => ({
           date: (e as any).createdAt,
           chiefComplaint: e.chiefComplaint,
@@ -451,22 +394,13 @@ Recent encounters (last 5): ${JSON.stringify(
         })),
         null,
         2
-      )}
-
-Respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):
-{
-  "goals": [{ "description": string, "targetValue": string | null, "status": "active" }],
-  "interventions": [{ "type": "medication"|"lifestyle"|"monitoring"|"referral", "description": string, "frequency": string | null }],
-  "monitoringSchedule": [{ "parameter": string, "frequency": string, "targetRange": string | null }],
-  "reviewDate": "<ISO date 3 months from today>"
-}`;
+      )}\n\nRespond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):\n{\n  "goals": [{ "description": string, "targetValue": string | null, "status": "active" }],\n  "interventions": [{ "type": "medication"|"lifestyle"|"monitoring"|"referral", "description": string, "frequency": string | null }],\n  "monitoringSchedule": [{ "parameter": string, "frequency": string, "targetRange": string | null }],\n  "reviewDate": "<ISO date 3 months from today>"\n}`;
 
       const result = await aiModel.generateContent(prompt);
       const text = result.response.text().trim();
 
       let suggestion: unknown;
       try {
-        // Strip possible markdown code fences
         const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
         suggestion = JSON.parse(json);
       } catch {
@@ -485,7 +419,6 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 );
 
 // POST /api/v1/ai/risk-assessment
-// Body: { patientId: string }
 router.post('/risk-assessment', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
@@ -570,7 +503,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
       smokingHistory,
     });
 
-    // Ask Gemini for recommendations (PII-stripped)
     const anonymizedSummary = stripPII(
       JSON.stringify({
         ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
@@ -581,14 +513,6 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
         missedAppointments: missedAppts,
       })
     );
-    const anonymizedSummary = stripPII(JSON.stringify({
-      ageGroup: ageYears > 65 ? '65+' : ageYears > 45 ? '45-65' : 'under-45',
-      sex: (patient as any).sex,
-      riskFactors: factors,
-      recentDiagnoses: allDiagnoses.slice(0, 5),
-      abnormalLabCount,
-      missedAppointments: missedAppts,
-    }));
 
     const genAI = new GoogleGenerativeAI(config.geminiApiKey);
     const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -641,21 +565,7 @@ router.post('/risk-assessment', authenticate, async (req: Request, res: Response
   }
 });
 
-// POST /api/v1/ai/predict-duration
-// Predict appointment duration based on appointment type, patient age, chief complaint, and doctor history
-router.post('/predict-duration', authenticate, async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured',
-      });
-    }
-
-    const { appointmentType, patientAge, chiefComplaint, doctorId } = req.body;
 // POST /api/v1/ai/differential-diagnosis
-// Body: { chiefComplaint, symptoms, vitalSigns?, patientAge?, patientSex?, relevantHistory? }
-// Returns: { differentials, urgency, disclaimer }
 router.post(
   '/differential-diagnosis',
   authenticate,
@@ -672,16 +582,14 @@ router.post(
         });
       }
 
-      const {
-        chiefComplaint,
-        symptoms,
-        vitalSigns,
-        patientAge,
-        patientSex,
-        relevantHistory,
-      } = req.body as DifferentialDiagnosisInput;
+      const { chiefComplaint, symptoms, vitalSigns, patientAge, patientSex, relevantHistory } =
+        req.body as DifferentialDiagnosisInput;
 
-      if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 3) {
+      if (
+        !chiefComplaint ||
+        typeof chiefComplaint !== 'string' ||
+        chiefComplaint.trim().length < 3
+      ) {
         return res.status(400).json({
           error: 'ValidationError',
           message: 'chiefComplaint is required and must be at least 3 characters',
@@ -693,7 +601,10 @@ router.post(
           message: 'symptoms must be a non-empty array of strings',
         });
       }
-      if (patientAge !== undefined && (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)) {
+      if (
+        patientAge !== undefined &&
+        (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150)
+      ) {
         return res.status(400).json({
           error: 'ValidationError',
           message: 'patientAge must be a number between 0 and 150',
@@ -711,20 +622,19 @@ router.post(
             patientAge,
             patientSex,
             relevantHistory,
-          }),
+          })
       );
 
       const duration = Date.now() - startTime;
       logger.info(
         { clinicId: req.user!.clinicId, duration, differentialCount: result.differentials.length },
-        'AI differential diagnosis generated',
+        'AI differential diagnosis generated'
       );
 
       return res.json({ success: true, ...result });
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
       logger.error({ err: error, duration }, 'AI differential-diagnosis error');
-
       if (error instanceof Error && error.message.includes('unparseable')) {
         return res.status(502).json({
           error: 'AIParseError',
@@ -732,24 +642,24 @@ router.post(
           disclaimer: DIFFERENTIAL_DISCLAIMER,
         });
       }
-
       return res.status(500).json({
         error: 'InternalServerError',
         message: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     }
-  },
+  }
 );
 
 // POST /api/v1/ai/predict-duration
 router.post('/predict-duration', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+      return res
+        .status(503)
+        .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
     }
 
     const { appointmentType, patientAge, chiefComplaint } = req.body;
-
     if (!appointmentType || !patientAge || !chiefComplaint) {
       return res.status(400).json({
         error: 'ValidationError',
@@ -757,7 +667,6 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
       });
     }
 
-    // Get historical encounter durations for similar cases
     const { EncounterModel } = await import('../encounters/encounter.model');
     const historicalEncounters = await EncounterModel.find({
       chiefComplaint: { $regex: chiefComplaint.split(' ')[0], $options: 'i' },
@@ -768,27 +677,19 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
       .limit(20)
       .lean();
 
-    // Calculate average duration from historical data
-    let baseDuration = 30; // default 30 minutes
+    let baseDuration = 30;
     if (historicalEncounters.length > 0) {
-      const durations = historicalEncounters.map((e: any) => {
-        const duration = Math.random() * 30 + 20; // Simulate 20-50 min range
-        return duration;
-      });
-      baseDuration = Math.round(
-        durations.reduce((a: number, b: number) => a + b, 0) / durations.length
-      );
+      const durations = historicalEncounters.map(() => Math.random() * 30 + 20);
+      baseDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
     }
 
-    // Adjust based on appointment type
     const typeMultipliers: Record<string, number> = {
       consultation: 1.0,
       'follow-up': 0.75,
       procedure: 1.5,
       emergency: 1.2,
     };
-    const multiplier = typeMultipliers[appointmentType] || 1.0;
-    const predictedDuration = Math.round(baseDuration * multiplier);
+    const predictedDuration = Math.round(baseDuration * (typeMultipliers[appointmentType] || 1.0));
 
     return res.json({
       status: 'success',
@@ -798,22 +699,6 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
         baselineDuration: baseDuration,
         disclaimer: AI_DISCLAIMER,
       },
-    }).select('createdAt').limit(20).lean();
-
-    let baseDuration = 30;
-    if (historicalEncounters.length > 0) {
-      const durations = historicalEncounters.map(() => Math.random() * 30 + 20);
-      baseDuration = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
-    }
-
-    const typeMultipliers: Record<string, number> = {
-      consultation: 1.0, 'follow-up': 0.75, procedure: 1.5, emergency: 1.2,
-    };
-    const predictedDuration = Math.round(baseDuration * (typeMultipliers[appointmentType] || 1.0));
-
-    return res.json({
-      status: 'success',
-      data: { predictedDuration, confidence: 0.75, baselineDuration: baseDuration, disclaimer: AI_DISCLAIMER },
     });
   } catch (error: any) {
     logger.error({ err: error }, 'AI predict-duration error');
@@ -822,65 +707,44 @@ router.post('/predict-duration', authenticate, async (req: Request, res: Respons
 });
 
 // POST /api/v1/ai/no-show-risk
-// Predict no-show risk based on patient history
 router.post('/no-show-risk', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured',
-      });
-    }
-
-    const { patientId, appointmentDate, appointmentType } = req.body;
-
-    if (!patientId || !appointmentDate) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'patientId and appointmentDate are required',
-      });
-    }
-
-    // Get patient's appointment history
-router.post('/no-show-risk', authenticate, async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+      return res
+        .status(503)
+        .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
     }
 
     const { patientId, appointmentDate } = req.body;
-
     if (!patientId || !appointmentDate) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId and appointmentDate are required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'patientId and appointmentDate are required' });
     }
 
     const { AppointmentModel } = await import('../appointments/appointment.model');
     const appointments = await AppointmentModel.find({
       patientId,
       clinicId: req.user!.clinicId,
-      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) }, // Last 6 months
+      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
     })
       .select('status')
       .lean();
-      createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
-    }).select('status').lean();
 
     const totalAppointments = appointments.length;
     const noShowCount = appointments.filter((a: any) => a.status === 'no-show').length;
     const cancelledCount = appointments.filter((a: any) => a.status === 'cancelled').length;
 
-    // Calculate risk score
     let riskScore = 0;
     if (totalAppointments > 0) {
-      const noShowRate = noShowCount / totalAppointments;
-      const cancelRate = cancelledCount / totalAppointments;
-      riskScore = Math.min(100, (noShowRate * 60 + cancelRate * 40) * 100);
+      riskScore = Math.min(
+        100,
+        ((noShowCount / totalAppointments) * 60 + (cancelledCount / totalAppointments) * 40) * 100
+      );
     }
 
-    // Determine risk level
-    let riskLevel: 'low' | 'medium' | 'high' = 'low';
-    if (riskScore > 60) riskLevel = 'high';
-    else if (riskScore > 30) riskLevel = 'medium';
+    const riskLevel: 'low' | 'medium' | 'high' =
+      riskScore > 60 ? 'high' : riskScore > 30 ? 'medium' : 'low';
 
     return res.json({
       status: 'success',
@@ -891,16 +755,6 @@ router.post('/no-show-risk', authenticate, async (req: Request, res: Response) =
         totalAppointments,
         disclaimer: AI_DISCLAIMER,
       },
-    let riskScore = 0;
-    if (totalAppointments > 0) {
-      riskScore = Math.min(100, ((noShowCount / totalAppointments) * 60 + (cancelledCount / totalAppointments) * 40) * 100);
-    }
-
-    const riskLevel: 'low' | 'medium' | 'high' = riskScore > 60 ? 'high' : riskScore > 30 ? 'medium' : 'low';
-
-    return res.json({
-      status: 'success',
-      data: { riskLevel, riskScore: Math.round(riskScore), noShowHistory: noShowCount, totalAppointments, disclaimer: AI_DISCLAIMER },
     });
   } catch (error: any) {
     logger.error({ err: error }, 'AI no-show-risk error');
@@ -916,15 +770,12 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       if (!isAIServiceAvailable()) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is not configured',
-        });
-        return res.status(503).json({ error: 'AIUnavailable', message: 'AI service is not configured' });
+        return res
+          .status(503)
+          .json({ error: 'AIUnavailable', message: 'AI service is not configured' });
       }
 
       const { date, availableSlots, pendingAppointments } = req.body;
-
       if (!date || !availableSlots || !pendingAppointments) {
         return res.status(400).json({
           error: 'ValidationError',
@@ -932,23 +783,12 @@ router.post(
         });
       }
 
-      // Simple optimization: sort by appointment type priority and patient risk
       const typeScores: Record<string, number> = {
         emergency: 1,
         consultation: 2,
         'follow-up': 3,
         procedure: 4,
       };
-
-      const optimized = pendingAppointments
-        .map((apt: any) => ({
-          ...apt,
-          score: typeScores[apt.type] || 5,
-        }))
-        .sort((a: any, b: any) => a.score - b.score);
-
-      // Assign to available slots
-      const typeScores: Record<string, number> = { emergency: 1, consultation: 2, 'follow-up': 3, procedure: 4 };
       const optimized = pendingAppointments
         .map((apt: any) => ({ ...apt, score: typeScores[apt.type] || 5 }))
         .sort((a: any, b: any) => a.score - b.score);
@@ -966,10 +806,97 @@ router.post(
           unscheduled: optimized.slice(availableSlots.length).length,
           disclaimer: AI_DISCLAIMER,
         },
-        data: { optimizedSchedule: scheduled, unscheduled: optimized.slice(availableSlots.length).length, disclaimer: AI_DISCLAIMER },
       });
     } catch (error: any) {
       logger.error({ err: error }, 'AI optimize-schedule error');
+      return res.status(500).json({ error: 'InternalServerError', message: error.message });
+    }
+  }
+);
+
+// POST /api/v1/ai/dosage-calculator
+router.post(
+  '/dosage-calculator',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    try {
+      if (!isAIServiceAvailable()) {
+        return res
+          .status(503)
+          .json({ error: 'AIUnavailable', message: 'AI service is not configured.' });
+      }
+
+      const {
+        drugName,
+        patientWeight,
+        patientAge,
+        patientSex,
+        indication,
+        renalFunction,
+        hepaticFunction,
+      } = req.body;
+
+      if (!drugName || patientWeight == null || patientAge == null || !patientSex || !indication) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'drugName, patientWeight, patientAge, patientSex, and indication are required',
+        });
+      }
+      if (typeof patientWeight !== 'number' || patientWeight <= 0 || patientWeight > 500) {
+        return res
+          .status(400)
+          .json({
+            error: 'ValidationError',
+            message: 'patientWeight must be a positive number (kg)',
+          });
+      }
+      if (typeof patientAge !== 'number' || patientAge < 0 || patientAge > 150) {
+        return res
+          .status(400)
+          .json({ error: 'ValidationError', message: 'patientAge must be 0–150' });
+      }
+      if (!['M', 'F'].includes(patientSex)) {
+        return res
+          .status(400)
+          .json({ error: 'ValidationError', message: 'patientSex must be M or F' });
+      }
+
+      const result = await calculateDosage({
+        drugName,
+        patientWeight,
+        patientAge,
+        patientSex,
+        indication,
+        renalFunction,
+        hepaticFunction,
+      });
+
+      const { auditLog } = await import('../audit/audit.service');
+      await auditLog(
+        {
+          action: 'DOSAGE_CALCULATION',
+          resourceType: 'Drug',
+          resourceId: drugName,
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+          outcome: 'SUCCESS',
+          metadata: {
+            drugName,
+            patientAge,
+            patientWeight,
+            indication,
+            durationMs: Date.now() - startTime,
+          },
+        },
+        req
+      );
+
+      aiRequestsTotal.inc({ endpoint: 'dosage-calculator' });
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error({ err: error }, 'AI dosage-calculator error');
       return res.status(500).json({ error: 'InternalServerError', message: error.message });
     }
   }

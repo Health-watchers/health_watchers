@@ -20,13 +20,13 @@ export const AI_DISCLAIMER =
 // ── PII stripping using anonymization service ─────────────────────────────────
 export function stripPII(text: string, patientData?: Partial<PatientData>): string {
   if (patientData) {
-    const anonymized = anonymize(
-      { ...patientData, clinicalNotes: text } as PatientData,
-      { level: 'de-identification', purpose: 'ai' }
-    );
+    const anonymized = anonymize({ ...patientData, clinicalNotes: text } as PatientData, {
+      level: 'de-identification',
+      purpose: 'ai',
+    });
     return anonymized.clinicalNotes || text;
   }
-  
+
   // Fallback to basic PII patterns
   const PII_PATTERNS: [RegExp, string][] = [
     [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],
@@ -35,7 +35,7 @@ export function stripPII(text: string, patientData?: Partial<PatientData>): stri
     [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'],
     [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],
   ];
-  
+
   let sanitized = text;
   for (const [pattern, replacement] of PII_PATTERNS) {
     sanitized = sanitized.replace(pattern, replacement);
@@ -140,7 +140,9 @@ export interface DrugInteractionResult {
   recommendation: string;
 }
 
-export async function checkDrugInteractions(input: DrugInteractionInput): Promise<DrugInteractionResult> {
+export async function checkDrugInteractions(
+  input: DrugInteractionInput
+): Promise<DrugInteractionResult> {
   const client = getGeminiClient();
 
   const prompt = `You are a clinical pharmacist AI. Check for drug-drug interactions between the new drug and the current medications.
@@ -241,5 +243,95 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to generate differential diagnosis: ${msg}`);
+  }
+}
+
+// ── Dosage Calculator ─────────────────────────────────────────────────────────
+
+export interface DosageCalculatorInput {
+  drugName: string;
+  patientWeight: number; // kg
+  patientAge: number; // years
+  patientSex: 'M' | 'F';
+  indication: string;
+  renalFunction?: 'normal' | 'mild_impairment' | 'moderate_impairment' | 'severe_impairment';
+  hepaticFunction?: 'normal' | 'impaired';
+}
+
+export interface DosageCalculatorResult {
+  recommendedDose: string;
+  frequency: string;
+  route: string;
+  maxDailyDose: string;
+  pediatricAdjustment: boolean;
+  renalAdjustment: boolean;
+  warnings: string[];
+  contraindications: string[];
+  disclaimer: string;
+}
+
+export async function calculateDosage(
+  input: DosageCalculatorInput
+): Promise<DosageCalculatorResult> {
+  const client = getGeminiClient();
+
+  const isPediatric = input.patientAge < 18;
+  const renalNote =
+    input.renalFunction && input.renalFunction !== 'normal'
+      ? `Renal function: ${input.renalFunction.replace(/_/g, ' ')}`
+      : 'Renal function: normal';
+  const hepaticNote =
+    input.hepaticFunction === 'impaired'
+      ? 'Hepatic function: impaired'
+      : 'Hepatic function: normal';
+
+  const prompt = `You are a clinical pharmacist AI providing evidence-based dosage guidance.
+
+Patient parameters (no PII):
+- Drug: ${input.drugName}
+- Indication: ${input.indication}
+- Weight: ${input.patientWeight} kg
+- Age: ${input.patientAge} years (${isPediatric ? 'pediatric' : 'adult'})
+- Sex: ${input.patientSex === 'M' ? 'Male' : 'Female'}
+- ${renalNote}
+- ${hepaticNote}
+
+Provide dosage recommendations based on standard clinical guidelines (e.g., BNF, Micromedex).
+Apply weight-based dosing for pediatric patients.
+Apply dose adjustments for renal/hepatic impairment if applicable.
+
+Respond ONLY with valid JSON matching this exact structure (no markdown):
+{
+  "recommendedDose": "string (e.g. '10 mg/kg' or '500 mg')",
+  "frequency": "string (e.g. 'every 8 hours' or 'twice daily')",
+  "route": "string (e.g. 'oral', 'IV', 'IM')",
+  "maxDailyDose": "string (e.g. '2000 mg/day')",
+  "pediatricAdjustment": boolean,
+  "renalAdjustment": boolean,
+  "warnings": ["string"],
+  "contraindications": ["string"]
+}`;
+
+  const model = client.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+
+  const result = await model.generateContent(prompt);
+  const text = result.response
+    .text()
+    .trim()
+    .replace(/^```json\n?/, '')
+    .replace(/\n?```$/, '');
+
+  try {
+    const data = JSON.parse(text) as Omit<DosageCalculatorResult, 'disclaimer'>;
+    return {
+      ...data,
+      disclaimer:
+        'AI-generated dosage guidance for clinical reference only. Always verify against current formulary guidelines and use professional judgment. Not a substitute for clinical pharmacist review.',
+    };
+  } catch {
+    throw new Error(`Failed to parse dosage calculator response: ${text}`);
   }
 }
