@@ -99,6 +99,36 @@ export const listEncountersQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
     .optional(),
+  // Full-text search across chiefComplaint and notes
+  q: z.string().max(200).optional(),
+  // ICD-10 diagnosis code filter
+  diagnosisCode: z.string().max(20).optional(),
+  // Date range filters
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'dateFrom must be YYYY-MM-DD')
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'dateTo must be YYYY-MM-DD')
+    .optional(),
+  // Boolean filters
+  hasAiSummary: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  hasPrescriptions: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  hasLabResults: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
+  // Sort
+  sort: z
+    .enum(['createdAt_desc', 'createdAt_asc', 'patientName_asc'])
+    .default('createdAt_desc'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

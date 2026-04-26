@@ -18,6 +18,8 @@ import { randomUUID } from 'crypto';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
+import { emitToClinic } from '@api/realtime/socket';
+import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
 
 const router = Router();
 router.use(authenticate);
@@ -295,6 +297,7 @@ router.post(
     }));
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
+    paymentsInitiatedTotal.inc({ currency: normalizedAsset });
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
@@ -446,6 +449,7 @@ router.patch(
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
+    paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
 
     // Auto-update linked invoice if any (non-blocking)
     try {
@@ -472,6 +476,12 @@ router.patch(
       /* non-critical */
     }
 
+    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
+      paymentId: String(updatedPayment!._id),
+      txHash,
+      amount: updatedPayment!.amount,
+      assetCode: updatedPayment!.assetCode,
+    });
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   })
 );
@@ -623,6 +633,60 @@ router.get(
   })
 );
 
+// GET /payments/analytics — fetch payment analytics
+router.get(
+  '/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const { from, to, groupBy } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'from and to query parameters are required (ISO 8601 format)',
+      });
+    }
+
+    const fromDate = new Date(from as string);
+    const toDate = new Date(to as string);
+    const groupByPeriod = (groupBy as 'day' | 'week' | 'month') || 'month';
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid date format. Use ISO 8601 format (e.g., 2026-01-01)',
+      });
+    }
+
+    const { getPaymentAnalytics } = await import('./services/analytics.service');
+    const analytics = await getPaymentAnalytics(clinicId, fromDate, toDate, groupByPeriod);
+
+    return res.json({ status: 'success', data: analytics });
+  })
+);
+
+// GET /payments/revenue-dashboard — fetch revenue dashboard data
+router.get(
+  '/revenue-dashboard',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canReadPayments(req.user!.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const months = Math.min(parseInt((req.query.months as string) ?? '12', 10), 36);
+
+    const { getRevenueDashboard } = await import('./services/analytics.service');
+    const dashboard = await getRevenueDashboard(clinicId, months);
+
+    return res.json({ status: 'success', data: dashboard });
+  })
+);
+
 // GET /payments/:intentId/qr — Generate QR code for payment intent
 router.get(
   '/:intentId/qr',
@@ -640,6 +704,7 @@ router.get(
         error: 'NotFound',
         message: 'Payment intent not found',
       });
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
@@ -649,6 +714,7 @@ router.get(
         payment.amount,
         payment.assetCode,
         payment.memo
+        payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
       if (format === 'svg') {
@@ -670,6 +736,7 @@ router.get(
         error: 'InternalServerError',
         message: 'Failed to generate QR code',
       });
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate QR code' });
     }
   })
 );
@@ -690,6 +757,7 @@ router.get(
         error: 'NotFound',
         message: 'Payment intent not found',
       });
+      return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
@@ -699,6 +767,7 @@ router.get(
         payment.amount,
         payment.assetCode,
         payment.memo
+        payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
       return res.json({
@@ -717,6 +786,11 @@ router.get(
         error: 'InternalServerError',
         message: 'Failed to generate payment URI',
       });
+        data: { paymentURI, destination: payment.destination, amount: payment.amount, assetCode: payment.assetCode, memo: payment.memo },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate payment URI');
+      return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate payment URI' });
     }
   })
 );

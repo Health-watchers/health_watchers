@@ -1,0 +1,50 @@
+groups:
+  - name: health-watchers-alerts
+    rules:
+      # Alert when error rate exceeds 5% over 5 minutes
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+            /
+            sum(rate(http_requests_total[5m])) by (job)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate on {{ $labels.job }}"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Alert when p99 latency exceeds 2 seconds
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (job, le)
+          ) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p99 latency on {{ $labels.job }}"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      # Alert when API is down
+      - alert: APIDown
+        expr: up{job="health-watchers-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Health Watchers API is down"
+          description: "The API has been unreachable for more than 1 minute"
+
+      # Alert when stellar service is down
+      - alert: StellarServiceDown
+        expr: up{job="health-watchers-stellar"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stellar service is down"
+          description: "The Stellar service has been unreachable for more than 1 minute"
