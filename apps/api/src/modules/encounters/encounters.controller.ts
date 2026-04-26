@@ -271,6 +271,7 @@ router.post(
     }
 
     const doc = await EncounterModel.create(req.body);
+    
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
 
@@ -283,6 +284,8 @@ router.post(
       ...patientContext,
     });
 
+    return res.status(201).json({ 
+      status: 'success', 
     return res.status(201).json({
       status: 'success',
       data: toEncounterResponse(doc),
@@ -475,6 +478,7 @@ router.post(
       status: 'success',
       data: toEncounterResponse(encounter),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
+      message: 'Prescription added successfully'
       message: 'Prescription added successfully',
     });
   })
