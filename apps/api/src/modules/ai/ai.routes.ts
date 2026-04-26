@@ -9,8 +9,13 @@ import {
   AI_DISCLAIMER,
 } from './ai.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
+import { validateRequest } from '../../middlewares/validate.middleware';
 import logger from '../../utils/logger';
 import { sendAISummaryNotification } from '@api/lib/email.service';
+import {
+  differentialDiagnosisRequestSchema,
+  DifferentialDiagnosisRequestDto,
+} from './ai.validation';
 
 const router = Router();
 
@@ -438,64 +443,50 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 // POST /api/v1/ai/differential-diagnosis
 // Request: { chiefComplaint: string, symptoms: string[], vitalSigns?: {...}, patientAge?: number, patientSex?: string, relevantHistory?: string }
 // Returns: { differentials: [...], urgency: string, disclaimer: string }
-router.post('/differential-diagnosis', authenticate, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured. Please contact your administrator.',
+router.post(
+  '/differential-diagnosis',
+  authenticate,
+  validateRequest({ body: differentialDiagnosisRequestSchema }),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+      const payload = req.body as DifferentialDiagnosisRequestDto;
+
+      const result = await generateDifferentialDiagnosis(payload);
+
+      const duration = Date.now() - startTime;
+      logger.info(
+        { duration, symptomsCount: payload.symptoms.length, hasVitalSigns: Boolean(payload.vitalSigns) },
+        'Differential diagnosis generated'
+      );
+
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      logger.error({ err: error, duration }, 'AI differential-diagnosis error');
+
+      if (error instanceof Error && error.message.includes('Failed to generate differential diagnosis')) {
+        return res.status(503).json({
+          error: 'AIServiceError',
+          message: 'Failed to generate AI suggestions. Please try again later.',
+        });
+      }
+
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     }
-
-    const { chiefComplaint, symptoms, vitalSigns, patientAge, patientSex, relevantHistory } = req.body;
-
-    if (!chiefComplaint || typeof chiefComplaint !== 'string' || chiefComplaint.trim().length < 5) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'chiefComplaint is required and must be at least 5 characters',
-      });
-    }
-
-    if (!Array.isArray(symptoms)) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'symptoms must be an array of strings',
-      });
-    }
-
-    const result = await generateDifferentialDiagnosis({
-      chiefComplaint,
-      symptoms,
-      vitalSigns,
-      patientAge,
-      patientSex,
-      relevantHistory,
-    });
-
-    const duration = Date.now() - startTime;
-    logger.info({ chiefComplaint, duration }, 'Differential diagnosis generated');
-
-    return res.json({
-      success: true,
-      ...result,
-    });
-  } catch (error: unknown) {
-    const duration = Date.now() - startTime;
-    logger.error({ err: error, duration }, 'AI differential-diagnosis error');
-
-    if (error instanceof Error && error.message.includes('Failed to generate differential diagnosis')) {
-      return res.status(503).json({
-        error: 'AIServiceError',
-        message: 'Failed to generate AI suggestions. Please try again later.',
-      });
-    }
-
-    return res.status(500).json({
-      error: 'InternalServerError',
-      message: error instanceof Error ? error.message : 'An unexpected error occurred',
-    });
   }
-});
+);
 
 export default router;

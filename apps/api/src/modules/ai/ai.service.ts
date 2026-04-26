@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '@health-watchers/config';
+import { z } from 'zod';
 
 let clientInstance: GoogleGenerativeAI | null = null;
 
@@ -149,11 +150,20 @@ export interface DifferentialDiagnosisResponse {
   disclaimer: string;
 }
 
-export async function generateDifferentialDiagnosis(
-  input: DifferentialDiagnosisInput
-): Promise<DifferentialDiagnosisResponse> {
-  const client = getGeminiClient();
+const differentialSuggestionSchema = z.object({
+  diagnosis: z.string().trim().min(1),
+  icdCode: z.string().trim().min(1),
+  probability: z.enum(['high', 'medium', 'low']),
+  reasoning: z.string().trim().min(1),
+  recommendedTests: z.array(z.string().trim().min(1)).min(1),
+});
 
+const differentialDiagnosisResponseSchema = z.object({
+  differentials: z.array(differentialSuggestionSchema).min(1).max(5),
+  urgency: z.enum(['routine', 'urgent', 'emergency']),
+});
+
+function buildDifferentialDiagnosisPrompt(input: DifferentialDiagnosisInput): string {
   const context = [
     `Chief Complaint: ${input.chiefComplaint}`,
     `Symptoms: ${input.symptoms.join(', ')}`,
@@ -167,26 +177,38 @@ export async function generateDifferentialDiagnosis(
 
   const safeContext = stripPII(context);
 
-  const prompt = `You are a clinical decision support AI. Based on the following patient presentation, suggest the top 3-5 differential diagnoses.
+  return `You are a clinical decision support AI assisting a licensed clinician with differential diagnosis triage.
+Use only the de-identified clinical context below. Do not infer or generate any patient identifiers.
 
 Patient Presentation:
 ${safeContext}
 
-Respond ONLY with a valid JSON object matching this exact structure (no markdown, no explanation):
+Return ONLY valid JSON (no markdown, no comments, no explanation) with this exact schema:
 {
   "differentials": [
     {
       "diagnosis": "string",
-      "icdCode": "string (ICD-10 format)",
+      "icdCode": "string",
       "probability": "high" | "medium" | "low",
-      "reasoning": "string (1-2 sentences explain why based on the presentation)",
-      "recommendedTests": ["string", "string"]
+      "reasoning": "string",
+      "recommendedTests": ["string"]
     }
   ],
   "urgency": "routine" | "urgent" | "emergency"
 }
 
-Ensure the diagnosis are clinically plausible and the reasoning is sound. If data is sparse, provide the most likely possibilities.`;
+Rules:
+1) Provide 3-5 clinically plausible differentials ordered by likelihood.
+2) Base reasoning only on provided findings (chief complaint, symptoms, vitals, age/sex/history).
+3) recommendedTests must list practical confirmatory or rule-out tests.
+4) Use "emergency" urgency when immediate life-threatening diagnoses are plausible.`;
+}
+
+export async function generateDifferentialDiagnosis(
+  input: DifferentialDiagnosisInput
+): Promise<DifferentialDiagnosisResponse> {
+  const client = getGeminiClient();
+  const prompt = buildDifferentialDiagnosisPrompt(input);
 
   try {
     const model = client.getGenerativeModel({
@@ -194,14 +216,15 @@ Ensure the diagnosis are clinically plausible and the reasoning is sound. If dat
       generationConfig: { responseMimeType: 'application/json' },
     });
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = result.response.text().trim();
 
     // The model might still return markdown code fences even with responseMimeType
-    const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-    const data = JSON.parse(jsonStr);
+    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const parsed = JSON.parse(jsonStr);
+    const validated = differentialDiagnosisResponseSchema.parse(parsed);
 
     return {
-      ...data,
+      ...validated,
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
