@@ -20,7 +20,11 @@ export type AuditAction =
   | 'KEYPAIR_ROTATE'
   | 'DISPUTE_OPENED'
   | 'DISPUTE_RESOLVED'
-  | 'REFUND_ISSUED';
+  | 'REFUND_ISSUED'
+  | 'IMMUNIZATION_CREATE'
+  | 'IMMUNIZATION_UPDATE'
+  | 'IMMUNIZATION_DELETE'
+  | 'IMMUNIZATION_CERTIFICATE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -63,6 +67,10 @@ const auditLogSchema = new Schema<AuditLog>(
         'DISPUTE_OPENED',
         'DISPUTE_RESOLVED',
         'REFUND_ISSUED',
+        'IMMUNIZATION_CREATE',
+        'IMMUNIZATION_UPDATE',
+        'IMMUNIZATION_DELETE',
+        'IMMUNIZATION_CERTIFICATE',
       ],
       index: true,
     },

@@ -56,10 +56,12 @@ export function getIO(): SocketIOServer {
 
 /** Emit an event scoped to a specific clinic room */
 export function emitToClinic(clinicId: string, event: string, data: unknown): void {
-  getIO().to(`clinic:${clinicId}`).emit(event, data);
+  if (!io) return;
+  io.to(`clinic:${clinicId}`).emit(event, data);
 }
 
 /** Emit an event scoped to a specific user room */
 export function emitToUser(userId: string, event: string, data: unknown): void {
-  getIO().to(`user:${userId}`).emit(event, data);
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, data);
 }

@@ -4,6 +4,7 @@ import { PatientModel } from '../patients/models/patient.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { ClinicModel } from '../clinics/clinic.model';
+import { ImmunizationModel } from '../immunizations/immunization.model';
 import logger from '../../utils/logger';
 
 interface PDFGenerationOptions {
@@ -21,7 +22,7 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   logger.info({ patientId, clinicId }, 'Generating patient PDF export');
 
   // Fetch all required data
-  const [patient, clinic, encounters, payments] = await Promise.all([
+  const [patient, clinic, encounters, payments, _immunizations] = await Promise.all([
     PatientModel.findOne({ _id: patientId, clinicId, isActive: true }),
     ClinicModel.findById(clinicId),
     EncounterModel.find({ patientId, clinicId, isActive: true })
@@ -31,7 +32,12 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
     PaymentRecordModel.find({ patientId, clinicId })
       .sort({ createdAt: -1 })
       .limit(50),
+    ImmunizationModel.find({ patientId, clinicId, isActive: true })
+      .populate('administeredBy', 'firstName lastName')
+      .sort({ administeredDate: -1 })
+      .lean(),
   ]);
+  const immunizations = _immunizations;
 
   if (!patient) {
     throw new Error('Patient not found');
@@ -162,6 +168,39 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
     if (payments.length > 20) {
       doc.text(`... and ${payments.length - 20} more payments`);
     }
+  }
+
+  // Immunization History Section
+  doc.moveDown(2);
+  if (doc.y > 650) {
+    doc.addPage();
+  }
+
+  doc.fontSize(14).text('Immunization History', { underline: true });
+  doc.moveDown(0.5);
+
+  if (immunizations.length === 0) {
+    doc.fontSize(10).text('No immunizations recorded', { italics: true });
+  } else {
+    doc.fontSize(10);
+    immunizations.forEach((imm, index) => {
+      const adminBy = imm.administeredBy as any;
+      const adminName = adminBy
+        ? `${adminBy.firstName ?? ''} ${adminBy.lastName ?? ''}`.trim()
+        : 'N/A';
+      const adminDate = imm.administeredDate
+        ? new Date(imm.administeredDate).toLocaleDateString()
+        : 'N/A';
+      doc.text(
+        `${index + 1}. ${adminDate} — ${imm.vaccineName} (CVX: ${imm.vaccineCode}), Dose ${imm.doseNumber}${imm.seriesComplete ? ' [Series Complete]' : ''} — By: ${adminName}`,
+      );
+      if (imm.lotNumber) doc.text(`   Lot #: ${imm.lotNumber}`);
+      if (imm.adverseReaction) {
+        doc.text(
+          `   ⚠ Adverse Reaction: ${imm.adverseReaction.description} (${imm.adverseReaction.severity})`,
+        );
+      }
+    });
   }
 
   // Footer

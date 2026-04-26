@@ -72,10 +72,10 @@ export const forgotPasswordLimiter: RateLimitRequestHandler = make(60 * 60 * 100
   message: 'Too many password reset requests. Try again in 1 hour.',
 });
 
-// ── AI endpoints: 10 req / 1 min per clinic ──────────────────────────────────
+// ── AI endpoints: 20 req / 1 min per clinic ──────────────────────────────────
 export const aiLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => req.user?.clinicId ?? req.ip ?? 'unknown',

@@ -266,3 +266,153 @@ appointmentRoutes.delete(
     }
   },
 );
+
+
+// ── POST /appointments/:id/video-room (create video room) ──────────────────────
+appointmentRoutes.post(
+  '/:id/video-room',
+  validateRequest({ params: appointmentIdParamsSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      const { createVideoRoom } = await import('./telemedicine.service');
+      const videoProvider = appointment.videoProvider || 'daily.co';
+      const videoRoom = await createVideoRoom(videoProvider);
+
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        {
+          isTelemedicine: true,
+          videoRoomId: videoRoom.roomId,
+          videoProvider: videoRoom.provider,
+        },
+        { new: true },
+      ).lean();
+
+      return res.json({
+        status: 'success',
+        data: {
+          appointment: updated,
+          videoRoom,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── GET /appointments/:id/video-token (get video access token) ────────────────
+appointmentRoutes.get(
+  '/:id/video-token',
+  validateRequest({ params: appointmentIdParamsSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId, userId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      if (!appointment.videoRoomId)
+        return res.status(400).json({ error: 'BadRequest', message: 'Video room not created' });
+
+      const { generateVideoToken } = await import('./telemedicine.service');
+      const participantName = userId === String(appointment.doctorId) ? 'Doctor' : 'Patient';
+      const token = await generateVideoToken(
+        appointment.videoRoomId,
+        participantName,
+        appointment.videoProvider || 'daily.co',
+      );
+
+      return res.json({ status: 'success', data: token });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── POST /appointments/:id/video-start (mark video session started) ────────────
+appointmentRoutes.post(
+  '/:id/video-start',
+  validateRequest({ params: appointmentIdParamsSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        { videoStartedAt: new Date() },
+        { new: true },
+      ).lean();
+
+      return res.json({ status: 'success', data: updated });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── POST /appointments/:id/video-end (mark video session ended, create encounter) ──
+appointmentRoutes.post(
+  '/:id/video-end',
+  validateRequest({ params: appointmentIdParamsSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId, userId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      if (!appointment.videoStartedAt)
+        return res.status(400).json({ error: 'BadRequest', message: 'Video session not started' });
+
+      const { calculateVideoDuration } = await import('./telemedicine.service');
+      const videoEndedAt = new Date();
+      const videoDuration = calculateVideoDuration(appointment.videoStartedAt, videoEndedAt);
+
+      // Update appointment with video end time
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        {
+          videoEndedAt,
+          videoDuration,
+          status: 'completed',
+        },
+        { new: true },
+      ).lean();
+
+      // Create encounter from video session
+      const { EncounterModel } = await import('../encounters/encounter.model');
+      const encounter = await EncounterModel.create({
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        clinicId,
+        type: 'telemedicine',
+        status: 'open',
+        chiefComplaint: appointment.chiefComplaint,
+        appointmentId: appointment._id,
+        createdBy: userId,
+      });
+
+      // Link encounter to appointment
+      await AppointmentModel.findByIdAndUpdate(req.params.id, { encounterId: encounter._id });
+
+      return res.json({
+        status: 'success',
+        data: {
+          appointment: updated,
+          encounter,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);

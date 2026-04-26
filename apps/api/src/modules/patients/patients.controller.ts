@@ -4,6 +4,7 @@ import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
+import { emitToClinic } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
@@ -18,6 +19,7 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
+import { patientsCreatedTotal } from '../../services/metrics.service';
 import {
   createEmergencyContactSchema,
   updateEmergencyContactSchema,
@@ -87,7 +89,7 @@ router.get(
   })
 );
 
-// GET /patients/search?q=
+// GET /patients/search?q=&sex=M&minAge=18&maxAge=65&active=true&registeredAfter=2024-01-01&page=1&limit=20
 router.get(
   '/search',
   validateRequest({ query: patientSearchQuerySchema }),
@@ -99,15 +101,69 @@ router.get(
         .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
-    const q = String(req.query.q || '').trim();
-    const filter: Record<string, any> = { isActive: true };
-    if (q) filter.searchName = { $regex: q, $options: 'i' };
 
-    const result = await paginate(PatientModel, filter, page, limit);
+    // Sanitize: trim and cap at 100 chars (schema enforces max, this is belt-and-suspenders)
+    const q = String(req.query.q || '').trim().slice(0, 100);
+
+    const filter: Record<string, any> = { clinicId: req.user!.clinicId };
+
+    // Active filter — default true
+    const activeParam = req.query.active;
+    filter.isActive = activeParam === undefined ? true : activeParam !== 'false';
+
+    // Sex filter
+    if (req.query.sex) filter.sex = req.query.sex;
+
+    // Age range → date-of-birth range
+    const now = new Date();
+    if (req.query.minAge !== undefined || req.query.maxAge !== undefined) {
+      filter.dateOfBirth = {};
+      if (req.query.maxAge !== undefined) {
+        const minDob = new Date(now);
+        minDob.setFullYear(minDob.getFullYear() - Number(req.query.maxAge) - 1);
+        filter.dateOfBirth.$gte = minDob.toISOString().slice(0, 10);
+      }
+      if (req.query.minAge !== undefined) {
+        const maxDob = new Date(now);
+        maxDob.setFullYear(maxDob.getFullYear() - Number(req.query.minAge));
+        filter.dateOfBirth.$lte = maxDob.toISOString().slice(0, 10);
+      }
+    }
+
+    // Registration date range
+    if (req.query.registeredAfter || req.query.registeredBefore) {
+      filter.createdAt = {};
+      if (req.query.registeredAfter) filter.createdAt.$gte = new Date(req.query.registeredAfter as string);
+      if (req.query.registeredBefore) filter.createdAt.$lte = new Date(req.query.registeredBefore as string);
+    }
+
+    let data: any[];
+    let total: number;
+
+    if (q) {
+      // Use MongoDB text index for full-text search with relevance scoring
+      filter.$text = { $search: q };
+      const [docs, count] = await Promise.all([
+        PatientModel.find(filter, { score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+        PatientModel.countDocuments(filter),
+      ]);
+      data = docs;
+      total = count;
+    } else {
+      // No query — return paginated list sorted by lastName
+      const result = await paginate(PatientModel, filter, page, limit, { lastName: 1 });
+      data = result.data;
+      total = result.meta.total;
+    }
+
     return res.json({
       status: 'success',
-      data: result.data.map(toPatientResponse),
-      meta: result.meta,
+      data: data.map(toPatientResponse),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   })
 );
@@ -149,6 +205,8 @@ router.post(
           searchName,
         })
     );
+    emitToClinic(String(clinicId || req.user!.clinicId), 'patient:created', { patientId: String(doc._id) });
+    patientsCreatedTotal.inc({ clinicId: clinicId || req.user!.clinicId });
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   })
 );
