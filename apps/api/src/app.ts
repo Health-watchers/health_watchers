@@ -72,13 +72,17 @@ import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
-import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
+import onboardingRoutes from './modules/clinics/onboarding.routes';
 import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import federationRouter from './modules/federation/federation.router';
 
@@ -123,7 +127,7 @@ app.use(
       }
       return compression.filter(req, res);
     },
-  }),
+  })
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -152,7 +156,9 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready') },
+    autoLogging: {
+      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+    },
     redact: ['req.headers.authorization'],
   })
 );
@@ -179,7 +185,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
@@ -204,7 +209,7 @@ app.get('/api/versions', (_req, res) =>
       },
     ],
     current: 'v1',
-  }),
+  })
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -241,6 +246,7 @@ app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/cds', cdsRoutes);
+app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
@@ -258,7 +264,7 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
-  
+
   // Seed built-in CDS rules
   await seedBuiltInRules();
 
