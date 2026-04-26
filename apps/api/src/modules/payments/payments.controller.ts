@@ -59,11 +59,16 @@ router.get(
 
     try {
       const data = await stellarClient.getBalance(clinic.stellarPublicKey);
+      const domain = process.env.FEDERATION_DOMAIN || 'healthwatchers.com';
       return res.json({
         status: 'success',
         data: {
           publicKey: clinic.stellarPublicKey,
+          federationAddress: clinic.federationAddress
+            ? `${clinic.federationAddress}*${domain}`
+            : null,
           xlmBalance: data.balance,
+          balance: data.balance,
           usdcBalance: data.usdcBalance,
           usdcIssuer: config.stellar.usdcIssuer,
           transactions: data.transactions,

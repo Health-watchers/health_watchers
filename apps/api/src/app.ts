@@ -77,6 +77,7 @@ import { mongodbConnectionPoolSize } from './services/metrics.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
+import federationRouter from './modules/federation/federation.router';
 
 
 const app = express();
@@ -237,6 +238,10 @@ app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/cds', cdsRoutes);
+
+// ── Stellar federation (public, no auth) ──────────────────────────────────────
+app.use('/.well-known', federationRouter);
+app.use('/federation', federationRouter);
 
 setupSwagger(app);
 
