@@ -28,6 +28,19 @@ interface DiagnosisEntry {
   isPrimary: boolean;
 }
 
+interface EncounterTemplate {
+  _id: string;
+  name: string;
+  description?: string;
+  category: string;
+  defaultChiefComplaint?: string;
+  defaultVitalSigns?: Record<string, unknown>;
+  suggestedDiagnoses?: { code: string; description: string }[];
+  suggestedTests?: string[];
+  notes?: string;
+  usageCount: number;
+}
+
 interface AiDifferential {
   diagnosis: string;
   icdCode: string;
