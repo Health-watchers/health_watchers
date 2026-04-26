@@ -700,12 +700,20 @@ router.get(
     });
 
     if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
       return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
       const { QRCodeService } = await import('./services/qr-code.service');
       const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination,
+        payment.amount,
+        payment.assetCode,
+        payment.memo
         payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
@@ -724,6 +732,10 @@ router.get(
       }
     } catch (err: any) {
       logger.error({ intentId, error: err.message }, 'Failed to generate QR code');
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: 'Failed to generate QR code',
+      });
       return res.status(500).json({ error: 'InternalServerError', message: 'Failed to generate QR code' });
     }
   })
@@ -741,17 +753,39 @@ router.get(
     });
 
     if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Payment intent not found',
+      });
       return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
     }
 
     try {
       const { QRCodeService } = await import('./services/qr-code.service');
       const paymentURI = QRCodeService.generateStellarPaymentURI(
+        payment.destination,
+        payment.amount,
+        payment.assetCode,
+        payment.memo
         payment.destination, payment.amount, payment.assetCode, payment.memo
       );
 
       return res.json({
         status: 'success',
+        data: {
+          paymentURI,
+          destination: payment.destination,
+          amount: payment.amount,
+          assetCode: payment.assetCode,
+          memo: payment.memo,
+        },
+      });
+    } catch (err: any) {
+      logger.error({ intentId, error: err.message }, 'Failed to generate payment URI');
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: 'Failed to generate payment URI',
+      });
         data: { paymentURI, destination: payment.destination, amount: payment.amount, assetCode: payment.assetCode, memo: payment.memo },
       });
     } catch (err: any) {

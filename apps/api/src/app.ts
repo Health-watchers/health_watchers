@@ -69,6 +69,7 @@ import { subscriptionRoutes } from './modules/subscriptions/subscriptions.contro
 import { immunizationRoutes, cvxCodesRouter } from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
@@ -231,6 +232,7 @@ app.use('/api/v1/portal', portalRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 app.use('/api/v1/schedules', scheduleRoutes);
