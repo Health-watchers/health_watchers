@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = [
   'balance_critical',
   'large_transaction',
   'unrecognized_transaction',
+  'waitlist_available',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

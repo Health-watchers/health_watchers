@@ -36,6 +36,7 @@ import {
   generalLimiter,
 } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import { waitlistRoutes } from './modules/appointments/waitlist.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { apiVersionHeader } from './middlewares/versioning.middleware';
@@ -60,6 +61,10 @@ import {
   startBalanceMonitoringJob,
   stopBalanceMonitoringJob,
 } from './modules/payments/services/balance-monitoring-job';
+import {
+  startWaitlistExpiryJob,
+  stopWaitlistExpiryJob,
+} from './modules/appointments/waitlist-expiry-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
@@ -71,10 +76,6 @@ import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
-import metricsRouter from './modules/metrics/metrics.routes';
-import { metricsMiddleware } from './middlewares/metrics.middleware';
-import { mongodbConnectionPoolSize } from './services/metrics.service';
-import scheduleRoutes from './modules/schedules/schedules.routes';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
 
@@ -221,6 +222,7 @@ app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/icd10', icd10Routes);
 app.use('/api/v1/lab-results', labResultRoutes);
 app.use('/api/v1/settings', clinicSettingsRoutes);
@@ -234,8 +236,6 @@ app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
-app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
-app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/cds', cdsRoutes);
 
 setupSwagger(app);
@@ -265,6 +265,7 @@ async function startServer() {
   startReconciliationJob();
   startRiskRecalculationJob();
   startBalanceMonitoringJob();
+  startWaitlistExpiryJob();
 
   // Track MongoDB connection pool size for Prometheus
   setInterval(() => {
@@ -286,6 +287,7 @@ async function startServer() {
         stopReconciliationJob();
         stopRiskRecalculationJob();
         stopBalanceMonitoringJob();
+        stopWaitlistExpiryJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection
