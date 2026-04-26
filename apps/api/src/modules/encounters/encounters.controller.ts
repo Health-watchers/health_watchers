@@ -17,6 +17,7 @@ import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { auditLog } from '../audit/audit.service';
+import crypto from 'crypto';
 import { emitToClinic } from '@api/realtime/socket';
 import { encountersCreatedTotal } from '../../services/metrics.service';
 import crypto from 'crypto';
@@ -377,6 +378,7 @@ router.patch(
     if (updateData.status === 'closed' && encounter.status !== 'closed') {
       await triggerSurveyAfterEncounter(req.params.id, doc!);
     }
+
     return res.json({ status: 'success', data: toEncounterResponse(doc!) });
   })
 );
