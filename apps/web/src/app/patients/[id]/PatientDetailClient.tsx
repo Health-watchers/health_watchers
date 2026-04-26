@@ -28,6 +28,7 @@ import {
 import { queryKeys } from '@/lib/queryKeys';
 import { API_V1 } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import PhotoUpload from '@/components/patients/PhotoUpload';
 
 const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsCharts'), {
   ssr: false,
@@ -346,17 +347,26 @@ export default function PatientDetailClient({
         className="mb-8 rounded-xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 id="demographics-heading" className="text-2xl font-bold text-neutral-900">
-              {patient.firstName} {patient.lastName}
-            </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Badge variant={patient.gender === 'inactive' ? 'danger' : 'success'}>
-                {labels.active}
-              </Badge>
-              <span className="text-xs text-neutral-500">
-                {labels.registeredOn}: {formatDate((patient as any).createdAt)}
-              </span>
+          <div className="flex items-start gap-4">
+            <PhotoUpload
+              patientId={patientId}
+              patientName={`${patient.firstName} ${patient.lastName}`}
+              photoUrl={(patient as any).photoUrl}
+              thumbnailUrl={(patient as any).thumbnailUrl}
+              canEdit={!!canEdit}
+            />
+            <div>
+              <h1 id="demographics-heading" className="text-2xl font-bold text-neutral-900">
+                {patient.firstName} {patient.lastName}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Badge variant={patient.gender === 'inactive' ? 'danger' : 'success'}>
+                  {labels.active}
+                </Badge>
+                <span className="text-xs text-neutral-500">
+                  {labels.registeredOn}: {formatDate((patient as any).createdAt)}
+                </span>
+              </div>
             </div>
           </div>
           {canEdit && (

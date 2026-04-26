@@ -80,6 +80,16 @@ export const config = {
 
   // Redis (used by BullMQ)
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+
+  // File Storage
+  storage: {
+    driver: (process.env.STORAGE_DRIVER || 'local') as 's3' | 'local',
+    s3Bucket: process.env.S3_BUCKET || '',
+    s3Region: process.env.S3_REGION || 'us-east-1',
+    s3AccessKey: process.env.S3_ACCESS_KEY_ID || '',
+    s3SecretKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    localUploadDir: process.env.LOCAL_UPLOAD_DIR || './uploads',
+  },
 };
 
 if (['development', 'staging'].includes(process.env.NODE_ENV || 'development')) {

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { type Patient, formatDate } from '@health-watchers/types';
 import { ErrorMessage, TableSkeleton, ModuleEmptyState, Badge } from '@/components/ui';
+import PatientThumbnail from '@/components/patients/PatientThumbnail';
 import { queryKeys } from '@/lib/queryKeys';
 import { API_URL } from '@/lib/api';
 
@@ -118,10 +119,18 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <PatientThumbnail
+                    patientId={String(p._id)}
+                    firstName={p.firstName}
+                    lastName={p.lastName}
+                    thumbnailUrl={(p as any).thumbnailUrl}
+                    size="md"
+                  />
+                  <p className="font-medium text-gray-900">{p.firstName} {p.lastName}</p>
+                </div>
                 <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.name}</p>
-                <p className="font-medium text-gray-900">{p.firstName} {p.lastName}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.dob}</p>
                 <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.sex}</p>
@@ -149,6 +158,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               <thead>
                 <tr className="bg-gray-50">
                   <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.id}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Photo</th>
                   <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.name}</th>
                   <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.dob}</th>
                   <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.sex}</th>
@@ -161,6 +171,15 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
                   <tr key={p._id} className="even:bg-gray-50">
                     <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      <PatientThumbnail
+                        patientId={String(p._id)}
+                        firstName={p.firstName}
+                        lastName={p.lastName}
+                        thumbnailUrl={(p as any).thumbnailUrl}
+                        size="sm"
+                      />
+                    </td>
                     <td className="border border-gray-200 px-4 py-2">{p.firstName} {p.lastName}</td>
                     <td className="border border-gray-200 px-4 py-2">{formatDate(p.dateOfBirth)}</td>
                     <td className="border border-gray-200 px-4 py-2">{p.sex}</td>

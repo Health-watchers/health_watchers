@@ -24,7 +24,10 @@ export type AuditAction =
   | 'IMMUNIZATION_CREATE'
   | 'IMMUNIZATION_UPDATE'
   | 'IMMUNIZATION_DELETE'
-  | 'IMMUNIZATION_CERTIFICATE';
+  | 'IMMUNIZATION_CERTIFICATE'
+  | 'PATIENT_PHOTO_UPLOAD'
+  | 'PATIENT_PHOTO_ACCESS'
+  | 'PATIENT_PHOTO_DELETE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -71,6 +74,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'IMMUNIZATION_UPDATE',
         'IMMUNIZATION_DELETE',
         'IMMUNIZATION_CERTIFICATE',
+        'PATIENT_PHOTO_UPLOAD',
+        'PATIENT_PHOTO_ACCESS',
+        'PATIENT_PHOTO_DELETE',
       ],
       index: true,
     },
