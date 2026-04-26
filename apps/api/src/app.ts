@@ -77,6 +77,7 @@ import { mongodbConnectionPoolSize } from './services/metrics.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
+import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 
 
 const app = express();
@@ -237,6 +238,7 @@ app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/immunizations/cvx-codes', cvxCodesRouter);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/cds', cdsRoutes);
+app.use('/api/v1/peer-reviews', peerReviewsRouter);
 
 setupSwagger(app);
 
