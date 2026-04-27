@@ -271,6 +271,21 @@ router.post(
       }
     }
 
+    // Age-based clinical alerts (Issue #396)
+    const ageAlerts: string[] = [];
+    if (req.body.patientId) {
+      const agePatient = await PatientModel.findById(req.body.patientId).select('dateOfBirth').lean();
+      if (agePatient?.dateOfBirth) {
+        const dob = new Date(agePatient.dateOfBirth);
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        const ageMonths = (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
+        if (age < 12) ageAlerts.push(`PEDIATRIC_WEIGHT_DOSING: Patient is ${ageMonths} months old — use weight-based dosing calculations.`);
+        if (age >= 65) ageAlerts.push(`ELDERLY_POLYPHARMACY: Patient is ${age} years old — review for polypharmacy risk and renal dosing adjustments.`)       if (age >= 18 && age < 65 && req.body.prescriptions?.length) ageAlerts.push(`STANDARD_ADULT_DOSING: Verify standard adult dosing for patient age ${age}.`);
+      }
+    }
     const doc = await EncounterModel.create(req.body);
     
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
@@ -291,6 +306,7 @@ router.post(
       status: 'success',
       data: toEncounterResponse(doc),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
+      ageAlerts: ageAlerts.length > 0 ? ageAlerts : undefined,
     });
   })
 );
@@ -480,6 +496,7 @@ router.post(
       status: 'success',
       data: toEncounterResponse(encounter),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
+      ageAlerts: ageAlerts.length > 0 ? ageAlerts : undefined,
       message: 'Prescription added successfully'
       message: 'Prescription added successfully',
     });

@@ -104,7 +104,7 @@ const patientSchema = new Schema<Patient>(
     photoUrl: { type: String },
     thumbnailUrl: { type: String },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 patientSchema.pre('save', function () {
@@ -132,5 +132,26 @@ patientSchema.post('find', function (docs: Record<string, unknown>[]) {
 });
 patientSchema.post('findOne', decryptDoc);
 patientSchema.post('findOneAndUpdate', decryptDoc);
+
+patientSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return null;
+  const dob = new Date(this.dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+});
+
+patientSchema.virtual('ageGroup').get(function () {
+  const age = (this as any).age;
+  if (age === null) return null;
+  if (age < 1)  return 'infant';
+  if (age < 3)  return 'toddler';
+  if (age < 12) return 'child';
+  if (age < 18) return 'adolescent';
+  if (age < 65) return 'adult';
+  return 'elderly';
+});
 
 export const PatientModel = models.Patient || model<Patient>('Patient', patientSchema);

@@ -15,6 +15,9 @@ export interface PatientResponse {
   updatedAt: string;
   photoUrl?: string;
   thumbnailUrl?: string;
+  age?: number | null;
+  ageGroup?: string | null;
+  thumbnailUrl?: string;
 }
 
 export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
@@ -33,5 +36,7 @@ export function toPatientResponse(doc: Document & Record<string, any>): PatientR
     updatedAt:     doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
     photoUrl:      doc.photoUrl,
     thumbnailUrl:  doc.thumbnailUrl,
+    age:           doc.age ?? null,
+    ageGroup:      doc.ageGroup ?? null,
   };
 }
