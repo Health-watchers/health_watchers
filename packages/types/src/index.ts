@@ -46,3 +46,29 @@ export function formatDate(dateStr: string | undefined): string {
     day: 'numeric',
   });
 }
+
+// ─── Age Calculation Utilities (Issue #396) ──────────────────────────────────
+
+export type AgeGroup = 'infant' | 'toddler' | 'child' | 'adolescent' | 'adult' | 'elderly';
+
+export function calculateAge(dateOfBirth: Date | string): number {
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+export function calculateAgeInMonths(dateOfBirth: Date | string): number {
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  return (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
+}
+
+export function getAgeGroup(age: number): AgeGroup {
+  if (age < 1)  return 'infant';
+  if (age < 3)  return 'toddler';
+  if (age < 12) return 'child';  if (age < 18) return 'adolescent';  if (age < 65) return 'adult';
+  return 'elderly';
+}
