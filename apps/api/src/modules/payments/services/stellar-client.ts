@@ -184,6 +184,54 @@ class StellarClient {
   }
 
   /**
+   * Create a claimable balance (escrow) on Stellar
+   * Calls the stellar-service POST /claimable-balance endpoint
+   */
+  async createClaimableBalance(params: {
+    fromPublicKey: string;
+    amount: string;
+    claimantPublicKey: string;
+    claimableUntil: string;
+    memo?: string;
+  }): Promise<{ balanceId: string; txHash?: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/claimable-balance',
+      params,
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Claim a claimable balance by ID
+   * Calls the stellar-service POST /claimable-balance/:balanceId/claim endpoint
+   */
+  async claimBalance(balanceId: string): Promise<{ txHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      `/claimable-balance/${encodeURIComponent(balanceId)}/claim`,
+      {},
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Reclaim a claimable balance back to the patient
+   * Calls the stellar-service POST /claimable-balance/:balanceId/reclaim endpoint
+   */
+  async reclaimBalance(balanceId: string): Promise<{ txHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      `/claimable-balance/${encodeURIComponent(balanceId)}/reclaim`,
+      {},
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {

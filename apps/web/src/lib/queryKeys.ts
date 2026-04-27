@@ -33,4 +33,9 @@ export const queryKeys = {
     list: () => [...queryKeys.invoices.all, 'list'] as const,
     detail: (id: string) => [...queryKeys.invoices.all, 'detail', id] as const,
   },
+  preAuth: {
+    all: ['pre-auth'] as const,
+    list: (status?: string) => [...queryKeys.preAuth.all, 'list', status] as const,
+    detail: (id: string) => [...queryKeys.preAuth.all, 'detail', id] as const,
+  },
 } as const;

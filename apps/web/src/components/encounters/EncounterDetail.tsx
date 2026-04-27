@@ -3,6 +3,8 @@
 import AiSummaryCard from './AiSummaryCard';
 import { SoapNotesView } from './SoapNotesView';
 import type { EncounterRecord } from './EncounterTable';
+import { usePreAuths } from '@/lib/queries/usePreAuth';
+import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
 
 interface EncounterDetailProps {
   encounter: EncounterRecord;
@@ -34,6 +36,8 @@ function formatDate(value?: string) {
 }
 
 export default function EncounterDetail({ encounter, onBack, onEdit }: EncounterDetailProps) {
+  const { data: preAuths = [] } = usePreAuths('pending');
+  const encounterPreAuths = preAuths.filter((pa) => pa.encounterId === encounter.id);
   return (
     <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -138,6 +142,28 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
             </h3>
             <p className="mt-2 text-gray-900">{formatDate(encounter.followUpDate)}</p>
           </article>
+
+          {encounterPreAuths.length > 0 && (
+            <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+                Insurance Pre-Authorizations
+              </h3>
+              <ul className="space-y-2">
+                {encounterPreAuths.map((pa) => (
+                  <li key={pa._id} className="rounded-md border border-gray-200 bg-white p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
+                      <PreAuthStatusBadge status={pa.status} />
+                    </div>
+                    <p className="text-xs text-gray-500">{pa.insuranceProvider} · {pa.estimatedAmount} XLM</p>
+                    {pa.preAuthNumber && (
+                      <p className="text-xs text-gray-500">Pre-auth #: {pa.preAuthNumber}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          )}
         </div>
       </div>
     </section>
