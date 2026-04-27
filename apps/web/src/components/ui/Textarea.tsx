@@ -26,16 +26,16 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
           }
           className={[
-            'w-full rounded-md border bg-neutral-0 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400',
-            'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
-            'disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[80px]',
+            'bg-neutral-0 w-full rounded-md border px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-500',
+            'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
+            'min-h-[80px] resize-y disabled:cursor-not-allowed disabled:opacity-50',
             hasError ? 'border-danger-500' : 'border-neutral-200',
             className ?? '',
           ].join(' ')}
           {...props}
         />
         {hasError && (
-          <p id={`${inputId}-error`} className="text-xs text-danger-500">
+          <p id={`${inputId}-error`} className="text-danger-500 text-xs">
             {error}
           </p>
         )}
@@ -46,7 +46,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         )}
       </div>
     );
-  },
+  }
 );
 
 Textarea.displayName = 'Textarea';

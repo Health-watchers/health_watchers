@@ -19,21 +19,26 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
   const passed = RULES.filter((r) => r.test(password)).length;
   const pct = (passed / RULES.length) * 100;
 
-  const color =
+  const colorClass =
     pct <= 40
-      ? 'bg-red-500'
+      ? 'bg-error-500'
       : pct <= 60
-        ? 'bg-orange-400'
+        ? 'bg-warning-500'
         : pct <= 80
-          ? 'bg-yellow-400'
-          : 'bg-green-500';
+          ? 'bg-warning-400'
+          : 'bg-success-500';
 
   return (
     <div className="mt-2 space-y-2" aria-live="polite">
-      <div className="h-1.5 w-full rounded-full bg-gray-200">
+      <div className="h-1.5 w-full rounded-full bg-neutral-200">
         <div
-          className={`h-1.5 rounded-full transition-all duration-300 ${color}`}
-          style={{ width: `${pct}%` }}
+          className={`h-1.5 rounded-full transition-all duration-300 ${colorClass} ${
+            pct <= 20 ? 'w-1/5' : 
+            pct <= 40 ? 'w-2/5' : 
+            pct <= 60 ? 'w-3/5' : 
+            pct <= 80 ? 'w-4/5' : 
+            'w-full'
+          }`}
           role="progressbar"
           aria-valuenow={passed}
           aria-valuemin={0}
@@ -47,7 +52,7 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
           return (
             <li
               key={r.label}
-              className={`flex items-center gap-1.5 text-xs ${ok ? 'text-green-600' : 'text-gray-400'}`}
+              className={`flex items-center gap-1.5 text-xs ${ok ? 'text-success-600' : 'text-neutral-500'}`}
             >
               <span aria-hidden="true">{ok ? '✓' : '○'}</span>
               {r.label}

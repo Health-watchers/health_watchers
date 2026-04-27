@@ -1,28 +1,17 @@
 import { authenticator } from 'otplib';
+import QRCode from 'qrcode';
 
-export function generateSecret(): string {
-  return authenticator.generateSecret();
-}
+export const totpService = {
+  async setup(
+    email: string
+  ): Promise<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }> {
+    const secret = authenticator.generateSecret();
+    const otpauthUrl = authenticator.keyuri(email, 'Health Watchers', secret);
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+    return { secret, otpauthUrl, qrCodeDataUrl };
+  },
 
-export function generateURI({
-  label,
-  issuer,
-  secret,
-}: {
-  label: string;
-  issuer: string;
-  secret: string;
-}): string {
-  return authenticator.keyuri(label, issuer, secret);
-}
-
-export async function totpVerify({
-  token,
-  secret,
-}: {
-  token: string;
-  secret: string;
-}): Promise<{ valid: boolean }> {
-  const valid = authenticator.verify({ token, secret });
-  return { valid };
-}
+  verify(token: string, secret: string): boolean {
+    return authenticator.verify({ token, secret });
+  },
+};

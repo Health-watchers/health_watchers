@@ -45,8 +45,8 @@ describe('Token Service', () => {
   });
 
   describe('signRefreshToken', () => {
-    it('should sign a refresh token with issuer and audience claims', () => {
-      const token = signRefreshToken(mockPayload);
+    it('should sign a refresh token with issuer, audience, jti, and family claims', () => {
+      const { token, jti, family } = signRefreshToken(mockPayload);
       const decoded = jwt.decode(token, { complete: true });
 
       expect(decoded).toBeTruthy();
@@ -56,6 +56,8 @@ describe('Token Service', () => {
         clinicId: mockPayload.clinicId,
         iss: 'health-watchers-api',
         aud: 'health-watchers-client',
+        jti,
+        family,
       });
     });
   });
@@ -156,30 +158,40 @@ describe('Token Service', () => {
   });
 
   describe('verifyRefreshToken', () => {
-    it('should verify a valid refresh token', () => {
-      const token = signRefreshToken(mockPayload);
+    it('should verify a valid refresh token and return payload with jti and family', () => {
+      const { token } = signRefreshToken(mockPayload);
       const result = verifyRefreshToken(token);
 
-      expect(result).toEqual(mockPayload);
+      expect(result).toMatchObject(mockPayload);
+      expect(result?.jti).toBeDefined();
+      expect(result?.family).toBeDefined();
     });
 
     it('should reject a token with wrong issuer', () => {
-      const tokenWithWrongIssuer = jwt.sign(mockPayload, 'test-refresh-secret', {
-        expiresIn: '7d',
-        issuer: 'malicious-service',
-        audience: 'health-watchers-client',
-      });
+      const tokenWithWrongIssuer = jwt.sign(
+        { ...mockPayload, jti: 'test-jti', family: 'test-family' },
+        'test-refresh-secret',
+        {
+          expiresIn: '7d',
+          issuer: 'malicious-service',
+          audience: 'health-watchers-client',
+        }
+      );
 
       const result = verifyRefreshToken(tokenWithWrongIssuer);
       expect(result).toBeNull();
     });
 
     it('should reject a token with wrong audience', () => {
-      const tokenWithWrongAudience = jwt.sign(mockPayload, 'test-refresh-secret', {
-        expiresIn: '7d',
-        issuer: 'health-watchers-api',
-        audience: 'wrong-audience',
-      });
+      const tokenWithWrongAudience = jwt.sign(
+        { ...mockPayload, jti: 'test-jti', family: 'test-family' },
+        'test-refresh-secret',
+        {
+          expiresIn: '7d',
+          issuer: 'health-watchers-api',
+          audience: 'wrong-audience',
+        }
+      );
 
       const result = verifyRefreshToken(tokenWithWrongAudience);
       expect(result).toBeNull();
@@ -227,7 +239,7 @@ describe('Token Service', () => {
           expiresIn: '15m',
           issuer: 'other-service-api',
           audience: 'other-service-client',
-        },
+        }
       );
 
       // This token should be rejected even though it has the correct secret

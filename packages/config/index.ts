@@ -19,6 +19,7 @@ export const config = {
 
   // Database Configuration
   mongoUri: process.env.MONGO_URI || '',
+  mongoMaxPool: parseInt(process.env.MONGO_MAX_POOL_SIZE || '10', 10),
 
   // JWT Authentication
   jwt: {
@@ -37,6 +38,10 @@ export const config = {
     horizonUrl,
     secretKey: process.env.STELLAR_SECRET_KEY || '',
     platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
+    usdcIssuer:
+      network === 'mainnet'
+        ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+        : 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   },
 
   // Payment Assets
@@ -55,6 +60,36 @@ export const config = {
 
   // PHI Field-Level Encryption
   fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || '',
+
+  // Stellar Keypair Encryption (separate key from PHI encryption)
+  keypairEncryptionKey: process.env.KEYPAIR_ENCRYPTION_KEY || '',
+
+  // Email Configuration
+  email: {
+    provider: (process.env.EMAIL_PROVIDER || 'smtp') as 'smtp' | 'sendgrid',
+    from: process.env.EMAIL_FROM || 'noreply@healthwatchers.com',
+    smtp: {
+      host: process.env.SMTP_HOST || 'localhost',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',
+    },
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+  },
+
+  // Redis (used by BullMQ)
+  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+
+  // File Storage
+  storage: {
+    driver: (process.env.STORAGE_DRIVER || 'local') as 's3' | 'local',
+    s3Bucket: process.env.S3_BUCKET || '',
+    s3Region: process.env.S3_REGION || 'us-east-1',
+    s3AccessKey: process.env.S3_ACCESS_KEY_ID || '',
+    s3SecretKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    localUploadDir: process.env.LOCAL_UPLOAD_DIR || './uploads',
+  },
 };
 
 if (['development', 'staging'].includes(process.env.NODE_ENV || 'development')) {

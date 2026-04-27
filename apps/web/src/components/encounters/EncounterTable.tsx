@@ -259,7 +259,7 @@ export default function EncounterTable({
 
       <div className="mt-4 overflow-hidden rounded-lg border border-gray-100">
         <table className="hidden min-w-full divide-y divide-gray-100 md:table">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+          <thead className="bg-gray-50 text-left text-xs tracking-wide text-gray-500 uppercase">
             <tr>
               <th className="px-4 py-3">Encounter ID</th>
               <th className="px-4 py-3">Patient</th>

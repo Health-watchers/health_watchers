@@ -67,6 +67,171 @@ class StellarClient {
   }
 
   /**
+   * Get XLM and USDC balances and recent transactions for a public key
+   * Calls the stellar-service GET /balance/:publicKey endpoint
+   */
+  async getBalance(
+    publicKey: string
+  ): Promise<{ balance: string; usdcBalance: string | null; transactions: unknown[] }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.get(`/balance/${publicKey}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    return response.data;
+  }
+
+  /**
+   * Create a USDC trustline for a clinic's Stellar account
+   * Calls the stellar-service POST /trustline/usdc endpoint
+   */
+  async createUsdcTrustline(
+    publicKey: string,
+    usdcIssuer: string
+  ): Promise<{ created?: boolean; alreadyExists?: boolean; hash?: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/trustline/usdc',
+      { publicKey, usdcIssuer },
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Fund a testnet account via Friendbot
+   * Calls the stellar-service POST /fund endpoint
+   */
+  async fundAccount(publicKey: string): Promise<{ funded: boolean; hash?: string }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fund',
+      { publicKey },
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Transfer all XLM from one account to another (used during keypair rotation)
+   * Calls the stellar-service POST /transfer endpoint
+   */
+  async transferBalance(
+    fromPublicKey: string,
+    toPublicKey: string,
+  ): Promise<{ transferred: boolean; amount?: string; hash?: string }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/transfer',
+      { fromPublicKey, toPublicKey },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Get fee statistics from stellar-service
+   * Calls GET /fee-stats (public endpoint)
+   */
+  async getFeeEstimate(): Promise<{
+    slow: { stroops: string; xlm: string; confirmationTime: string };
+    standard: { stroops: string; xlm: string; confirmationTime: string };
+    fast: { stroops: string; xlm: string; confirmationTime: string };
+    raw: Record<string, string>;
+  }> {
+    try {
+      const response = await this.client.get('/fee-stats');
+      const { success: _s, ...data } = response.data;
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(error.response?.data?.message ?? `Fee stats unavailable: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Issue a refund transaction (platform -> patient)
+   * Calls the stellar-service POST /refund endpoint
+   */
+  async issueRefund(
+    toPublicKey: string,
+    amount: string,
+    memo: string,
+  ): Promise<{ transactionHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/refund',
+      { toPublicKey, amount, memo },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    return response.data;
+  }
+
+  /**
+   * Wrap an inner transaction in a platform-sponsored fee bump tx
+   * Calls the stellar-service POST /fee-bump endpoint
+   */
+  async sponsorFeeBump(innerXdr: string): Promise<{ xdr: string; hash: string; feeStroops: number }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/fee-bump',
+      { innerXdr },
+      { headers: { Authorization: `Bearer ${secret}` } },
+    );
+    const { success: _s, ...data } = response.data;
+    return data;
+  }
+
+  /**
+   * Create a claimable balance (escrow) on Stellar
+   * Calls the stellar-service POST /claimable-balance endpoint
+   */
+  async createClaimableBalance(params: {
+    fromPublicKey: string;
+    amount: string;
+    claimantPublicKey: string;
+    claimableUntil: string;
+    memo?: string;
+  }): Promise<{ balanceId: string; txHash?: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/claimable-balance',
+      params,
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Claim a claimable balance by ID
+   * Calls the stellar-service POST /claimable-balance/:balanceId/claim endpoint
+   */
+  async claimBalance(balanceId: string): Promise<{ txHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      `/claimable-balance/${encodeURIComponent(balanceId)}/claim`,
+      {},
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
+   * Reclaim a claimable balance back to the patient
+   * Calls the stellar-service POST /claimable-balance/:balanceId/reclaim endpoint
+   */
+  async reclaimBalance(balanceId: string): Promise<{ txHash: string; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      `/claimable-balance/${encodeURIComponent(balanceId)}/reclaim`,
+      {},
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
    * Check if the stellar-service is healthy
    */
   async healthCheck(): Promise<{ status: string; network: string; dryRun: boolean }> {
@@ -79,6 +244,37 @@ class StellarClient {
       }
       throw new Error('Stellar service health check failed: unknown error');
     }
+  }
+
+  /**
+   * Discover payment paths from stellar-service
+   */
+  async findPaths(params: {
+    sourceAssetCode: string;
+    sourceAssetIssuer?: string;
+    destinationAssetCode: string;
+    destinationAssetIssuer?: string;
+    destinationAmount: string;
+  }): Promise<any[]> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.get('/paths', {
+      params,
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    return response.data.data;
+  }
+
+  /**
+   * Get orderbook from stellar-service
+   */
+  async getOrderbook(params: {
+    baseAssetCode: string;
+    baseAssetIssuer?: string;
+    counterAssetCode: string;
+    counterAssetIssuer?: string;
+  }): Promise<any> {
+    const response = await this.client.get('/orderbook', { params });
+    return response.data.data;
   }
 }
 

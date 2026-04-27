@@ -16,5 +16,10 @@ COPY . .
 # Expose API port
 EXPOSE 3001
 
+# Set stop signal for graceful shutdown
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health/live || exit 1
+
 # Start development server
 CMD ["npm", "run", "dev", "--workspace=api"]

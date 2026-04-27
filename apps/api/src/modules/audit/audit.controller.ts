@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { AuditLogModel } from './audit.model';
 import { authenticate } from '../../middlewares/auth.middleware';
+import logger from '../../utils/logger';
 
 const router = Router();
 
@@ -139,7 +140,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching audit logs:', error);
+    logger.error({ err: error }, 'Error fetching audit logs');
     return res.status(500).json({
       error: 'InternalServerError',
       message: 'Failed to retrieve audit logs',

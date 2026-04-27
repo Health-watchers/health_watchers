@@ -9,82 +9,71 @@ import { ConfirmPaymentModal } from '@/components/payments/ConfirmPaymentModal';
 
 export interface Payment {
   id: string;
+  intentId?: string;
   patientId: string;
   amount: string;
   asset?: string;
-  status: 'pending' | 'completed' | 'failed' | string;
+  assetCode?: string;
+  status: 'pending' | 'confirmed' | 'completed' | 'failed' | string;
   txHash?: string;
+  confirmedAt?: string;
   createdAt?: string;
 }
 
-type StatusFilter = 'all' | 'pending' | 'completed' | 'failed';
+type StatusFilter = 'all' | 'pending' | 'confirmed' | 'completed' | 'failed';
 
-interface PaymentTableLabels {
-  noMatch: string;
-  all: string;
-  pending: string;
-  completed: string;
-  failed: string;
-  from: string;
-  to: string;
-  id: string;
-  patient: string;
-  amount: string;
-  status: string;
-  transaction: string;
-  date: string;
-  actions: string;
-  confirm: string;
-  viewOnExplorer: string;
-}
-
-const DEFAULT_LABELS: PaymentTableLabels = {
-  noMatch: 'No payments match the current filters.',
-  all: 'All',
-  pending: 'Pending',
-  completed: 'Completed',
-  failed: 'Failed',
-  from: 'From',
-  to: 'To',
-  id: 'ID',
-  patient: 'Patient',
-  amount: 'Amount',
-  status: 'Status',
-  transaction: 'Transaction',
-  date: 'Date',
-  actions: 'Actions',
-  confirm: 'Confirm',
-  viewOnExplorer: 'View on Explorer',
-};
+const STATUS_TABS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'failed', label: 'Failed' },
+];
 
 function statusBadgeVariant(status: string) {
-  if (status === 'completed') return 'success';
+  if (status === 'confirmed' || status === 'completed') return 'success';
   if (status === 'pending') return 'warning';
   if (status === 'failed') return 'danger';
   return 'default';
+}
+}
+
+/** Animated dot indicator for real-time status feedback */
+function StatusIndicator({ status }: { status: string }) {
+  if (status === "pending") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" aria-hidden="true" />
+        <Badge variant="warning">pending</Badge>
+      </span>
+    );
+  }
+  if (status === "confirmed" || status === "completed") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden="true" />
+        <Badge variant="success">{status}</Badge>
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
+        <Badge variant="danger">failed</Badge>
+      </span>
+    );
+  }
+  return <Badge variant="default">{status}</Badge>;
 }
 
 interface Props {
   payments: Payment[];
   network?: string;
-  labels?: Partial<PaymentTableLabels>;
   /** Called when user confirms a payment; should throw on failure */
   onConfirm: (paymentId: string, txHash: string) => Promise<void>;
 }
 
-export function PaymentTable({
-  payments,
-  network = 'testnet',
-  labels: labelsProp,
-  onConfirm,
-}: Props) {
-  const labels = { ...DEFAULT_LABELS, ...labelsProp };
-  const STATUS_TABS: { value: StatusFilter; label: string }[] = [
-    { value: 'all', label: labels.all },
-    { value: 'pending', label: labels.pending },
-    { value: 'completed', label: labels.completed },
-    { value: 'failed', label: labels.failed },
-  ];
+export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -100,7 +89,7 @@ export function PaymentTable({
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <TabsList>
             {STATUS_TABS.map((t) => (
@@ -111,26 +100,26 @@ export function PaymentTable({
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center gap-2 ml-auto">
-          <label htmlFor="date-from" className="text-xs text-neutral-500 whitespace-nowrap">
-            {labels.from}
+        <div className="ml-auto flex items-center gap-2">
+          <label htmlFor="date-from" className="text-xs whitespace-nowrap text-neutral-500">
+            From
           </label>
           <input
             id="date-from"
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="focus:ring-primary-500 rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none"
           />
           <label htmlFor="date-to" className="text-xs text-neutral-500">
-            {labels.to}
+            To
           </label>
           <input
             id="date-to"
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="focus:ring-primary-500 rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none"
           />
         </div>
       </div>
@@ -142,60 +131,60 @@ export function PaymentTable({
             <tr>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.id}
+                ID
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.patient}
+                Patient
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.amount}
+                Amount
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.status}
+                Status
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.transaction}
+                Transaction
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.date}
+                Date
               </th>
               <th
                 scope="col"
-                className="px-4 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wide"
+                className="px-4 py-3 text-right text-xs font-medium tracking-wide text-neutral-500 uppercase"
               >
-                {labels.actions}
+                Actions
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100 bg-white">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-neutral-400">
-                  {labels.noMatch}
+                <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                  No payments match the current filters.
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-neutral-50 transition-colors">
+                <tr key={p.id} className="transition-colors hover:bg-neutral-50">
                   <td
-                    className="px-4 py-3 font-mono text-xs text-neutral-600 max-w-[120px] truncate"
+                    className="max-w-[120px] truncate px-4 py-3 font-mono text-xs text-neutral-600"
                     title={p.id}
                   >
                     {p.id.slice(0, 12)}…
@@ -203,10 +192,10 @@ export function PaymentTable({
                   <td className="px-4 py-3 text-neutral-700">{p.patientId}</td>
                   <td className="px-4 py-3 font-medium text-neutral-900">
                     {p.amount}{' '}
-                    <span className="text-neutral-400 font-normal">{p.asset ?? 'XLM'}</span>
+                    <span className="font-normal text-neutral-500">{p.asset ?? 'XLM'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={statusBadgeVariant(p.status)}>{p.status}</Badge>
+                    <StatusIndicator status={p.status} />
                   </td>
                   <td className="px-4 py-3">
                     {p.txHash ? (
@@ -215,7 +204,7 @@ export function PaymentTable({
                       <span className="text-neutral-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs whitespace-nowrap text-neutral-500">
                     {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -223,7 +212,7 @@ export function PaymentTable({
                       {/* Confirm only visible on pending rows */}
                       {p.status === 'pending' && (
                         <Button size="sm" variant="primary" onClick={() => setConfirmTarget(p.id)}>
-                          {labels.confirm}
+                          Confirm
                         </Button>
                       )}
                       {p.txHash && (
@@ -231,11 +220,11 @@ export function PaymentTable({
                           href={`https://stellar.expert/explorer/${network}/tx/${p.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-500 hover:bg-primary-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                          className="text-primary-500 hover:bg-primary-50 focus-visible:ring-primary-500 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2"
                         >
-                          {labels.viewOnExplorer}
+                          View on Explorer
                           <svg
-                            className="w-3 h-3"
+                            className="h-3 w-3"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"

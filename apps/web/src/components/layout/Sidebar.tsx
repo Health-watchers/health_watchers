@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
     href: '/',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
     href: '/patients',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
     href: '/encounters',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -79,7 +79,7 @@ const navItems: NavItem[] = [
     href: '/payments',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -100,7 +100,7 @@ const navItems: NavItem[] = [
     href: '/appointments',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -120,7 +120,7 @@ const navItems: NavItem[] = [
     href: '/documents',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -140,7 +140,7 @@ const navItems: NavItem[] = [
     href: '/settings',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -167,7 +167,7 @@ const navItems: NavItem[] = [
     href: '/audit-log',
     icon: (
       <svg
-        className="w-5 h-5"
+        className="h-5 w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -178,6 +178,27 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
+    label: 'Reports',
+    href: '/reports',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
         />
       </svg>
     ),
@@ -201,7 +222,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const el = sidebarRef.current;
     if (!el) return;
     const focusable = el.querySelectorAll<HTMLElement>(
-      'a, button, [tabindex]:not([tabindex="-1"])',
+      'a, button, [tabindex]:not([tabindex="-1"])'
     );
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -231,22 +252,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [isOpen, onClose]);
 
   const visibleItems = navItems.filter(
-    (item) => !item.roles || (user && item.roles.includes(user.role)),
+    (item) => !item.roles || (user && item.roles.includes(user.role))
   );
 
   const sidebarContent = (
     <nav
       ref={sidebarRef}
       aria-label="Main navigation"
-      className="flex flex-col h-full w-60 bg-neutral-0 border-r border-neutral-200"
+      className="bg-neutral-0 flex h-full w-60 flex-col border-r border-neutral-200"
     >
       {/* Logo area */}
-      <div className="flex items-center gap-2 px-5 h-14 border-b border-neutral-200 shrink-0">
-        <span className="text-primary-500 font-bold text-lg tracking-tight">HealthWatchers</span>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-5">
+        <span className="text-primary-500 text-lg font-bold tracking-tight">HealthWatchers</span>
       </div>
 
       {/* Nav items */}
-      <ul className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2" role="list">
+      <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" role="list">
         {visibleItems.map((item) => {
           const isActive =
             pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -257,11 +278,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 onClick={onClose}
                 aria-current={isActive ? 'page' : undefined}
                 className={[
-                  'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                   'border-l-4',
                   isActive
-                    ? 'border-primary-500 bg-primary-50 text-primary-500'
-                    : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-500'
+                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100',
                 ].join(' ')}
               >
                 {item.icon}
@@ -277,7 +298,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex shrink-0">{sidebarContent}</aside>
+      <aside className="hidden shrink-0 md:flex">{sidebarContent}</aside>
 
       {/* Mobile drawer overlay */}
       {isOpen && (

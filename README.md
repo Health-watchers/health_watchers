@@ -2,7 +2,7 @@
 
 > **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
 
-[![CI Status](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
@@ -35,12 +35,11 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 
 - Node.js >= 18.0.0
 - npm 10.9.2
-- Docker and Docker Compose (for quickstart)
-- MongoDB (or use Docker)
+- Docker and Docker Compose
 
-### 5-Minute Quickstart with Docker Compose
+### Quick Start — MongoDB only (recommended for local dev)
 
-The fastest way to get Health Watchers running locally:
+No local MongoDB installation required. Spin up just the database:
 
 ```bash
 # 1. Clone the repository
@@ -50,26 +49,42 @@ cd health-watchers
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start all services with Docker Compose
+# 3. Start MongoDB (and optional mongo-express UI on :8081)
+docker-compose -f docker-compose.dev.yml up -d
+
+# 4. Install dependencies and start the API
+npm install
+npm run dev --workspace=api
+```
+
+The default `MONGO_URI=mongodb://localhost:27017/health_watchers` in `.env.example` connects directly to the containerized MongoDB — no credentials needed for local dev.
+
+To stop:
+```bash
+docker-compose -f docker-compose.dev.yml down
+```
+
+### 5-Minute Quickstart — Full Stack with Docker Compose
+
+Runs all services (API, web, stellar-service, MongoDB) in containers:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/OWNER/health-watchers.git
+cd health-watchers
+
+# 2. Copy environment configuration
+cp .env.example .env
+
+# 3. Start all services
 docker-compose up -d
 
-# 4. Wait for services to be ready (about 30 seconds)
-docker-compose logs -f
-
-# 5. Access the application
+# 4. Access the application
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
 ```
 
-The Docker setup includes:
-
-- MongoDB database with automatic initialization
-- API server with hot-reload
-- Web frontend with hot-reload
-- Pre-configured networking between services
-
 To stop all services:
-
 ```bash
 docker-compose down
 ```
@@ -99,7 +114,6 @@ npm run dev
 ```
 
 This will start:
-
 - Web app on http://localhost:3000
 - API server on http://localhost:3001
 - Stellar service on http://localhost:3002
@@ -152,6 +166,66 @@ Health Watchers is designed with HIPAA compliance in mind:
 - 🔐 Secrets management with AWS Secrets Manager support
 
 For detailed security guidelines, see `SECURITY.md`.
+
+## Database Migrations
+
+Health Watchers uses [migrate-mongo](https://github.com/seppevs/migrate-mongo) to version-control MongoDB schema changes. All migrations live in `apps/api/src/migrations/` and are written in TypeScript.
+
+### Available Commands
+
+Run from the repo root (or inside `apps/api/`):
+
+```bash
+# Apply all pending migrations
+npm run migrate:up --workspace=api
+
+# Roll back the last applied migration
+npm run migrate:down --workspace=api
+
+# Show migration status (applied / pending)
+npm run migrate:status --workspace=api
+
+# Scaffold a new migration file
+npm run migrate:create --workspace=api -- <migration-name>
+```
+
+### How It Works
+
+- migrate-mongo tracks applied migrations in the `changelog` collection in MongoDB.
+- Migrations run in filename order (lexicographic), so prefix files with a date: `YYYYMMDD_description.ts`.
+- Every migration **must** export both `up` and `down` functions — `down` must reverse what `up` does.
+- All `up` operations use idempotent MongoDB operations (e.g. `createIndex` with a named index, `updateMany` with `$exists` guards) so they are safe to re-run.
+
+### Writing a Migration
+
+```ts
+// apps/api/src/migrations/20240201_example.ts
+import { Db } from 'mongodb';
+
+export async function up(db: Db): Promise<void> {
+  await db.collection('patients').createIndex(
+    { clinicId: 1, isActive: 1 },
+    { background: true, name: 'clinicId_1_isActive_1' }
+  );
+}
+
+export async function down(db: Db): Promise<void> {
+  await db.collection('patients').dropIndex('clinicId_1_isActive_1').catch(() => {});
+}
+```
+
+### CI / Deployment
+
+- `migrate:up` runs automatically in the CI `test` job before the test suite (see `.github/workflows/ci.yml`).
+- Run `migrate:up` as part of your deployment pipeline before starting the API server to ensure the database schema is always up to date.
+
+### Rollback Strategy
+
+If a migration causes issues in production:
+
+1. Run `npm run migrate:down --workspace=api` to revert the last migration.
+2. Fix the migration file.
+3. Re-run `npm run migrate:up --workspace=api`.
 
 ## Testing
 

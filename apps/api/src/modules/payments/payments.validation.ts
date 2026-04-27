@@ -1,25 +1,38 @@
 import { z } from 'zod';
 
 const objectIdRegex = /^[a-f\d]{24}$/i;
-const objectId = z.string().regex(objectIdRegex, 'Invalid ObjectId');
 
 export const createPaymentIntentSchema = z.object({
-  patientId: objectId.optional(),
-  // eslint-disable-next-line security/detect-unsafe-regex -- anchored regex with limited input is safe
+  patientId: z.string().regex(objectIdRegex, 'Invalid patientId').optional(),
   amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'amount must be a positive numeric string'),
   destination: z.string().min(1, 'destination is required'),
   memo: z.string().optional(),
+  /** 'XLM' | 'USDC' — defaults to 'XLM' */
+  currency: z.enum(['XLM', 'USDC']).optional(),
   assetCode: z.string().optional().default('XLM'),
   issuer: z.string().optional(),
+  // Path payment fields
+  sourceAssetCode: z.string().optional(),
+  sourceAssetIssuer: z.string().optional(),
+  destinationAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
+  maxSourceAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
+  path: z.array(z.string()).optional(),
+  /** Fee speed tier — defaults to 'standard' */
+  feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
+  /** If true, platform wraps the inner tx in a fee bump and pays the fee */
+  sponsorFee: z.boolean().optional().default(false),
 });
 
 export const confirmPaymentSchema = z.object({
-  intentId: z.string().min(1, 'intentId is required'),
   txHash: z.string().min(1, 'txHash is required'),
 });
 
+export const confirmPaymentParamsSchema = z.object({
+  intentId: z.string().min(1, 'intentId is required'),
+});
+
 export const listPaymentsQuerySchema = z.object({
-  patientId: objectId.optional(),
+  patientId: z.string().regex(objectIdRegex, 'Invalid patientId').optional(),
   status: z.enum(['pending', 'confirmed', 'failed']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -28,3 +41,4 @@ export const listPaymentsQuerySchema = z.object({
 export type CreatePaymentIntentDto = z.infer<typeof createPaymentIntentSchema>;
 export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
 export type ConfirmPaymentDto = z.infer<typeof confirmPaymentSchema>;
+export type ConfirmPaymentParamsDto = z.infer<typeof confirmPaymentParamsSchema>;

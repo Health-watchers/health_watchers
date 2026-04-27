@@ -1,7 +1,2 @@
-import { Request, Response, NextFunction, RequestHandler } from 'express';
-
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
-): RequestHandler {
-  return (req, res, next) => fn(req, res, next).catch(next);
-}
+// Re-export from canonical location to avoid duplicate implementations
+export { asyncHandler } from '../utils/asyncHandler';

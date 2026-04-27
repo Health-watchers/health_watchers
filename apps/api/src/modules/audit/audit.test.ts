@@ -1,4 +1,4 @@
-import { AuditLogModel, AuditAction } from './audit.model';
+import { AuditLogModel } from './audit.model';
 import { auditLog } from './audit.service';
 
 describe('Audit Logging', () => {
@@ -11,7 +11,7 @@ describe('Audit Logging', () => {
       });
 
       await expect(
-        AuditLogModel.updateOne({ _id: log._id }, { action: 'LOGIN_FAILURE' }),
+        AuditLogModel.updateOne({ _id: log._id }, { action: 'LOGIN_FAILURE' })
       ).rejects.toThrow('Audit logs are immutable and cannot be updated');
     });
 
@@ -23,7 +23,7 @@ describe('Audit Logging', () => {
       });
 
       await expect(AuditLogModel.deleteOne({ _id: log._id })).rejects.toThrow(
-        'Audit logs are immutable and cannot be deleted',
+        'Audit logs are immutable and cannot be deleted'
       );
     });
   });
@@ -36,7 +36,7 @@ describe('Audit Logging', () => {
           'x-forwarded-for': '192.168.1.1',
         },
         socket: { remoteAddress: '127.0.0.1' },
-      } as unknown as import('express').Request;
+      } as any;
 
       await auditLog(
         {
@@ -47,7 +47,7 @@ describe('Audit Logging', () => {
           clinicId: 'clinic-123',
           outcome: 'SUCCESS',
         },
-        mockReq,
+        mockReq
       );
 
       const logs = await AuditLogModel.find({ resourceId: 'patient-123' });
@@ -59,9 +59,7 @@ describe('Audit Logging', () => {
 
     it('should not throw error if audit logging fails', async () => {
       // This should not throw even with invalid data
-      await expect(
-        auditLog({ action: 'INVALID_ACTION' as AuditAction }, undefined),
-      ).resolves.not.toThrow();
+      await expect(auditLog({ action: 'INVALID_ACTION' as any }, undefined)).resolves.not.toThrow();
     });
   });
 });

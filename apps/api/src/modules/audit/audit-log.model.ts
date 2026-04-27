@@ -28,7 +28,7 @@ const auditLogSchema = new Schema<AuditLog>(
   {
     // Append-only: disable updates and deletes at the schema level
     versionKey: false,
-  },
+  }
 );
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);

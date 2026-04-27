@@ -1,6 +1,7 @@
 import { Request } from 'express';
 import { Types } from 'mongoose';
 import { AuditAction, AuditLogModel } from './audit.model';
+import logger from '../../utils/logger';
 
 interface AuditLogParams {
   action: AuditAction;
@@ -41,6 +42,6 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
     });
   } catch (error) {
     // Log the error but don't throw - audit logging should not break the main flow
-    console.error('Failed to create audit log:', error);
+    logger.error({ err: error }, 'Failed to create audit log');
   }
 }

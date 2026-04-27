@@ -25,7 +25,7 @@ export default function AiSummaryCard({
     setTimeout(() => {
       setSummary(
         initialSummary ??
-          `${patientName} presents with a focused complaint pattern across recent visits. AI review suggests conservative management is appropriate with close follow-up and escalation to imaging if symptoms persist or worsen.`,
+          `${patientName} presents with a focused complaint pattern across recent visits. AI review suggests conservative management is appropriate with close follow-up and escalation to imaging if symptoms persist or worsen.`
       );
       setLoading(false);
     }, 1800);
@@ -50,7 +50,7 @@ export default function AiSummaryCard({
         <button
           onClick={generateSummary}
           disabled={loading}
-          className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
         >
           {/* Regenerate icon */}
           <svg

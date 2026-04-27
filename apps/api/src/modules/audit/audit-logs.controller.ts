@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/middlewares/async.handler';
-import { AuditLogModel } from './audit-log.model';
+import { AuditLogModel } from './audit.model';
 import { parsePagination } from '@api/utils/paginate';
 
 const router = Router();
@@ -36,7 +36,7 @@ router.get(
     ]);
 
     return res.json({ status: 'success', data: logs, meta: { total, page, limit } });
-  }),
+  })
 );
 
 export const auditLogRoutes = router;

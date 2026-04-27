@@ -37,7 +37,7 @@ export const AssetSelector = forwardRef<HTMLSelectElement, AssetSelectorProps>(
           aria-invalid={Boolean(error)}
           className={[
             'w-full rounded-md border bg-white px-3 py-2 text-sm text-neutral-900',
-            'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+            'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-50',
             error ? 'border-danger-500' : 'border-neutral-200',
             className ?? '',
@@ -50,10 +50,10 @@ export const AssetSelector = forwardRef<HTMLSelectElement, AssetSelectorProps>(
             </option>
           ))}
         </select>
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <p className="text-danger-500 text-xs">{error}</p>}
       </div>
     );
-  },
+  }
 );
 
 AssetSelector.displayName = 'AssetSelector';

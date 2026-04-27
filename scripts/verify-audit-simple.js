@@ -37,7 +37,7 @@ check('Audit Service File', fs.existsSync(auditServicePath), 'audit.service.ts e
 // Check 3: Verify audit controller file exists
 const auditControllerPath = path.join(
   __dirname,
-  '../apps/api/src/modules/audit/audit.controller.ts',
+  '../apps/api/src/modules/audit/audit.controller.ts'
 );
 check('Audit Controller File', fs.existsSync(auditControllerPath), 'audit.controller.ts exists');
 
@@ -68,7 +68,7 @@ if (fs.existsSync(auditModelPath)) {
     check(
       `Model Field: ${field}`,
       modelContent.includes(field),
-      `Field '${field}' defined in schema`,
+      `Field '${field}' defined in schema`
     );
   });
 }
@@ -101,12 +101,12 @@ if (fs.existsSync(auditModelPath)) {
   check(
     'Immutability: Update Protection',
     modelContent.includes('updateOne') && modelContent.includes('immutable'),
-    'Pre-hooks prevent updates',
+    'Pre-hooks prevent updates'
   );
   check(
     'Immutability: Delete Protection',
     modelContent.includes('deleteOne') && modelContent.includes('immutable'),
-    'Pre-hooks prevent deletes',
+    'Pre-hooks prevent deletes'
   );
 }
 
@@ -117,12 +117,12 @@ if (fs.existsSync(appPath)) {
   check(
     'Routes: Audit routes imported',
     appContent.includes('auditRoutes'),
-    'auditRoutes imported in app.ts',
+    'auditRoutes imported in app.ts'
   );
   check(
     'Routes: Audit routes registered',
     appContent.includes('/api/v1/audit-logs') && appContent.includes('auditRoutes'),
-    'Audit routes registered at /api/v1/audit-logs',
+    'Audit routes registered at /api/v1/audit-logs'
   );
 }
 
@@ -133,36 +133,36 @@ if (fs.existsSync(authControllerPath)) {
   check(
     'Integration: Auth controller imports auditLog',
     authContent.includes('auditLog'),
-    'auditLog imported in auth controller',
+    'auditLog imported in auth controller'
   );
   check(
     'Integration: LOGIN_SUCCESS logged',
     authContent.includes('LOGIN_SUCCESS'),
-    'LOGIN_SUCCESS event logged',
+    'LOGIN_SUCCESS event logged'
   );
   check(
     'Integration: LOGIN_FAILURE logged',
     authContent.includes('LOGIN_FAILURE'),
-    'LOGIN_FAILURE event logged',
+    'LOGIN_FAILURE event logged'
   );
 }
 
 // Check 11: Verify patient controller exists with audit logging
 const patientControllerPath = path.join(
   __dirname,
-  '../apps/api/src/modules/patients/patients.controller.ts',
+  '../apps/api/src/modules/patients/patients.controller.ts'
 );
 if (fs.existsSync(patientControllerPath)) {
   const patientContent = fs.readFileSync(patientControllerPath, 'utf8');
   check(
     'Integration: Patient controller has audit logging',
     patientContent.includes('auditLog') || patientContent.includes('auditMiddleware'),
-    'Patient operations are audited',
+    'Patient operations are audited'
   );
   check(
     'Integration: PATIENT_VIEW logged',
     patientContent.includes('PATIENT_VIEW'),
-    'PATIENT_VIEW event logged',
+    'PATIENT_VIEW event logged'
   );
 }
 

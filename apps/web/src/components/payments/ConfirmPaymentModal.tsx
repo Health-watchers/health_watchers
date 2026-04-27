@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Spinner } from '@/components/ui/Spinner';
 
 export interface ConfirmPaymentModalProps {
   open: boolean;
@@ -57,9 +58,9 @@ export function ConfirmPaymentModal({
     >
       {state === 'success' ? (
         <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success-50">
+          <div className="bg-success-50 flex h-12 w-12 items-center justify-center rounded-full">
             <svg
-              className="w-6 h-6 text-success-500"
+              className="text-success-500 h-6 w-6"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -90,7 +91,7 @@ export function ConfirmPaymentModal({
           />
 
           {state === 'error' && (
-            <p role="alert" className="text-xs text-danger-500">
+            <p role="alert" className="text-danger-500 text-xs">
               {errorMsg}
             </p>
           )}

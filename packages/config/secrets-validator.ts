@@ -7,7 +7,9 @@ const REQUIRED_VARS = [
   'JWT_ACCESS_TOKEN_SECRET',
   'JWT_REFRESH_TOKEN_SECRET',
   'STELLAR_PLATFORM_PUBLIC_KEY',
+  'STELLAR_SECRET_KEY',
   'FIELD_ENCRYPTION_KEY',
+  'KEYPAIR_ENCRYPTION_KEY',
 ] as const;
 
 export function validateStartupSecrets(): void {

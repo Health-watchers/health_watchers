@@ -1,0 +1,191 @@
+{
+  "title": "Health Watchers API",
+  "uid": "health-watchers-api",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\"}[1m])) by (method)",
+          "legendFormat": "{{ method }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{job=\"health-watchers-api\",status=~\"5..\"}[1m])) / sum(rate(http_requests_total{job=\"health-watchers-api\"}[1m]))",
+          "legendFormat": "Error Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Response Time Percentiles",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"health-watchers-api\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"health-watchers-api\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"health-watchers-api\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active HTTP Connections",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "nodejs_active_handles_total{job=\"health-watchers-api\"}",
+          "legendFormat": "Active Handles"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Node.js Heap Used",
+      "type": "timeseries",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "nodejs_heap_size_used_bytes{job=\"health-watchers-api\"}",
+          "legendFormat": "Heap Used"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Patients Created (total)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 16, "w": 6, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(patients_created_total)",
+          "legendFormat": "Patients"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Encounters Created (total)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 16, "w": 6, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(encounters_created_total)",
+          "legendFormat": "Encounters"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Payments Initiated (total)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(payments_initiated_total)",
+          "legendFormat": "Payments"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "AI Requests (total)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(ai_requests_total)",
+          "legendFormat": "AI Requests"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Business Metrics Trend",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(patients_created_total[5m])",
+          "legendFormat": "Patients/s"
+        },
+        {
+          "expr": "rate(encounters_created_total[5m])",
+          "legendFormat": "Encounters/s"
+        },
+        {
+          "expr": "rate(payments_initiated_total[5m])",
+          "legendFormat": "Payments/s"
+        },
+        {
+          "expr": "rate(ai_requests_total[5m])",
+          "legendFormat": "AI Requests/s"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "MongoDB Connection Pool",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 30, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "mongodb_connection_pool_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Pool Size"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Stellar Service Request Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 30, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-stellar\"}[1m])) by (method)",
+          "legendFormat": "{{ method }}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: health-watchers
+description: A comprehensive healthcare management platform for patient records, encounters, and payments with Stellar blockchain integration
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - healthcare
+  - patient-management
+  - stellar
+  - blockchain
+  - medical-records
+home: https://github.com/Chisom92/health_watchers
+sources:
+  - https://github.com/Chisom92/health_watchers
+maintainers:
+  - name: Health Watchers Team
+    url: https://github.com/Chisom92/health_watchers

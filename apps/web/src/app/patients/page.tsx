@@ -1,8 +1,15 @@
+import { Metadata } from 'next';
 import { useTranslations } from 'next-intl';
 import PatientsClient from './PatientsClient';
 
+export const metadata: Metadata = {
+  title: 'Patients',
+  description: 'Manage patient records, view medical history, and track patient care.',
+};
+
 export default function PatientsPage() {
   const t = useTranslations('patients');
+  const tNew = useTranslations('patientNew');
   return (
     <PatientsClient
       labels={{
@@ -16,6 +23,7 @@ export default function PatientsPage() {
         contact: t('contact'),
         search: t('search'),
         view: t('view'),
+        registerNew: tNew('title'),
       }}
     />
   );

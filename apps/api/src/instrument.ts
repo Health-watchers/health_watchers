@@ -8,17 +8,12 @@ Sentry.init({
 
   // Performance monitoring
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-  profilesSampleRate: 1.0,
 
   // Alert thresholds are configured in the Sentry dashboard:
   // - Error rate alert: > 1% over 5 min window
   // - p95 latency alert: > 2000ms
 
-  beforeSend(event) {
-    return scrubPHI(event);
-  },
-
-  beforeSendTransaction(event) {
+  beforeSend(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
     return scrubPHI(event);
   },
 });
@@ -43,7 +38,7 @@ const PHI_KEYS = [
   'insuranceId',
 ];
 
-function scrubPHI<T extends Sentry.Event>(event: T): T {
+function scrubPHI<T extends Sentry.ErrorEvent>(event: T): T {
   if (event.request?.data) {
     event.request.data = redactKeys(event.request.data);
   }

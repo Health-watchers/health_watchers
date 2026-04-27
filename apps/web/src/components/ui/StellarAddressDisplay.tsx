@@ -31,13 +31,13 @@ export function StellarAddressDisplay({
           target="_blank"
           rel="noopener noreferrer"
           title={value}
-          className="font-mono text-xs text-primary-500 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+          className="text-primary-500 focus-visible:ring-primary-500 rounded font-mono text-xs hover:underline focus:outline-none focus-visible:ring-2"
         >
           {display}
         </a>
         {/* external link icon */}
         <svg
-          className="w-3 h-3 text-neutral-400"
+          className="h-3 w-3 text-neutral-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -58,7 +58,7 @@ export function StellarAddressDisplay({
     <span
       title={value}
       className={[
-        'font-mono text-xs text-neutral-700 bg-neutral-100 px-1.5 py-0.5 rounded',
+        'rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-neutral-700',
         className ?? '',
       ].join(' ')}
       {...props}

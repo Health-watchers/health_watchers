@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { auditLog } from '../modules/audit/audit.service';
 import { AuditAction } from '../modules/audit/audit.model';
+import logger from '../utils/logger';
 
 /**
  * Middleware to automatically log audit events for specific routes
@@ -27,7 +28,7 @@ export function auditMiddleware(action: AuditAction, resourceType?: string) {
           },
           req,
         ).catch((error) => {
-          console.error('Audit logging failed:', error);
+          logger.error({ err: error }, 'Audit logging failed');
         });
       }
 

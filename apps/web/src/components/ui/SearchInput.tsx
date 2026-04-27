@@ -8,9 +8,9 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
   ({ className, value, onClear, ...props }, ref) => (
     <div className="relative flex items-center">
       {/* Search icon */}
-      <span className="absolute left-3 text-neutral-400 pointer-events-none">
+      <span className="pointer-events-none absolute left-3 text-neutral-500">
         <svg
-          className="w-4 h-4"
+          className="h-4 w-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -31,8 +31,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         role="searchbox"
         value={value}
         className={[
-          'w-full rounded-md border border-neutral-200 bg-neutral-0 pl-9 pr-9 py-2 text-sm text-neutral-900 placeholder:text-neutral-400',
-          'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+          'bg-neutral-0 w-full rounded-md border border-neutral-200 py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500',
+          'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
           'disabled:cursor-not-allowed disabled:opacity-50',
           className ?? '',
         ].join(' ')}
@@ -45,10 +45,10 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           type="button"
           onClick={onClear}
           aria-label="Clear search"
-          className="absolute right-2.5 text-neutral-400 hover:text-neutral-700 focus:outline-none"
+          className="absolute right-2.5 text-neutral-500 hover:text-neutral-700 focus:outline-none"
         >
           <svg
-            className="w-4 h-4"
+            className="h-4 w-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -64,7 +64,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         </button>
       )}
     </div>
-  ),
+  )
 );
 
 SearchInput.displayName = 'SearchInput';

@@ -20,7 +20,6 @@ module.exports = {
           allowSyntheticDefaultImports: true,
           strict: false,
           skipLibCheck: true,
-          ignoreDeprecations: '6.0',
           types: ['jest', 'node'],
           baseUrl: '.',
           paths: {

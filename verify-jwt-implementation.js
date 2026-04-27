@@ -190,7 +190,7 @@ test('Token from OTHER SERVICE (same secret, different iss/aud) is REJECTED', ()
       expiresIn: '15m',
       issuer: 'other-service-api', // Different issuer
       audience: 'other-service-client', // Different audience
-    },
+    }
   );
 
   try {

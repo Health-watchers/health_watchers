@@ -197,7 +197,7 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
         </div>
       </form>
     );
-  },
+  }
 );
 
 PatientForm.displayName = 'PatientForm';

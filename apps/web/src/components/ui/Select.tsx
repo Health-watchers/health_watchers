@@ -21,7 +21,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="flex flex-col gap-1">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-neutral-700">
+          <label htmlFor={inputId} className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
             {label}
           </label>
         )}
@@ -34,10 +34,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             className={[
-              'w-full appearance-none rounded-md border bg-neutral-0 px-3 py-2 pr-8 text-sm text-neutral-900',
-              'transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+              'bg-neutral-0 w-full appearance-none rounded-md border px-3 py-2 pr-8 text-sm text-neutral-900',
+              'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              hasError ? 'border-danger-500' : 'border-neutral-200',
+              hasError ? 'border-danger-500' : 'border-neutral-200 dark:border-neutral-600',
               className ?? '',
             ].join(' ')}
             {...props}
@@ -50,9 +50,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ))}
           </select>
           {/* Chevron icon */}
-          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400">
+          <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-neutral-500">
             <svg
-              className="w-4 h-4"
+              className="h-4 w-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -68,7 +68,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           </span>
         </div>
         {hasError && (
-          <p id={`${inputId}-error`} className="text-xs text-danger-500">
+          <p id={`${inputId}-error`} className="text-danger-500 text-xs">
             {error}
           </p>
         )}
@@ -79,7 +79,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         )}
       </div>
     );
-  },
+  }
 );
 
 Select.displayName = 'Select';

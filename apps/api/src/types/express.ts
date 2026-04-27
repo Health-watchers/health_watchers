@@ -4,13 +4,15 @@ export type AppRole =
   | 'DOCTOR'
   | 'NURSE'
   | 'ASSISTANT'
-  | 'READ_ONLY';
+  | 'READ_ONLY'
+  | 'PATIENT';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      user?: { userId: string; role: AppRole; clinicId: string };
+      user?:      { userId: string; role: AppRole; clinicId: string };
+      requestId?: string;
     }
   }
 }

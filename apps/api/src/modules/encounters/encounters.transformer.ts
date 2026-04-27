@@ -4,47 +4,42 @@ import { Diagnosis, Prescription, VitalSigns } from './encounter.model';
 export interface EncounterResponse {
   id: string;
   patientId: string;
+  patient?: { firstName: string; lastName: string; systemId: string };
   clinicId: string;
   attendingDoctorId: string;
   chiefComplaint: string;
   status: string;
   notes?: string;
+  soapNotes?: { subjective?: string; objective?: string; assessment?: string; plan?: string };
   treatmentPlan?: string;
   diagnosis?: Diagnosis[];
   vitalSigns?: VitalSigns;
   prescriptions?: Prescription[];
   followUpDate?: string;
   aiSummary?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export function toEncounterResponse(
-  doc: Document & {
-    patientId: unknown;
-    clinicId: unknown;
-    attendingDoctorId: unknown;
-    chiefComplaint: string;
-    status: string;
-    notes?: string;
-    treatmentPlan?: string;
-    diagnosis?: Diagnosis[];
-    vitalSigns?: VitalSigns;
-    prescriptions?: Prescription[];
-    followUpDate?: Date | string;
-    aiSummary?: string;
-    createdAt?: Date | string;
-    updatedAt?: Date | string;
-  },
-): EncounterResponse {
+export function toEncounterResponse(doc: Document & Record<string, any>): EncounterResponse {
+  const patient = doc.patientId;
+  const patientId = patient && typeof patient === 'object' && '_id' in patient
+    ? String(patient._id)
+    : String(patient);
+
   return {
     id: String(doc._id),
-    patientId: String(doc.patientId),
+    patientId,
+    patient: patient && typeof patient === 'object' && 'firstName' in patient
+      ? { firstName: patient.firstName, lastName: patient.lastName, systemId: patient.systemId }
+      : undefined,
     clinicId: String(doc.clinicId),
     attendingDoctorId: String(doc.attendingDoctorId),
     chiefComplaint: doc.chiefComplaint,
     status: doc.status,
     notes: doc.notes,
+    soapNotes: doc.soapNotes,
     treatmentPlan: doc.treatmentPlan,
     diagnosis: doc.diagnosis,
     vitalSigns: doc.vitalSigns,
@@ -52,7 +47,8 @@ export function toEncounterResponse(
     followUpDate:
       doc.followUpDate instanceof Date ? doc.followUpDate.toISOString() : doc.followUpDate,
     aiSummary: doc.aiSummary,
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : (doc.createdAt ?? ''),
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : (doc.updatedAt ?? ''),
+    isActive: doc.isActive !== undefined ? doc.isActive : true,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   };
 }

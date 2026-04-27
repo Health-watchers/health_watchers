@@ -1,6 +1,3 @@
-import { Document } from 'mongoose';
-import { PaymentRecord } from './models/payment-record.model';
-
 export interface PaymentResponse {
   id: string;
   intentId: string;
@@ -15,11 +12,15 @@ export interface PaymentResponse {
   confirmedAt?: string;
   createdAt: string;
   updatedAt: string;
+  sourceAssetCode?: string;
+  sourceAssetIssuer?: string;
+  destinationAmount?: string;
+  maxSourceAmount?: string;
+  path?: string[];
 }
 
-export function toPaymentResponse(
-  doc: Document<unknown, unknown, PaymentRecord> & PaymentRecord,
-): PaymentResponse {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toPaymentResponse(doc: any): PaymentResponse {
   return {
     id: String(doc._id),
     intentId: doc.intentId,
@@ -32,7 +33,12 @@ export function toPaymentResponse(
     status: doc.status,
     txHash: doc.txHash,
     confirmedAt: doc.confirmedAt instanceof Date ? doc.confirmedAt.toISOString() : doc.confirmedAt,
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : (doc.createdAt ?? ''),
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : (doc.updatedAt ?? ''),
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+    sourceAssetCode: doc.sourceAssetCode,
+    sourceAssetIssuer: doc.sourceAssetIssuer ?? undefined,
+    destinationAmount: doc.destinationAmount,
+    maxSourceAmount: doc.maxSourceAmount,
+    path: doc.path,
   };
 }

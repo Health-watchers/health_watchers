@@ -12,12 +12,13 @@ export async function paginate<T>(
   query: FilterQuery<T>,
   page: number,
   limit: number,
+  sort: Record<string, 1 | -1> = { createdAt: -1 }
 ): Promise<{ data: T[]; meta: PaginationMeta }> {
   const [total, data] = await Promise.all([
     model.countDocuments(query),
     model
       .find(query)
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean() as Promise<T[]>,
@@ -26,7 +27,7 @@ export async function paginate<T>(
 }
 
 export function parsePagination(
-  query: Record<string, string | undefined>,
+  query: Record<string, any>
 ): { page: number; limit: number } | null {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = parseInt(query.limit as string) || 20;

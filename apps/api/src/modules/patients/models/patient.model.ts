@@ -4,6 +4,28 @@ import { sanitizeText } from '@api/utils/sanitize';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
+export interface IAllergy {
+  allergen: string;
+  allergenType: 'drug' | 'food' | 'environmental' | 'other';
+  reaction: string;
+  severity: 'mild' | 'moderate' | 'severe' | 'life-threatening';
+  onsetDate?: Date;
+  recordedBy: Schema.Types.ObjectId;
+  recordedAt: Date;
+  isActive: boolean;
+}
+
+export interface IEmergencyContact {
+  name: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  isPrimary: boolean;
+}
+
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 export interface Patient {
   systemId: string;
   firstName: string;
@@ -15,7 +37,50 @@ export interface Patient {
   address?: string;
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
+  allergies: IAllergy[];
+  emergencyContacts?: IEmergencyContact[];
+  riskScore?: number;
+  riskLevel?: RiskLevel;
+  riskFactors?: string[];
+  lastRiskCalculatedAt?: Date;
+  nextRiskReviewDate?: Date;
+  photoUrl?: string;
+  thumbnailUrl?: string;
 }
+
+const allergySchema = new Schema<IAllergy>(
+  {
+    allergen: { type: String, required: true, trim: true },
+    allergenType: {
+      type: String,
+      enum: ['drug', 'food', 'environmental', 'other'],
+      required: true,
+    },
+    reaction: { type: String, required: true },
+    severity: {
+      type: String,
+      enum: ['mild', 'moderate', 'severe', 'life-threatening'],
+      required: true,
+    },
+    onsetDate: { type: Date },
+    recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedAt: { type: Date, default: () => new Date() },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: true }
+);
+
+const emergencyContactSchema = new Schema<IEmergencyContact>(
+  {
+    name: { type: String, required: true, trim: true },
+    relationship: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    email: { type: String, trim: true },
+    address: { type: String, trim: true },
+    isPrimary: { type: Boolean, default: false },
+  },
+  { _id: true }
+);
 
 const patientSchema = new Schema<Patient>(
   {
@@ -29,23 +94,33 @@ const patientSchema = new Schema<Patient>(
     address: { type: String },
     clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     isActive: { type: Boolean, default: true, index: true },
+    allergies: { type: [allergySchema], default: [] },
+    emergencyContacts: { type: [emergencyContactSchema], default: [] },
+    riskScore: { type: Number, min: 0, max: 100 },
+    riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+    riskFactors: { type: [String], default: undefined },
+    lastRiskCalculatedAt: { type: Date },
+    nextRiskReviewDate: { type: Date },
+    photoUrl: { type: String },
+    thumbnailUrl: { type: String },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
   for (const field of PHI_FIELDS) {
     const val = this[field] as string | undefined;
-    if (val) (this as Record<string, unknown>)[field] = encrypt(val);
+    if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
   }
 });
 
-function decryptDoc(doc: Record<string, unknown> | null) {
-  if (!doc) return;
+function decryptDoc(doc: unknown) {
+  if (!doc || typeof doc !== 'object') return;
+  const d = doc as Record<string, unknown>;
   for (const field of PHI_FIELDS) {
-    const val = doc[field] as string | undefined;
-    if (val) doc[field] = decrypt(val);
+    const val = d[field] as string | undefined;
+    if (val) d[field] = decrypt(val);
   }
 }
 
@@ -57,5 +132,26 @@ patientSchema.post('find', function (docs: Record<string, unknown>[]) {
 });
 patientSchema.post('findOne', decryptDoc);
 patientSchema.post('findOneAndUpdate', decryptDoc);
+
+patientSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return null;
+  const dob = new Date(this.dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+});
+
+patientSchema.virtual('ageGroup').get(function () {
+  const age = (this as any).age;
+  if (age === null) return null;
+  if (age < 1)  return 'infant';
+  if (age < 3)  return 'toddler';
+  if (age < 12) return 'child';
+  if (age < 18) return 'adolescent';
+  if (age < 65) return 'adult';
+  return 'elderly';
+});
 
 export const PatientModel = models.Patient || model<Patient>('Patient', patientSchema);

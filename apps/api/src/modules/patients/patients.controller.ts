@@ -1,47 +1,83 @@
 import { Router, Request, Response } from 'express';
-import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
-import { validateRequest } from '@api/middlewares/validate.middleware';
-import { asyncHandler } from '@api/utils/asyncHandler';
-import { paginate, parsePagination } from '@api/utils/paginate';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { paginate, parsePagination } from '../../utils/paginate';
+import { emitToClinic } from '@api/realtime/socket';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
+import { PaymentRecordModel } from '../payments/models/payment-record.model';
+import { toPaymentResponse } from '../payments/payments.transformer';
+import { EncounterModel } from '../encounters/encounter.model';
+import { toEncounterResponse } from '../encounters/encounters.transformer';
+import { LabResultModel } from '../lab-results/lab-result.model';
 import {
   createPatientSchema,
   updatePatientSchema,
-  CreatePatientDto,
-  UpdatePatientDto,
+  patientQuerySchema,
+  patientSearchQuerySchema,
 } from './patients.validation';
+import { createAllergySchema, updateAllergySchema } from './allergy.validation';
+import { patientsCreatedTotal } from '../../services/metrics.service';
+import {
+  createEmergencyContactSchema,
+  updateEmergencyContactSchema,
+} from './emergency-contact.validation';
+import { auditLog } from '../audit/audit.service';
+import { withSpan } from '@api/utils/tracer';
+import { cache } from '@api/services/cache.service';
 
 const router = Router();
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
-const PATCH_ROLES = requireRoles('NURSE', 'DOCTOR', 'CLINIC_ADMIN');
+const ADMIN_ROLES = requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN');
+
+const ALLOWED_PATCH_FIELDS = new Set([
+  'firstName',
+  'lastName',
+  'dateOfBirth',
+  'sex',
+  'contactNumber',
+  'address',
+]);
+
+/** Calculate trend from last N readings: 'improving' | 'stable' | 'worsening' */
+function calcTrend(values: number[]): 'improving' | 'stable' | 'worsening' {
+  if (values.length < 2) return 'stable';
+  const first = values[0];
+  const last = values[values.length - 1];
+  const delta = last - first;
+  const threshold = first * 0.03; // 3% change threshold
+  if (Math.abs(delta) < threshold) return 'stable';
+  return delta < 0 ? 'improving' : 'worsening';
+}
 
 async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
     { _id: clinicId },
     { $inc: { value: 1 } },
-    { new: true, upsert: true },
+    { new: true, upsert: true }
   );
   const short = clinicId.slice(-6).toUpperCase();
   const padded = String(counter!.value).padStart(6, '0');
   return `HW-${short}-${padded}`;
 }
 
-// GET /patients
+// GET /patients?page=1&limit=20&clinicId=
 router.get(
   '/',
+  validateRequest({ query: patientQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, string>);
+    const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
       return res
         .status(400)
         .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
-    const filter: Record<string, unknown> = { isActive: true };
+    const filter: Record<string, any> = { isActive: true };
     if (req.query.clinicId) filter.clinicId = req.query.clinicId;
 
     const result = await paginate(PatientModel, filter, page, limit);
@@ -50,36 +86,97 @@ router.get(
       data: result.data.map(toPatientResponse),
       meta: result.meta,
     });
-  }),
+  })
 );
 
-// GET /patients/search
+// GET /patients/search?q=&sex=M&minAge=18&maxAge=65&active=true&registeredAfter=2024-01-01&page=1&limit=20
 router.get(
   '/search',
+  validateRequest({ query: patientSearchQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const q = String(req.query.q || '')
-      .toLowerCase()
-      .trim();
-    const docs = await PatientModel.find({
-      clinicId: req.user!.clinicId,
-      isActive: true,
-      searchName: { $regex: q, $options: 'i' },
-    }).sort({ createdAt: -1 });
-    return res.json({ status: 'success', data: docs.map(toPatientResponse) });
-  }),
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+
+    // Sanitize: trim and cap at 100 chars (schema enforces max, this is belt-and-suspenders)
+    const q = String(req.query.q || '').trim().slice(0, 100);
+
+    const filter: Record<string, any> = { clinicId: req.user!.clinicId };
+
+    // Active filter — default true
+    const activeParam = req.query.active;
+    filter.isActive = activeParam === undefined ? true : activeParam !== 'false';
+
+    // Sex filter
+    if (req.query.sex) filter.sex = req.query.sex;
+
+    // Age range → date-of-birth range
+    const now = new Date();
+    if (req.query.minAge !== undefined || req.query.maxAge !== undefined) {
+      filter.dateOfBirth = {};
+      if (req.query.maxAge !== undefined) {
+        const minDob = new Date(now);
+        minDob.setFullYear(minDob.getFullYear() - Number(req.query.maxAge) - 1);
+        filter.dateOfBirth.$gte = minDob.toISOString().slice(0, 10);
+      }
+      if (req.query.minAge !== undefined) {
+        const maxDob = new Date(now);
+        maxDob.setFullYear(maxDob.getFullYear() - Number(req.query.minAge));
+        filter.dateOfBirth.$lte = maxDob.toISOString().slice(0, 10);
+      }
+    }
+
+    // Registration date range
+    if (req.query.registeredAfter || req.query.registeredBefore) {
+      filter.createdAt = {};
+      if (req.query.registeredAfter) filter.createdAt.$gte = new Date(req.query.registeredAfter as string);
+      if (req.query.registeredBefore) filter.createdAt.$lte = new Date(req.query.registeredBefore as string);
+    }
+
+    let data: any[];
+    let total: number;
+
+    if (q) {
+      // Use MongoDB text index for full-text search with relevance scoring
+      filter.$text = { $search: q };
+      const [docs, count] = await Promise.all([
+        PatientModel.find(filter, { score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+        PatientModel.countDocuments(filter),
+      ]);
+      data = docs;
+      total = count;
+    } else {
+      // No query — return paginated list sorted by lastName
+      const result = await paginate(PatientModel, filter, page, limit, { lastName: 1 });
+      data = result.data;
+      total = result.meta.total;
+    }
+
+    return res.json({
+      status: 'success',
+      data: data.map(toPatientResponse),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  })
 );
 
 // GET /patients/:id
 router.get(
   '/:id',
+  cacheResponse(300, (req) => `${req.user?.clinicId}:patient:${req.params.id}`),
   asyncHandler(async (req: Request, res: Response) => {
-    const doc = await PatientModel.findOne({
-      _id: req.params.id,
-      clinicId: req.user!.clinicId,
-    });
+    const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(doc) });
-  }),
+  })
 );
 
 // POST /patients
@@ -88,74 +185,781 @@ router.post(
   WRITE_ROLES,
   validateRequest({ body: createPatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as CreatePatientDto;
-    const { firstName, lastName, ...rest } = body;
-    const clinicId = req.user!.clinicId;
-    const searchName = `${lastName.toLowerCase()} ${firstName.toLowerCase()}`;
-    const systemId = await nextSystemId(clinicId);
-    const patient = await PatientModel.create({
-      ...rest,
-      firstName,
-      lastName,
-      searchName,
-      systemId,
-      clinicId,
-    });
-    return res.status(201).json({ status: 'success', data: toPatientResponse(patient) });
-  }),
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
+    const searchName = `${firstName} ${lastName}`.toLowerCase();
+    const systemId = await nextSystemId(clinicId || req.user!.clinicId);
+    const doc = await withSpan(
+      'patient.create',
+      { 'clinic.id': clinicId || req.user!.clinicId },
+      async () =>
+        PatientModel.create({
+          systemId,
+          firstName,
+          lastName,
+          dateOfBirth: new Date(dateOfBirth),
+          sex,
+          contactNumber,
+          address,
+          clinicId: clinicId || req.user!.clinicId,
+          isActive: true,
+          searchName,
+        })
+    );
+    emitToClinic(String(clinicId || req.user!.clinicId), 'patient:created', { patientId: String(doc._id) });
+    patientsCreatedTotal.inc({ clinicId: clinicId || req.user!.clinicId });
+    return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
+  })
 );
 
-// PATCH /patients/:id — partial update scoped to caller's clinic
+// PUT /patients/:id
+router.put(
+  '/:id',
+  WRITE_ROLES,
+  validateRequest({ body: createPatientSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
+    const update: Record<string, any> = { contactNumber, address, sex };
+    if (firstName) update.firstName = firstName;
+    if (lastName) update.lastName = lastName;
+    if (firstName || lastName) {
+      update.searchName = `${firstName || ''} ${lastName || ''}`.toLowerCase().trim();
+    }
+    if (dateOfBirth) update.dateOfBirth = new Date(dateOfBirth);
+
+    const doc = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const clinicId = req.user!.clinicId;
+    await Promise.all([
+      cache.del(`${clinicId}:patient:${req.params.id}`),
+      cache.delPattern(`${clinicId}:GET:/dashboard*`),
+    ]);
+
+    return res.json({ status: 'success', data: toPatientResponse(doc) });
+  })
+);
+
+// PATCH /patients/:id — partial update of allowed fields only
 router.patch(
   '/:id',
-  PATCH_ROLES,
+  WRITE_ROLES,
   validateRequest({ body: updatePatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as UpdatePatientDto;
-    const clinicId = req.user!.clinicId;
-    const { firstName, lastName, ...rest } = body;
-    const update: Record<string, unknown> = { ...rest };
-
-    if (firstName !== undefined) update.firstName = firstName;
-    if (lastName !== undefined) update.lastName = lastName;
-
-    if (firstName !== undefined || lastName !== undefined) {
-      const existing = await PatientModel.findOne({
-        _id: req.params.id,
-        clinicId,
+    const disallowed = Object.keys(req.body).filter((k) => !ALLOWED_PATCH_FIELDS.has(k));
+    if (disallowed.length > 0) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: `Field(s) not updatable: ${disallowed.join(', ')}`,
       });
-      if (!existing)
-        return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-      const fn = firstName ?? existing.firstName;
-      const ln = lastName ?? existing.lastName;
-      update.searchName = `${ln.toLowerCase()} ${fn.toLowerCase()}`;
     }
 
-    const updated = await PatientModel.findOneAndUpdate({ _id: req.params.id, clinicId }, update, {
-      new: true,
-      runValidators: true,
-    });
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
+    const update: Record<string, any> = {};
+    if (sex !== undefined) update.sex = sex;
+    if (contactNumber !== undefined) update.contactNumber = contactNumber;
+    if (address !== undefined) update.address = address;
+    if (firstName !== undefined) update.firstName = firstName;
+    if (lastName !== undefined) update.lastName = lastName;
+    if (dateOfBirth !== undefined) update.dateOfBirth = new Date(dateOfBirth);
+
+    if (firstName !== undefined || lastName !== undefined) {
+      const doc = await PatientModel.findById(req.params.id);
+      if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+      update.searchName = `${firstName ?? doc.firstName} ${lastName ?? doc.lastName}`
+        .toLowerCase()
+        .trim();
+    }
+
+    const updated = await PatientModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
+      update,
+      { new: true, runValidators: true }
+    );
     if (!updated) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const clinicId = req.user!.clinicId;
+    await Promise.all([
+      cache.del(`${clinicId}:patient:${req.params.id}`),
+      cache.delPattern(`${clinicId}:GET:/dashboard*`),
+    ]);
+
     return res.json({ status: 'success', data: toPatientResponse(updated) });
-  }),
+  })
 );
 
 // DELETE /patients/:id — soft delete
 router.delete(
   '/:id',
-  WRITE_ROLES,
+  ADMIN_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await PatientModel.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
-      { new: true },
+      { new: true }
     );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
+  })
+);
+
+// GET /patients/:id/payments
+router.get(
+  '/:id/payments',
+  asyncHandler(async (req: Request, res: Response) => {
+    const pagination = parsePagination(req.query as Record<string, unknown>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const result = await paginate(
+      PaymentRecordModel,
+      { patientId: req.params.id, clinicId: req.user!.clinicId },
+      page,
+      limit
+    );
     return res.json({
       status: 'success',
-      data: { id: String(doc._id), isActive: false },
+      data: result.data.map(toPaymentResponse),
+      meta: result.meta,
     });
-  }),
+  })
+);
+
+// GET /patients/:id/encounters
+router.get(
+  '/:id/encounters',
+  asyncHandler(async (req: Request, res: Response) => {
+    const pagination = parsePagination(req.query as Record<string, unknown>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const result = await paginate(
+      EncounterModel,
+      { patientId: req.params.id, clinicId: req.user!.clinicId, isActive: true },
+      page,
+      limit,
+      { createdAt: -1 }
+    );
+    return res.json({
+      status: 'success',
+      data: result.data.map(toEncounterResponse),
+      meta: result.meta,
+    });
+  })
+);
+
+// GET /patients/:id/prescriptions - All prescriptions for a patient (across encounters)
+router.get(
+  '/:id/prescriptions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounters = await EncounterModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+      prescriptions: { $exists: true, $ne: [] },
+    })
+      .populate('prescriptions.prescribedBy', 'firstName lastName')
+      .sort({ createdAt: -1 });
+
+    // Flatten all prescriptions from all encounters
+    const allPrescriptions = encounters.flatMap((encounter) => {
+      return (encounter.prescriptions || []).map((prescription: any) => ({
+        ...(prescription.toObject ? prescription.toObject() : prescription),
+        encounterId: encounter._id,
+        encounterDate: encounter.createdAt,
+      }));
+    });
+
+    return res.json({
+      status: 'success',
+      data: allPrescriptions,
+      meta: {
+        total: allPrescriptions.length,
+        encountersWithPrescriptions: encounters.length,
+      },
+    });
+  })
+);
+
+// GET /patients/:id/vitals — all vital sign readings across encounters
+// Query params: ?type=bloodPressure&from=2024-01-01&to=2024-12-31
+router.get(
+  '/:id/vitals',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    const filter: Record<string, unknown> = {
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+      vitalSigns: { $exists: true, $ne: null },
+    };
+
+    if (req.query.from || req.query.to) {
+      const dateFilter: Record<string, Date> = {};
+      if (req.query.from) dateFilter.$gte = new Date(String(req.query.from));
+      if (req.query.to) dateFilter.$lte = new Date(String(req.query.to));
+      filter.createdAt = dateFilter;
+    }
+
+    const encounters = await EncounterModel.find(filter)
+      .sort({ createdAt: 1 })
+      .select('vitalSigns createdAt')
+      .lean();
+
+    const vitalType = req.query.type as string | undefined;
+
+    const readings = encounters
+      .filter((e) => e.vitalSigns && Object.keys(e.vitalSigns).length > 0)
+      .map((e) => ({
+        date: (e as any).createdAt,
+        vitals: vitalType
+          ? { [vitalType]: (e.vitalSigns as Record<string, unknown>)[vitalType] }
+          : e.vitalSigns,
+      }))
+      .filter((r) => {
+        if (!vitalType) return true;
+        return (r.vitals as Record<string, unknown>)[vitalType] !== undefined;
+      });
+
+    return res.json({ status: 'success', data: readings });
+  })
+);
+
+// GET /patients/:id/analytics — computed vital sign statistics
+router.get(
+  '/:id/analytics',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    const encounters = await EncounterModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    })
+      .sort({ createdAt: 1 })
+      .select('vitalSigns createdAt')
+      .lean();
+
+    // Blood pressure analytics
+    const bpReadings = encounters
+      .filter((e) => e.vitalSigns?.bloodPressure)
+      .map((e) => {
+        const [sys, dia] = (e.vitalSigns!.bloodPressure as string).split('/').map(Number);
+        return { systolic: sys, diastolic: dia, date: (e as any).createdAt };
+      })
+      .filter((r) => !isNaN(r.systolic) && !isNaN(r.diastolic));
+
+    const bpAnalytics =
+      bpReadings.length > 0
+        ? {
+            latest: {
+              systolic: bpReadings.at(-1)!.systolic,
+              diastolic: bpReadings.at(-1)!.diastolic,
+            },
+            average: {
+              systolic: Math.round(
+                bpReadings.reduce((s, r) => s + r.systolic, 0) / bpReadings.length
+              ),
+              diastolic: Math.round(
+                bpReadings.reduce((s, r) => s + r.diastolic, 0) / bpReadings.length
+              ),
+            },
+            trend: calcTrend(bpReadings.slice(-5).map((r) => r.systolic)),
+            readings: bpReadings.length,
+          }
+        : null;
+
+    // Weight analytics
+    const weightReadings = encounters
+      .filter((e) => e.vitalSigns?.weight != null)
+      .map((e) => ({ value: e.vitalSigns!.weight as number, date: (e as any).createdAt }));
+
+    const weightAnalytics =
+      weightReadings.length > 0
+        ? (() => {
+            const latest = weightReadings.at(-1)!.value;
+            const thirtyDayStart = weightReadings.find((r) => r.date >= thirtyDaysAgo);
+            const change30Days = thirtyDayStart
+              ? +(latest - thirtyDayStart.value).toFixed(1)
+              : null;
+            return {
+              latest,
+              change30Days,
+              trend: calcTrend(weightReadings.slice(-5).map((r) => r.value)),
+            };
+          })()
+        : null;
+
+    // Encounter frequency
+    const encounterFrequency = {
+      last30Days: encounters.filter((e) => (e as any).createdAt >= thirtyDaysAgo).length,
+      last90Days: encounters.filter((e) => (e as any).createdAt >= ninetyDaysAgo).length,
+    };
+
+    return res.json({
+      status: 'success',
+      data: {
+        bloodPressure: bpAnalytics,
+        weight: weightAnalytics,
+        encounterFrequency,
+      },
+    });
+  })
+);
+
+// GET /patients/:id/lab-results — All lab results for a patient
+router.get(
+  '/:id/lab-results',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const { sort = 'orderedAt', order = 'desc' } = req.query as Record<string, string>;
+    const sortField = ['orderedAt', 'testName'].includes(sort) ? sort : 'orderedAt';
+    const sortOrder = order === 'asc' ? 1 : -1;
+
+    const docs = await LabResultModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).sort({ [sortField]: sortOrder });
+    return res.json({ status: 'success', data: docs });
+  })
+);
+
+// ── Allergy endpoints ─────────────────────────────────────────────────────────
+
+// GET /patients/:id/allergies
+router.get(
+  '/:id/allergies',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: patient.allergies.filter((a) => a.isActive) });
+  })
+);
+
+// POST /patients/:id/allergies
+router.post(
+  '/:id/allergies',
+  WRITE_ROLES,
+  validateRequest({ body: createAllergySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const allergy = {
+      ...req.body,
+      recordedBy: req.user!.userId,
+      recordedAt: new Date(),
+      isActive: true,
+      ...(req.body.onsetDate && { onsetDate: new Date(req.body.onsetDate) }),
+    };
+    patient.allergies.push(allergy as any);
+    await patient.save();
+
+    const added = patient.allergies[patient.allergies.length - 1];
+    auditLog(
+      {
+        action: 'ALLERGY_CREATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergen: allergy.allergen, severity: allergy.severity },
+      },
+      req
+    );
+    return res.status(201).json({ status: 'success', data: added });
+  })
+);
+
+// PUT /patients/:id/allergies/:allergyId
+router.put(
+  '/:id/allergies/:allergyId',
+  WRITE_ROLES,
+  validateRequest({ body: updateAllergySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const allergy = patient.allergies.id(req.params.allergyId);
+    if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
+
+    Object.assign(allergy, req.body);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'ALLERGY_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergyId: req.params.allergyId },
+      },
+      req
+    );
+    return res.json({ status: 'success', data: allergy });
+  })
+);
+
+// DELETE /patients/:id/allergies/:allergyId — soft delete
+router.delete(
+  '/:id/allergies/:allergyId',
+  WRITE_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const allergy = patient.allergies.id(req.params.allergyId);
+    if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
+
+    allergy.isActive = false;
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'ALLERGY_DELETE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { allergyId: req.params.allergyId },
+      },
+      req
+    );
+    return res.json({ status: 'success', data: { id: req.params.allergyId, isActive: false } });
+  })
+);
+
+// POST /patients/import — bulk CSV import (CLINIC_ADMIN only)
+import { parse } from 'csv-parse/sync';
+import { csvUploadMiddleware, handleCsvUploadError } from '@api/middlewares/csv-upload.middleware';
+import { ImportLogModel } from './models/import-log.model';
+
+const MAX_ROWS = 10_000;
+const MAX_ERRORS = 100;
+const BATCH_SIZE = 100;
+
+router.post(
+  '/import',
+  ADMIN_ROLES,
+  csvUploadMiddleware,
+  handleCsvUploadError,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'ValidationError', message: 'CSV file is required' });
+    }
+
+    const clinicId = req.user!.clinicId;
+    const userId = req.user!.userId;
+
+    let rows: Record<string, string>[];
+    try {
+      rows = parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+    } catch {
+      return res.status(400).json({ error: 'ParseError', message: 'Invalid CSV format' });
+    }
+
+    if (rows.length > MAX_ROWS) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: `Maximum ${MAX_ROWS} rows allowed` });
+    }
+
+    const errors: { row: number; field: string; error: string }[] = [];
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    // Process in batches of BATCH_SIZE
+    for (let batchStart = 0; batchStart < rows.length; batchStart += BATCH_SIZE) {
+      if (errors.length >= MAX_ERRORS) break;
+      const batch = rows.slice(batchStart, batchStart + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (row, idx) => {
+          const rowNum = batchStart + idx + 2; // 1-indexed + header row
+          if (errors.length >= MAX_ERRORS) {
+            skippedCount++;
+            return;
+          }
+
+          // Validate with Zod
+          const parsed = createPatientSchema.safeParse({
+            firstName: row.firstName,
+            lastName: row.lastName,
+            dateOfBirth: row.dateOfBirth,
+            sex: row.sex,
+            contactNumber: row.contactNumber || undefined,
+            address: row.address || undefined,
+          });
+
+          if (!parsed.success) {
+            const issue = parsed.error.issues[0];
+            errors.push({ row: rowNum, field: issue.path[0] as string, error: issue.message });
+            skippedCount++;
+            return;
+          }
+
+          // Duplicate check: same name + DOB in this clinic
+          const searchName = `${parsed.data.firstName} ${parsed.data.lastName}`.toLowerCase();
+          const exists = await PatientModel.exists({
+            clinicId,
+            searchName,
+            dateOfBirth: parsed.data.dateOfBirth,
+          });
+          if (exists) {
+            skippedCount++;
+            return;
+          }
+
+          const systemId = await nextSystemId(String(clinicId));
+          await PatientModel.create({
+            ...parsed.data,
+            systemId,
+            clinicId,
+            searchName,
+            isActive: true,
+          });
+          importedCount++;
+        })
+      );
+    }
+
+    await ImportLogModel.create({
+      clinicId,
+      importedBy: userId,
+      totalRows: rows.length,
+      importedCount,
+      skippedCount,
+      errorCount: errors.length,
+      fileName: req.file.originalname,
+      errors,
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      data: { total: rows.length, imported: importedCount, skipped: skippedCount, errors },
+    });
+  })
+);
+
+// GET /patients/:id/emergency-contacts
+router.get(
+  '/:id/emergency-contacts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id).select('emergencyContacts');
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: patient.emergencyContacts || [] });
+  })
+);
+
+// POST /patients/:id/emergency-contacts
+router.post(
+  '/:id/emergency-contacts',
+  WRITE_ROLES,
+  validateRequest({ body: createEmergencyContactSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, relationship, phone, email, address, isPrimary } = req.body;
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    if (!patient.emergencyContacts) patient.emergencyContacts = [];
+    if (patient.emergencyContacts.length >= 3) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Maximum 3 emergency contacts allowed per patient',
+      });
+    }
+
+    if (isPrimary) {
+      patient.emergencyContacts.forEach((c) => (c.isPrimary = false));
+    }
+
+    patient.emergencyContacts.push({
+      name,
+      relationship,
+      phone,
+      email,
+      address,
+      isPrimary: isPrimary || false,
+    });
+    await patient.save();
+
+    return res.status(201).json({
+      status: 'success',
+      data: patient.emergencyContacts[patient.emergencyContacts.length - 1],
+    });
+  })
+);
+
+// PUT /patients/:id/emergency-contacts/:contactId
+router.put(
+  '/:id/emergency-contacts/:contactId',
+  WRITE_ROLES,
+  validateRequest({ body: updateEmergencyContactSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name, relationship, phone, email, address, isPrimary } = req.body;
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const contact = patient.emergencyContacts?.find((c) => String(c._id) === req.params.contactId);
+    if (!contact) {
+      return res.status(404).json({ error: 'NotFound', message: 'Emergency contact not found' });
+    }
+
+    if (name !== undefined) contact.name = name;
+    if (relationship !== undefined) contact.relationship = relationship;
+    if (phone !== undefined) contact.phone = phone;
+    if (email !== undefined) contact.email = email;
+    if (address !== undefined) contact.address = address;
+    if (isPrimary !== undefined) {
+      if (isPrimary) {
+        patient.emergencyContacts!.forEach((c) => (c.isPrimary = false));
+      }
+      contact.isPrimary = isPrimary;
+    }
+
+    await patient.save();
+    return res.json({ status: 'success', data: contact });
+  })
+);
+
+// DELETE /patients/:id/emergency-contacts/:contactId
+router.delete(
+  '/:id/emergency-contacts/:contactId',
+  WRITE_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const index = patient.emergencyContacts?.findIndex(
+      (c) => String(c._id) === req.params.contactId
+    );
+    if (index === undefined || index === -1) {
+      return res.status(404).json({ error: 'NotFound', message: 'Emergency contact not found' });
+    }
+
+    patient.emergencyContacts!.splice(index, 1);
+    await patient.save();
+    return res.json({ status: 'success', data: { id: req.params.contactId, deleted: true } });
+  })
+);
+
+// POST /patients/:id/emergency-alert (DOCTOR only)
+router.post(
+  '/:id/emergency-alert',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findById(req.params.id);
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const primaryContact = patient.emergencyContacts?.find((c) => c.isPrimary);
+    if (!primaryContact) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'No primary emergency contact set',
+      });
+    }
+
+    const clinic = await (
+      await import('../clinics/clinic.model')
+    ).ClinicModel.findById(patient.clinicId);
+    const clinicName = clinic?.name || 'Our Clinic';
+    const clinicPhone = clinic?.phone || 'N/A';
+
+    const message = `Your family member ${patient.firstName} is receiving emergency care at ${clinicName}. Please call ${clinicPhone}.`;
+
+    // Log the alert (in production, would send SMS/email)
+    await auditLog(req.user!.id, 'EMERGENCY_ALERT_SENT', {
+      patientId: String(patient._id),
+      contactName: primaryContact.name,
+      contactPhone: primaryContact.phone,
+      message,
+    });
+
+    return res.json({
+      status: 'success',
+      data: {
+        contactName: primaryContact.name,
+        contactPhone: primaryContact.phone,
+        message,
+        sentAt: new Date(),
+      },
+    });
+  })
 );
 
 export const patientRoutes = router;
+
+// GET /api/v1/patients/:id/risk-history
+router.get(
+  '/:id/risk-history',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    const history = await RiskScoreHistoryModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    })
+      .sort({ calculatedAt: -1 })
+      .limit(20)
+      .lean();
+    return res.json({ status: 'success', data: history });
+  })
+);

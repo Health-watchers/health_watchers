@@ -17,7 +17,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
   });
 
   // JWT authentication middleware
-  io.use((socket: Socket, next) => {
+  io.use((socket: Socket, next: (err?: Error) => void) => {
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.replace('Bearer ', '');
@@ -39,12 +39,14 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
   io.on('connection', (socket: Socket) => {
     const user = (socket as AuthenticatedSocket).user;
     const clinicRoom = `clinic:${user.clinicId}`;
+    const userRoom = `user:${user.userId}`;
 
-    // Join the clinic-scoped room automatically
     socket.join(clinicRoom);
+    socket.join(userRoom);
 
     socket.on('disconnect', () => {
       socket.leave(clinicRoom);
+      socket.leave(userRoom);
     });
   });
 
@@ -58,5 +60,12 @@ export function getIO(): SocketIOServer {
 
 /** Emit an event scoped to a specific clinic room */
 export function emitToClinic(clinicId: string, event: string, data: unknown): void {
-  getIO().to(`clinic:${clinicId}`).emit(event, data);
+  if (!io) return;
+  io.to(`clinic:${clinicId}`).emit(event, data);
+}
+
+/** Emit an event scoped to a specific user room */
+export function emitToUser(userId: string, event: string, data: unknown): void {
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, data);
 }

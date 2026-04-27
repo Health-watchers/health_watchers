@@ -1,30 +1,68 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d1d5db;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1f2937;
+  --color-neutral-900: #111827;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-500: #ef4444;
+  --color-danger-700: #b91c1c;
+
+  --color-success-50: #f0fdf4;
+  --color-success-700: #15803d;
+
+  --font-family-sans: Inter, system-ui, -apple-system, sans-serif;
+}
 
 @layer base {
-  * {
-    @apply border-neutral-200;
-  }
   body {
-    @apply bg-neutral-50 text-neutral-900 antialiased;
+    background-color: var(--color-neutral-50);
+    color: var(--color-neutral-900);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .dark body {
+    background-color: var(--color-neutral-900);
+    color: var(--color-neutral-50);
   }
 }
 
-@layer components {
-  .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors;
-  }
-  .btn-secondary {
-    @apply px-4 py-2 bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 transition-colors;
-  }
-  .card {
-    @apply bg-neutral-0 rounded-xl shadow-sm border border-neutral-200 p-6;
-  }
-  .input {
-    @apply w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
-  }
-  .label {
-    @apply block text-sm font-medium text-neutral-700 mb-1;
-  }
+/* TipTap editor styles */
+.tiptap {
+  outline: none;
 }
+.tiptap p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.tiptap h2 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.tiptap h3 { font-size: 1.1rem;  font-weight: 600; margin: 0.5rem 0 0.25rem; }
+.tiptap ul  { list-style: disc;    padding-left: 1.25rem; }
+.tiptap ol  { list-style: decimal; padding-left: 1.25rem; }
+.tiptap li  { margin: 0.15rem 0; }
+.tiptap blockquote { border-left: 3px solid #d1d5db; padding-left: 0.75rem; color: #6b7280; }

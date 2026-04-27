@@ -1,6 +1,5 @@
 version: 2
 updates:
-  # Enable version updates for npm packages
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -8,7 +7,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    # Group minor and patch updates together
     groups:
       development-dependencies:
         dependency-type: "development"
@@ -20,18 +18,15 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # Ignore major version bumps to prevent breaking changes
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-    # Add labels for easier PR management
     labels:
       - "dependencies"
       - "automated"
-    # Increase version requirements for security updates
     versioning-strategy: increase
+    auto-merged-enabled: true
 
-  # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

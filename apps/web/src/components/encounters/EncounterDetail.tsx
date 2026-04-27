@@ -1,7 +1,10 @@
 'use client';
 
 import AiSummaryCard from './AiSummaryCard';
+import { SoapNotesView } from './SoapNotesView';
 import type { EncounterRecord } from './EncounterTable';
+import { usePreAuths } from '@/lib/queries/usePreAuth';
+import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
 
 interface EncounterDetailProps {
   encounter: EncounterRecord;
@@ -12,7 +15,7 @@ interface EncounterDetailProps {
 function InfoCard({ title, value, unit }: { title: string; value: string; unit?: string }) {
   return (
     <div className="rounded-lg border border-gray-100 bg-white p-3">
-      <p className="text-xs uppercase tracking-wide text-gray-500">{title}</p>
+      <p className="text-xs tracking-wide text-gray-500 uppercase">{title}</p>
       <p className="mt-1 text-2xl font-semibold text-gray-900">
         {value}
         {unit ? <span className="ml-1 text-sm font-normal text-gray-500">{unit}</span> : null}
@@ -33,6 +36,8 @@ function formatDate(value?: string) {
 }
 
 export default function EncounterDetail({ encounter, onBack, onEdit }: EncounterDetailProps) {
+  const { data: preAuths = [] } = usePreAuths('pending');
+  const encounterPreAuths = preAuths.filter((pa) => pa.encounterId === encounter.id);
   return (
     <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -43,7 +48,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           >
             ← Back to list
           </button>
-          <p className="text-xs uppercase tracking-wide text-gray-500">
+          <p className="text-xs tracking-wide text-gray-500 uppercase">
             Encounter Detail · {encounter.id}
           </p>
           <h2 className="text-3xl font-semibold text-gray-900">{encounter.patientName}</h2>
@@ -53,7 +58,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-700 uppercase">
             {encounter.status}
           </span>
           <button
@@ -82,14 +87,14 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
       <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-4">
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Chief Complaint
             </h3>
             <p className="mt-2 text-gray-800">{encounter.chiefComplaint}</p>
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Diagnosis
             </h3>
             <ul className="mt-2 list-inside list-disc space-y-1 text-gray-800">
@@ -100,16 +105,23 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Treatment Plan
             </h3>
             <p className="mt-2 text-gray-800">{encounter.treatmentPlan}</p>
+          </article>
+
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              SOAP Notes
+            </h3>
+            <SoapNotesView soapNotes={(encounter as any).soapNotes} />
           </article>
         </div>
 
         <div className="space-y-4">
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Prescriptions
             </h3>
             <div className="mt-2 space-y-2">
@@ -125,11 +137,33 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Follow-up Date
             </h3>
             <p className="mt-2 text-gray-900">{formatDate(encounter.followUpDate)}</p>
           </article>
+
+          {encounterPreAuths.length > 0 && (
+            <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+                Insurance Pre-Authorizations
+              </h3>
+              <ul className="space-y-2">
+                {encounterPreAuths.map((pa) => (
+                  <li key={pa._id} className="rounded-md border border-gray-200 bg-white p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
+                      <PreAuthStatusBadge status={pa.status} />
+                    </div>
+                    <p className="text-xs text-gray-500">{pa.insuranceProvider} · {pa.estimatedAmount} XLM</p>
+                    {pa.preAuthNumber && (
+                      <p className="text-xs text-gray-500">Pre-auth #: {pa.preAuthNumber}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          )}
         </div>
       </div>
     </section>
