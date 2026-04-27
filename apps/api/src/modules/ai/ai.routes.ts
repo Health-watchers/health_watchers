@@ -7,6 +7,7 @@ import {
   generateDifferentialDiagnosis,
   isAIServiceAvailable,
   AI_DISCLAIMER,
+  calculateDosage,
 } from './ai.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validate.middleware';
@@ -15,6 +16,8 @@ import { sendAISummaryNotification } from '@api/lib/email.service';
 import {
   differentialDiagnosisRequestSchema,
   DifferentialDiagnosisRequestDto,
+  dosageCalculatorRequestSchema,
+  DosageCalculatorRequestDto,
 } from './ai.validation';
 
 const router = Router();
@@ -478,6 +481,75 @@ router.post(
         return res.status(503).json({
           error: 'AIServiceError',
           message: 'Failed to generate AI suggestions. Please try again later.',
+        });
+      }
+
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+      });
+    }
+  }
+);
+
+// POST /api/v1/ai/dosage-calculator
+// Request: { drugName, patientWeight, patientAge, patientSex, indication, renalFunction?, hepaticFunction? }
+// Returns: { recommendedDose, frequency, route, maxDailyDose, pediatricAdjustment, renalAdjustment, warnings, contraindications, disclaimer }
+router.post(
+  '/dosage-calculator',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  validateRequest({ body: dosageCalculatorRequestSchema }),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      const payload = req.body as DosageCalculatorRequestDto;
+      const result = await calculateDosage(payload);
+
+      const duration = Date.now() - startTime;
+      logger.info(
+        { drug: payload.drugName, age: payload.patientAge, weight: payload.patientWeight, duration },
+        'Dosage calculation completed'
+      );
+
+      // Audit log — non-blocking
+      import('../audit/audit.service').then(({ auditLog }) =>
+        auditLog(
+          {
+            action: 'DOSAGE_CALCULATION',
+            userId: req.user!.userId,
+            clinicId: req.user!.clinicId,
+            resourceType: 'drug',
+            metadata: {
+              drugName: payload.drugName,
+              patientAge: payload.patientAge,
+              patientWeight: payload.patientWeight,
+              pediatricAdjustment: result.pediatricAdjustment,
+              renalAdjustment: result.renalAdjustment,
+              warningCount: result.warnings.length,
+              contraindicationCount: result.contraindications.length,
+            },
+          },
+          req
+        )
+      ).catch(() => { /* non-critical */ });
+
+      return res.json({ success: true, ...result });
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      logger.error({ err: error, duration }, 'AI dosage-calculator error');
+
+      if (error instanceof Error && error.message.includes('Failed to calculate dosage')) {
+        return res.status(503).json({
+          error: 'AIServiceError',
+          message: 'Failed to calculate dosage. Please try again later.',
         });
       }
 
