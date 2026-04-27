@@ -22,7 +22,7 @@ export interface AuditLog {
   ipAddress?: string;
   userAgent?: string;
   outcome: 'SUCCESS' | 'FAILURE';
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -60,7 +60,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  }
+  },
 );
 
 // Prevent updates and deletes - immutable logs

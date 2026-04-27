@@ -22,8 +22,8 @@ function getGeminiClient(): GoogleGenerativeAI {
 export interface ClinicalNotesInput {
   chiefComplaint: string;
   notes?: string;
-  diagnosis?: any;
-  vitalSigns?: any;
+  diagnosis?: unknown;
+  vitalSigns?: unknown;
 }
 
 /**

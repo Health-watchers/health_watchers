@@ -5,6 +5,7 @@
 This feature adds end-to-end request ID propagation across the API and stellar-service. A unique `X-Request-ID` is assigned to every inbound API request (read from the header or generated as UUID v4), attached to the Express `Request` object, included in all structured log output, forwarded to the stellar-service on outbound calls, and echoed back to the caller in every response. The stellar-service reads the forwarded header and includes it in its own pino-based log output, enabling full distributed tracing for payment operations.
 
 The implementation touches four areas:
+
 1. A new Express middleware in the API (`requestId.middleware.ts`)
 2. An extension to the Express `Request` type declaration
 3. Updates to the `StellarClient` to forward the header
@@ -62,7 +63,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: { userId: string; role: AppRole; clinicId: string };
-      requestId?: string;  // added
+      requestId?: string; // added
     }
   }
 }
@@ -143,53 +144,53 @@ When no `X-Request-ID` header is present, the `requestId` field is simply absent
 
 ## Correctness Properties
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+_A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees._
 
 ### Property 1: Request ID round-trip
 
-*For any* inbound API request that carries an `X-Request-ID` header, the value of that header in the HTTP response must equal the value that was sent in the request.
+_For any_ inbound API request that carries an `X-Request-ID` header, the value of that header in the HTTP response must equal the value that was sent in the request.
 
 **Validates: Requirements 1.1, 2.1**
 
 ### Property 2: Generated ID is a valid UUID v4
 
-*For any* inbound API request that does NOT carry an `X-Request-ID` header, the `X-Request-ID` value returned in the response must be a well-formed UUID v4 string.
+_For any_ inbound API request that does NOT carry an `X-Request-ID` header, the `X-Request-ID` value returned in the response must be a well-formed UUID v4 string.
 
 **Validates: Requirements 1.2, 2.1**
 
 ### Property 3: Response always carries X-Request-ID
 
-*For any* HTTP request to the API (success or error path), the response must include an `X-Request-ID` header with a non-empty string value.
+_For any_ HTTP request to the API (success or error path), the response must include an `X-Request-ID` header with a non-empty string value.
 
 **Validates: Requirements 2.1, 2.2**
 
 ### Property 4: Log entries contain requestId
 
-*For any* request processed by the API, every structured log entry emitted during that request's lifecycle must contain a `requestId` field equal to `req.requestId`.
+_For any_ request processed by the API, every structured log entry emitted during that request's lifecycle must contain a `requestId` field equal to `req.requestId`.
 
 **Validates: Requirements 3.1, 3.2**
 
 ### Property 5: StellarClient forwards requestId
 
-*For any* call to `StellarClient.verifyTransaction` or `StellarClient.healthCheck` with a non-empty `requestId`, the outbound HTTP request to the stellar-service must include an `X-Request-ID` header equal to that `requestId`.
+_For any_ call to `StellarClient.verifyTransaction` or `StellarClient.healthCheck` with a non-empty `requestId`, the outbound HTTP request to the stellar-service must include an `X-Request-ID` header equal to that `requestId`.
 
 **Validates: Requirements 4.1, 4.2**
 
 ### Property 6: StellarClient omits header when no requestId
 
-*For any* call to `StellarClient.verifyTransaction` or `StellarClient.healthCheck` where `requestId` is `undefined`, the outbound HTTP request must NOT include an `X-Request-ID` header.
+_For any_ call to `StellarClient.verifyTransaction` or `StellarClient.healthCheck` where `requestId` is `undefined`, the outbound HTTP request must NOT include an `X-Request-ID` header.
 
 **Validates: Requirements 4.3**
 
 ### Property 7: stellar-service logs received requestId
 
-*For any* request to the stellar-service that includes an `X-Request-ID` header, all log entries emitted during that request must contain a `requestId` field equal to the received header value.
+_For any_ request to the stellar-service that includes an `X-Request-ID` header, all log entries emitted during that request must contain a `requestId` field equal to the received header value.
 
 **Validates: Requirements 5.1, 6.2**
 
 ### Property 8: Payment operation uses same requestId end-to-end
 
-*For any* payment confirmation request, the `requestId` logged by the API payments module and the `requestId` forwarded to (and logged by) the stellar-service must be identical.
+_For any_ payment confirmation request, the `requestId` logged by the API payments module and the `requestId` forwarded to (and logged by) the stellar-service must be identical.
 
 **Validates: Requirements 6.1, 6.3**
 
@@ -219,15 +220,15 @@ Each property test runs a minimum of **100 iterations**.
 
 Tag format: `Feature: request-id-propagation, Property <N>: <property_text>`
 
-| Property | Test description |
-|---|---|
-| P1 | For any arbitrary string used as `X-Request-ID`, the middleware echoes it unchanged in the response header |
-| P2 | For any request without the header, the generated value matches the UUID v4 regex |
-| P3 | For any request (success or error), the response always has a non-empty `X-Request-ID` header |
-| P4 | For any `requestId` string, a child logger created with it always includes that field in emitted entries |
-| P5 | For any non-empty `requestId`, `StellarClient` always sets the outbound header to that value |
-| P6 | For any call with `requestId = undefined`, `StellarClient` never sets the outbound header |
-| P7 | For any `X-Request-ID` header value received by stellar-service, the per-request child logger always includes it |
-| P8 | For any payment confirmation flow, the `requestId` in API logs equals the `X-Request-ID` forwarded to stellar-service |
+| Property | Test description                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------- |
+| P1       | For any arbitrary string used as `X-Request-ID`, the middleware echoes it unchanged in the response header            |
+| P2       | For any request without the header, the generated value matches the UUID v4 regex                                     |
+| P3       | For any request (success or error), the response always has a non-empty `X-Request-ID` header                         |
+| P4       | For any `requestId` string, a child logger created with it always includes that field in emitted entries              |
+| P5       | For any non-empty `requestId`, `StellarClient` always sets the outbound header to that value                          |
+| P6       | For any call with `requestId = undefined`, `StellarClient` never sets the outbound header                             |
+| P7       | For any `X-Request-ID` header value received by stellar-service, the per-request child logger always includes it      |
+| P8       | For any payment confirmation flow, the `requestId` in API logs equals the `X-Request-ID` forwarded to stellar-service |
 
 Unit tests and property tests are complementary: unit tests cover concrete examples and integration points; property tests verify universal correctness across arbitrary inputs.

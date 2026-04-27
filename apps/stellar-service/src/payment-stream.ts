@@ -1,5 +1,5 @@
-import StellarSdk from "stellar-sdk";
-import { stellarConfig } from "./config";
+import { Horizon } from '@stellar/stellar-sdk';
+import { stellarConfig } from './config';
 
 export type PaymentStreamHandler = (payment: {
   memo: string;
@@ -15,14 +15,14 @@ export type PaymentStreamHandler = (payment: {
  */
 export function startPaymentStream(onPayment: PaymentStreamHandler): () => void {
   if (!stellarConfig.platformPublicKey) {
-    console.warn("[stellar-stream] STELLAR_PLATFORM_PUBLIC_KEY not set — stream disabled");
+    console.warn('[stellar-stream] STELLAR_PLATFORM_PUBLIC_KEY not set — stream disabled');
     return () => {};
   }
 
-  const server = new StellarSdk.Horizon.Server(
-    stellarConfig.network === "mainnet"
-      ? "https://horizon.stellar.org"
-      : "https://horizon-testnet.stellar.org",
+  const server = new Horizon.Server(
+    stellarConfig.network === 'mainnet'
+      ? 'https://horizon.stellar.org'
+      : 'https://horizon-testnet.stellar.org',
   );
 
   console.log(
@@ -32,27 +32,29 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
   const close = server
     .payments()
     .forAccount(stellarConfig.platformPublicKey)
-    .cursor("now")
+    .cursor('now')
     .stream({
-      onmessage: async (record: any) => {
+      onmessage: async (
+        record: Record<string, unknown> & { transaction: () => Promise<{ memo?: string }> },
+      ) => {
         // Only process incoming payment_operations
-        if (record.type !== "payment" || record.to !== stellarConfig.platformPublicKey) return;
+        if (record.type !== 'payment' || record.to !== stellarConfig.platformPublicKey) return;
 
         try {
           const tx = await record.transaction();
-          const memo = tx.memo ?? "";
+          const memo = tx.memo ?? '';
           onPayment({
             memo,
             txHash: record.transaction_hash,
             amount: record.amount,
-            from:   record.from,
+            from: record.from,
           });
         } catch (err) {
-          console.error("[stellar-stream] Failed to fetch transaction for payment", err);
+          console.error('[stellar-stream] Failed to fetch transaction for payment', err);
         }
       },
       onerror: (err: unknown) => {
-        console.error("[stellar-stream] Stream error", err);
+        console.error('[stellar-stream] Stream error', err);
       },
     });
 

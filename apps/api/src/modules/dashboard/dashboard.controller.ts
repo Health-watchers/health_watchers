@@ -10,11 +10,11 @@ import { PaymentRecordModel } from '../payments/models/payment-record.model';
 export async function getStats(req: Request, res: Response) {
   try {
     const clinicId = req.user?.clinicId;
-    
+
     if (!clinicId) {
-      return res.status(400).json({ 
-        error: 'Bad Request', 
-        message: 'Clinic ID not found in user context' 
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Clinic ID not found in user context',
       });
     }
 
@@ -24,21 +24,21 @@ export async function getStats(req: Request, res: Response) {
 
     // Execute all queries in parallel for optimal performance
     const [todayPatients, openEncounters, pendingPayments, totalPatients] = await Promise.all([
-      PatientModel.countDocuments({ 
-        clinicId, 
-        createdAt: { $gte: today } 
+      PatientModel.countDocuments({
+        clinicId,
+        createdAt: { $gte: today },
       }),
-      EncounterModel.countDocuments({ 
-        clinicId, 
-        status: 'open' 
+      EncounterModel.countDocuments({
+        clinicId,
+        status: 'open',
       }),
-      PaymentRecordModel.countDocuments({ 
-        clinicId, 
-        status: 'pending' 
+      PaymentRecordModel.countDocuments({
+        clinicId,
+        status: 'pending',
       }),
-      PatientModel.countDocuments({ 
-        clinicId, 
-        isActive: true 
+      PatientModel.countDocuments({
+        clinicId,
+        isActive: true,
       }),
     ]);
 
@@ -52,9 +52,9 @@ export async function getStats(req: Request, res: Response) {
       },
     });
   } catch (error) {
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      message: error instanceof Error ? error.message : 'Unknown error'
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 }

@@ -35,7 +35,10 @@ router.post(
     payment.txHash = txHash;
     await payment.save();
 
-    logger.info({ intentId: payment.intentId, txHash, amount }, 'stellar-webhook: payment confirmed');
+    logger.info(
+      { intentId: payment.intentId, txHash, amount },
+      'stellar-webhook: payment confirmed',
+    );
 
     return res.json({ status: 'success', data: { intentId: payment.intentId, txHash } });
   }),

@@ -19,27 +19,29 @@ All acceptance criteria have been met through code implementation.
 ## Code Verification
 
 ### Token Signing (token.service.ts lines 21-30)
+
 ```typescript
 export function signAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, config.jwt.accessTokenSecret, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
-    issuer: JWT_ISSUER,        // ✅ Added
-    audience: JWT_AUDIENCE,     // ✅ Added
+    issuer: JWT_ISSUER, // ✅ Added
+    audience: JWT_AUDIENCE, // ✅ Added
   });
 }
 ```
 
 ### Token Verification (token.service.ts lines 57-72)
+
 ```typescript
 export function verifyAccessToken(token: string): TokenPayload | null {
   try {
     const decoded = jwt.verify(token, config.jwt.accessTokenSecret, {
-      issuer: JWT_ISSUER,        // ✅ Validates issuer
-      audience: JWT_AUDIENCE,     // ✅ Validates audience
+      issuer: JWT_ISSUER, // ✅ Validates issuer
+      audience: JWT_AUDIENCE, // ✅ Validates audience
     }) as JwtPayload;
     return { userId: decoded.userId, role: decoded.role, clinicId: decoded.clinicId };
   } catch (error) {
-    return null;  // ✅ Rejects invalid tokens
+    return null; // ✅ Rejects invalid tokens
   }
 }
 ```

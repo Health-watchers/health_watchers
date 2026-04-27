@@ -32,6 +32,7 @@ This module implements HIPAA-compliant audit logging as required by 45 CFR § 16
 Retrieve audit logs (SUPER_ADMIN only)
 
 **Query Parameters:**
+
 - `page` (integer, default: 1): Page number
 - `limit` (integer, default: 50, max: 100): Records per page
 - `startDate` (ISO 8601): Filter from this date
@@ -40,6 +41,7 @@ Retrieve audit logs (SUPER_ADMIN only)
 - `userId` (string): Filter by user ID
 
 **Example:**
+
 ```
 GET /api/v1/audit-logs?startDate=2026-01-01&endDate=2026-03-26&action=PATIENT_VIEW&page=1&limit=50
 ```
@@ -60,7 +62,7 @@ await auditLog(
     clinicId: req.user?.clinicId,
     outcome: 'SUCCESS',
   },
-  req
+  req,
 );
 ```
 
@@ -77,6 +79,7 @@ router.get('/:id', auditMiddleware('PATIENT_VIEW', 'Patient'), async (req, res) 
 ## Database Schema
 
 Audit logs are stored in the `audit_logs` collection with the following indexes:
+
 - `timestamp` (descending)
 - `userId + timestamp`
 - `clinicId + timestamp`

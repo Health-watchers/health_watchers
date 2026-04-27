@@ -94,7 +94,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   const skip = (page - 1) * limit;
 
   // Build filter
-  const filter: any = {};
+  const filter: Record<string, unknown> = {};
 
   if (req.query.startDate || req.query.endDate) {
     filter.timestamp = {};

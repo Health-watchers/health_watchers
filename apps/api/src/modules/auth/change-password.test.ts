@@ -37,15 +37,27 @@ jest.mock('bcryptjs', () => ({
 }));
 
 // Mock modules that have runtime issues (not needed for auth tests)
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
+/* eslint-disable @typescript-eslint/no-require-imports */
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/clinics/clinic.model', () => ({ ClinicModel: {} }));
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
+/* eslint-enable @typescript-eslint/no-require-imports */
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
   stopPaymentExpirationJob: jest.fn(),
@@ -116,9 +128,7 @@ describe('PATCH /api/v1/auth/me/password', () => {
 
   describe('1. Authentication required', () => {
     it('returns 401 when no Authorization header is provided', async () => {
-      const res = await request(app)
-        .patch('/api/v1/auth/me/password')
-        .send(VALID_BODY);
+      const res = await request(app).patch('/api/v1/auth/me/password').send(VALID_BODY);
 
       expect(res.status).toBe(401);
       expect(res.body.error).toBe('Unauthorized');

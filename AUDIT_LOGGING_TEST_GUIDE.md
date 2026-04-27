@@ -9,6 +9,7 @@
 Run: `node scripts/verify-audit-simple.js`
 
 **Passed Checks:**
+
 - ✓ All required files exist (model, service, controller, middlewares)
 - ✓ All required schema fields present (userId, clinicId, action, resourceType, resourceId, ipAddress, userAgent, outcome, timestamp)
 - ✓ All 11 audit actions defined (LOGIN_SUCCESS, LOGIN_FAILURE, PATIENT_VIEW, PATIENT_CREATE, PATIENT_UPDATE, PATIENT_DELETE, ENCOUNTER_VIEW, ENCOUNTER_CREATE, ENCOUNTER_UPDATE, PAYMENT_CREATE, EXPORT_PATIENT_DATA)
@@ -144,10 +145,7 @@ const auditLogs = db.collection('audit_logs');
 
 // Try to update (should fail)
 try {
-  await auditLogs.updateOne(
-    { action: 'LOGIN_SUCCESS' },
-    { $set: { action: 'LOGIN_FAILURE' } }
-  );
+  await auditLogs.updateOne({ action: 'LOGIN_SUCCESS' }, { $set: { action: 'LOGIN_FAILURE' } });
   console.log('❌ Update succeeded (should have failed!)');
 } catch (error) {
   console.log('✓ Update blocked:', error.message);
@@ -184,13 +182,13 @@ try {
 
 ## Acceptance Criteria Verification
 
-| Criteria | Status | Test |
-|----------|--------|------|
-| Every GET /patients/:id creates PATIENT_VIEW log | ✅ | Test 5 |
-| Every failed login creates LOGIN_FAILURE log | ✅ | Test 1 |
-| GET /audit-logs returns paginated entries for SUPER_ADMIN | ✅ | Test 3 |
-| Audit logs cannot be deleted or modified | ✅ | Test 10 |
-| Audit logs stored in separate collection | ✅ | Verified in model |
+| Criteria                                                  | Status | Test              |
+| --------------------------------------------------------- | ------ | ----------------- |
+| Every GET /patients/:id creates PATIENT_VIEW log          | ✅     | Test 5            |
+| Every failed login creates LOGIN_FAILURE log              | ✅     | Test 1            |
+| GET /audit-logs returns paginated entries for SUPER_ADMIN | ✅     | Test 3            |
+| Audit logs cannot be deleted or modified                  | ✅     | Test 10           |
+| Audit logs stored in separate collection                  | ✅     | Verified in model |
 
 ## HIPAA Compliance Checklist
 
@@ -206,15 +204,19 @@ try {
 ## Troubleshooting
 
 ### Issue: "Cannot connect to MongoDB"
+
 **Solution:** Ensure MongoDB is running: `mongod` or check Docker container
 
 ### Issue: "Invalid token"
+
 **Solution:** Ensure JWT secrets are configured in environment variables
 
 ### Issue: "403 Forbidden on audit logs"
+
 **Solution:** Ensure you're using a SUPER_ADMIN token, not a regular user token
 
 ### Issue: "Audit logs not appearing"
+
 **Solution:** Check console for audit logging errors. Audit logging is non-blocking, so errors won't break the API but will be logged to console.
 
 ## Performance Considerations

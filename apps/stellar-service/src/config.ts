@@ -13,4 +13,6 @@ export const stellarConfig = {
   port: process.env.STELLAR_SERVICE_PORT || '3002',
   /** Server-side Stellar secret key — NEVER accept this from callers */
   stellarSecretKey: process.env.STELLAR_SECRET_KEY ?? null,
+  /** Platform public key for receiving payments */
+  platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY ?? null,
 };
