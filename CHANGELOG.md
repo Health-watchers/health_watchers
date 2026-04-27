@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Web Application
+
 - Patient management system with CRUD operations
   - Patient listing with search and pagination
   - Individual patient detail views
@@ -38,17 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Toast notifications
 
 #### API
+
 - RESTful API endpoints for patient, encounter, and payment management
 - Authentication controller with user model
 - MongoDB integration for data persistence
 
 #### Infrastructure
+
 - Monorepo structure using npm workspaces and Turbo
 - TypeScript configuration across all packages
 - Database seeding scripts
 - Environment configuration templates
 
 ### Security
+
 - JWT token-based authentication
 - Password hashing with bcryptjs
 - Protected API routes

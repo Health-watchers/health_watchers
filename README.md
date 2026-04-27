@@ -62,12 +62,14 @@ docker-compose logs -f
 ```
 
 The Docker setup includes:
+
 - MongoDB database with automatic initialization
 - API server with hot-reload
 - Web frontend with hot-reload
 - Pre-configured networking between services
 
 To stop all services:
+
 ```bash
 docker-compose down
 ```
@@ -97,6 +99,7 @@ npm run dev
 ```
 
 This will start:
+
 - Web app on http://localhost:3000
 - API server on http://localhost:3001
 - Stellar service on http://localhost:3002

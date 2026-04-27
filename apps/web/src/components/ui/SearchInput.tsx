@@ -9,8 +9,19 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
     <div className="relative flex items-center">
       {/* Search icon */}
       <span className="absolute left-3 text-neutral-400 pointer-events-none">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+          />
         </svg>
       </span>
 
@@ -36,13 +47,24 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           aria-label="Clear search"
           className="absolute right-2.5 text-neutral-400 hover:text-neutral-700 focus:outline-none"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       )}
     </div>
-  )
+  ),
 );
 
 SearchInput.displayName = 'SearchInput';

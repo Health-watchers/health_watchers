@@ -66,11 +66,11 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
       summary,
       encounterId,
     });
-  } catch (error: any) {
-    console.error('AI summarize error:', error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('AI summarize error:', err);
 
-    // Handle Gemini API specific errors
-    if (error.message.includes('Failed to generate AI summary')) {
+    if (err.message.includes('Failed to generate AI summary')) {
       return res.status(503).json({
         error: 'AIServiceError',
         message: 'Failed to generate AI summary. Please try again later.',
@@ -79,7 +79,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
 
     return res.status(500).json({
       error: 'InternalServerError',
-      message: error.message || 'An unexpected error occurred',
+      message: err.message || 'An unexpected error occurred',
     });
   }
 });

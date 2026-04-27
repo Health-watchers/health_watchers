@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import LanguageSwitcher from './LanguageSwitcher';
 import type { Locale } from '../../i18n.config';
 
@@ -17,6 +18,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
   const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations('nav');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -70,7 +72,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-white focus:border focus:border-gray-400 focus:rounded"
       >
-        Skip to main content
+        {t('skipToContent')}
       </a>
 
       <nav aria-label="Main navigation" className="border-b border-gray-200 bg-white" ref={menuRef}>
@@ -99,14 +101,14 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
                   onClick={handleLogout}
                   className="text-sm text-gray-500 hover:text-red-600 focus:outline-none focus:underline transition-colors"
                 >
-                  Logout
+                  {t('logout')}
                 </button>
               )}
             </div>
 
             <button
               className="md:hidden p-2 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
-              aria-label={open ? 'Close menu' : 'Open menu'}
+              aria-label={open ? t('closeMenu') : t('openMenu')}
               aria-expanded={open}
               aria-controls="mobile-menu"
               onClick={() => setOpen((v) => !v)}
@@ -162,7 +164,7 @@ const NavbarClient = ({ links, locale }: { links: NavLink[]; locale: Locale }) =
                   }}
                   className="mt-3 block w-full text-left text-sm text-gray-500 hover:text-red-600 focus:outline-none focus:underline"
                 >
-                  Logout
+                  {t('logout')}
                 </button>
               </>
             )}

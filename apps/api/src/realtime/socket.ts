@@ -1,8 +1,12 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { verifyAccessToken } from '@api/modules/auth/token.service';
+import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
 
 let io: SocketIOServer | null = null;
+
+interface AuthenticatedSocket extends Socket {
+  user: TokenPayload;
+}
 
 export function initSocket(httpServer: HttpServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
@@ -28,12 +32,12 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     }
 
     // Attach user info to socket for use in handlers
-    (socket as any).user = payload;
+    (socket as AuthenticatedSocket).user = payload;
     next();
   });
 
   io.on('connection', (socket: Socket) => {
-    const user = (socket as any).user;
+    const user = (socket as AuthenticatedSocket).user;
     const clinicRoom = `clinic:${user.clinicId}`;
 
     // Join the clinic-scoped room automatically

@@ -10,15 +10,26 @@ export function Table({ className, children, ...props }: HTMLAttributes<HTMLTabl
   );
 }
 
-export function TableHead({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+export function TableHead({
+  className,
+  children,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <thead className={['bg-neutral-50 border-b border-neutral-200', className ?? ''].join(' ')} {...props}>
+    <thead
+      className={['bg-neutral-50 border-b border-neutral-200', className ?? ''].join(' ')}
+      {...props}
+    >
       {children}
     </thead>
   );
 }
 
-export function TableBody({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+export function TableBody({
+  className,
+  children,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <tbody className={['divide-y divide-neutral-100', className ?? ''].join(' ')} {...props}>
       {children}
@@ -38,7 +49,10 @@ export function TableTh({ className, children, ...props }: ThHTMLAttributes<HTML
   return (
     <th
       scope="col"
-      className={['px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide', className ?? ''].join(' ')}
+      className={[
+        'px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide',
+        className ?? '',
+      ].join(' ')}
       {...props}
     >
       {children}

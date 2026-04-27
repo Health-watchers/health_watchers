@@ -10,8 +10,8 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
     const { name, address, contactEmail, plan } = req.body;
     const clinic = await ClinicModel.create({ name, address, contactEmail, plan });
     return res.status(201).json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
+  } catch (err: unknown) {
+    return res.status(400).json({ error: 'BadRequest', message: (err as Error).message });
   }
 });
 
@@ -21,8 +21,8 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
     const clinic = await ClinicModel.findById(req.params.id);
     if (!clinic) return res.status(404).json({ error: 'NotFound', message: 'Clinic not found' });
     return res.json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 

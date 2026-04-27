@@ -7,7 +7,7 @@
     "dev": "NEXT_DISABLE_LOCKFILE_PATCHING=1 next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@health-watchers/types": "*",

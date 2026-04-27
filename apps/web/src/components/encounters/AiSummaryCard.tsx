@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 
 interface AiSummaryCardProps {
   patientName: string;
@@ -45,9 +45,7 @@ export default function AiSummaryCard({
           <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white">
             CLINICAL AI
           </span>
-          <span className="text-sm font-semibold text-gray-800">
-            Intelligent Encounter Summary
-          </span>
+          <span className="text-sm font-semibold text-gray-800">Intelligent Encounter Summary</span>
         </div>
         <button
           onClick={generateSummary}
@@ -62,11 +60,7 @@ export default function AiSummaryCard({
             stroke="currentColor"
             strokeWidth="2"
           >
-            <path
-              d="M1 4v6h6M23 20v-6h-6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round" />
             <path
               d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"
               strokeLinecap="round"

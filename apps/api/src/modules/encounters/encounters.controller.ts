@@ -1,41 +1,39 @@
 import { Router, Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
-import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
-import { objectIdSchema } from '@api/middlewares/objectid.schema';
-import { asyncHandler } from '@api/middlewares/async.handler';
 import {
   createEncounterSchema,
   updateEncounterSchema,
+  encounterIdParamSchema,
+  patientIdParamSchema,
   listEncountersQuerySchema,
   ListEncountersQuery,
 } from './encounter.validation';
+import { asyncHandler } from '@api/middlewares/async.handler';
 import { toEncounterResponse } from './encounters.transformer';
 import { paginate, parsePagination } from '@api/utils/paginate';
-import { auditLog } from '@api/middlewares/audit.middleware';
 
 const router = Router();
 router.use(authenticate);
-router.use(auditLog('Encounter'));
-
-const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { patientId, doctorId, status, date, page, limit } = req.query as unknown as ListEncountersQuery;
+    const { patientId, doctorId, status, date, page, limit } =
+      req.query as unknown as ListEncountersQuery;
 
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
 
-    if (patientId) filter.patientId         = patientId;
-    if (doctorId)  filter.attendingDoctorId = doctorId;
-    if (status)    filter.status            = status;
+    if (patientId) filter.patientId = patientId;
+    if (doctorId) filter.attendingDoctorId = doctorId;
+    if (status) filter.status = status;
 
     if (date) {
       const start = new Date(date);
-      const end   = new Date(date);
+      const end = new Date(date);
       end.setUTCDate(end.getUTCDate() + 1);
       filter.createdAt = { $gte: start, $lt: end };
     }
@@ -46,37 +44,34 @@ router.get(
       EncounterModel.countDocuments(filter),
     ]);
 
-    res.json({
+    return res.json({
       status: 'success',
-      data: encounters.map(toEncounterResponse),
+      data: encounters.map((doc) =>
+        toEncounterResponse(doc as unknown as Parameters<typeof toEncounterResponse>[0]),
+      ),
       meta: { total, page, limit },
     });
   }),
 );
 
-// GET /encounters/patient/:patientId — MUST be before /:id to avoid route shadowing
+// GET /encounters/patient/:patientId
 router.get(
   '/patient/:patientId',
-  validateRequest({ params: objectIdSchema }),
+  validateRequest({ params: patientIdParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, unknown>);
+    const pagination = parsePagination(req.query as Record<string, string>);
     if (!pagination) {
       return res
         .status(400)
         .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
-    
-    const filter = { 
-      patientId: req.params.patientId, 
-      clinicId: req.user!.clinicId 
-    };
-    
-    const result = await paginate(EncounterModel, filter, page, limit, { createdAt: -1 });
-    
+    const result = await paginate(EncounterModel, { patientId: req.params.patientId }, page, limit);
     return res.json({
       status: 'success',
-      data: result.data.map(toEncounterResponse),
+      data: result.data.map((doc) =>
+        toEncounterResponse(doc as unknown as Parameters<typeof toEncounterResponse>[0]),
+      ),
       meta: result.meta,
     });
   }),
@@ -85,52 +80,38 @@ router.get(
 // GET /encounters/:id
 router.get(
   '/:id',
-  validateRequest({ params: objectIdSchema }),
+  validateRequest({ params: encounterIdParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const encounter = await EncounterModel.findOne({ 
-      _id: req.params.id, 
-      clinicId: req.user!.clinicId 
-    }).lean();
-    
-    if (!encounter) {
-      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
-    }
-    
-    res.json({ status: 'success', data: toEncounterResponse(encounter) });
+    const doc = await EncounterModel.findById(req.params.id).lean();
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.json({
+      status: 'success',
+      data: toEncounterResponse(doc as unknown as Parameters<typeof toEncounterResponse>[0]),
+    });
   }),
 );
 
 // POST /encounters
 router.post(
   '/',
-  WRITE_ROLES,
   validateRequest({ body: createEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const encounter = await EncounterModel.create({
-      ...req.body,
-      clinicId: req.user!.clinicId,
-    });
-    res.status(201).json({ status: 'success', data: toEncounterResponse(encounter) });
+    const doc = await EncounterModel.create(req.body);
+    return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   }),
 );
 
 // PATCH /encounters/:id
 router.patch(
   '/:id',
-  WRITE_ROLES,
-  validateRequest({ params: objectIdSchema, body: updateEncounterSchema }),
+  validateRequest({ params: encounterIdParamSchema, body: updateEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const encounter = await EncounterModel.findOneAndUpdate(
-      { _id: req.params.id, clinicId: req.user!.clinicId },
-      req.body,
-      { new: true, runValidators: true },
-    ).lean();
-    
-    if (!encounter) {
-      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
-    }
-    
-    res.json({ status: 'success', data: toEncounterResponse(encounter) });
+    const doc = await EncounterModel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.json({ status: 'success', data: toEncounterResponse(doc) });
   }),
 );
 

@@ -9,10 +9,10 @@ const button = cva(
   {
     variants: {
       variant: {
-        primary:   'bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700',
+        primary: 'bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700',
         secondary: 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200 active:bg-neutral-300',
-        ghost:     'bg-transparent text-neutral-700 hover:bg-neutral-100 active:bg-neutral-200',
-        danger:    'bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-700',
+        ghost: 'bg-transparent text-neutral-700 hover:bg-neutral-100 active:bg-neutral-200',
+        danger: 'bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-700',
       },
       size: {
         sm: 'h-8  px-3 text-xs',
@@ -21,12 +21,11 @@ const button = cva(
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },
-  }
+  },
 );
 
 export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof button> {
+  extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof button> {
   loading?: boolean;
 }
 
@@ -42,7 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       {loading && <Spinner size="sm" className="text-current" />}
       {children}
     </button>
-  )
+  ),
 );
 
 Button.displayName = 'Button';

@@ -5,7 +5,9 @@ import { AppRole } from '../types/express';
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header' });
+    return res
+      .status(401)
+      .json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header' });
   }
   const token = header.slice(7);
   const payload = verifyAccessToken(token);
