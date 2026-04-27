@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
+import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,49 @@ export default function NewEncounterPage() {
   const [aiSuggestions, setAiSuggestions] = useState<AiResponse | null>(null);
   const [fetchingAi, setFetchingAi] = useState(false);
   const [fullPatient, setFullPatient] = useState<FullPatient | null>(null);
+
+  // Prescriptions
+  interface PrescriptionRow {
+    id: number;
+    drugName: string;
+    dosage: string;
+    frequency: string;
+    route: string;
+    duration: string;
+  }
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
+  const [dosageModalOpen, setDosageModalOpen] = useState(false);
+  const [activePrescriptionId, setActivePrescriptionId] = useState<number | null>(null);
+  const nextPrescriptionId = useRef(1);
+
+  function addPrescriptionRow() {
+    setPrescriptions((prev) => [
+      ...prev,
+      { id: nextPrescriptionId.current++, drugName: '', dosage: '', frequency: '', route: 'oral', duration: '' },
+    ]);
+  }
+
+  function removePrescriptionRow(id: number) {
+    setPrescriptions((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function updatePrescriptionRow(id: number, field: keyof PrescriptionRow, value: string) {
+    setPrescriptions((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  }
+
+  function openDosageCalculator(id: number) {
+    setActivePrescriptionId(id);
+    setDosageModalOpen(true);
+  }
+
+  function applyDosageResult(dose: string, frequency: string, route: string) {
+    if (activePrescriptionId === null) return;
+    setPrescriptions((prev) =>
+      prev.map((r) =>
+        r.id === activePrescriptionId ? { ...r, dosage: dose, frequency, route } : r
+      )
+    );
+  }
 
   // Fetch full patient data when selected
   const fetchFullPatient = useCallback(async (id: string) => {
@@ -322,6 +366,20 @@ export default function NewEncounterPage() {
       ...(diagnoses.length > 0 && { diagnosis: diagnoses }),
       ...(Object.keys(vitalSigns).length > 0 && { vitalSigns }),
       ...(followUpDate && { followUpDate: new Date(followUpDate).toISOString() }),
+      ...(prescriptions.filter((r) => r.drugName.trim()).length > 0 && {
+        prescriptions: prescriptions
+          .filter((r) => r.drugName.trim())
+          .map((r) => ({
+            drugName: r.drugName.trim(),
+            dosage: r.dosage.trim() || 'As directed',
+            frequency: r.frequency.trim() || 'As directed',
+            route: r.route || 'oral',
+            duration: r.duration.trim() || 'As directed',
+            prescribedBy: user.userId,
+            prescribedAt: new Date().toISOString(),
+            refillsAllowed: 0,
+          })),
+      }),
     };
 
     setSubmitting(true);
@@ -817,6 +875,127 @@ export default function NewEncounterPage() {
           )}
         </section>
 
+        {/* ── Prescriptions ── */}
+        <section aria-labelledby="section-rx">
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              id="section-rx"
+              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            >
+              Prescriptions{' '}
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+            </h2>
+            <Button size="sm" variant="outline" onClick={addPrescriptionRow}>
+              + Add Medication
+            </Button>
+          </div>
+
+          {prescriptions.length === 0 && (
+            <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-400">
+              No prescriptions added. Click &ldquo;Add Medication&rdquo; to start.
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {prescriptions.map((rx) => (
+              <div
+                key={rx.id}
+                className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-medium text-neutral-500">Medication</span>
+                  <button
+                    type="button"
+                    onClick={() => removePrescriptionRow(rx.id)}
+                    aria-label="Remove prescription"
+                    className="text-xs text-neutral-400 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* Drug name + Calculate Dose button */}
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Drug Name *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={rx.drugName}
+                        onChange={(e) => updatePrescriptionRow(rx.id, 'drugName', e.target.value)}
+                        placeholder="e.g. Amoxicillin"
+                        className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openDosageCalculator(rx.id)}
+                        title="AI Dosage Calculator"
+                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 whitespace-nowrap"
+                      >
+                        <span aria-hidden="true">✨</span> Calculate Dose
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Dosage
+                    </label>
+                    <input
+                      value={rx.dosage}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'dosage', e.target.value)}
+                      placeholder="e.g. 500 mg"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Frequency
+                    </label>
+                    <input
+                      value={rx.frequency}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'frequency', e.target.value)}
+                      placeholder="e.g. every 8 hours"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Route
+                    </label>
+                    <select
+                      value={rx.route}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'route', e.target.value)}
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="oral">Oral</option>
+                      <option value="injection">Injection</option>
+                      <option value="topical">Topical</option>
+                      <option value="inhaled">Inhaled</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Duration
+                    </label>
+                    <input
+                      value={rx.duration}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'duration', e.target.value)}
+                      placeholder="e.g. 7 days"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* ── Follow-up Date ── */}
         <section aria-labelledby="section-followup">
           <h2
@@ -864,6 +1043,21 @@ export default function NewEncounterPage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Dosage Calculator Modal ── */}
+      <DosageCalculatorModal
+        open={dosageModalOpen}
+        onClose={() => setDosageModalOpen(false)}
+        initialDrugName={
+          activePrescriptionId !== null
+            ? (prescriptions.find((r) => r.id === activePrescriptionId)?.drugName ?? '')
+            : ''
+        }
+        onApply={applyDosageResult}
+        patientWeight={weight ? toKg(weight) : undefined}
+        patientAge={fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined}
+        patientSex={fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined}
+      />
     </main>
   );
 }
