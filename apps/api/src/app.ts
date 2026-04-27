@@ -84,6 +84,7 @@ import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
 import onboardingRoutes from './modules/clinics/onboarding.routes';
 import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
+import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
 
 
@@ -247,6 +248,7 @@ app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
 app.use('/api/v1/cds', cdsRoutes);
 app.use('/api/v1/onboarding', onboardingRoutes);
+app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
