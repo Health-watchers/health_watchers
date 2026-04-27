@@ -1,5 +1,10 @@
 import type { Config } from 'jest';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Jest 30 evaluates .ts config files as ESM, so __dirname is not available.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const srcRoot = path.resolve(__dirname, 'src');
 
@@ -30,7 +35,7 @@ const config: Config = {
   testMatch: ['**/*.test.ts'],
   testPathIgnorePatterns: [
     '/node_modules/',
-    'src/modules/audit/audit.test.ts',          // requires live MongoDB
+    'src/modules/audit/audit.test.ts', // requires live MongoDB
     'src/__tests__/unit/clinicId-consistency.test.ts', // requires live MongoDB
   ],
 
@@ -54,17 +59,25 @@ const config: Config = {
     ],
   },
 
-  // Coverage: focus on the auth module
+  // Coverage: auth + payments modules
   collectCoverageFrom: [
     'src/modules/auth/**/*.ts',
+    'src/modules/payments/**/*.ts',
     '!src/modules/auth/**/*.test.ts',
     '!src/modules/auth/**/*.d.ts',
+    '!src/modules/payments/**/*.test.ts',
+    '!src/modules/payments/**/__tests__/**',
+    '!src/modules/payments/**/*.d.ts',
   ],
 
   coverageThreshold: {
     global: {
       lines: 80,
       branches: 80,
+    },
+    './src/modules/payments/': {
+      lines: 85,
+      branches: 85,
     },
   },
 

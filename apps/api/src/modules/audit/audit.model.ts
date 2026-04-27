@@ -27,7 +27,7 @@ export type AuditAction =
   | 'IMMUNIZATION_CERTIFICATE'
   | 'PATIENT_PHOTO_UPLOAD'
   | 'PATIENT_PHOTO_ACCESS'
-  | 'PATIENT_PHOTO_DELETE';
+  | 'PATIENT_PHOTO_DELETE'
   | 'PAYMENT_EXPORT';
 
 export interface AuditLog {
