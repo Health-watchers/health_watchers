@@ -232,3 +232,96 @@ export async function generateDifferentialDiagnosis(
     throw new Error(`Failed to generate differential diagnosis: ${msg}`);
   }
 }
+
+// ── Dosage Calculator ─────────────────────────────────────────────────────────
+
+export interface DosageCalculatorInput {
+  drugName: string;
+  patientWeight: number;
+  patientAge: number;
+  patientSex: 'M' | 'F';
+  indication: string;
+  renalFunction?: 'normal' | 'mild_impairment' | 'moderate_impairment' | 'severe_impairment';
+  hepaticFunction?: 'normal' | 'impaired';
+}
+
+export interface DosageCalculatorResponse {
+  recommendedDose: string;
+  frequency: string;
+  route: string;
+  maxDailyDose: string;
+  pediatricAdjustment: boolean;
+  renalAdjustment: boolean;
+  warnings: string[];
+  contraindications: string[];
+  disclaimer: string;
+}
+
+const dosageResponseSchema = z.object({
+  recommendedDose: z.string().trim().min(1),
+  frequency: z.string().trim().min(1),
+  route: z.string().trim().min(1),
+  maxDailyDose: z.string().trim().min(1),
+  pediatricAdjustment: z.boolean(),
+  renalAdjustment: z.boolean(),
+  warnings: z.array(z.string()),
+  contraindications: z.array(z.string()),
+});
+
+export async function calculateDosage(input: DosageCalculatorInput): Promise<DosageCalculatorResponse> {
+  const client = getGeminiClient();
+
+  const context = [
+    `Drug: ${input.drugName}`,
+    `Indication: ${input.indication}`,
+    `Patient weight: ${input.patientWeight} kg`,
+    `Patient age: ${input.patientAge} years`,
+    `Patient sex: ${input.patientSex === 'M' ? 'Male' : 'Female'}`,
+    input.renalFunction ? `Renal function: ${input.renalFunction.replace(/_/g, ' ')}` : '',
+    input.hepaticFunction ? `Hepatic function: ${input.hepaticFunction.replace(/_/g, ' ')}` : '',
+  ].filter(Boolean).join('\n');
+
+  const prompt = `You are a clinical pharmacology AI assisting a licensed clinician. Calculate the appropriate dosage for the following de-identified patient parameters using evidence-based guidelines.
+
+Patient Parameters:
+${context}
+
+Return ONLY valid JSON (no markdown, no explanation) matching this exact schema:
+{
+  "recommendedDose": "string (e.g. '500 mg' or '10 mg/kg')",
+  "frequency": "string (e.g. 'every 8 hours' or 'once daily')",
+  "route": "string (e.g. 'oral', 'intravenous', 'intramuscular')",
+  "maxDailyDose": "string (e.g. '3000 mg/day')",
+  "pediatricAdjustment": boolean (true if age < 18 or weight-based dosing applied),
+  "renalAdjustment": boolean (true if renal impairment dose adjustment applied),
+  "warnings": ["string"] (list of clinical warnings; empty array if none),
+  "contraindications": ["string"] (list of contraindications; empty array if none)
+}
+
+Rules:
+1. Use weight-based dosing (mg/kg) for patients under 18 years.
+2. Adjust dose for renal/hepatic impairment per standard guidelines.
+3. Flag any dose that exceeds the maximum recommended daily dose in warnings.
+4. List absolute contraindications separately from warnings.
+5. If the drug is contraindicated for this patient, still return the structure but include the contraindication.`;
+
+  try {
+    const model = client.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const parsed = JSON.parse(jsonStr);
+    const validated = dosageResponseSchema.parse(parsed);
+
+    return {
+      ...validated,
+      disclaimer: AI_DISCLAIMER,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to calculate dosage: ${msg}`);
+  }
+}

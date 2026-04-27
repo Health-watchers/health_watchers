@@ -19,7 +19,14 @@ import {
   issueRefund,
   streamAccountTransactions,
   getNetworkStatus,
+  getHorizonServer,
+  getNetworkPassphrase,
 } from './stellar.js';
+import {
+  createClaimableBalance as buildCreateClaimableBalance,
+  claimClaimableBalance as buildClaimClaimableBalance,
+} from './operations/claimable-balance.js';
+import { Keypair, BASE_FEE, Asset } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
@@ -282,6 +289,118 @@ app.get('/orderbook', async (req, res) => {
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance — create escrow claimable balance for insurance pre-auth
+app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { fromPublicKey, amount, claimantPublicKey, claimableUntil, memo } = req.body;
+    if (!fromPublicKey || !amount || !claimantPublicKey || !claimableUntil) {
+      return res.status(400).json({ error: 'fromPublicKey, amount, claimantPublicKey, claimableUntil are required' });
+    }
+
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const sourceAccount = await server.loadAccount(fromPublicKey);
+    const fee = await server.fetchBaseFee();
+
+    const claimableAfter = new Date(); // claimable immediately
+    const claimableUntilDate = new Date(claimableUntil);
+
+    const tx = buildCreateClaimableBalance({
+      sourceAccount,
+      amount,
+      asset: Asset.native(),
+      claimantPublicKey,
+      claimableAfter,
+      claimableUntil: claimableUntilDate,
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      const balanceId = `dry-run-balance-${Date.now()}`;
+      return res.json({ success: true, balanceId, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    // Extract balance ID from the transaction result
+    const balanceId = (result as any).id ?? `balance-${result.hash}`;
+    recordSuccess();
+    return res.json({ success: true, balanceId, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance/:balanceId/claim — clinic claims the escrowed funds
+app.post('/claimable-balance/:balanceId/claim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
+
+    const tx = buildClaimClaimableBalance({
+      claimerAccount,
+      balanceId: decodeURIComponent(balanceId),
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      return res.json({ success: true, txHash: `dry-run-claim-${Date.now()}`, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    recordSuccess();
+    return res.json({ success: true, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance/:balanceId/reclaim — patient reclaims after denial
+app.post('/claimable-balance/:balanceId/reclaim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
+
+    // Reclaim uses the same ClaimClaimableBalance operation but signed by the platform
+    // acting on behalf of the patient (or the patient's key if available)
+    const tx = buildClaimClaimableBalance({
+      claimerAccount,
+      balanceId: decodeURIComponent(balanceId),
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      return res.json({ success: true, txHash: `dry-run-reclaim-${Date.now()}`, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    recordSuccess();
+    return res.json({ success: true, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 

@@ -22,3 +22,15 @@ export const differentialDiagnosisRequestSchema = z.object({
 });
 
 export type DifferentialDiagnosisRequestDto = z.infer<typeof differentialDiagnosisRequestSchema>;
+
+export const dosageCalculatorRequestSchema = z.object({
+  drugName: z.string().trim().min(1).max(200),
+  patientWeight: z.number().positive().max(500),
+  patientAge: z.number().int().min(0).max(130),
+  patientSex: z.enum(['M', 'F']),
+  indication: z.string().trim().min(2).max(500),
+  renalFunction: z.enum(['normal', 'mild_impairment', 'moderate_impairment', 'severe_impairment']).optional(),
+  hepaticFunction: z.enum(['normal', 'impaired']).optional(),
+});
+
+export type DosageCalculatorRequestDto = z.infer<typeof dosageCalculatorRequestSchema>;
