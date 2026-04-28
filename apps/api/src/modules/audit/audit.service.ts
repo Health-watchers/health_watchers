@@ -10,7 +10,7 @@ interface AuditLogParams {
   userId?: string | Types.ObjectId;
   clinicId?: string | Types.ObjectId;
   outcome?: 'SUCCESS' | 'FAILURE';
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**

@@ -50,7 +50,7 @@ function verifyAccessToken(token: string): TokenPayload | null {
       role: decoded.role,
       clinicId: decoded.clinicId,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -69,7 +69,7 @@ function assert(condition: boolean, testName: string) {
   }
 }
 
-function assertEqual(actual: any, expected: any, testName: string) {
+function assertEqual(actual: unknown, expected: unknown, testName: string) {
   const condition = JSON.stringify(actual) === JSON.stringify(expected);
   assert(condition, testName);
   if (!condition) {
@@ -91,7 +91,9 @@ const mockPayload: TokenPayload = {
 // Test 1: Token is signed with issuer and audience
 console.log('\n📋 Test Group: Token Signing\n');
 const validToken = signAccessToken(mockPayload);
-const decoded = jwt.decode(validToken, { complete: true }) as any;
+const decoded = jwt.decode(validToken, { complete: true }) as {
+  payload: Record<string, unknown>;
+} | null;
 assert(decoded?.payload?.iss === 'health-watchers-api', 'Token includes correct issuer claim');
 assert(decoded?.payload?.aud === 'health-watchers-client', 'Token includes correct audience claim');
 assert(decoded?.payload?.userId === 'user123', 'Token includes userId');
@@ -146,13 +148,13 @@ const otherServiceToken = jwt.sign(
     expiresIn: '15m',
     issuer: 'other-service-api',
     audience: 'other-service-client',
-  }
+  },
 );
 const resultOtherService = verifyAccessToken(otherServiceToken);
 assertEqual(
   resultOtherService,
   null,
-  'Token from other service (same secret, different iss/aud) is REJECTED'
+  'Token from other service (same secret, different iss/aud) is REJECTED',
 );
 
 // Test 8: Token with no claims at all

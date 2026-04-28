@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
+import { ErrorMessage, Toast, TableSkeleton, ModuleEmptyState, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
@@ -30,17 +30,6 @@ interface Labels {
   notes: string;
 }
 
-function getEncounterErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unable to load encounters right now.';
-  if (error.message.includes('Failed to fetch')) {
-    return 'Unable to reach the server. Please check your connection and try again.';
-  }
-  if (error.message.startsWith('Request failed')) {
-    return 'Unable to load encounters right now. Please try again.';
-  }
-  return error.message;
-}
-
 export default function EncountersClient({ labels }: { labels: Labels }) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -66,11 +55,11 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
   };
 
-  if (isLoading) return <TableSkeleton columns={6} rows={5} />;
+  if (isLoading) return <TableSkeleton columns={4} rows={5} />;
   if (error)
     return (
       <ErrorMessage
-        message={getEncounterErrorMessage(error)}
+        message={error instanceof Error ? error.message : 'Failed to load encounters.'}
         onRetry={() =>
           queryClient.invalidateQueries({
             queryKey: queryKeys.encounters.list(),
@@ -101,13 +90,14 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
       )}
 
       {encounters.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-          <h2 className="text-lg font-semibold text-gray-900">No records found</h2>
-          <p className="mt-2 text-sm text-gray-600">{labels.empty}</p>
-          <Button variant="primary" size="md" className="mt-5" onClick={() => setShowForm(true)}>
-            Create Encounter
-          </Button>
-        </div>
+        <ModuleEmptyState
+          module="encounters"
+          action={
+            <Button variant="primary" size="md" className="mt-2">
+              Create Encounter
+            </Button>
+          }
+        />
       ) : (
         <ul aria-label={labels.title} className="m-0 flex list-none flex-col gap-4 p-0">
           {encounters.map((e: Encounter) => (

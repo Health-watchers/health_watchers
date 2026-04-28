@@ -12,7 +12,7 @@ export function auditMiddleware(action: AuditAction, resourceType?: string) {
     const originalSend = res.send;
 
     // Override send to capture response
-    res.send = function (data: any): Response {
+    res.send = function (data: unknown): Response {
       // Only log if response is successful (2xx status code)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const resourceId = req.params.id || req.params.patientId || req.params.encounterId;
@@ -26,7 +26,7 @@ export function auditMiddleware(action: AuditAction, resourceType?: string) {
             clinicId: req.user?.clinicId,
             outcome: 'SUCCESS',
           },
-          req
+          req,
         ).catch((error) => {
           logger.error({ err: error }, 'Audit logging failed');
         });

@@ -71,8 +71,8 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
     }, req);
 
     return res.status(201).json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
+  } catch (err: unknown) {
+    return res.status(400).json({ error: 'BadRequest', message: (err as Error).message });
   }
 });
 
@@ -97,8 +97,8 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
     }
     return res.json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 
