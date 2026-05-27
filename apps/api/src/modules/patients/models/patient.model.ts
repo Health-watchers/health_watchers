@@ -124,6 +124,23 @@ function decryptDoc(doc: unknown) {
   }
 }
 
+function encryptUpdatePayload(update: Record<string, any>) {
+  const target = update.$set ?? update;
+  for (const field of PHI_FIELDS) {
+    if (target[field]) target[field] = encrypt(target[field]);
+  }
+}
+
+patientSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as Record<string, any>;
+  if (update) encryptUpdatePayload(update);
+});
+
+patientSchema.pre('updateMany', function () {
+  const update = this.getUpdate() as Record<string, any>;
+  if (update) encryptUpdatePayload(update);
+});
+
 patientSchema.post('save', function () {
   decryptDoc(this as unknown as Record<string, unknown>);
 });
