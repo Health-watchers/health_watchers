@@ -8,6 +8,7 @@ import {
   isAIServiceAvailable,
   AI_DISCLAIMER,
   calculateDosage,
+  suggestClinicalCodes,
 } from './ai.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validate.middleware';

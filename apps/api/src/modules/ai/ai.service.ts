@@ -325,3 +325,98 @@ Rules:
     throw new Error(`Failed to calculate dosage: ${msg}`);
   }
 }
+
+// ── Clinical Coding (ICD-10 & CPT) ────────────────────────────────────────────
+
+export interface CodeSuggestion {
+  code: string;
+  description: string;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+}
+
+export interface ClinicalCodingResponse {
+  diagnosisCodes: CodeSuggestion[];
+  procedureCodes: CodeSuggestion[];
+  disclaimer: string;
+}
+
+const codeSuggestionSchema = z.object({
+  code: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  confidence: z.enum(['high', 'medium', 'low']),
+  reasoning: z.string().trim().min(1),
+});
+
+const clinicalCodingResponseSchema = z.object({
+  diagnosisCodes: z.array(codeSuggestionSchema).min(1).max(10),
+  procedureCodes: z.array(codeSuggestionSchema).min(0).max(10),
+});
+
+export async function suggestClinicalCodes(input: {
+  chiefComplaint: string;
+  clinicalNotes: string;
+  procedures?: string[];
+}): Promise<ClinicalCodingResponse> {
+  const client = getGeminiClient();
+
+  const safeNotes = stripPII(input.clinicalNotes);
+  const procedureList = input.procedures?.length ? input.procedures.join(', ') : 'None documented';
+
+  const prompt = `You are a medical coding AI assisting a licensed coder with ICD-10 diagnosis and CPT procedure code suggestions.
+Use only the de-identified clinical context below. Do not infer or generate any patient identifiers.
+
+Clinical Presentation:
+Chief Complaint: ${input.chiefComplaint}
+Clinical Notes: ${safeNotes}
+Procedures Performed: ${procedureList}
+
+Return ONLY valid JSON (no markdown, no comments, no explanation) with this exact schema:
+{
+  "diagnosisCodes": [
+    {
+      "code": "string (ICD-10 code, e.g. 'E11.9')",
+      "description": "string",
+      "confidence": "high" | "medium" | "low",
+      "reasoning": "string"
+    }
+  ],
+  "procedureCodes": [
+    {
+      "code": "string (CPT code, e.g. '99213')",
+      "description": "string",
+      "confidence": "high" | "medium" | "low",
+      "reasoning": "string"
+    }
+  ]
+}
+
+Rules:
+1. Suggest 2-5 ICD-10 diagnosis codes based on clinical findings.
+2. Suggest 0-3 CPT procedure codes based on documented procedures.
+3. Use "high" confidence only for explicitly documented diagnoses/procedures.
+4. Use "medium" confidence for strongly implied diagnoses/procedures.
+5. Use "low" confidence for differential or rule-out diagnoses.
+6. Include the most specific ICD-10 code available (e.g., E11.9 for Type 2 diabetes without complications).
+7. Codes must be valid ICD-10 or CPT codes.`;
+
+  try {
+    const model = client.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const parsed = JSON.parse(jsonStr);
+    const validated = clinicalCodingResponseSchema.parse(parsed);
+
+    return {
+      ...validated,
+      disclaimer: AI_DISCLAIMER,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to suggest clinical codes: ${msg}`);
+  }
+}

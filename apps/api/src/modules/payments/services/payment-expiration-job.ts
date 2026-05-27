@@ -4,27 +4,43 @@ import logger from '@api/utils/logger';
 /**
  * Payment Expiration Job
  *
- * Automatically expires pending payments that are older than 30 minutes.
- * This prevents payments from remaining in 'pending' state indefinitely.
+ * Automatically expires pending payments based on their expiresAt timestamp.
+ * Default expiry is 24 hours after creation.
+ * Multi-sig payments use 24-hour timeout, escrow payments use 30-day timeout.
  *
  * Runs every 5 minutes to check for expired payments.
  */
 
-const PAYMENT_EXPIRY_MINUTES = 30;
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 let expirationJobInterval: NodeJS.Timeout | null = null;
 
 /**
- * Expire pending payments older than the configured threshold
+ * Calculate expiry date based on payment type
+ */
+export function calculateExpiryDate(paymentType: 'immediate' | 'multisig' | 'escrow' = 'immediate'): Date {
+  const now = new Date();
+  switch (paymentType) {
+    case 'multisig':
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+    case 'escrow':
+      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    case 'immediate':
+    default:
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours default
+  }
+}
+
+/**
+ * Expire pending payments that have passed their expiresAt timestamp
  */
 export async function expirePendingPayments(): Promise<number> {
-  const expiryThreshold = new Date(Date.now() - PAYMENT_EXPIRY_MINUTES * 60 * 1000);
+  const now = new Date();
 
   const result = await PaymentRecordModel.updateMany(
     {
       status: 'pending',
-      createdAt: { $lt: expiryThreshold },
+      expiresAt: { $lt: now },
     },
     {
       status: 'failed',
@@ -35,7 +51,7 @@ export async function expirePendingPayments(): Promise<number> {
     logger.info({
       event: 'payments_expired',
       count: result.modifiedCount,
-      threshold: expiryThreshold.toISOString(),
+      timestamp: now.toISOString(),
     });
   }
 
@@ -51,9 +67,7 @@ export function startPaymentExpirationJob(): void {
     return;
   }
 
-  logger.info(
-    `Starting payment expiration job (checking every ${CHECK_INTERVAL_MS / 1000}s, expiring after ${PAYMENT_EXPIRY_MINUTES}m)`
-  );
+  logger.info(`Starting payment expiration job (checking every ${CHECK_INTERVAL_MS / 1000}s)`);
 
   // Run immediately on startup
   expirePendingPayments().catch((err) => {

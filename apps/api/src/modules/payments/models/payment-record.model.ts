@@ -32,6 +32,9 @@ export interface PaymentRecord {
   usdEquivalent?: string;
   exchangeRate?: string;
   receiptGeneratedAt?: Date;
+  // Expiry fields
+  expiresAt?: Date;
+  paymentType?: 'immediate' | 'multisig' | 'escrow';
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -72,6 +75,9 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     usdEquivalent: { type: String },
     exchangeRate: { type: String },
     receiptGeneratedAt: { type: Date },
+    // Expiry fields
+    expiresAt: { type: Date, index: true },
+    paymentType: { type: String, enum: ['immediate', 'multisig', 'escrow'], default: 'immediate' },
   },
   { timestamps: true, versionKey: false }
 );
