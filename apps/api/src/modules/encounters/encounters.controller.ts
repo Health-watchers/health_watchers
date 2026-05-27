@@ -20,8 +20,8 @@ import { auditLog } from '../audit/audit.service';
 import crypto from 'crypto';
 import { emitToClinic } from '@api/realtime/socket';
 import { encountersCreatedTotal } from '../../services/metrics.service';
-import crypto from 'crypto';
 import cdsRulesEngine from '../cds/cds-rules-engine.js';
+import { EncounterValidationService } from './encounter-validation.service';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -189,6 +189,8 @@ router.post(
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'NURSE'),
   validateRequest({ body: createEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    const validationService = new EncounterValidationService();
+
     // Merge template defaults (request body overrides template)
     const { templateId } = req.query;
     if (templateId && typeof templateId === 'string') {
@@ -218,11 +220,19 @@ router.post(
       }
     }
 
-    const invalidCode = await validateDiagnosisCodes(req.body.diagnosis);
-    if (invalidCode) {
-      return res
-        .status(400)
-        .json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
+    // Run comprehensive business rule validation
+    const validationErrors = await validationService.validateEncounterCreation(
+      req.body,
+      req.user!.clinicId,
+      { maxPastHours: 24, allowOpenEncounter: false }
+    );
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Encounter validation failed',
+        errors: validationErrors,
+      });
     }
 
     // Allergy check for prescriptions
