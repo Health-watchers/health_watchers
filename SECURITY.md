@@ -35,6 +35,21 @@ Health Watchers is designed with HIPAA and GDPR compliance in mind. This documen
 - Tokens stored in secure HTTP-only cookies
 - Token revocation on logout
 
+### Access Token Invalidation (Redis-backed)
+
+Access tokens are short-lived (15 min) but can be explicitly invalidated before expiry:
+
+- **Per-token denylist**: Each access token carries a `jti` (UUID v4) claim. On logout or password change, the `jti` is stored in Redis with a TTL equal to the token's remaining lifetime. `verifyAccessToken` rejects any token whose `jti` is in the denylist.
+- **Logout-all**: `POST /api/v1/auth/logout-all` stores a per-user invalidation timestamp (`user-invalidated:{userId}`) in Redis. All access tokens with an `iat` (issued-at) before that timestamp are rejected, effectively invalidating every active session for the user.
+- **Graceful degradation**: If Redis is unavailable, denylist checks are skipped and tokens remain valid until natural expiry. This is acceptable given the 15-minute access token lifetime.
+
+Redis keys used:
+
+| Key pattern | Purpose | TTL |
+|---|---|---|
+| `token-denylist:{jti}` | Single-token revocation | Token's remaining lifetime |
+| `user-invalidated:{userId}` | Logout-all timestamp | 7 days |
+
 ### Role-Based Access Control (RBAC)
 
 Roles and permissions:

@@ -1,11 +1,13 @@
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { UserModel } from '../auth/models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
+import { addToDenylist } from '@api/services/token-denylist.service';
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(100),
@@ -189,6 +191,17 @@ router.post(
 
     user.password = req.body.newPassword;
     await user.save();
+
+    // Denylist the current access token so it can't be reused after password change
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const rawToken = authHeader.slice(7);
+      const tokenData = jwt.decode(rawToken) as { jti?: string; exp?: number } | null;
+      if (tokenData?.jti && tokenData?.exp) {
+        const ttl = tokenData.exp - Math.floor(Date.now() / 1000);
+        await addToDenylist(tokenData.jti, ttl);
+      }
+    }
 
     return res.json({
       status: 'success',

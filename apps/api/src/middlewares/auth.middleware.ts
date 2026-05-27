@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../modules/auth/token.service';
+import { verifyAccessTokenAsync } from '../modules/auth/token.service';
 import { AppRole } from '../types/express';
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
@@ -12,7 +12,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.slice(7);
-  const payload = verifyAccessToken(token);
+  const payload = await verifyAccessTokenAsync(token);
   if (!payload) {
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
   }
@@ -23,6 +23,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     clinicId: payload.clinicId,
     patientId: payload.patientId,
   };
+  req.tokenJti = payload.jti;
   return next();
 }
 

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { Request, Response, Router } from 'express';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { authenticate } from '@api/middlewares/auth.middleware';
@@ -39,6 +40,7 @@ import { totpService } from './totp.service';
 import { sendVerificationEmail, sendWelcomeEmail } from '@api/lib/email.service';
 import { encrypt, decrypt } from '@api/lib/encrypt';
 import { auditLog } from '../audit/audit.service';
+import { addToDenylist, setUserInvalidatedAt } from '@api/services/token-denylist.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -256,17 +258,30 @@ router.post(
  * @swagger
  * /auth/logout:
  *   post:
- *     summary: Invalidate the current refresh token
+ *     summary: Invalidate the current refresh token and access token
  *     tags: [Auth]
  */
 router.post(
   '/logout',
   validateRequest({ body: refreshSchema }),
   async (req: RefreshReq, res: Response) => {
+    // Revoke refresh token
     const decoded = verifyRefreshToken(req.body.refreshToken);
     if (decoded) {
       await RefreshTokenModel.deleteOne({ jti: decoded.jti });
     }
+
+    // Denylist the current access token if present
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const rawToken = authHeader.slice(7);
+      const tokenData = jwt.decode(rawToken) as { jti?: string; exp?: number } | null;
+      if (tokenData?.jti && tokenData?.exp) {
+        const ttl = tokenData.exp - Math.floor(Date.now() / 1000);
+        await addToDenylist(tokenData.jti, ttl);
+      }
+    }
+
     return res.json({ status: 'success', data: { loggedOut: true } });
   }
 );
@@ -275,13 +290,17 @@ router.post(
  * @swagger
  * /auth/logout-all:
  *   post:
- *     summary: Revoke all refresh tokens for the authenticated user
+ *     summary: Revoke all sessions for the authenticated user
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
  */
 router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
-  await RefreshTokenModel.deleteMany({ userId: req.user!.userId });
+  const userId = req.user!.userId;
+  // Revoke all refresh tokens
+  await RefreshTokenModel.deleteMany({ userId });
+  // Store invalidation timestamp — all access tokens issued before now are rejected
+  await setUserInvalidatedAt(userId, Math.floor(Date.now() / 1000));
   return res.json({ status: 'success', data: { loggedOut: true } });
 });
 

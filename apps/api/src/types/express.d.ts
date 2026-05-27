@@ -16,6 +16,7 @@ declare global {
         clinicId: string;
         patientId?: string;
       };
+      tokenJti?: string;
     }
   }
 }

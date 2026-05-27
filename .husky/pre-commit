@@ -4,3 +4,9 @@ npx lint-staged
 
 # Run secret scanning on staged files
 . "$(dirname "$0")/pre-commit-secrets"
+
+# Run actionlint on staged workflow files
+. "$(dirname "$0")/pre-commit-actionlint"
+
+# Run translation check on staged translation files
+. "$(dirname "$0")/pre-commit-translations"

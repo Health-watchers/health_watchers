@@ -21,6 +21,12 @@ jest.mock('@health-watchers/config', () => ({
   },
 }));
 
+// Mock the denylist service (not under test here)
+jest.mock('@api/services/token-denylist.service', () => ({
+  isDenylisted: jest.fn().mockResolvedValue(false),
+  isInvalidatedForUser: jest.fn().mockResolvedValue(false),
+}));
+
 describe('Token Service', () => {
   const mockPayload: TokenPayload = {
     userId: 'user123',
@@ -81,7 +87,8 @@ describe('Token Service', () => {
       const token = signAccessToken(mockPayload);
       const result = verifyAccessToken(token);
 
-      expect(result).toEqual(mockPayload);
+      expect(result).toMatchObject(mockPayload);
+      expect(result?.jti).toBeDefined();
     });
 
     it('should reject a token without issuer claim', () => {
