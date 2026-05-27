@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { Keypair } from '@stellar/stellar-sdk';
+import { mongodbKeyDecryptionFailures } from '@api/services/metrics.service';
 
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 16;
@@ -33,9 +34,14 @@ export function encryptSecretKey(secretKey: string) {
 export function decryptSecretKey(encryptedSecretKey: string, iv: string) {
   const [ctHex, tagHex] = encryptedSecretKey.split(':');
   if (!ctHex || !tagHex) throw new Error('Invalid encrypted secret key format');
-  const decipher = createDecipheriv(ALGO, getEncryptionKey(), Buffer.from(iv, 'hex'));
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-  return decipher.update(Buffer.from(ctHex, 'hex')).toString('utf8') + decipher.final('utf8');
+  try {
+    const decipher = createDecipheriv(ALGO, getEncryptionKey(), Buffer.from(iv, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    return decipher.update(Buffer.from(ctHex, 'hex')).toString('utf8') + decipher.final('utf8');
+  } catch (err) {
+    mongodbKeyDecryptionFailures.inc();
+    throw err;
+  }
 }
 
 /** Generate a new Stellar keypair and return the public key + encrypted secret. */

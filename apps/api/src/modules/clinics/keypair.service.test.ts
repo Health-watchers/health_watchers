@@ -109,5 +109,15 @@ describe('keypair.service', () => {
       const { publicKey } = generateClinicKeypair();
       expect(publicKey).toBe('GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZQE3NMQKK6UUUHKKOAIB');
     });
+
+    it('stored encryptedSecretKey is NOT a raw Stellar secret (does not start with S)', () => {
+      // Issue #596: verify encryption at rest — raw Stellar secrets start with 'S'
+      const { generateClinicKeypair } = require('./keypair.service');
+      const { encryptedSecretKey } = generateClinicKeypair();
+      // The stored value must not be a raw Stellar secret key
+      expect(encryptedSecretKey).not.toMatch(/^S[A-Z2-7]{55}$/);
+      // It should be hex-encoded ciphertext:authTag format
+      expect(encryptedSecretKey).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    });
   });
 });
