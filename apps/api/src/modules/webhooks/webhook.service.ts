@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import logger from '@api/utils/logger';
+import { validateWebhookUrl } from '@api/utils/url-validator';
 import { WebhookDeliveryModel } from './webhook.model';
 
 export function generateWebhookSecret(): string {
@@ -65,6 +66,15 @@ async function deliverWebhookWithRetry(
 
   const maxAttempts = 3;
   const backoffMs = [1000, 5000, 30000]; // 1s, 5s, 30s
+
+  const { valid, reason } = validateWebhookUrl(url);
+  if (!valid) {
+    delivery.status = 'failed';
+    delivery.error = `Blocked URL: ${reason}`;
+    await delivery.save();
+    logger.error({ webhookId, event, url, reason }, 'Webhook delivery blocked: invalid URL');
+    return;
+  }
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
