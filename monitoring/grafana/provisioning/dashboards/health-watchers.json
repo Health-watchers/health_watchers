@@ -171,9 +171,24 @@
       "targets": [
         {
           "expr": "mongodb_connection_pool_size{job=\"health-watchers-api\"}",
-          "legendFormat": "Pool Size"
+          "legendFormat": "Active Connections"
+        },
+        {
+          "expr": "mongodb_pool_wait_queue_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Wait Queue Size"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 8 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 12,

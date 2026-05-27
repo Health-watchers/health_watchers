@@ -48,3 +48,37 @@ groups:
         annotations:
           summary: "Stellar service is down"
           description: "The Stellar service has been unreachable for more than 1 minute"
+
+      # Alert when MongoDB connection pool utilization exceeds 80%
+      - alert: MongoDBPoolHighUtilization
+        expr: |
+          mongodb_connection_pool_size{job="health-watchers-api"}
+          / on() group_left()
+          scalar(mongodb_connection_pool_size{job="health-watchers-api"} * 0 + ignoring() (count(up{job="health-watchers-api"}) * 0 + 10))
+          > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MongoDB connection pool utilization high"
+          description: "MongoDB pool utilization has exceeded 80% for more than 2 minutes"
+
+      # Alert when MongoDB pool wait queue is non-zero (connections queuing)
+      - alert: MongoDBPoolWaitQueueNonEmpty
+        expr: mongodb_pool_wait_queue_size{job="health-watchers-api"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB connection pool wait queue is non-empty"
+          description: "Requests are waiting for MongoDB connections — pool may be exhausted"
+
+      # Alert for Stellar keypair decryption failures
+      - alert: StellarKeypairDecryptionFailure
+        expr: increase(mongodb_keypair_decryption_failures_total{job="health-watchers-api"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stellar keypair decryption failure detected"
+          description: "One or more Stellar keypair decryption failures occurred in the last 5 minutes"

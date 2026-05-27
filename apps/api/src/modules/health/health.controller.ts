@@ -36,7 +36,28 @@ router.get('/ready', async (req: Request, res: Response) => {
     if (mongoStatus === 1) {
       // Perform a simple ping if connected
       await mongoose.connection.db?.admin().ping();
-      checks.mongodb = { status: 'healthy', latency: Date.now() - mongoStart };
+      const pool = mongoose.connection.pool;
+      const totalConnections = pool?.totalConnectionCount ?? 0;
+      const waitQueueSize = pool?.waitQueueSize ?? 0;
+      const maxPoolSize = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);
+      const utilization = maxPoolSize > 0 ? totalConnections / maxPoolSize : 0;
+      const poolExhausted = waitQueueSize > 0 && totalConnections >= maxPoolSize;
+
+      if (poolExhausted) {
+        isReady = false;
+        checks.mongodb = {
+          status: 'unhealthy',
+          message: 'Connection pool exhausted',
+          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          latency: Date.now() - mongoStart,
+        };
+      } else {
+        checks.mongodb = {
+          status: 'healthy',
+          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          latency: Date.now() - mongoStart,
+        };
+      }
     } else {
       isReady = false;
       checks.mongodb = { 

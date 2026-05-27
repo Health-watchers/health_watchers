@@ -88,6 +88,18 @@ export const mongodbConnectionPoolSize = new client.Gauge({
   registers: [register],
 });
 
+export const mongodbPoolWaitQueueSize = new client.Gauge({
+  name: 'mongodb_pool_wait_queue_size',
+  help: 'Number of operations waiting for a MongoDB connection from the pool',
+  registers: [register],
+});
+
+export const mongodbKeyDecryptionFailures = new client.Counter({
+  name: 'mongodb_keypair_decryption_failures_total',
+  help: 'Total number of Stellar keypair decryption failures',
+  registers: [register],
+});
+
 // ── Normalise path helper ─────────────────────────────────────────────────────
 // Replace dynamic segments (ObjectIds, UUIDs, numbers) with placeholders
 // to avoid high-cardinality label explosion.

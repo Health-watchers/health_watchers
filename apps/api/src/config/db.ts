@@ -6,7 +6,7 @@ const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 1_000;
 
 const POOL_OPTIONS = {
-  maxPoolSize: 10,
+  maxPoolSize: parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10),
   minPoolSize: 2,
   serverSelectionTimeoutMS: 5_000,
   socketTimeoutMS: 45_000,

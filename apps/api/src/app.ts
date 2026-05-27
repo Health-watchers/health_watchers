@@ -67,6 +67,10 @@ import {
   stopWaitlistExpiryJob,
 } from './modules/appointments/waitlist-expiry-job';
 import { getCacheMetrics } from './services/cache.service';
+import {
+  mongodbConnectionPoolSize,
+  mongodbPoolWaitQueueSize,
+} from './services/metrics.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
@@ -284,10 +288,13 @@ async function startServer() {
   startBalanceMonitoringJob();
   startWaitlistExpiryJob();
 
-  // Track MongoDB connection pool size for Prometheus
+  // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const poolSize = mongoose.connection.pool?.totalConnectionCount ?? 0;
+    const pool = mongoose.connection.pool;
+    const poolSize = pool?.totalConnectionCount ?? 0;
+    const waitQueueSize = pool?.waitQueueSize ?? 0;
     mongodbConnectionPoolSize.set(poolSize);
+    mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
   // Graceful shutdown handler
