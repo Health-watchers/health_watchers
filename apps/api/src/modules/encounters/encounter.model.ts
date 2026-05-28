@@ -54,6 +54,16 @@ export interface BillingInfo {
   paidAt?: Date;
 }
 
+export interface Attachment {
+  fileId: string;
+  fileName: string;
+  fileType: 'PDF' | 'JPEG' | 'PNG' | 'DICOM';
+  fileSize: number;
+  uploadedBy: Schema.Types.ObjectId;
+  uploadedAt: Date;
+  storageKey: string;
+}
+
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
@@ -73,6 +83,7 @@ export interface Encounter {
   aiSummary?: string;
   isActive?: boolean;
   billing?: BillingInfo;
+  attachments?: Attachment[];
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -154,6 +165,19 @@ const billingInfoSchema = new Schema<BillingInfo>(
   { _id: false }
 );
 
+const attachmentSchema = new Schema<Attachment>(
+  {
+    fileId: { type: String, required: true },
+    fileName: { type: String, required: true },
+    fileType: { type: String, enum: ['PDF', 'JPEG', 'PNG', 'DICOM'], required: true },
+    fileSize: { type: Number, required: true },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    uploadedAt: { type: Date, default: Date.now },
+    storageKey: { type: String, required: true },
+  },
+  { _id: true }
+);
+
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
@@ -174,6 +198,7 @@ const encounterSchema = new Schema<Encounter>(
     aiSummary:         { type: String },
     isActive:          { type: Boolean, default: true, index: true },
     billing:           { type: billingInfoSchema },
+    attachments:       { type: [attachmentSchema], default: [] },
   },
   { timestamps: true, versionKey: false }
 );

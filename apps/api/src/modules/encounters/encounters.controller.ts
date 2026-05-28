@@ -573,4 +573,8 @@ router.delete(
   })
 );
 
+// Mount attachment routes
+import { attachmentRoutes } from './attachments.controller';
+router.use('/:encounterId/attachments', attachmentRoutes);
+
 export const encounterRoutes = router;
