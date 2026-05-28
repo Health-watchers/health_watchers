@@ -1,0 +1,53 @@
+groups:
+  - name: health_watchers_business_kpis
+    interval: 30s
+    rules:
+      - alert: PaymentSuccessRateLow
+        expr: payment_success_rate < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          service: health-watchers
+        annotations:
+          summary: "Payment success rate below 95% for clinic {{ $labels.clinicId }}"
+          description: "Payment success rate is {{ $value | humanizePercentage }} for clinic {{ $labels.clinicId }}"
+
+      - alert: PaymentSuccessRateVeryLow
+        expr: payment_success_rate < 0.90
+        for: 2m
+        labels:
+          severity: critical
+          service: health-watchers
+        annotations:
+          summary: "Payment success rate critically low (< 90%) for clinic {{ $labels.clinicId }}"
+          description: "Payment success rate is {{ $value | humanizePercentage }} for clinic {{ $labels.clinicId }}"
+
+      - alert: HighEncounterDuration
+        expr: histogram_quantile(0.95, encounter_duration_seconds_bucket) > 3600
+        for: 10m
+        labels:
+          severity: warning
+          service: health-watchers
+        annotations:
+          summary: "High encounter duration (p95 > 1 hour) for clinic {{ $labels.clinicId }}"
+          description: "p95 encounter duration is {{ $value | humanizeDuration }} for clinic {{ $labels.clinicId }}"
+
+      - alert: NoActiveUsers
+        expr: active_users_total == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: health-watchers
+        annotations:
+          summary: "No active users for clinic {{ $labels.clinicId }}"
+          description: "Clinic {{ $labels.clinicId }} has no active users for the last 30 minutes"
+
+      - alert: HighStellarTransactionFees
+        expr: histogram_quantile(0.95, stellar_transaction_fee_xlm_bucket) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: health-watchers
+        annotations:
+          summary: "High Stellar transaction fees (p95 > 1 XLM) for clinic {{ $labels.clinicId }}"
+          description: "p95 Stellar fee is {{ $value }} XLM for clinic {{ $labels.clinicId }}"

@@ -73,6 +73,43 @@ export const paymentsConfirmedTotal = new client.Counter({
   registers: [register],
 });
 
+export const paymentSuccessRate = new client.Gauge({
+  name: 'payment_success_rate',
+  help: 'Payment success rate (0-1)',
+  labelNames: ['clinicId'] as const,
+  registers: [register],
+});
+
+export const encounterDurationSeconds = new client.Histogram({
+  name: 'encounter_duration_seconds',
+  help: 'Encounter duration in seconds',
+  labelNames: ['clinicId'] as const,
+  buckets: [60, 300, 600, 1800, 3600, 7200, 14400],
+  registers: [register],
+});
+
+export const activeUsersTotal = new client.Gauge({
+  name: 'active_users_total',
+  help: 'Total number of active users',
+  labelNames: ['clinicId'] as const,
+  registers: [register],
+});
+
+export const apiKeyRequestsTotal = new client.Counter({
+  name: 'api_key_requests_total',
+  help: 'Total API requests by API key and endpoint',
+  labelNames: ['apiKeyId', 'endpoint'] as const,
+  registers: [register],
+});
+
+export const stellarTransactionFeeXlm = new client.Histogram({
+  name: 'stellar_transaction_fee_xlm',
+  help: 'Stellar transaction fee in XLM',
+  labelNames: ['clinicId', 'transactionType'] as const,
+  buckets: [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10],
+  registers: [register],
+});
+
 export const aiRequestsTotal = new client.Counter({
   name: 'ai_requests_total',
   help: 'Total number of AI endpoint requests',
