@@ -6,6 +6,7 @@ export interface PaginationMeta {
   limit: number;
   totalPages: number;
   hasNextPage: boolean;
+  hasPrevPage: boolean;
   nextCursor: string | null;
 }
 
@@ -27,12 +28,13 @@ export async function paginate<T>(
   ]);
   const totalPages = Math.ceil(total / limit);
   const hasNextPage = page < totalPages;
+  const hasPrevPage = page > 1;
   const lastDoc = data[data.length - 1] as (T & { _id?: Types.ObjectId }) | undefined;
   const nextCursor = hasNextPage && lastDoc?._id ? lastDoc._id.toString() : null;
 
   return {
     data,
-    meta: { total, page, limit, totalPages, hasNextPage, nextCursor },
+    meta: { total, page, limit, totalPages, hasNextPage, hasPrevPage, nextCursor },
   };
 }
 
