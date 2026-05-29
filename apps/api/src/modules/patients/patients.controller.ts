@@ -1151,4 +1151,166 @@ router.post(
 // Mount communications router
 router.use('/:id/communications', communicationsRouter);
 
+/**
+ * @swagger
+ * /patients/{id}/risk-explanation:
+ *   get:
+ *     summary: Get AI-generated risk factor explanation and recommendations for a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Risk explanation with factor weights, trends, and recommendations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     riskScore: { type: number }
+ *                     riskLevel: { type: string }
+ *                     factorWeights:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           factor: { type: string }
+ *                           weight: { type: number }
+ *                           percentage: { type: number }
+ *                           trend: { type: string, enum: [improving, stable, worsening] }
+ *                     naturalLanguageExplanation: { type: string }
+ *                     recommendations: { type: array, items: { type: string } }
+ *                     disclaimer: { type: string }
+ *       404:
+ *         description: Patient not found or no risk assessment available
+ */
+// GET /patients/:id/risk-explanation
+router.get(
+  '/:id/risk-explanation',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    }).lean();
+
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    if (!patient.riskScore || !patient.riskLevel || !patient.riskFactors?.length) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'No risk assessment available for this patient. Run an assessment first.',
+      });
+    }
+
+    // Fetch last 2 risk history entries to compute factor trends
+    const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    const history = await RiskScoreHistoryModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    })
+      .sort({ calculatedAt: -1 })
+      .limit(2)
+      .lean();
+
+    const previousFactors: string[] = history[1]?.riskFactors ?? [];
+
+    // Build factor weights array with trend indicators
+    const rawWeights: Record<string, number> =
+      (patient as any).riskFactorWeights instanceof Map
+        ? Object.fromEntries((patient as any).riskFactorWeights)
+        : ((patient as any).riskFactorWeights ?? {});
+
+    const totalWeight = Object.values(rawWeights).reduce((s, v) => s + v, 0) || 1;
+
+    const factorWeights = patient.riskFactors.map((factor) => {
+      const weight = rawWeights[factor] ?? 0;
+      const wasPresent = previousFactors.includes(factor);
+      // A factor that is new is "worsening"; one that disappeared would not appear here
+      const trend: 'improving' | 'stable' | 'worsening' =
+        history.length < 2 ? 'stable' : wasPresent ? 'stable' : 'worsening';
+      return {
+        factor,
+        weight,
+        percentage: Math.round((weight / totalWeight) * 100),
+        trend,
+      };
+    });
+
+    // Factors that were present before but are gone now = improving
+    const improvedFactors = previousFactors.filter(
+      (f) => !patient.riskFactors!.includes(f)
+    );
+
+    // Generate AI explanation + recommendations
+    const { isAIServiceAvailable, AI_DISCLAIMER } = await import('../ai/ai.service');
+
+    let naturalLanguageExplanation: string;
+    let recommendations: string[];
+
+    if (isAIServiceAvailable()) {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const { config } = await import('@health-watchers/config');
+      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+
+      const prompt = `You are a clinical decision support AI. A patient has a risk score of ${patient.riskScore}/100 (${patient.riskLevel} risk).
+
+Contributing risk factors and their point weights:
+${factorWeights.map((f) => `- ${f.factor}: ${f.weight} points (${f.percentage}% of total)`).join('\n')}
+${improvedFactors.length ? `\nFactors that have improved since last assessment:\n${improvedFactors.map((f) => `- ${f}`).join('\n')}` : ''}
+
+Return ONLY valid JSON (no markdown) with this exact schema:
+{
+  "explanation": "string — 2-3 sentence plain-language explanation of why this patient is at ${patient.riskLevel} risk, referencing the top contributing factors",
+  "recommendations": ["string"] — array of 3-5 specific, actionable clinical recommendations to address the highest-weight risk factors
+}`;
+
+      try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        const parsed = JSON.parse(json);
+        naturalLanguageExplanation = parsed.explanation ?? '';
+        recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
+      } catch {
+        naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
+        recommendations = ['Consult with the care team to review the identified risk factors.'];
+      }
+    } else {
+      naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
+      recommendations = ['Consult with the care team to review the identified risk factors.'];
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        riskScore: patient.riskScore,
+        riskLevel: patient.riskLevel,
+        lastCalculatedAt: patient.lastRiskCalculatedAt,
+        factorWeights,
+        improvedFactors,
+        naturalLanguageExplanation,
+        recommendations,
+        disclaimer: 'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
+      },
+    });
+  })
+);
+
 export const patientRoutes = router;
