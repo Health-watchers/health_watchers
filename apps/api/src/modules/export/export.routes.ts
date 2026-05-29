@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { auditLog } from '@api/modules/audit/audit.service';
 import logger from '@api/utils/logger';
+import { bulkExportLimiter } from '@api/middlewares/rate-limit.middleware';
 import {
   buildPatientRecord,
   sendPatientJson,
@@ -27,7 +28,7 @@ const router = Router();
  *     security:
  *       - bearerAuth: []
  */
-router.get('/patients/:id/export', authenticate, async (req: Request, res: Response) => {
+router.get('/patients/:id/export', authenticate, bulkExportLimiter, async (req: Request, res: Response) => {
   const { id } = req.params;
   const format = ((req.query.format as string) || '').toLowerCase();
 
@@ -92,6 +93,7 @@ router.get(
   '/clinics/:id/export',
   authenticate,
   requireRoles('SUPER_ADMIN'),
+  bulkExportLimiter,
   async (req: Request, res: Response) => {
     const { id } = req.params;
 

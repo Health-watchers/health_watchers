@@ -116,3 +116,42 @@ export const generalLimiter: RateLimitRequestHandler = make(15 * 60 * 1000, 300,
   error: 'TooManyRequests',
   message: 'Too many requests. Try again in 15 minutes.',
 });
+
+// ── Per-user limiters (keyed by userId from JWT) ──────────────────────────────
+function makeUserLimiter(
+  windowMs: number,
+  max: number,
+  message: object
+): RateLimitRequestHandler {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => req.user?.userId ?? req.ip ?? 'unknown',
+    message,
+    handler: makeHandler(windowMs, message),
+    store: redisStore,
+  });
+}
+
+// Bulk export: 5 req / 1 hour per user
+export const bulkExportLimiter: RateLimitRequestHandler = makeUserLimiter(
+  60 * 60 * 1000,
+  5,
+  { error: 'TooManyRequests', message: 'Bulk export limit: 5 per hour. Try again later.' }
+);
+
+// Patient search: 100 req / 1 min per user
+export const patientSearchLimiter: RateLimitRequestHandler = makeUserLimiter(
+  60 * 1000,
+  100,
+  { error: 'TooManyRequests', message: 'Search rate limit exceeded. Try again in 1 minute.' }
+);
+
+// Report generation: 10 req / 1 hour per user
+export const reportGenerationLimiter: RateLimitRequestHandler = makeUserLimiter(
+  60 * 60 * 1000,
+  10,
+  { error: 'TooManyRequests', message: 'Report generation limit: 10 per hour. Try again later.' }
+);

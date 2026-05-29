@@ -23,6 +23,7 @@ import {
   patientQuerySchema,
   patientSearchQuerySchema,
 } from './patients.validation';
+import { DuplicateDetectionService } from './duplicate-detection.service';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
 import {
@@ -175,6 +176,23 @@ router.get(
       data: data.map(toPatientResponse),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
+  })
+);
+
+// GET /patients/potential-duplicates — ranked duplicate pairs for admin review
+router.get(
+  '/potential-duplicates',
+  ADMIN_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const minConfidence = Math.min(
+      100,
+      Math.max(0, parseInt(String(req.query.minConfidence ?? '60'), 10) || 60)
+    );
+    const pairs = await DuplicateDetectionService.findPotentialDuplicates(
+      req.user!.clinicId.toString(),
+      minConfidence
+    );
+    return res.json({ status: 'success', data: pairs, count: pairs.length });
   })
 );
 

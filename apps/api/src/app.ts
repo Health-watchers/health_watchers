@@ -36,6 +36,9 @@ import {
   aiLimiter,
   paymentLimiter,
   generalLimiter,
+  bulkExportLimiter,
+  patientSearchLimiter,
+  reportGenerationLimiter,
 } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { waitlistRoutes } from './modules/appointments/waitlist.controller';
@@ -242,6 +245,7 @@ app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/patients/search', patientSearchLimiter);
 app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
@@ -263,7 +267,7 @@ app.use('/api/v1/referrals', referralRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
-app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/reports', reportGenerationLimiter, reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
