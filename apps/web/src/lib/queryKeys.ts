@@ -13,6 +13,8 @@ export const queryKeys = {
     all: ['payments'] as const,
     list: () => [...queryKeys.payments.all, 'list'] as const,
     byPatient: (patientId: string) => [...queryKeys.payments.all, 'patient', patientId] as const,
+    analytics: (params: Record<string, string>) =>
+      [...queryKeys.payments.all, 'analytics', params] as const,
   },
   wallet: {
     all: ['wallet'] as const,

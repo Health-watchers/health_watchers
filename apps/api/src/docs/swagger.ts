@@ -79,12 +79,69 @@ const options: swaggerJsdoc.Options = {
             txHash: { type: 'string', example: 'abc123...', description: 'Stellar transaction hash' },
           },
         },
+        PaymentAnalytics: {
+          type: 'object',
+          properties: {
+            totalRevenue: {
+              type: 'object',
+              properties: {
+                xlm: { type: 'string', example: '100.0000000' },
+                usdc: { type: 'string', example: '50.00' },
+                usdEquivalent: { type: 'string', example: '60.00' },
+              },
+            },
+            transactionCount: {
+              type: 'object',
+              properties: {
+                total: { type: 'integer' },
+                confirmed: { type: 'integer' },
+                pending: { type: 'integer' },
+                failed: { type: 'integer' },
+              },
+            },
+            successRate: { type: 'number', example: 95.5 },
+            averageTransactionValue: {
+              type: 'object',
+              properties: {
+                xlm: { type: 'string', example: '10.0000000' },
+                usd: { type: 'string', example: '5.00' },
+              },
+            },
+            revenueByPeriod: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  period: { type: 'string', example: '2024-01' },
+                  xlm: { type: 'string' },
+                  usdc: { type: 'string' },
+                  usdEquivalent: { type: 'string' },
+                  count: { type: 'integer' },
+                },
+              },
+            },
+            currencyDistribution: {
+              type: 'object',
+              properties: {
+                xlm: {
+                  type: 'object',
+                  properties: { count: { type: 'integer' }, amount: { type: 'string' } },
+                },
+                usdc: {
+                  type: 'object',
+                  properties: { count: { type: 'integer' }, amount: { type: 'string' } },
+                },
+              },
+            },
+          },
+        },
       },
     },
     security: [{ bearerAuth: [] }],
   },
   apis: [
     path.join(__dirname, '../modules/payments/payments.controller.ts'),
+    path.join(__dirname, '../modules/payments/analytics.controller.ts'),
     path.join(__dirname, '../modules/payments/dispute.controller.ts'),
     path.join(__dirname, '../modules/payments/payments.export.controller.ts'),
     path.join(__dirname, '../modules/export/export.routes.ts'),
