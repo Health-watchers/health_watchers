@@ -185,6 +185,14 @@ npm run build
 npm run start
 ```
 
+## Release Process
+
+We use [release-please](https://github.com/google-github-actions/release-please-action) to automate our release process. Releases are automatically generated based on conventional commits.
+
+1.  **Commit with conventional messages**: Ensure your commits follow the [Conventional Commits](https://www.conventionalcommits.org/) specification (e.g., `feat:`, `fix:`, `chore:`).
+2.  **Automated Pull Requests**: `release-please` will automatically create a "release-please" Pull Request when there are new commits on `main`.
+3.  **Merge and Release**: When the release Pull Request is merged into `main`, a new release is created, and the `CHANGELOG.md` is updated.
+
 ## Contributing
 
 We welcome contributions! Please follow these steps:

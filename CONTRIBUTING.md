@@ -37,7 +37,7 @@ Use conventional commit format:
 1. Update documentation if needed
 2. Add tests for new features
 3. Ensure all tests pass
-4. Update the CHANGELOG.md
+4. Use conventional commit messages. The CHANGELOG.md will be automatically updated by our release workflow.
 5. Request review from maintainers
 
 ## Questions?
