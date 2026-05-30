@@ -87,6 +87,17 @@ const checkCircuitBreakerMiddleware = (_req: express.Request, res: express.Respo
 };
 
 app.use(express.json());
+// Ensure requestId is available in AsyncLocalStorage for correlation
+import { enterRequestContext } from './request-context.js';
+
+app.use((req, _res, next) => {
+  const incoming = (req.headers['x-request-id'] as string) ?? crypto.randomUUID();
+  // set header so pino-http and downstream services see it
+  req.headers['x-request-id'] = incoming;
+  enterRequestContext(String(incoming));
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,

@@ -1,0 +1,55 @@
+name: SonarCloud analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  sonarcloud:
+    name: Build, test and analyze with SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Run tests and generate coverage (api)
+        working-directory: apps/api
+        run: |
+          npm ci
+          npm test -- --coverage --coverageDirectory=coverage --coverageReporters=lcov
+
+      - name: Run tests and generate coverage (web)
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm test -- --coverage --coverageDirectory=coverage --coverageReporters=lcov
+
+      - name: Run tests and generate coverage (stellar-service)
+        working-directory: apps/stellar-service
+        run: |
+          npm ci
+          npm test -- --coverage --coverageDirectory=coverage --coverageReporters=lcov
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          args: >-
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.qualitygate.wait=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

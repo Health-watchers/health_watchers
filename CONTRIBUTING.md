@@ -153,6 +153,7 @@ All of the following CI checks must pass before merging:
   - TypeScript type checking (`tsc --noEmit`)
   - ESLint with zero-warning policy
   - Prettier format check
+  - SonarCloud quality gate (coverage, duplication, critical issues)
 
 - ✅ **Security Scan**
   - npm audit (fails on high/critical vulnerabilities)
@@ -184,6 +185,21 @@ All of the following CI checks must pass before merging:
 - **Branches must be up to date** before merging
 - **Linear history** preferred (rebase instead of merge commits)
 - **Signed commits** recommended for security
+
+## Quality Gates
+
+We use SonarCloud to enforce code quality gates on `main` and pull requests. The default quality gate requirements are:
+
+- **Test coverage:** overall coverage >= 70% (new code must also meet this threshold)
+- **Critical issues:** no new critical issues allowed
+- **Duplication:** duplication < 3% for the analysed codebase
+
+How this is enforced:
+
+- CI runs SonarCloud analysis and waits for the quality gate; if the gate fails, the check fails and the PR cannot be merged.
+- PR decoration from SonarCloud will appear on pull requests with coverage and issue summaries.
+
+Maintainers may adjust these thresholds in SonarCloud if necessary; any change must be communicated in this document and the project settings.
 
 ### Setting Up Branch Protection (For Maintainers)
 

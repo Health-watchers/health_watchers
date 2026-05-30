@@ -77,16 +77,25 @@ export default function PaymentsClient() {
   }, [polledPayments]);
 
   const handleCreate = async (data: PaymentIntentData) => {
+    const body: any = {
+      patientId: data.patientId,
+      amount: data.amount,
+      assetCode: data.asset,
+      memo: data.memo,
+      feeStrategy: data.feeStrategy,
+    };
+    if (data.sourceAssetCode) {
+      body.sourceAssetCode = data.sourceAssetCode;
+      body.sourceAssetIssuer = data.sourceAssetIssuer;
+    }
+    if (data.destinationAmount) body.destinationAmount = data.destinationAmount;
+    if (data.maxSourceAmount) body.maxSourceAmount = data.maxSourceAmount;
+    if (data.path) body.path = data.path;
+
     const res = await fetchWithAuth(`${API}/payments/intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        patientId: data.patientId,
-        amount: data.amount,
-        assetCode: data.asset,
-        memo: data.memo,
-        feeStrategy: data.feeStrategy,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

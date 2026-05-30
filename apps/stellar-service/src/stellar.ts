@@ -47,7 +47,8 @@ export async function fundAccount(publicKey: string, amount?: number) {
     throw new Error('Friendbot funding is not available on mainnet. Use real XLM instead.');
   }
 
-  logger.info({ publicKey, amount }, 'Funding account via Friendbot');
+  const start = Date.now();
+  logger.info({ operation: 'fundAccount', publicKey, amount }, 'Funding account via Friendbot');
 
   try {
     const response = await fetch(
@@ -60,15 +61,17 @@ export async function fundAccount(publicKey: string, amount?: number) {
     }
 
     const json = await response.json() as { hash: string; ledger: number };
-    logger.info({ publicKey }, 'Account funded successfully');
+    const durationMs = Date.now() - start;
+    logger.info({ operation: 'fundAccount', publicKey, hash: json.hash, ledger: json.ledger, durationMs }, 'Account funded successfully');
     
     return {
       funded: true,
       hash: json.hash,
       ledger: json.ledger,
+      durationMs,
     };
   } catch (error) {
-    logger.error({ error, publicKey }, 'Failed to fund account');
+    logger.error({ operation: 'fundAccount', error: { message: (error as Error).message, stack: (error as any).stack }, publicKey }, 'Failed to fund account');
     throw error;
   }
 }
@@ -79,6 +82,8 @@ export async function fundAccount(publicKey: string, amount?: number) {
 export async function getAccountBalance(publicKey: string) {
   const server = getHorizonServer();
   try {
+    const start = Date.now();
+    logger.info({ operation: 'getAccountBalance', publicKey }, 'Loading account from Horizon');
     const account = await server.loadAccount(publicKey);
     const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
     const usdcBalance = account.balances.find(
@@ -99,13 +104,16 @@ export async function getAccountBalance(publicKey: string) {
         createdAt: r.created_at,
       }));
 
+    const durationMs = Date.now() - start;
+    logger.info({ operation: 'getAccountBalance', publicKey, durationMs }, 'Fetched account balance and recent transactions');
     return {
       balance: xlmBalance ? xlmBalance.balance : '0',
       usdcBalance: usdcBalance ? usdcBalance.balance : null,
       transactions,
+      durationMs,
     };
   } catch (error: any) {
-    logger.error({ error, publicKey }, 'Failed to get account balance');
+    logger.error({ operation: 'getAccountBalance', error: { message: error.message, stack: error.stack }, publicKey }, 'Failed to get account balance');
     throw error;
   }
 }
@@ -125,6 +133,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
     return { alreadyExists: true, trustline: 'USDC' };
   }
 
+  const start = Date.now();
   const fee = await server.fetchBaseFee();
   const transaction = new TransactionBuilder(sourceAccount, {
     fee: String(fee),
@@ -138,13 +147,15 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
     .setTimeout(30)
     .build();
 
-  if (stellarConfig.stellarSecretKey) {
+    if (stellarConfig.stellarSecretKey) {
     const keypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
     transaction.sign(keypair);
-    if (!stellarConfig.dryRun) {
-      const result = await server.submitTransaction(transaction);
-      return { created: true, hash: result.hash };
-    }
+      if (!stellarConfig.dryRun) {
+        const result = await server.submitTransaction(transaction);
+        const durationMs = Date.now() - start;
+        logger.info({ operation: 'createUsdcTrustline', publicKey, usdcIssuer, hash: result.hash, durationMs }, 'USDC trustline created');
+        return { created: true, hash: result.hash, durationMs };
+      }
   }
 
   return { envelope: transaction.toEnvelope().toXDR('base64'), dryRun: true };
@@ -160,8 +171,8 @@ export async function createIntent(
 ) {
   const amountNum = parseFloat(amount);
   assertTransactionLimit(amountNum);
-
-  logger.info({ from: fromPublicKey, to: toPublicKey, amount }, 'Creating payment intent');
+  const start = Date.now();
+  logger.info({ operation: 'createIntent', from: fromPublicKey, to: toPublicKey, amount }, 'Creating payment intent');
 
   const server = getHorizonServer();
   const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
@@ -187,17 +198,19 @@ export async function createIntent(
 
     const xdr = transaction.toXDR();
     const hash = transaction.hash().toString('hex');
+    const durationMs = Date.now() - start;
 
-    logger.info({ hash }, 'Payment intent created');
+    logger.info({ operation: 'createIntent', hash, durationMs }, 'Payment intent created');
 
     return {
       xdr,
       hash,
       networkPassphrase: getNetworkPassphrase(),
       envelope: transaction.toEnvelope().toXDR('base64'),
+      durationMs,
     };
   } catch (error) {
-    logger.error({ error, from: fromPublicKey, to: toPublicKey }, 'Failed to create intent');
+    logger.error({ operation: 'createIntent', error: { message: (error as Error).message, stack: (error as any).stack }, from: fromPublicKey, to: toPublicKey }, 'Failed to create intent');
     throw error;
   }
 }
@@ -206,14 +219,15 @@ export async function createIntent(
  * Verify a transaction by hash
  */
 export async function verifyIntent(hash: string) {
-  logger.info({ hash }, 'Verifying transaction');
+  const start = Date.now();
+  logger.info({ operation: 'verifyIntent', hash }, 'Verifying transaction');
 
   const server = getHorizonServer();
 
   try {
     const transaction = await server.transactions().transaction(hash).call();
-    
-    logger.info({ hash, successful: transaction.successful }, 'Transaction verified');
+    const durationMs = Date.now() - start;
+    logger.info({ operation: 'verifyIntent', hash, successful: transaction.successful, durationMs }, 'Transaction verified');
 
     return {
       found: true,
@@ -221,9 +235,10 @@ export async function verifyIntent(hash: string) {
       successful: transaction.successful,
       ledger: transaction.ledger_attr,
       createdAt: transaction.created_at,
+      durationMs,
     };
   } catch (error: any) {
-    logger.error({ error, hash }, 'Failed to verify transaction');
+    logger.error({ operation: 'verifyIntent', error: { message: error.message, stack: error.stack }, hash }, 'Failed to verify transaction');
     if (error.response?.status === 404) {
       return { found: false, error: 'Transaction not found' };
     }
@@ -252,9 +267,13 @@ export async function findPaths(
     : [new Asset(sourceAssetCode, sourceAssetIssuer!)];
 
   try {
+    const start = Date.now();
     const paths = await server
       .strictReceivePaths(sourceAssets, destAsset, destinationAmount)
       .call();
+
+    const durationMs = Date.now() - start;
+    logger.info({ operation: 'findPaths', sourceAssetCode, destinationAssetCode, destinationAmount, durationMs, count: paths.records.length }, 'Found payment paths');
 
     return paths.records.map((p: Horizon.ServerApi.PaymentPathRecord) => ({
       sourceAssetCode: p.source_asset_type === 'native' ? 'XLM' : p.source_asset_code,
@@ -266,7 +285,7 @@ export async function findPaths(
       path: p.path.map((a: any) => a.asset_type === 'native' ? 'XLM' : a.asset_code),
     }));
   } catch (error: any) {
-    logger.error({ error, sourceAssetCode, destinationAssetCode }, 'Failed to find paths');
+    logger.error({ operation: 'findPaths', error: { message: error.message, stack: error.stack }, sourceAssetCode, destinationAssetCode }, 'Failed to find paths');
     throw error;
   }
 }
@@ -286,15 +305,19 @@ export async function getOrderbook(
   const counter = counterAssetCode === 'XLM' ? Asset.native() : new Asset(counterAssetCode, counterAssetIssuer!);
 
   try {
+    const start = Date.now();
     const orderbook = await server.orderbook(base, counter).call();
+    const durationMs = Date.now() - start;
+    logger.info({ operation: 'getOrderbook', baseAssetCode, counterAssetCode, durationMs }, 'Fetched orderbook');
     return {
       base: baseAssetCode,
       counter: counterAssetCode,
       bids: orderbook.bids.slice(0, 10),
       asks: orderbook.asks.slice(0, 10),
+      durationMs,
     };
   } catch (error: any) {
-    logger.error({ error, baseAssetCode, counterAssetCode }, 'Failed to get orderbook');
+    logger.error({ operation: 'getOrderbook', error: { message: error.message, stack: error.stack }, baseAssetCode, counterAssetCode }, 'Failed to get orderbook');
     throw error;
   }
 }
@@ -333,9 +356,11 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
     return { transactionHash: 'dry-run-' + transaction.hash().toString('hex'), dryRun: true };
   }
 
+  const start = Date.now();
   const result = await server.submitTransaction(transaction);
-  logger.info({ hash: result.hash, to: toPublicKey, amount }, 'Refund issued');
-  return { transactionHash: result.hash };
+  const durationMs = Date.now() - start;
+  logger.info({ operation: 'issueRefund', hash: result.hash, to: toPublicKey, amount, durationMs }, 'Refund issued');
+  return { transactionHash: result.hash, durationMs };
 }
 
 function stroopsToXlm(stroops: string): string {
