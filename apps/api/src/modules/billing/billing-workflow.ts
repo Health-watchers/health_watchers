@@ -1,11 +1,11 @@
 export type BillingStatus = 'unbilled' | 'billed' | 'paid' | 'denied' | 'resubmitted';
 
 const VALID_TRANSITIONS: Record<BillingStatus, BillingStatus[]> = {
-  unbilled:    ['billed'],
-  billed:      ['paid', 'denied'],
-  paid:        [],
-  denied:      ['resubmitted'],
-  resubmitted: ['billed', 'paid', 'denied'],
+  unbilled:     ['billed'],
+  billed:       ['paid', 'denied'],
+  paid:         [],
+  denied:       ['resubmitted'],
+  resubmitted:  ['billed', 'paid', 'denied'],
 };
 
 export interface TransitionResult {

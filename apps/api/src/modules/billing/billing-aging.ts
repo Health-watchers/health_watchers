@@ -26,9 +26,14 @@ export function buildAgingReport(
   const buckets: AgingBucket[] = BUCKETS.map(b => ({ ...b, encounters: [] }));
 
   for (const entry of entries) {
-    const days   = Math.floor((asOf.getTime() - entry.serviceDate.getTime()) / 86_400_000);
-    const bucket = buckets.find(b => days >= b.minDays && (b.maxDays === null || days <= b.maxDays));
-    if (bucket) bucket.encounters.push({ ...entry, daysUnbilled: days });
+    const diffMs = asOf.getTime() - entry.serviceDate.getTime();
+    const days   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const bucket = buckets.find(
+      b => days >= b.minDays && (b.maxDays === null || days <= b.maxDays),
+    );
+    if (bucket) {
+      bucket.encounters.push({ ...entry, daysUnbilled: days });
+    }
   }
 
   return buckets;
