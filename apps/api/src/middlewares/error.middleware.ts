@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Error as MongooseError } from 'mongoose';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { ZodError } from 'zod';
+import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -71,6 +72,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (isDev) {
     logger.error({ err }, 'Unhandled error');
   }
+
+  // Report unexpected errors to Sentry (skips 4xx — those are expected)
+  Sentry.captureException(err);
 
   const stack = isDev && err instanceof Error ? err.stack : undefined;
   res.status(500).json({

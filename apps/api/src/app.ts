@@ -1,4 +1,5 @@
 import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './instrument'; // must be first — initialises Sentry before any other module
 import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';

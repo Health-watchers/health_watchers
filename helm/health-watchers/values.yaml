@@ -156,6 +156,7 @@ secrets:
   smtpPass: ""
   metricsUsername: "admin"
   metricsPassword: ""
+  sentryDsn: ""
 
 # ── Redis (optional) ──────────────────────────────────────────────────────────
 redis:
