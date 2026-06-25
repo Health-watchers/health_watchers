@@ -104,7 +104,7 @@ export function Modal({
         aria-describedby={description ? 'modal-description' : undefined}
         className={[
           'fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2',
-          'rounded-lg bg-white p-6 shadow-lg focus:outline-none',
+          'rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-lg focus:outline-none',
           sizeMap[size],
           className ?? '',
         ].join(' ')}
@@ -113,12 +113,12 @@ export function Modal({
         {(title || description) && (
           <div className="mb-4">
             {title && (
-              <h2 id="modal-title" className="text-lg font-semibold text-neutral-800">
+              <h2 id="modal-title" className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">
                 {title}
               </h2>
             )}
             {description && (
-              <p id="modal-description" className="mt-1 text-sm text-neutral-500">
+              <p id="modal-description" className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
                 {description}
               </p>
             )}
@@ -130,7 +130,7 @@ export function Modal({
         {/* Close button */}
         <button
           onClick={onClose}
-          className="focus:ring-primary-500 absolute top-4 right-4 rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:ring-2 focus:outline-none"
+          className="focus:ring-primary-500 absolute top-4 right-4 rounded-md p-1 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 focus:ring-2 focus:outline-none"
           aria-label="Close"
         >
           <svg
