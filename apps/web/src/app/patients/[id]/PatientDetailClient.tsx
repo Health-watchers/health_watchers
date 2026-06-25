@@ -40,6 +40,10 @@ const PatientDocumentsTab = dynamic(
   () => import('@/components/patients/PatientDocumentsTab').then((m) => ({ default: m.PatientDocumentsTab })),
   { ssr: false },
 );
+const CarePlanTab = dynamic(
+  () => import('@/components/patients/CarePlanTab').then((m) => ({ default: m.CarePlanTab })),
+  { ssr: false },
+);
 
 interface EncounterResponse {
   id: string;
@@ -442,6 +446,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="consent">Consent</TabsTrigger>
           <TabsTrigger value="referrals">Referrals</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="care-plans">Care Plans</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -730,6 +735,11 @@ export default function PatientDetailClient({
         {/* Documents tab */}
         <TabsContent value="documents">
           <PatientDocumentsTab patientId={patientId} clinicId={user?.clinicId ?? ''} />
+        </TabsContent>
+
+        {/* Care Plans tab */}
+        <TabsContent value="care-plans">
+          <CarePlanTab patientId={patientId} />
         </TabsContent>
       </Tabs>
 
