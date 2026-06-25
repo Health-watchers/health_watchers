@@ -17,8 +17,8 @@ export const createPaymentIntentSchema = z.object({
   destinationAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
   maxSourceAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
   path: z.array(z.string()).optional(),
-  /** Fee speed tier — defaults to 'standard' */
-  feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
+  /** Fee speed tier — omit to let the system auto-select based on network conditions */
+  feeStrategy: z.enum(['slow', 'standard', 'fast']).optional(),
   /** If true, platform wraps the inner tx in a fee bump and pays the fee */
   sponsorFee: z.boolean().optional().default(false),
   idempotencyKey: z.string().min(1).max(256).optional(),

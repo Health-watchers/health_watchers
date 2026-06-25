@@ -229,11 +229,23 @@ export async function getRevenueDashboard(clinicId: string, months: number = 12)
 
   const analytics = await getPaymentAnalytics(clinicId, from, to, 'month');
 
+  // Fee strategy distribution
+  const feeStrategyBreakdown = await PaymentRecordModel.aggregate([
+    { $match: { clinicId, createdAt: { $gte: from, $lte: to } } },
+    { $group: { _id: { $ifNull: ['$feeStrategy', 'standard'] }, count: { $sum: 1 } } },
+  ]);
+
+  const feeStrategyDistribution: Record<string, number> = { slow: 0, standard: 0, fast: 0 };
+  for (const row of feeStrategyBreakdown) {
+    feeStrategyDistribution[row._id as string] = row.count as number;
+  }
+
   return {
     monthlyRevenue: analytics.revenueByPeriod,
     successRate: analytics.successRate,
     totalRevenue: analytics.totalRevenue,
     transactionCount: analytics.transactionCount,
     currencyDistribution: analytics.currencyDistribution,
+    feeStrategyDistribution,
   };
 }

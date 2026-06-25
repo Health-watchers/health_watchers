@@ -158,7 +158,7 @@ clinicSettingsRoutes.get('/', async (req: Request, res: Response) => {
 clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
   try {
     const { clinicId, userId } = req.user!;
-    const { workingHours, appointmentDuration, timezone, currency, notifications, branding } =
+    const { workingHours, appointmentDuration, timezone, currency, notifications, branding, feeOptimization } =
       req.body;
 
     if (timezone && !isValidTimezone(timezone)) {
@@ -175,6 +175,7 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
     if (currency !== undefined) update.currency = currency;
     if (notifications !== undefined) update.notifications = notifications;
     if (branding !== undefined) update.branding = branding;
+    if (feeOptimization !== undefined) update.feeOptimization = feeOptimization;
 
     const settings = await ClinicSettingsModel.findOneAndUpdate(
       { clinicId },

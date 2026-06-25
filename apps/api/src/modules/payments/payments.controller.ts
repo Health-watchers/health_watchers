@@ -21,8 +21,9 @@ import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
-import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { paymentsInitiatedTotal, paymentsConfirmedTotal, feeStrategySelectedTotal } from '@api/services/metrics.service';
 import { getCurrentXLMRate } from './services/xlm-rate.service';
+import { selectFeeStrategy } from './services/fee-optimizer';
 
 const router = Router();
 router.use(authenticate);
@@ -553,7 +554,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
-      feeStrategy = 'standard',
+      feeStrategy: requestedFeeStrategy,
       sponsorFee = false,
       idempotencyKey,
     } = req.body;
@@ -574,6 +575,29 @@ router.post(
         });
       }
     }
+
+    // Auto-select fee strategy when caller does not specify one
+    let feeStrategy: 'slow' | 'standard' | 'fast';
+    let autoSelectedFee = false;
+    if (requestedFeeStrategy) {
+      feeStrategy = requestedFeeStrategy;
+    } else {
+      const { ClinicSettingsModel } = await import('../clinics/clinic-settings.model');
+      const settings = await ClinicSettingsModel.findOne({ clinicId }).lean();
+      if (settings?.feeOptimization?.enabled !== false) {
+        let feeEstimate: import('./services/fee-optimizer').FeeEstimate | null = null;
+        try { feeEstimate = await stellarClient.getFeeEstimate(); } catch { /* non-fatal */ }
+        feeStrategy = selectFeeStrategy({
+          amount: String(amount),
+          feeEstimate,
+          preferLowFees: settings?.feeOptimization?.preferLowFees ?? false,
+        });
+        autoSelectedFee = true;
+      } else {
+        feeStrategy = 'standard';
+      }
+    }
+    feeStrategySelectedTotal.inc({ strategy: feeStrategy, auto: String(autoSelectedFee) });
     // `currency` takes precedence over `assetCode` for convenience
     const normalizedAsset = (currency ?? String(assetCode)).toUpperCase().trim();
 
@@ -662,6 +686,8 @@ router.post(
       data: {
         ...toPaymentResponse(record),
         platformPublicKey: config.stellar.platformPublicKey,
+        feeStrategy,
+        autoSelectedFee,
         ...(feeBump ? { feeBump } : {}),
       },
     });

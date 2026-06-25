@@ -59,6 +59,14 @@ export interface IClinicSettings {
     largeTransactionXlm: number;
     alertsEnabled: boolean;
   };
+  feeOptimization: {
+    /** Enable automatic fee strategy selection */
+    enabled: boolean;
+    /** Prefer lower fees during off-peak hours even for non-urgent payments */
+    preferLowFees: boolean;
+    /** XLM amount above which the system always selects the 'fast' strategy */
+    highValueThresholdXlm: number;
+  };
 }
 
 const clinicSettingsSchema = new Schema<IClinicSettings>(
@@ -101,6 +109,11 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
       criticalBalanceXlm: { type: Number, default: 10 },
       largeTransactionXlm: { type: Number, default: 1000 },
       alertsEnabled: { type: Boolean, default: true },
+    },
+    feeOptimization: {
+      enabled: { type: Boolean, default: true },
+      preferLowFees: { type: Boolean, default: false },
+      highValueThresholdXlm: { type: Number, default: 100 },
     },
   },
   { timestamps: true, versionKey: false }

@@ -110,6 +110,13 @@ export const stellarTransactionFeeXlm = new client.Histogram({
   registers: [register],
 });
 
+export const feeStrategySelectedTotal = new client.Counter({
+  name: 'fee_strategy_selected_total',
+  help: 'Total number of fee strategies selected for payment intents',
+  labelNames: ['strategy', 'auto'] as const,
+  registers: [register],
+});
+
 export const aiRequestsTotal = new client.Counter({
   name: 'ai_requests_total',
   help: 'Total number of AI endpoint requests',
