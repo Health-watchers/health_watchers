@@ -11,6 +11,14 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
 import { parsePagination } from '@api/utils/paginate';
 import { sendReferralNotificationEmail } from '@api/lib/email.service';
+import {
+  createReferralSchema,
+  listReferralsQuerySchema,
+  idParamSchema,
+} from './referrals.validation';
+import { z } from 'zod';
+
+const declineBodySchema = z.object({ declinedReason: z.string().max(2000).optional() });
 
 const router = Router();
 router.use(authenticate);
@@ -21,12 +29,9 @@ const DOCTOR_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 router.post(
   '/',
   DOCTOR_ROLES,
+  validateRequest({ body: createReferralSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { toClinicId, patientId, reason, urgency, encounterId, sharedData, notes } = req.body;
-
-    if (!toClinicId || !patientId || !reason || !urgency) {
-      return res.status(400).json({ error: 'ValidationError', message: 'toClinicId, patientId, reason, urgency are required' });
-    }
 
     // Verify patient belongs to the referring clinic and has data_sharing consent
     const patient = await PatientModel.findOne({ _id: patientId, clinicId: req.user!.clinicId, isActive: true });
@@ -79,6 +84,7 @@ router.post(
 // GET /referrals/outgoing — referrals sent by this clinic
 router.get(
   '/outgoing',
+  validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
@@ -108,6 +114,7 @@ router.get(
 // GET /referrals/incoming — referrals received by this clinic
 router.get(
   '/incoming',
+  validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
@@ -138,6 +145,7 @@ router.get(
 router.put(
   '/:id/accept',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const referral = await ReferralModel.findOne({ _id: req.params.id, toClinicId: req.user!.clinicId, status: 'pending' });
     if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Pending referral not found' });
@@ -165,6 +173,7 @@ router.put(
 router.put(
   '/:id/decline',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema, body: declineBodySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { declinedReason } = req.body;
     const referral = await ReferralModel.findOne({ _id: req.params.id, toClinicId: req.user!.clinicId, status: 'pending' });
@@ -181,6 +190,7 @@ router.put(
 // GET /referrals/:id/patient-data — access shared patient data (accepted referrals only)
 router.get(
   '/:id/patient-data',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const referral = await ReferralModel.findOne({
       _id: req.params.id,
@@ -226,6 +236,7 @@ router.get(
 router.patch(
   '/:id/outcome',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { outcome, outcomeNotes } = req.body;
 

@@ -13,6 +13,12 @@ import { asyncHandler } from '@api/utils/asyncHandler';
 import { parsePagination } from '@api/utils/paginate';
 import { sendInvoiceEmail } from '@api/lib/email.service';
 import { randomUUID } from 'crypto';
+import {
+  createInvoiceSchema,
+  listInvoicesQuerySchema,
+  idParamSchema,
+} from './invoices.validation';
+import { z } from 'zod';
 
 const router = Router();
 router.use(authenticate);
@@ -39,12 +45,9 @@ async function buildQRDataUrl(uri: string): Promise<string> {
 router.post(
   '/',
   WRITE_ROLES,
+  validateRequest({ body: createInvoiceSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { patientId, encounterId, lineItems, dueDate, currency } = req.body;
-
-    if (!patientId || !lineItems?.length || !dueDate) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId, lineItems, dueDate are required' });
-    }
 
     const [clinic, settings] = await Promise.all([
       ClinicModel.findById(req.user!.clinicId).lean(),
@@ -90,6 +93,7 @@ router.post(
 // GET /invoices
 router.get(
   '/',
+  validateRequest({ query: listInvoicesQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
@@ -121,6 +125,7 @@ router.get(
 // GET /invoices/:id
 router.get(
   '/:id',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId })
       .populate('patientId', 'firstName lastName systemId')
@@ -137,6 +142,7 @@ router.get(
 // GET /invoices/:id/pdf
 router.get(
   '/:id/pdf',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
@@ -172,6 +178,7 @@ router.get(
 // GET /invoices/:id/preview
 router.get(
   '/:id/preview',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
@@ -208,6 +215,7 @@ router.get(
 router.post(
   '/:id/send',
   WRITE_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
@@ -241,13 +249,15 @@ router.post(
   }),
 );
 
+const markPaidSchema = z.object({ txHash: z.string().min(1, 'txHash is required') });
+
 // POST /invoices/:id/mark-paid
 router.post(
   '/:id/mark-paid',
   WRITE_ROLES,
+  validateRequest({ params: idParamSchema, body: markPaidSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { txHash } = req.body;
-    if (!txHash) return res.status(400).json({ error: 'ValidationError', message: 'txHash is required' });
 
     const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });

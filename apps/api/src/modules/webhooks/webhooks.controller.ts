@@ -7,6 +7,7 @@ import logger from '@api/utils/logger';
 import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
 import { generateWebhookSecret, verifyWebhookSignature, deliverWebhook } from './webhook.service';
 import { registerWebhookSchema, inboundWebhookSchema } from './webhook.validation';
+import { confirmPayment } from '../payments/services/payment-confirmation.service';
 
 const router = Router();
 
@@ -36,34 +37,16 @@ router.post(
       return res.json({ status: 'ignored' });
     }
 
-    payment.status = 'confirmed';
-    payment.txHash = txHash;
-    await payment.save();
-
-    logger.info(
-      { intentId: payment.intentId, txHash, amount },
-      'stellar-webhook: payment confirmed'
-    );
-
-    // Trigger outbound webhooks for registered listeners
-    const webhooks = await WebhookModel.find({
-      clinicId: payment.clinicId,
-      events: 'payment.confirmed',
-      isActive: true,
+    const result = await confirmPayment({
+      intentId: payment.intentId,
+      txHash,
+      allowAlreadyConfirmed: true,
     });
 
-    for (const webhook of webhooks) {
-      await deliverWebhook(String(webhook._id), 'payment.confirmed', webhook.url, webhook.secret, {
-        event: 'payment.confirmed',
-        data: {
-          intentId: payment.intentId,
-          amount: payment.amount,
-          destination: payment.destination,
-          txHash,
-          confirmedAt: new Date(),
-        },
-      });
-    }
+    logger.info(
+      { intentId: payment.intentId, txHash, amount, result: result.status },
+      'stellar-webhook: payment processed'
+    );
 
     return res.json({ status: 'success', data: { intentId: payment.intentId, txHash } });
   })
@@ -105,11 +88,8 @@ router.post(
       });
     }
 
-    // Find and update payment record
-    const payment = await PaymentRecordModel.findOne({
-      memo,
-      status: 'pending',
-    });
+    // Find matching payment record
+    const payment = await PaymentRecordModel.findOne({ memo, status: 'pending' });
 
     if (!payment) {
       return res.status(404).json({
@@ -119,14 +99,15 @@ router.post(
     }
 
     if (status === 'confirmed') {
-      payment.status = 'confirmed';
-      payment.txHash = transactionHash;
-      payment.confirmedAt = new Date();
+      await confirmPayment({
+        intentId: payment.intentId,
+        txHash: transactionHash,
+        allowAlreadyConfirmed: true,
+      });
     } else if (status === 'failed') {
       payment.status = 'failed';
+      await payment.save();
     }
-
-    await payment.save();
 
     logger.info(
       { intentId: payment.intentId, transactionHash, status },
