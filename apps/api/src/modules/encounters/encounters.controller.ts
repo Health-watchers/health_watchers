@@ -351,6 +351,7 @@ router.post(
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
+    cache.del(dashboardCacheKey(String(req.user!.clinicId)));
 
     // Track ICD-10 codes used on this encounter so they surface in the clinic's
     // "recently used" list. Best-effort — never blocks encounter creation.

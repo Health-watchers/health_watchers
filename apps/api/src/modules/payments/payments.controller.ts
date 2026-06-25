@@ -637,6 +637,7 @@ router.post(
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
     paymentsInitiatedTotal.inc({ currency: normalizedAsset });
+    cache.del(dashboardCacheKey(String(clinicId)));
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
