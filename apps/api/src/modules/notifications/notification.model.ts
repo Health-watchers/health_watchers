@@ -13,6 +13,9 @@ export const NOTIFICATION_TYPES = [
   'large_transaction',
   'unrecognized_transaction',
   'waitlist_available',
+  'cosignature_requested',
+  'cosignature_completed',
+  'cosignature_rejected',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

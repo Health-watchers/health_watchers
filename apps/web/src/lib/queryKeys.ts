@@ -8,6 +8,7 @@ export const queryKeys = {
     all: ['encounters'] as const,
     list: () => [...queryKeys.encounters.all, 'list'] as const,
     byPatient: (patientId: string) => [...queryKeys.encounters.all, 'patient', patientId] as const,
+    pendingCosignatures: () => [...queryKeys.encounters.all, 'pending-cosignatures'] as const,
   },
   payments: {
     all: ['payments'] as const,

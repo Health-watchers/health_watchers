@@ -83,3 +83,15 @@ export function useDeleteNotification() {
     },
   });
 }
+
+export function usePendingCosignatures() {
+  return useQuery({
+    queryKey: queryKeys.encounters.pendingCosignatures(),
+    queryFn: async () => {
+      const res = await fetch('/api/encounters/pending-cosignatures', { credentials: 'include' });
+      if (!res.ok) return { count: 0, data: [] };
+      return res.json();
+    },
+    refetchInterval: 60_000,
+  });
+}
