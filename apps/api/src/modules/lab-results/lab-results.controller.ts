@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { LabResultModel } from './lab-result.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { paginate, parsePagination } from '../../utils/paginate';
 import { detectCriticalValues } from './critical-value.service';
 import { createNotification } from '../notifications/notification.service';
 import { emitToUser } from '@api/realtime/socket';
@@ -52,8 +53,13 @@ router.get(
       if (from) (filter.orderedAt as any).$gte = new Date(from);
       if (to) (filter.orderedAt as any).$lte = new Date(to);
     }
-    const docs = await LabResultModel.find(filter).sort({ orderedAt: -1 });
-    return res.json({ status: 'success', data: docs });
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const result = await paginate(LabResultModel, filter, page, limit, { orderedAt: -1 });
+    return res.json({ status: 'success', data: result.data, meta: result.meta });
   }),
 );
 

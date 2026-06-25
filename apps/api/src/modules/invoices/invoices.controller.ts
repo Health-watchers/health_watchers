@@ -10,6 +10,7 @@ import { PatientModel } from '../patients/models/patient.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
+import { parsePagination } from '@api/utils/paginate';
 import { sendInvoiceEmail } from '@api/lib/email.service';
 import { randomUUID } from 'crypto';
 
@@ -90,16 +91,30 @@ router.post(
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
     if (req.query.patientId) filter.patientId = req.query.patientId;
     if (req.query.status) filter.status = req.query.status;
 
-    const invoices = await InvoiceModel.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('patientId', 'firstName lastName systemId')
-      .lean();
-
-    return res.json({ status: 'success', data: invoices });
+    const [data, total] = await Promise.all([
+      InvoiceModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('patientId', 'firstName lastName systemId')
+        .lean(),
+      InvoiceModel.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+    });
   }),
 );
 
