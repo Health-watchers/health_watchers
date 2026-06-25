@@ -41,9 +41,16 @@ export async function createRecurringPayment(
   });
 }
 
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
 export async function getRecurringPayments(clinicId: string, patientId?: string) {
-  const query: any = { clinicId };
-  if (patientId) query.patientId = patientId;
+  const query: Record<string, unknown> = { clinicId };
+  if (patientId) {
+    if (!OBJECT_ID_REGEX.test(patientId)) {
+      throw new Error('Invalid patientId');
+    }
+    query.patientId = patientId;
+  }
   return RecurringPayment.find(query).sort({ nextPaymentDate: 1 });
 }
 

@@ -29,16 +29,17 @@ router.post(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   async (req: Request, res: Response) => {
     try {
-      const { businessAssociate, status, signedDate, expiryDate, documentUrl, notes } = req.body;
+     const { businessAssociate, status, signedDate, expiryDate, documentUrl, notes } = req.body;
 
-      if (!businessAssociate) {
+      if (!businessAssociate || typeof businessAssociate !== 'string') {
         return res
           .status(400)
           .json({ error: 'ValidationError', message: 'businessAssociate is required' });
       }
 
+      const safeBusinessAssociate = String(businessAssociate).slice(0, 500);
       const baa = await BAAModel.findOneAndUpdate(
-        { clinicId: req.user!.clinicId, businessAssociate },
+        { clinicId: req.user!.clinicId, businessAssociate: safeBusinessAssociate },
         {
           status,
           signedDate,

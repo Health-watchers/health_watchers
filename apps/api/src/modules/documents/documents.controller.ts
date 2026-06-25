@@ -117,7 +117,11 @@ router.post(
       let doc;
       let version = 1;
 
-      if (documentId) {
+            if (documentId) {
+        // Validate documentId to prevent NoSQL injection via request body
+        if (!/^[a-f\d]{24}$/i.test(documentId)) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid document ID' });
+        }
         // Update existing document (new version)
         const existing = await DocumentModel.findById(documentId);
         if (!existing) {

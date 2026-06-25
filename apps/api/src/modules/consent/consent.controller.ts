@@ -31,10 +31,14 @@ router.post(
   WRITE_ROLES,
   validateRequest({ body: grantConsentSchema }),
   async (req: Request, res: Response) => {
-    const { id: patientId } = req.params;
+   const { id: patientId } = req.params;
     const clinicId = req.user!.clinicId;
     const { type, expiresAt, signatureData } = req.body as { type: ConsentType; expiresAt?: string; signatureData: string };
 
+    // Validate patientId is a legitimate ObjectId — prevents NoSQL injection via URL params
+    if (!/^[a-f\d]{24}$/i.test(patientId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const template = CONSENT_TEMPLATES[type];
     const ipAddress =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
@@ -126,8 +130,13 @@ router.delete(
   '/patients/:id/consent/:type',
   WRITE_ROLES,
   async (req: Request, res: Response) => {
-    const { id: patientId, type } = req.params;
+     const { id: patientId, type } = req.params;
     const clinicId = req.user!.clinicId;
+
+    // Validate patientId is a legitimate ObjectId — prevents NoSQL injection via URL params
+    if (!/^[a-f\d]{24}$/i.test(patientId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
 
     const consent = await ConsentModel.findOneAndUpdate(
       { patientId, clinicId, type },

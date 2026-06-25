@@ -91,20 +91,30 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     filter.timestamp = range;
   }
 
-  // Full-text search (requires text index on action + metadata)
+ // Full-text search (requires text index on action + metadata)
   if (req.query.q) {
-    filter.$text = { $search: req.query.q as string };
+    const searchTerm = String(req.query.q).slice(0, 200);
+    filter.$text = { $search: searchTerm };
   }
-
   // Cursor-based pagination: cursor encodes the last seen timestamp + _id
   if (req.query.cursor) {
     try {
       const { ts, id } = JSON.parse(Buffer.from(req.query.cursor as string, 'base64').toString());
-      const op = sortDir === -1 ? '$lt' : '$gt';
-      filter.$or = [
-        { timestamp: { [op]: new Date(ts) } },
-        { timestamp: new Date(ts), _id: { [op]: new Types.ObjectId(id) } },
-      ];
+      // Whitelist the operator — never derive it from user input
+      const op: '$lt' | '$gt' = sortDir === -1 ? '$lt' : '$gt';
+      const cursorTs = new Date(ts);
+      const cursorId = new Types.ObjectId(String(id));
+      if (op === '$lt') {
+        filter.$or = [
+          { timestamp: { $lt: cursorTs } },
+          { timestamp: cursorTs, _id: { $lt: cursorId } },
+        ];
+      } else {
+        filter.$or = [
+          { timestamp: { $gt: cursorTs } },
+          { timestamp: cursorTs, _id: { $gt: cursorId } },
+        ];
+      }
     } catch {
       return res.status(400).json({ error: 'BadRequest', message: 'Invalid cursor' });
     }

@@ -42,6 +42,11 @@ import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+function validateObjectId(id: string): boolean {
+  return OBJECT_ID_REGEX.test(id);
+}
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -679,6 +684,9 @@ router.get(
 router.get(
   '/:id/lab-results',
   asyncHandler(async (req: Request, res: Response) => {
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const patient = await PatientModel.findOne({
       _id: req.params.id,
       clinicId: req.user!.clinicId,
@@ -1523,6 +1531,9 @@ router.get(
 
     // Fetch last 2 risk history entries to compute factor trends
     const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const history = await RiskScoreHistoryModel.find({
       patientId: req.params.id,
       clinicId: req.user!.clinicId,

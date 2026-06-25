@@ -1,23 +1,33 @@
 # Development Dockerfile for API
 FROM node:18-alpine
 
+# Create a non-root user to run the application
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 WORKDIR /app
 
-# Copy package files
+# Copy only package files first (not entire source)
 COPY package*.json ./
 COPY apps/api/package*.json ./apps/api/
 
 # Install dependencies
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy only the necessary source directories explicitly
+COPY apps/api/src ./apps/api/src
+COPY apps/api/tsconfig*.json ./apps/api/
+COPY tsconfig.base.json ./
+COPY turbo.json ./
+
+# Switch to non-root user
+USER appuser
 
 # Expose API port
 EXPOSE 3001
 
 # Set stop signal for graceful shutdown
 STOPSIGNAL SIGTERM
+
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health/live || exit 1
 

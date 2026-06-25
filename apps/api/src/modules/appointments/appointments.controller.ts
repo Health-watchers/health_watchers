@@ -31,21 +31,28 @@ async function hasConflict(
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-  const query: Record<string, unknown> = {
+  // Fetch only scheduled/confirmed appointments for this doctor
+  // that could potentially overlap — we avoid $expr to prevent
+  // user-controlled data from influencing query operators.
+  const filter: Record<string, unknown> = {
     doctorId: new Types.ObjectId(doctorId),
     status: { $in: ['scheduled', 'confirmed'] },
     scheduledAt: { $lt: proposedEnd },
-    $expr: {
-      $gt: [
-        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
-        scheduledAt.getTime(),
-      ],
-    },
   };
 
-  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
+  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  return (await AppointmentModel.countDocuments(query)) > 0;
+  const candidates = await AppointmentModel.find(filter)
+    .select('scheduledAt duration')
+    .lean();
+
+  // Check overlap in JS — no user-controlled operators in the query
+  return candidates.some((appt) => {
+    const apptEnd = new Date(
+      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+    );
+    return apptEnd > scheduledAt;
+  });
 }
 
 async function emitAppointmentStatusChange(
