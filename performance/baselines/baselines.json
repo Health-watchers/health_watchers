@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "baselines": {
+    "patient_list_duration": 200,
+    "encounter_create_duration": 500,
+    "payment_intent_duration": 1000,
+    "health_check_duration": 50,
+    "auth_login_duration": 300,
+    "clinics_list_duration": 200,
+    "appointments_list_duration": 200,
+    "single_patient_duration": 150,
+    "encounters_list_duration": 200,
+    "payments_list_duration": 200
+  },
+  "regression_threshold_percent": 20
+}

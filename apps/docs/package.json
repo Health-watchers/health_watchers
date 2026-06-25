@@ -17,17 +17,12 @@
   "dependencies": {
     "@docusaurus/core": "^3.0.0",
     "@docusaurus/preset-classic": "^3.0.0",
-    "@docusaurus/plugin-openapi-docs": "^0.5.0",
-    "@docusaurus/theme-openapi-docs": "^0.5.0",
-    "docusaurus-plugin-openapi-docs": "^0.5.0",
-    "docusaurus-theme-openapi-docs": "^0.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "clsx": "^2.0.0",
     "prism-react-renderer": "^2.1.0"
   },
   "devDependencies": {
-    "@docusaurus/module-validation-plugin": "^3.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "typescript": "^5.0.0"

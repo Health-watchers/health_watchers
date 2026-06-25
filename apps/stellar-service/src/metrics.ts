@@ -31,6 +31,24 @@ export const stellarTransactionsTotal = new client.Counter({
   registers: [register],
 });
 
+export const stellarPaymentQueueDepth = new client.Gauge({
+  name: 'stellar_payment_queue_depth',
+  help: 'Current number of payments waiting to be processed',
+  registers: [register],
+});
+
+export const stellarConfirmedPaymentsTotal = new client.Counter({
+  name: 'stellar_confirmed_payments_total',
+  help: 'Total number of Stellar payments auto-confirmed by the Horizon stream',
+  registers: [register],
+});
+
+export const stellarStreamHealth = new client.Gauge({
+  name: 'stellar_stream_health',
+  help: '1 when the Stellar payment stream is active, 0 when disconnected',
+  registers: [register],
+});
+
 function normalisePath(path: string): string {
   return path
     .replace(/\/[A-Z0-9]{56}/gi, '/:publicKey') // Stellar public keys

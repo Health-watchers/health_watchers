@@ -40,6 +40,42 @@ const upload = multer({
   fileFilter,
 });
 
+// ── GET /documents?patientId= ────────────────────────────────────────────────
+
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { patientId, clinicId, documentType, page = '1', limit = '20' } = req.query as Record<string, string>;
+
+    if (!patientId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'patientId is required.' });
+    }
+
+    const filter: Record<string, unknown> = { patientId };
+    if (clinicId) filter.clinicId = clinicId;
+    if (documentType) filter.documentType = documentType;
+
+    const pageNum  = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+
+    const [documents, total] = await Promise.all([
+      DocumentModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      DocumentModel.countDocuments(filter),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: documents,
+      meta: { page: pageNum, limit: limitNum, total },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'InternalError', message: err.message });
+  }
+});
+
 // ── POST /documents/upload ───────────────────────────────────────────────────
 
 /**
@@ -117,7 +153,11 @@ router.post(
       let doc;
       let version = 1;
 
-      if (documentId) {
+            if (documentId) {
+        // Validate documentId to prevent NoSQL injection via request body
+        if (!/^[a-f\d]{24}$/i.test(documentId)) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid document ID' });
+        }
         // Update existing document (new version)
         const existing = await DocumentModel.findById(documentId);
         if (!existing) {

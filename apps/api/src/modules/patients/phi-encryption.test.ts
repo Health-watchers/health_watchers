@@ -204,3 +204,155 @@ describe('PHI encryption — patient.model', () => {
     });
   });
 });
+
+// ── Insurance PHI Encryption Tests ───────────────────────────────────────────
+describe('PHI encryption — insurance sub-documents', () => {
+  function makeDocWithInsurance(insuranceOverrides: Record<string, unknown> = {}) {
+    return {
+      ...makeDoc(),
+      insurance: [
+        {
+          provider: 'Blue Cross Blue Shield',
+          policyNumber: 'XYZ123456789',
+          groupNumber: 'GRP-001',
+          coverageType: 'PPO',
+          effectiveDate: '2024-01-01',
+          expirationDate: '2024-12-31',
+          isPrimary: true,
+          ...insuranceOverrides,
+        },
+      ],
+    };
+  }
+
+  describe('policyNumber encryption', () => {
+    it('stores policyNumber as encrypted (not plaintext) in MongoDB', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ policyNumber: 'POL-111' }));
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      expect(rawIns?.policyNumber).not.toBe('POL-111');
+      expect(rawIns?.policyNumber).toMatch(ENCRYPTED_PATTERN);
+    });
+
+    it('returns decrypted policyNumber to the caller after create', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ policyNumber: 'POL-222' }));
+      expect(patient.insurance![0].policyNumber).toBe('POL-222');
+    });
+
+    it('returns decrypted policyNumber on findOne', async () => {
+      const created = await PatientModel.create(makeDocWithInsurance({ policyNumber: 'POL-333' }));
+      const found = await PatientModel.findOne({ _id: created._id });
+      expect(found?.insurance![0].policyNumber).toBe('POL-333');
+    });
+
+    it('uses a random IV so two identical policyNumbers produce different ciphertexts', async () => {
+      const p1 = await PatientModel.create(makeDocWithInsurance({ policyNumber: 'SAME-POL' }));
+      const p2 = await PatientModel.create(makeDocWithInsurance({ policyNumber: 'SAME-POL' }));
+      const raw1 = await mongoose.connection.collection('patients').findOne({ _id: p1._id });
+      const raw2 = await mongoose.connection.collection('patients').findOne({ _id: p2._id });
+      const enc1 = (raw1?.insurance as any[])?.[0]?.policyNumber;
+      const enc2 = (raw2?.insurance as any[])?.[0]?.policyNumber;
+      expect(enc1).not.toBe(enc2);
+    });
+  });
+
+  describe('groupNumber encryption', () => {
+    it('stores groupNumber as encrypted (not plaintext) in MongoDB', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ groupNumber: 'GRP-XYZ' }));
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      expect(rawIns?.groupNumber).not.toBe('GRP-XYZ');
+      expect(rawIns?.groupNumber).toMatch(ENCRYPTED_PATTERN);
+    });
+
+    it('returns decrypted groupNumber to the caller after create', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ groupNumber: 'GRP-ABC' }));
+      expect(patient.insurance![0].groupNumber).toBe('GRP-ABC');
+    });
+
+    it('returns decrypted groupNumber on findOne', async () => {
+      const created = await PatientModel.create(makeDocWithInsurance({ groupNumber: 'GRP-DEF' }));
+      const found = await PatientModel.findOne({ _id: created._id });
+      expect(found?.insurance![0].groupNumber).toBe('GRP-DEF');
+    });
+
+    it('does not encrypt groupNumber when it is absent', async () => {
+      const docWithoutGroup = {
+        ...makeDoc(),
+        insurance: [
+          {
+            provider: 'Aetna',
+            policyNumber: 'AET-001',
+            coverageType: 'HMO',
+            isPrimary: false,
+          },
+        ],
+      };
+      const patient = await PatientModel.create(docWithoutGroup);
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      // groupNumber should be absent or undefined — not an encrypted string
+      expect(rawIns?.groupNumber).toBeFalsy();
+    });
+  });
+
+  describe('non-PHI insurance fields are not encrypted', () => {
+    it('stores provider as plaintext in MongoDB', async () => {
+      const patient = await PatientModel.create(
+        makeDocWithInsurance({ provider: 'United Health' })
+      );
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      expect(rawIns?.provider).toBe('United Health');
+    });
+
+    it('stores coverageType as plaintext in MongoDB', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ coverageType: 'HMO' }));
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      expect(rawIns?.coverageType).toBe('HMO');
+    });
+
+    it('stores isPrimary as plaintext boolean in MongoDB', async () => {
+      const patient = await PatientModel.create(makeDocWithInsurance({ isPrimary: true }));
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawIns = (raw?.insurance as any[])?.[0];
+      expect(rawIns?.isPrimary).toBe(true);
+    });
+  });
+
+  describe('multiple insurance entries', () => {
+    it('encrypts PHI fields in all insurance entries', async () => {
+      const doc = {
+        ...makeDoc(),
+        insurance: [
+          { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
+          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+        ],
+      };
+      const patient = await PatientModel.create(doc);
+      const raw = await mongoose.connection.collection('patients').findOne({ _id: patient._id });
+      const rawInsurance = raw?.insurance as any[];
+
+      expect(rawInsurance[0].policyNumber).toMatch(ENCRYPTED_PATTERN);
+      expect(rawInsurance[1].policyNumber).toMatch(ENCRYPTED_PATTERN);
+      expect(rawInsurance[1].groupNumber).toMatch(ENCRYPTED_PATTERN);
+    });
+
+    it('decrypts PHI fields in all insurance entries on findOne', async () => {
+      const doc = {
+        ...makeDoc(),
+        insurance: [
+          { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
+          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+        ],
+      };
+      const created = await PatientModel.create(doc);
+      const found = await PatientModel.findOne({ _id: created._id });
+
+      expect(found?.insurance![0].policyNumber).toBe('POL-A');
+      expect(found?.insurance![1].policyNumber).toBe('POL-B');
+      expect(found?.insurance![1].groupNumber).toBe('GRP-B');
+    });
+  });
+});

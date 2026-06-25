@@ -88,6 +88,27 @@
           "patientId": {
             "type": "string"
           },
+          "sourceAssetCode": {
+            "type": "string",
+            "description": "Optional: source asset code chosen by payer (e.g., XLM)"
+          },
+          "sourceAssetIssuer": {
+            "type": "string",
+            "description": "Optional: issuer for the source asset when non-native"
+          },
+          "destinationAmount": {
+            "type": "string",
+            "description": "Destination amount clinic should receive (string decimal)"
+          },
+          "maxSourceAmount": {
+            "type": "string",
+            "description": "Maximum source amount allowed (after slippage)"
+          },
+          "path": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional Stellar path array to use for the payment"
+          },
           "sponsorFee": {
             "type": "boolean"
           }

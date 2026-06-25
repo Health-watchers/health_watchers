@@ -11,6 +11,7 @@ export { Pagination, type PaginationProps } from './Pagination';
 export { Skeleton, TableSkeleton, CardSkeleton, DetailSkeleton } from './Skeleton';
 export { EmptyState, ModuleEmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorBoundary } from './error-boundary';
+export { SectionErrorBoundary } from './SectionErrorBoundary';
 export { ErrorMessage } from './ErrorMessage';
 export { PageWrapper, PageHeader } from './PageWrapper';
 export { SlideOver } from './SlideOver';

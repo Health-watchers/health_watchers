@@ -59,7 +59,20 @@ export interface FhirMedicationRequest {
   authoredOn?: string;
 }
 
-export type FhirResource = FhirPatient | FhirEncounter | FhirCondition | FhirObservation | FhirMedicationRequest;
+export interface FhirCoverage {
+  resourceType: 'Coverage';
+  id: string;
+  status: 'active' | 'cancelled' | 'draft' | 'entered-in-error';
+  beneficiary: { reference: string };
+  payor: { display: string }[];
+  subscriberId?: string;
+  grouping?: { group?: string };
+  type?: { coding: { system: string; code: string; display: string }[] };
+  period?: { start?: string; end?: string };
+  order?: number;
+}
+
+export type FhirResource = FhirPatient | FhirEncounter | FhirCondition | FhirObservation | FhirMedicationRequest | FhirCoverage;
 
 export interface FhirBundle {
   resourceType: 'Bundle';
@@ -193,9 +206,65 @@ export function mapMedicationRequests(enc: any, patientId: string): FhirMedicati
 
 // ── Bundle builder ────────────────────────────────────────────────────────────
 
+/**
+ * Maps patient insurance records to FHIR R4 Coverage resources.
+ * policyNumber maps to subscriberId; groupNumber maps to grouping.group.
+ */
+export function mapCoverage(patient: any): FhirCoverage[] {
+  if (!patient.insurance?.length) return [];
+
+  // Coverage type → FHIR ActCode mapping (http://terminology.hl7.org/CodeSystem/v3-ActCode)
+  const COVERAGE_TYPE_MAP: Record<string, { code: string; display: string }> = {
+    HMO:      { code: 'HMO',      display: 'Health Maintenance Organization' },
+    PPO:      { code: 'PPO',      display: 'Preferred Provider Organization' },
+    EPO:      { code: 'EPO',      display: 'Exclusive Provider Organization' },
+    POS:      { code: 'POS',      display: 'Point of Service' },
+    HDHP:     { code: 'HDHP',     display: 'High Deductible Health Plan' },
+    Medicare: { code: 'RETIRE',   display: 'Retiree Health Program' },
+    Medicaid: { code: 'PUBLICPOL', display: 'Public Healthcare' },
+    other:    { code: 'pay',      display: 'Payer' },
+  };
+
+  const patientId = String(patient._id);
+
+  return (patient.insurance as any[]).map((ins: any, i: number) => {
+    const typeInfo = COVERAGE_TYPE_MAP[ins.coverageType] ?? COVERAGE_TYPE_MAP.other;
+    const resource: FhirCoverage = {
+      resourceType: 'Coverage',
+      id: `${patientId}-cov-${i}`,
+      status: 'active',
+      beneficiary: { reference: `Patient/${patientId}` },
+      payor: [{ display: ins.provider }],
+      order: ins.isPrimary ? 1 : i + 2,
+      type: {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+            code: typeInfo.code,
+            display: typeInfo.display,
+          },
+        ],
+      },
+    };
+
+    if (ins.policyNumber) resource.subscriberId = ins.policyNumber;
+    if (ins.groupNumber) resource.grouping = { group: ins.groupNumber };
+    if (ins.effectiveDate || ins.expirationDate) {
+      resource.period = {};
+      if (ins.effectiveDate) resource.period.start = ins.effectiveDate.slice(0, 10);
+      if (ins.expirationDate) resource.period.end = ins.expirationDate.slice(0, 10);
+    }
+
+    return resource;
+  });
+}
+
 export function buildFhirBundle(patient: any, encounters: any[]): FhirBundle {
   const patientId = String(patient._id);
   const resources: FhirResource[] = [mapPatient(patient)];
+
+  // Include Coverage resources for insurance records
+  resources.push(...mapCoverage(patient));
 
   for (const enc of encounters) {
     resources.push(mapEncounter(enc, patientId));

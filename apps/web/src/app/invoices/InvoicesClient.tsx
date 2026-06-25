@@ -64,6 +64,19 @@ export default function InvoicesClient() {
     }
   };
 
+  const handlePreviewPDF = async (id: string) => {
+    try {
+      const res = await fetch(`${API_V1}/invoices/${id}/preview`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to open preview');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      setToast({ message: 'Failed to open preview', type: 'error' });
+    }
+  };
+
   const handleSend = async (id: string) => {
     try {
       const res = await fetch(`${API_V1}/invoices/${id}/send`, { method: 'POST', credentials: 'include' });
@@ -120,10 +133,16 @@ export default function InvoicesClient() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => handlePreviewPDF(inv._id)}
+                        className="text-xs text-primary-600 hover:underline"
+                      >
+                        Preview
+                      </button>
+                      <button
                         onClick={() => handleDownloadPDF(inv._id, inv.invoiceNumber)}
                         className="text-xs text-primary-600 hover:underline"
                       >
-                        PDF
+                        Download
                       </button>
                       {inv.status === 'draft' && (
                         <button

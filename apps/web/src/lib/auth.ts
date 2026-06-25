@@ -54,5 +54,20 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     }
   }
 
+  if (res.status === 429) {
+    const retryAfter = res.headers.get('Retry-After');
+    const body = await res.json().catch(() => ({}));
+    const message = body.message ?? 'Too many requests. Please slow down and try again.';
+    const detail = retryAfter ? ` Retry after ${retryAfter}s.` : '';
+    throw new RateLimitError(message + detail, retryAfter ? Number(retryAfter) : undefined);
+  }
+
   return res;
+}
+
+export class RateLimitError extends Error {
+  constructor(message: string, public readonly retryAfterSeconds?: number) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
 }

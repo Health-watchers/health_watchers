@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
 import { PaymentRecordModel } from './models/payment-record.model';
+import { PaymentDisputeModel } from './models/payment-dispute.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
@@ -11,6 +12,7 @@ import {
   ListPaymentsQuery,
 } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
+import { authorize } from '@api/middlewares/rbac.middleware';
 import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
@@ -20,8 +22,7 @@ import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
 import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
-import { cache } from '@api/services/cache.service';
-import { dashboardCacheKey } from '../dashboard/dashboard.controller';
+import { getCurrentXLMRate } from './services/xlm-rate.service';
 
 const router = Router();
 router.use(authenticate);
@@ -858,9 +859,22 @@ router.patch(
       }
     }
 
+    // Capture the exchange rate at the time of payment so receipts show an
+    // accurate USD equivalent even if the rate changes later. USDC is pegged ~1:1.
+    let exchangeRate = payment.exchangeRate;
+    if (!exchangeRate) {
+      if (payment.assetCode === 'USDC') {
+        exchangeRate = '1';
+      } else {
+        const current = await getCurrentXLMRate();
+        exchangeRate = current.rateUSD.toString();
+      }
+    }
+    const usdEquivalent = (parseFloat(payment.amount) * parseFloat(exchangeRate)).toFixed(2);
+
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date() },
+      { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
       { new: true }
     );
 
@@ -1532,6 +1546,11 @@ router.get(
     }
 
     try {
+      // Surface dispute status on the receipt so patients/clinics see it at a glance.
+      const dispute = await PaymentDisputeModel.findOne({ paymentIntentId: intentId })
+        .select('status resolution refundIntentId')
+        .lean();
+
       // Return pre-signed S3 URL or receipt data
       return res.json({
         status: 'success',
@@ -1539,6 +1558,8 @@ router.get(
           receiptUrl: payment.receiptUrl,
           receiptNumber: payment.receiptNumber,
           generatedAt: payment.receiptGeneratedAt,
+          disputeStatus: dispute ? (dispute as any).status : 'none',
+          refundIntentId: dispute ? (dispute as any).refundIntentId : undefined,
         },
       });
     } catch (err: any) {
@@ -1871,6 +1892,64 @@ router.get(
     } catch (err: any) {
       return res.status(400).json({ error: 'Error', message: err.message });
     }
+  })
+);
+
+/**
+ * @swagger
+ * /payments/expiring-claimable:
+ *   get:
+ *     summary: List claimable balances expiring within 24 hours (CLINIC_ADMIN)
+ *     description: >
+ *       Returns all unclaimed claimable-balance payment records whose `claimableUntil`
+ *       falls within the next 24 hours. Useful for clinic admins to monitor patients
+ *       who have not yet claimed their payment before the window closes.
+ *       The hourly expiry-notification job also uses this window to send proactive
+ *       email, in-app, and Socket.IO notifications to patients (issue #714).
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of expiring claimable balances for the clinic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       intentId: { type: string }
+ *                       claimableBalanceId: { type: string }
+ *                       amount: { type: string }
+ *                       patientId: { type: string }
+ *                       claimableUntil: { type: string, format: date-time }
+ *                       claimableExpiryNotificationSent: { type: boolean }
+ *       403:
+ *         description: Forbidden — CLINIC_ADMIN or SUPER_ADMIN only
+ */
+// GET /payments/expiring-claimable — list claimable balances expiring within 24h (CLINIC_ADMIN)
+router.get(
+  '/expiring-claimable',
+  authorize(['CLINIC_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId } = req.user!;
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const records = await PaymentRecordModel.find({
+      clinicId,
+      claimableUntil: { $gte: now, $lte: in24h },
+      claimed: { $ne: true },
+    })
+      .select('intentId claimableBalanceId amount patientId claimableUntil claimableExpiryNotificationSent')
+      .lean();
+
+    return res.json({ status: 'success', data: records });
   })
 );
 

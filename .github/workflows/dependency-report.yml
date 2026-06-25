@@ -1,0 +1,67 @@
+name: Weekly Dependency Audit Report
+
+# Generates a consolidated dependency health report every Monday and publishes it
+# as a tracking issue (and a downloadable artifact). Covers: npm audit findings,
+# outdated packages, and a production-license breakdown.
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    name: Generate dependency report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collect audit data
+        run: |
+          npm audit --json > audit.json || true
+          npm outdated --json > outdated.json || true
+          npx license-checker --production --json > licenses.json || true
+
+      - name: Build markdown report
+        run: node .github/scripts/dependency-report.js > dependency-report.md
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: dependency-report
+          path: dependency-report.md
+          retention-days: 90
+
+      - name: Publish / update tracking issue
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('dependency-report.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const title = '📦 Weekly Dependency Audit Report';
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'dependencies,automated',
+            });
+            const issue = existing.data.find(i => i.title === title);
+            if (issue) {
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, body });
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `🔄 Report refreshed for the week of ${new Date().toISOString().slice(0, 10)}.`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo, title, body, labels: ['dependencies', 'automated'],
+              });
+            }

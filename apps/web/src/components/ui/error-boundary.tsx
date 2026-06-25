@@ -1,11 +1,15 @@
 'use client';
 
 import { Component, type ReactNode } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { Button } from './Button';
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
+  /** Custom fallback. Receives the error and a reset callback. A plain node is also accepted. */
+  fallback?: ReactNode | ((error: Error, reset: () => void) => ReactNode);
+  /** Human-readable name of the section this boundary protects (used in Sentry tags + copy). */
+  name?: string;
   onError?: (error: Error, errorInfo: { componentStack: string }) => void;
 }
 
@@ -24,19 +28,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
-    // Report to monitoring service (Sentry stub)
     this.reportError(error, errorInfo);
     this.props.onError?.(error, errorInfo);
   }
 
   private reportError(error: Error, errorInfo: { componentStack: string }) {
-    // Stub for Sentry integration
-    console.error('Error reported:', {
-      errorId: this.state.errorId,
-      message: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-      timestamp: new Date().toISOString(),
+    // Report to Sentry with the generated error ID so support can correlate it
+    // with what the user sees on screen.
+    Sentry.withScope((scope) => {
+      scope.setTag('errorId', this.state.errorId);
+      if (this.props.name) scope.setTag('errorBoundary', this.props.name);
+      scope.setContext('react', { componentStack: errorInfo.componentStack });
+      Sentry.captureException(error);
     });
   }
 
@@ -45,9 +48,13 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && this.state.error) {
+      const { fallback } = this.props;
+      if (typeof fallback === 'function') {
+        return fallback(this.state.error, this.handleReset);
+      }
       return (
-        this.props.fallback ?? (
+        fallback ?? (
           <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
             <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 shadow-lg">
               <div className="flex justify-center text-5xl" aria-hidden="true">

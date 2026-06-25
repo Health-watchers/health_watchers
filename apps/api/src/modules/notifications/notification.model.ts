@@ -4,6 +4,7 @@ export const NOTIFICATION_TYPES = [
   'referral_received',
   'payment_confirmed',
   'appointment_reminder',
+  'appointment_status_update',
   'ai_summary_ready',
   'lab_result_ready',
   'high_risk_patient',
@@ -13,6 +14,7 @@ export const NOTIFICATION_TYPES = [
   'large_transaction',
   'unrecognized_transaction',
   'waitlist_available',
+  'claimable_expiring',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

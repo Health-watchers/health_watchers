@@ -63,7 +63,6 @@ export interface Attachment {
   uploadedAt: Date;
   storageKey: string;
 }
-
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
@@ -71,6 +70,8 @@ export interface Encounter {
   encounteredBy?: Schema.Types.ObjectId;
   type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
   appointmentId?: Schema.Types.ObjectId;
+  /** The specific template version used when creating this encounter. */
+  templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
   status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
@@ -81,6 +82,8 @@ export interface Encounter {
   prescriptions?: Prescription[];
   followUpDate?: Date;
   aiSummary?: string;
+  patientFriendlySummary?: string;
+  patientNotes?: Array<{ note: string; createdAt: Date }>;
   isActive?: boolean;
   billing?: BillingInfo;
   attachments?: Attachment[];
@@ -177,7 +180,6 @@ const attachmentSchema = new Schema<Attachment>(
   },
   { _id: true }
 );
-
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
@@ -186,6 +188,7 @@ const encounterSchema = new Schema<Encounter>(
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
     type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
     appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
+    templateVersionId: { type: Schema.Types.ObjectId, ref: 'EncounterTemplate' },
     chiefComplaint:    { type: String, required: true },
     status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
@@ -196,6 +199,11 @@ const encounterSchema = new Schema<Encounter>(
     prescriptions:     { type: [prescriptionSchema], default: undefined },
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
+    patientFriendlySummary: { type: String },
+    patientNotes:      {
+      type: [new Schema({ note: { type: String, required: true }, createdAt: { type: Date, default: Date.now } }, { _id: true })],
+      default: [],
+    },
     isActive:          { type: Boolean, default: true, index: true },
     billing:           { type: billingInfoSchema },
     attachments:       { type: [attachmentSchema], default: [] },

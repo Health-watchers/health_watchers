@@ -65,7 +65,7 @@ export async function runRiskRecalculation(): Promise<void> {
         const bmiOver30 = latestWeight && latestHeight ? (latestWeight / ((latestHeight / 100) ** 2)) > 30 : false;
         const smokingHistory = allDiagnoses.some((d) => d.toLowerCase().includes('smok'));
 
-        const { score, level, factors } = calculateRiskScore({
+        const { score, level, factors, factorWeights } = calculateRiskScore({
           ageYears, diagnoses: allDiagnoses, recentHospitalization,
           missedAppointments: missedAppts, abnormalLabCount,
           highBloodPressure: highBP, bmiOver30: !!bmiOver30, smokingHistory,
@@ -77,6 +77,7 @@ export async function runRiskRecalculation(): Promise<void> {
         const now = new Date();
         await PatientModel.findByIdAndUpdate(patientId, {
           riskScore: score, riskLevel: level, riskFactors: factors,
+          riskFactorWeights: factorWeights,
           lastRiskCalculatedAt: now, nextRiskReviewDate: new Date(now.getTime() + WEEK_MS),
         });
 

@@ -54,6 +54,8 @@ export const createEncounterSchema = z.object({
   prescriptions: z.array(prescriptionSchema).optional(),
   followUpDate: z.string().datetime({ offset: true }).optional(),
   aiSummary: z.string().max(5000).optional(),
+  /** ID of the specific encounter template version used to create this encounter. */
+  templateVersionId: objectId.optional(),
 });
 
 export const encounterIdParamSchema = z.object({

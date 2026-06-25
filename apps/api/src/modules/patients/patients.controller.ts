@@ -2,9 +2,13 @@ import { Router, Request, Response } from 'express';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
+import { UserModel } from '../auth/models/user.model';
+import { PortalMessageModel } from '../portal/models/portal-message.model';
+import { portalMessageCreateSchema } from '../portal/portal.validation';
+import { sendMail } from '@api/lib/email.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
-import { emitToClinic } from '@api/realtime/socket';
+import { emitToClinic, emitToUser } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { checkSubscriptionLimit } from '@api/middlewares/subscription.middleware';
@@ -19,8 +23,13 @@ import {
   patientQuerySchema,
   patientSearchQuerySchema,
 } from './patients.validation';
+import { DuplicateDetectionService } from './duplicate-detection.service';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
+import {
+  createInsuranceSchema,
+  updateInsuranceSchema,
+} from './insurance.validation';
 import {
   createEmergencyContactSchema,
   updateEmergencyContactSchema,
@@ -28,9 +37,16 @@ import {
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
+import { cacheResponse } from '@api/middlewares/cache.middleware';
 import { incrementUsage } from '../subscriptions/usage.service';
+import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+function validateObjectId(id: string): boolean {
+  return OBJECT_ID_REGEX.test(id);
+}
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -174,6 +190,23 @@ router.get(
   })
 );
 
+// GET /patients/potential-duplicates — ranked duplicate pairs for admin review
+router.get(
+  '/potential-duplicates',
+  ADMIN_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const minConfidence = Math.min(
+      100,
+      Math.max(0, parseInt(String(req.query.minConfidence ?? '60'), 10) || 60)
+    );
+    const pairs = await DuplicateDetectionService.findPotentialDuplicates(
+      req.user!.clinicId.toString(),
+      minConfidence
+    );
+    return res.json({ status: 'success', data: pairs, count: pairs.length });
+  })
+);
+
 // GET /patients/:id
 router.get(
   '/:id',
@@ -310,6 +343,96 @@ router.delete(
     );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
+  })
+);
+
+// POST /patients/:id/messages — staff reply to patient portal message
+router.post(
+  '/:id/messages',
+  requireStaff,
+  validateRequest({ body: portalMessageCreateSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    const { subject, body, attachments, threadId, parentMessageId } = req.body as {
+      subject: string;
+      body: string;
+      attachments?: any[];
+      threadId?: string;
+      parentMessageId?: string;
+    };
+
+    const message = await PortalMessageModel.create({
+      clinicId: new Types.ObjectId(req.user!.clinicId),
+      patientId: new Types.ObjectId(req.params.id),
+      senderId: new Types.ObjectId(req.user!.userId),
+      senderRole: req.user!.role,
+      subject,
+      body,
+      direction: 'staff_to_patient',
+      threadId: threadId ? new Types.ObjectId(threadId) : new Types.ObjectId(),
+      parentMessageId: parentMessageId ? new Types.ObjectId(parentMessageId) : undefined,
+      attachments,
+    });
+
+    const patientUser = await UserModel.findOne({
+      clinicId: new Types.ObjectId(req.user!.clinicId),
+      patientId: patient._id,
+      role: 'PATIENT',
+      isActive: true,
+    }).lean();
+
+    const patientName = `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient';
+
+    if (patientUser) {
+      emitToUser(String(patientUser._id), 'portal:message:new', {
+        messageId: String(message._id),
+        threadId: String(message.threadId),
+        clinicId: String(message.clinicId),
+        patientId: String(message.patientId),
+        subject: message.subject,
+        body: message.body,
+        direction: message.direction,
+        createdAt: message.createdAt,
+        senderRole: message.senderRole,
+      });
+
+      if (patientUser.email && patientUser.preferences?.emailNotifications !== false) {
+        sendMail({
+          to: patientUser.email,
+          subject: `Reply from your care team`,
+          html: `
+            <p>Hi ${patientName},</p>
+            <p>Your care team has replied to your portal message.</p>
+            <p><strong>Subject:</strong> ${message.subject}</p>
+            <p>${message.body}</p>
+            <p>Please log in to the patient portal to view the full thread.</p>
+          `,
+        }).catch(() => undefined);
+      }
+    }
+
+    emitToClinic(req.user!.clinicId, 'portal:message:new', {
+      messageId: String(message._id),
+      threadId: String(message.threadId),
+      clinicId: String(message.clinicId),
+      patientId: String(message.patientId),
+      subject: message.subject,
+      body: message.body,
+      direction: message.direction,
+      createdAt: message.createdAt,
+      senderRole: message.senderRole,
+    });
+
+    return res.status(201).json({ status: 'success', data: message });
   })
 );
 
@@ -561,6 +684,9 @@ router.get(
 router.get(
   '/:id/lab-results',
   asyncHandler(async (req: Request, res: Response) => {
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const patient = await PatientModel.findOne({
       _id: req.params.id,
       clinicId: req.user!.clinicId,
@@ -695,6 +821,306 @@ router.delete(
       req
     );
     return res.json({ status: 'success', data: { id: req.params.allergyId, isActive: false } });
+  })
+);
+
+// ── Insurance endpoints ───────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /patients/{id}/insurance:
+ *   get:
+ *     summary: List all insurance records for a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: List of insurance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Insurance' }
+ *       404:
+ *         description: Patient not found
+ */
+router.get(
+  '/:id/insurance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).select('insurance');
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: patient.insurance ?? [] });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance:
+ *   post:
+ *     summary: Add an insurance record to a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateInsurance' }
+ *     responses:
+ *       201:
+ *         description: Insurance record created
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Patient not found
+ */
+router.post(
+  '/:id/insurance',
+  WRITE_ROLES,
+  validateRequest({ body: createInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    if (!patient.insurance) patient.insurance = [];
+
+    // Enforce a single primary — demote existing primary if new one is primary
+    if (req.body.isPrimary) {
+      patient.insurance.forEach((ins) => (ins.isPrimary = false));
+    }
+
+    patient.insurance.push(req.body);
+    await patient.save();
+
+    const added = patient.insurance[patient.insurance.length - 1];
+
+    auditLog(
+      {
+        action: 'INSURANCE_CREATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { provider: req.body.provider, coverageType: req.body.coverageType },
+      },
+      req
+    );
+
+    return res.status(201).json({ status: 'success', data: added });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   put:
+ *     summary: Update an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateInsurance' }
+ *     responses:
+ *       200:
+ *         description: Insurance record updated
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.put(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  validateRequest({ body: createInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const ins = patient.insurance?.id(req.params.insuranceId);
+    if (!ins)
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+
+    // Enforce single primary
+    if (req.body.isPrimary) {
+      patient.insurance!.forEach((i) => (i.isPrimary = false));
+    }
+
+    Object.assign(ins, req.body);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: ins });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   patch:
+ *     summary: Partially update an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateInsurance' }
+ *     responses:
+ *       200:
+ *         description: Insurance record updated
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.patch(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  validateRequest({ body: updateInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const ins = patient.insurance?.id(req.params.insuranceId);
+    if (!ins)
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+
+    if (req.body.isPrimary) {
+      patient.insurance!.forEach((i) => (i.isPrimary = false));
+    }
+
+    Object.assign(ins, req.body);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: ins });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   delete:
+ *     summary: Delete an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Insurance record deleted
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.delete(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const index = patient.insurance?.findIndex(
+      (ins) => String(ins._id) === req.params.insuranceId
+    );
+    if (index === undefined || index === -1) {
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+    }
+
+    patient.insurance!.splice(index, 1);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_DELETE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: { id: req.params.insuranceId, deleted: true } });
   })
 );
 
@@ -1038,5 +1464,160 @@ router.post(
 
 // Mount communications router
 router.use('/:id/communications', communicationsRouter);
+
+/**
+ * @swagger
+ * /patients/{id}/risk-explanation:
+ *   get:
+ *     summary: Get AI-generated risk factor explanation and recommendations for a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Risk explanation with factor weights, trends, and recommendations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     riskScore: { type: number }
+ *                     riskLevel: { type: string }
+ *                     factorWeights:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           factor: { type: string }
+ *                           weight: { type: number }
+ *                           percentage: { type: number }
+ *                           trend: { type: string, enum: [improving, stable, worsening] }
+ *                     naturalLanguageExplanation: { type: string }
+ *                     recommendations: { type: array, items: { type: string } }
+ *                     disclaimer: { type: string }
+ *       404:
+ *         description: Patient not found or no risk assessment available
+ */
+// GET /patients/:id/risk-explanation
+router.get(
+  '/:id/risk-explanation',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    }).lean();
+
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    if (!patient.riskScore || !patient.riskLevel || !patient.riskFactors?.length) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'No risk assessment available for this patient. Run an assessment first.',
+      });
+    }
+
+    // Fetch last 2 risk history entries to compute factor trends
+    const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
+    const history = await RiskScoreHistoryModel.find({
+      patientId: req.params.id,
+      clinicId: req.user!.clinicId,
+    })
+      .sort({ calculatedAt: -1 })
+      .limit(2)
+      .lean();
+
+    const previousFactors: string[] = history[1]?.riskFactors ?? [];
+
+    // Build factor weights array with trend indicators
+    const rawWeights: Record<string, number> =
+      (patient as any).riskFactorWeights instanceof Map
+        ? Object.fromEntries((patient as any).riskFactorWeights)
+        : ((patient as any).riskFactorWeights ?? {});
+
+    const { buildFactorBreakdown, getImprovedFactors } = await import('../ai/risk-calculator');
+    const factorWeights = buildFactorBreakdown(
+      patient.riskFactors,
+      rawWeights,
+      previousFactors,
+      history.length >= 2
+    );
+
+    // Factors that were present before but are gone now = improving
+    const improvedFactors = getImprovedFactors(patient.riskFactors, previousFactors);
+
+    // Generate AI explanation + recommendations
+    const { isAIServiceAvailable, AI_DISCLAIMER } = await import('../ai/ai.service');
+
+    let naturalLanguageExplanation: string;
+    let recommendations: string[];
+
+    if (isAIServiceAvailable()) {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const { config } = await import('@health-watchers/config');
+      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+
+      const prompt = `You are a clinical decision support AI. A patient has a risk score of ${patient.riskScore}/100 (${patient.riskLevel} risk).
+
+Contributing risk factors and their point weights:
+${factorWeights.map((f) => `- ${f.factor}: ${f.weight} points (${f.percentage}% of total)`).join('\n')}
+${improvedFactors.length ? `\nFactors that have improved since last assessment:\n${improvedFactors.map((f) => `- ${f}`).join('\n')}` : ''}
+
+Return ONLY valid JSON (no markdown) with this exact schema:
+{
+  "explanation": "string — 2-3 sentence plain-language explanation of why this patient is at ${patient.riskLevel} risk, referencing the top contributing factors",
+  "recommendations": ["string"] — array of 3-5 specific, actionable clinical recommendations to address the highest-weight risk factors
+}`;
+
+      try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+        const parsed = JSON.parse(json);
+        naturalLanguageExplanation = parsed.explanation ?? '';
+        recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
+      } catch {
+        naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
+        recommendations = ['Consult with the care team to review the identified risk factors.'];
+      }
+    } else {
+      naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
+      recommendations = ['Consult with the care team to review the identified risk factors.'];
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        riskScore: patient.riskScore,
+        riskLevel: patient.riskLevel,
+        lastCalculatedAt: patient.lastRiskCalculatedAt,
+        factorWeights,
+        improvedFactors,
+        naturalLanguageExplanation,
+        recommendations,
+        disclaimer: 'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
+      },
+    });
+  })
+);
 
 export const patientRoutes = router;

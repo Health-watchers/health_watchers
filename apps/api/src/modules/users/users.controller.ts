@@ -69,6 +69,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? 'en',
+        theme: user.preferences?.theme ?? 'system',
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
@@ -343,6 +344,7 @@ const notificationTypesSchema = z.object({
 
 const updatePreferencesSchema = z.object({
   language: z.enum(['en', 'fr']).optional(),
+  theme: z.enum(['light', 'dark', 'system']).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
   notificationTypes: notificationTypesSchema,
@@ -384,9 +386,10 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    const { language, emailNotifications, inAppNotifications, notificationTypes } = req.body;
+    const { language, theme, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
+    if (theme !== undefined) user.preferences.theme = theme;
     if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined) user.preferences.inAppNotifications = inAppNotifications;
     if (notificationTypes !== undefined) {
@@ -400,6 +403,7 @@ router.patch(
       data: {
         preferences: {
           language: user.preferences.language,
+          theme: user.preferences.theme,
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
           notificationTypes: user.preferences.notificationTypes,

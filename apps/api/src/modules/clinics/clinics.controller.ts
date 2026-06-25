@@ -4,9 +4,10 @@ import { ClinicSettingsModel } from './clinic-settings.model';
 import { ClinicKeypairModel } from './clinic-keypair.model';
 import { UserModel } from '../auth/models/user.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
-import { generateClinicKeypair } from './keypair.service';
+import { generateClinicKeypair, rotateClinicKeypair } from './keypair.service';
 import { stellarClient } from '../payments/services/stellar-client';
 import { auditLog } from '../audit/audit.service';
+import { sendKeypairRotationEmail } from '@api/lib/email.service';
 import { config } from '@health-watchers/config';
 import logger from '@api/utils/logger';
 
@@ -245,6 +246,98 @@ router.post(
       return res.json({ status: 'success', data: { publicKey, keyVersion: nextVersion } });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+/**
+ * @swagger
+ * /clinics/{id}/keypair/rotate:
+ *   post:
+ *     summary: Atomically rotate a clinic's Stellar keypair
+ *     description: >
+ *       Generates a new Stellar keypair, transfers the XLM balance from the old
+ *       account to the new one, then activates the new keypair. The old keypair
+ *       is only deactivated after a successful balance transfer (atomic rotation).
+ *       Rolls back (deletes the new keypair document) if the transfer fails.
+ *     tags: [Clinics]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Clinic MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Keypair rotated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     publicKey:
+ *                       type: string
+ *                       example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZQE3NMQKK6UUUHKKOAIB
+ *                     keyVersion:
+ *                       type: integer
+ *                       example: 2
+ *       404:
+ *         description: Clinic not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Rotation failed (balance transfer error); rollback applied
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post(
+  '/:id/keypair/rotate',
+  authenticate,
+  requireRoles('SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const clinic = await ClinicModel.findById(req.params.id);
+      if (!clinic) return res.status(404).json({ error: 'NotFound', message: 'Clinic not found' });
+
+      const { publicKey, keyVersion, transferResult } = await rotateClinicKeypair(req.params.id, {
+        ClinicModel,
+        ClinicKeypairModel,
+        stellarClient,
+        stellarNetwork: config.stellarNetwork,
+        logger,
+      });
+
+      auditLog({
+        action: 'KEYPAIR_ROTATE',
+        resourceType: 'Clinic',
+        resourceId: String(clinic._id),
+        userId: req.user!.userId,
+        metadata: { newPublicKey: publicKey, keyVersion, transferResult },
+      }, req);
+
+      // Notify clinic admin by email (best-effort, non-blocking)
+      const admin = await UserModel.findOne({ clinicId: req.params.id, role: 'CLINIC_ADMIN' }).lean();
+      if (admin?.email) {
+        sendKeypairRotationEmail(admin.email, clinic.name, publicKey, keyVersion);
+      }
+
+      return res.json({ status: 'success', data: { publicKey, keyVersion } });
+    } catch (err: any) {
+      logger.error({ err, clinicId: req.params.id }, 'Keypair rotation failed');
+      return res.status(500).json({ error: 'RotationFailed', message: err.message });
     }
   },
 );

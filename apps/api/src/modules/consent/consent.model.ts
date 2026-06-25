@@ -12,7 +12,12 @@ export interface IConsent {
   withdrawnAt?: Date;
   expiresAt?: Date;
   version: string;
+  formVersion?: Types.ObjectId; // ref to ConsentForm document
   ipAddress?: string;
+  userAgent?: string;
+  signatureData?: string; // base64 string
+  signedAt?: Date;
+  signatureHash?: string;
   grantedBy?: Types.ObjectId; // userId who recorded the consent
 }
 
@@ -30,7 +35,12 @@ const consentSchema = new Schema<IConsent>(
     withdrawnAt: { type: Date },
     expiresAt: { type: Date },
     version: { type: String, required: true, default: '1.0' },
+    formVersion: { type: Schema.Types.ObjectId, ref: 'ConsentForm', default: undefined },
     ipAddress: { type: String },
+    userAgent: { type: String },
+    signatureData: { type: String },
+    signedAt: { type: Date },
+    signatureHash: { type: String },
     grantedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true, versionKey: false }

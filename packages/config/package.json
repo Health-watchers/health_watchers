@@ -4,7 +4,6 @@
   "description": "Shared configuration package for Health Watchers monorepo",
   "license": "MIT",
   "private": true,
-  "type": "module",
   "main": "./index.ts",
   "exports": {
     ".": "./index.ts",

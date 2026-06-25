@@ -102,7 +102,7 @@ async function registerHandler(
   const rawToken = crypto.randomBytes(32).toString('hex');
   user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   await user.save();
-  await sendVerificationEmail(user.email, rawToken);
+  await sendVerificationEmail(user.email, rawToken, undefined);
 
   const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user;
   return res.status(201).json({ status: 'success', data: sanitized });
@@ -149,7 +149,7 @@ describe('POST /auth/register', () => {
     await registerHandler('CLINIC_ADMIN', validBody, res);
 
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(sendVerificationEmail).toHaveBeenCalledWith('alice@clinic.com', expect.any(String));
+    expect(sendVerificationEmail).toHaveBeenCalledWith('alice@clinic.com', expect.any(String), undefined);
     const responseData = (res.json as jest.Mock).mock.calls[0][0].data;
     expect(responseData).not.toHaveProperty('password');
     expect(responseData).not.toHaveProperty('emailVerificationTokenHash');

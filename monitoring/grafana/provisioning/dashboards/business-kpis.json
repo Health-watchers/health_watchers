@@ -1,0 +1,254 @@
+{
+  "title": "Business KPIs",
+  "uid": "hw-business-kpis",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "tags": ["business", "kpis", "health-watchers"],
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "interval",
+        "type": "interval",
+        "label": "Interval",
+        "options": [
+          { "text": "5m", "value": "5m" },
+          { "text": "1h", "value": "1h" },
+          { "text": "6h", "value": "6h" }
+        ],
+        "current": { "text": "1h", "value": "1h" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Patients Created",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(patients_created_total)",
+          "legendFormat": "Patients"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "blue", "mode": "fixed" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 2,
+      "title": "Total Encounters Created",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(encounters_created_total)",
+          "legendFormat": "Encounters"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "purple", "mode": "fixed" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 3,
+      "title": "Total Payments Confirmed",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(payments_confirmed_total)",
+          "legendFormat": "Payments"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "green", "mode": "fixed" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 4,
+      "title": "Total AI Requests",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(ai_requests_total)",
+          "legendFormat": "AI Requests"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "orange", "mode": "fixed" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 5,
+      "title": "Patient Creation Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(patients_created_total[$interval])) by (clinicId)",
+          "legendFormat": "Clinic {{ clinicId }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Encounter Creation Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(encounters_created_total[$interval])) by (clinicId)",
+          "legendFormat": "Clinic {{ clinicId }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Business Activity Trend",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(patients_created_total[$interval]))",
+          "legendFormat": "Patients/s"
+        },
+        {
+          "expr": "sum(rate(encounters_created_total[$interval]))",
+          "legendFormat": "Encounters/s"
+        },
+        {
+          "expr": "sum(rate(payments_initiated_total[$interval]))",
+          "legendFormat": "Payments Initiated/s"
+        },
+        {
+          "expr": "sum(rate(payments_confirmed_total[$interval]))",
+          "legendFormat": "Payments Confirmed/s"
+        },
+        {
+          "expr": "sum(rate(ai_requests_total[$interval]))",
+          "legendFormat": "AI Requests/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "AI Requests by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(ai_requests_total[$interval])) by (endpoint)",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Payments by Currency",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(payments_initiated_total[$interval])) by (currency)",
+          "legendFormat": "Initiated ({{ currency }})"
+        },
+        {
+          "expr": "sum(rate(payments_confirmed_total[$interval])) by (currency)",
+          "legendFormat": "Confirmed ({{ currency }})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Top Clinics by Patient Volume",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(10, sum(patients_created_total) by (clinicId))",
+          "legendFormat": "{{ clinicId }}"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 11,
+      "title": "Top Clinics by Encounter Volume",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(10, sum(encounters_created_total) by (clinicId))",
+          "legendFormat": "{{ clinicId }}"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 12,
+      "title": "Subscription Limit Violations",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 37, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "sum(rate(subscription_limit_violations_total[$interval])) by (tier, resource)",
+          "legendFormat": "{{ tier }} / {{ resource }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Payment Expiration Job — Payments Expired",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 37, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "payment_expiration_job_last_run_expired{job=\"health-watchers-api\"}",
+          "legendFormat": "Expired per Run"
+        }
+      ]
+    }
+  ]
+}

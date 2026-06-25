@@ -1,0 +1,101 @@
+{
+  "info": {
+    "name": "Health Watchers API",
+    "description": "Complete API collection for Health Watchers. Import the companion environment file before use.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const res = pm.response.json();",
+                "if (res.data && res.data.token) {",
+                "  pm.environment.set('jwt_token', res.data.token);",
+                "}"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{admin_email}}\", \"password\": \"{{admin_password}}\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patients",
+      "item": [
+        {
+          "name": "List Patients",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/patients"
+          }
+        },
+        {
+          "name": "Get Patient",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/patients/{{patient_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment Intent",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/payments/intent",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount\": 100, \"currency\": \"XLM\", \"feeStrategy\": \"standard\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portal - Health Log",
+      "item": [
+        {
+          "name": "Log Health Metric",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/portal/health-log",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"metricType\": \"weight\", \"value\": 72.5, \"unit\": \"kg\"}"
+            }
+          }
+        },
+        {
+          "name": "Get My Health Log",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/portal/health-log"
+          }
+        }
+      ]
+    }
+  ]
+}

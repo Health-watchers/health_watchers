@@ -1,0 +1,103 @@
+name: Performance Regression Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup k6
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Start API
+        run: docker compose up -d mongodb api
+        env:
+          NODE_ENV: test
+
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            curl -sf http://localhost:3001/health && exit 0
+            sleep 2
+          done
+          docker compose logs api
+          exit 1
+
+      - name: Run k6 performance tests
+        id: k6
+        run: |
+          k6 run performance/scripts/k6-baseline.js \
+            --env BASE_URL=http://localhost:3001 \
+            --env AUTH_TOKEN=${{ secrets.PERF_TEST_TOKEN }} \
+            --summary-export=performance/summary.json
+        continue-on-error: true
+
+      - name: Evaluate regression thresholds
+        id: regression
+        run: |
+          node - <<'NODE'
+          const summary = require('./performance/summary.json');
+          const baselines = require('./performance/baselines/baselines.json');
+          const threshold = baselines.regression_threshold_percent / 100;
+          const results = [];
+          let failed = false;
+
+          for (const [metric, baseline] of Object.entries(baselines.baselines)) {
+            const actual = summary.metrics?.[metric]?.values?.['p(95)'];
+            if (typeof actual !== 'number') continue;
+            const limit = baseline * (1 + threshold);
+            const pass = actual <= limit;
+            if (!pass) failed = true;
+            results.push({ metric, baseline, actual: Math.round(actual), limit: Math.round(limit), pass });
+          }
+
+          console.log(JSON.stringify(results, null, 2));
+          if (failed) process.exit(1);
+          NODE
+
+      - name: Post results as PR comment
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const baselines = require('./performance/baselines/baselines.json');
+            let body = '## Performance Test Results\n\n';
+            body += '| Metric | p95 ms | Baseline ms | Limit ms | Status |\n|---|---:|---:|---:|---|\n';
+            try {
+              const summary = JSON.parse(fs.readFileSync('performance/summary.json', 'utf8'));
+              const threshold = baselines.regression_threshold_percent / 100;
+              for (const [metric, baseline] of Object.entries(baselines.baselines)) {
+                const actual = summary.metrics?.[metric]?.values?.['p(95)'];
+                if (typeof actual !== 'number') continue;
+                const limit = baseline * (1 + threshold);
+                body += `| ${metric} | ${Math.round(actual)} | ${baseline} | ${Math.round(limit)} | ${actual <= limit ? 'pass' : 'fail'} |\n`;
+              }
+            } catch (error) {
+              body += '| unavailable | n/a | n/a | n/a | fail |\n';
+            }
+            body += `\nRun: ${context.sha.substring(0, 7)}`;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if k6 failed
+        if: steps.k6.outcome == 'failure'
+        run: exit 1
+
+      - name: Fail if regression detected
+        if: steps.regression.outcome == 'failure'
+        run: exit 1

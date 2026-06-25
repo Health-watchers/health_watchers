@@ -7,12 +7,15 @@ export const queryKeys = {
   encounters: {
     all: ['encounters'] as const,
     list: () => [...queryKeys.encounters.all, 'list'] as const,
+    detail: (id: string) => [...queryKeys.encounters.all, 'detail', id] as const,
     byPatient: (patientId: string) => [...queryKeys.encounters.all, 'patient', patientId] as const,
   },
   payments: {
     all: ['payments'] as const,
     list: () => [...queryKeys.payments.all, 'list'] as const,
     byPatient: (patientId: string) => [...queryKeys.payments.all, 'patient', patientId] as const,
+    analytics: (params: Record<string, string>) =>
+      [...queryKeys.payments.all, 'analytics', params] as const,
   },
   wallet: {
     all: ['wallet'] as const,

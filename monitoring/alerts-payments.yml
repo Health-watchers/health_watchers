@@ -1,0 +1,118 @@
+groups:
+  - name: payment-expiration-job
+    interval: 1m
+    rules:
+      # Fires when the job has not completed a successful run in more than
+      # 2× its scheduled interval (2 × 5 min = 10 min).
+      - alert: PaymentExpirationJobStalled
+        expr: >
+          (time() - payment_expiration_job_last_success_timestamp_seconds) > 600
+        for: 1m
+        labels:
+          severity: critical
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "Payment expiration job has not run successfully in >10 minutes"
+          description: >
+            The payment expiration job last succeeded
+            {{ $value | humanizeDuration }} ago (threshold: 10 min).
+            Payments may be stuck in pending status, causing accounting
+            discrepancies and blocking new payments for the same encounter.
+          runbook_url: "https://wiki.internal/runbooks/payment-expiration-job"
+
+      # Fires immediately when 2 or more consecutive failures are recorded.
+      - alert: PaymentExpirationJobConsecutiveFailures
+        expr: payment_expiration_job_consecutive_failures >= 2
+        for: 0m
+        labels:
+          severity: warning
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: >
+            Payment expiration job has failed {{ $value | humanize }} consecutive times
+          description: >
+            The payment expiration job has encountered {{ $value }} consecutive
+            failures. Check MongoDB connectivity and application logs for
+            structured error details (job=payment-expiration-job).
+          runbook_url: "https://wiki.internal/runbooks/payment-expiration-job"
+
+      # Informational alert tracking cumulative error rate.
+      - alert: PaymentExpirationJobErrorRateHigh
+        expr: >
+          rate(payment_expiration_job_errors_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "Payment expiration job error rate is non-zero over the last 15 minutes"
+          description: >
+            Errors have been observed in the payment expiration job over the
+            last 15 minutes. Review logs for transient vs. permanent failures.
+
+  - name: stellar-payments
+    rules:
+      # Alert when Stellar service is down
+      - alert: StellarServiceDown
+        expr: up{job="health-watchers-stellar"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "Stellar payment service is down"
+          description: "The Stellar service has been unreachable for more than 1 minute. Payments cannot be processed."
+          runbook_url: "https://wiki.internal/runbooks/stellar-service"
+
+      # Alert when payment success rate drops below 95%
+      - alert: PaymentSuccessRateLow
+        expr: >
+          (
+            sum(rate(payments_confirmed_total[5m]))
+            / (sum(rate(payments_initiated_total[5m])) > 0)
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "Payment success rate below 95%"
+          description: >
+            Payment success rate is {{ $value | humanizePercentage }} (threshold: 95%).
+            Check Stellar network connectivity and transaction logs.
+
+      # Alert when Stellar service error rate exceeds 5%
+      - alert: StellarServiceHighErrorRate
+        expr: >
+          (
+            sum(rate(http_requests_total{job="health-watchers-stellar",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="health-watchers-stellar"}[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "High error rate on Stellar service"
+          description: "Stellar service error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Alert when Stellar service p99 latency exceeds 5 seconds
+      - alert: StellarServiceHighLatency
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="health-watchers-stellar"}[5m])) by (le)
+          ) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: payments
+          dashboard: hw-stellar-payments
+        annotations:
+          summary: "High p99 latency on Stellar service"
+          description: "Stellar service p99 latency is {{ $value | humanizeDuration }} (threshold: 5s)"

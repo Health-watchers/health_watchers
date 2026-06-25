@@ -12,6 +12,7 @@ Thank you for your interest in contributing to Health Watchers! This document pr
 - [Coding Standards](#coding-standards)
 - [Testing](#testing)
 - [Commit Messages](#commit-messages)
+- [Dependency Update Guidelines](#dependency-update-guidelines)
 
 ## Code of Conduct
 
@@ -152,6 +153,7 @@ All of the following CI checks must pass before merging:
   - TypeScript type checking (`tsc --noEmit`)
   - ESLint with zero-warning policy
   - Prettier format check
+  - SonarCloud quality gate (coverage, duplication, critical issues)
 
 - ✅ **Security Scan**
   - npm audit (fails on high/critical vulnerabilities)
@@ -183,6 +185,21 @@ All of the following CI checks must pass before merging:
 - **Branches must be up to date** before merging
 - **Linear history** preferred (rebase instead of merge commits)
 - **Signed commits** recommended for security
+
+## Quality Gates
+
+We use SonarCloud to enforce code quality gates on `main` and pull requests. The default quality gate requirements are:
+
+- **Test coverage:** overall coverage >= 70% (new code must also meet this threshold)
+- **Critical issues:** no new critical issues allowed
+- **Duplication:** duplication < 3% for the analysed codebase
+
+How this is enforced:
+
+- CI runs SonarCloud analysis and waits for the quality gate; if the gate fails, the check fails and the PR cannot be merged.
+- PR decoration from SonarCloud will appear on pull requests with coverage and issue summaries.
+
+Maintainers may adjust these thresholds in SonarCloud if necessary; any change must be communicated in this document and the project settings.
 
 ### Setting Up Branch Protection (For Maintainers)
 
@@ -468,7 +485,7 @@ npm test -- --projects apps/api
 
 ## Commit Messages
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is enforced by `commitlint` on every commit.
 
 ```
 <type>(<scope>): <subject>
@@ -478,39 +495,17 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 <footer>
 ```
 
-### Types
+See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
 
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Test additions or modifications
-- `chore`: Maintenance tasks
-- `perf`: Performance improvements
-- `ci`: CI/CD changes
+### Pull Request Titles
 
-### Examples
+Because pull requests are squash-merged, **the PR title becomes the commit subject on `main`** and feeds the automated changelog/release tooling. PR titles must therefore also follow the Conventional Commits format (e.g. `feat(patients): add insurance tab`).
 
-```bash
-feat(auth): add two-factor authentication
+This is enforced in CI by the **Lint PR Title** workflow, which runs `commitlint` against the PR title whenever it is opened or edited. A non-conforming title will fail the check until it is corrected.
 
-Implement TOTP-based 2FA for user accounts.
-Users can enable 2FA in their profile settings.
+## Release Process
 
-Closes #123
-
-fix(payments): prevent double-confirmation of transactions
-
-Add idempotency check to prevent the same transaction
-from being confirmed multiple times.
-
-Closes #456
-
-docs(readme): update installation instructions
-
-Add Docker setup instructions and troubleshooting section.
-```
+We use [Changesets](https://github.com/changesets/changesets) for automated versioning and release management. For details, see [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Security
 
@@ -518,6 +513,48 @@ Add Docker setup instructions and troubleshooting section.
 - Use **environment variables** for configuration
 - Follow **OWASP** security best practices
 - Report security vulnerabilities privately to maintainers
+
+## Dependency Update Guidelines
+
+Dependencies are kept current and secure through a combination of [Dependabot](https://docs.github.com/en/code-security/dependabot) and automated security scanning. Understanding the flow helps you review and merge dependency PRs safely.
+
+### How updates are proposed
+
+- **Dependabot** runs weekly (Mondays 09:00) and opens PRs for the `npm` and `github-actions` ecosystems (see `.github/dependabot.yml`).
+- **Minor and patch** updates are **grouped** into a single PR per dependency-type (production / development) so security checks run once per batch.
+- **Major** updates are opened individually and are **never auto-merged** — they require manual review because they may contain breaking changes.
+
+### Automated checks on every Dependabot PR
+
+Each Dependabot PR triggers `.github/workflows/dependabot-security.yml`:
+
+| Check | Purpose | Blocks merge? |
+| --- | --- | --- |
+| **Critical Vulnerability Gate** (`npm audit --audit-level=critical`) | Fails if any introduced/remaining dependency has a critical CVE | ✅ Yes (required status check) |
+| **License Compatibility** | Verifies new production dependencies use an allow-listed license (MIT, Apache-2.0, BSD, ISC, …) | ✅ Yes |
+| **Snyk PR Comment** | Posts a vulnerability breakdown as a PR comment | ❌ Informational |
+
+The main CI pipeline (`.github/workflows/ci.yml`) additionally runs `npm audit --audit-level=critical` and `--audit-level=high` as required gates.
+
+### Auto-merge policy
+
+- **Patch** updates (`x.y.Z`) that pass **all** required checks are **auto-approved and auto-merged** via `.github/workflows/dependabot-auto-merge.yml` (squash merge).
+- **Minor** updates require a maintainer to review and merge manually.
+- **Major** updates require manual review, testing, and an explicit changeset.
+
+> Auto-merge relies on branch protection. Maintainers must mark **"Critical Vulnerability Gate"** and **"License Compatibility"** as required status checks on `main` for the gates to be enforced.
+
+### Adding or upgrading a dependency manually
+
+1. Prefer well-maintained packages with a compatible license (see allow-list above).
+2. Add it to the correct workspace (`apps/*` or `packages/*`), not the repo root, unless it is a dev tool used across the monorepo.
+3. Run `npm audit --audit-level=high` locally before pushing.
+4. Run `npx license-checker --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense"` to confirm license compatibility.
+5. Add a [changeset](#commit-messages) if the change affects a published package's behaviour.
+
+### Weekly audit report
+
+The **Weekly Dependency Audit Report** workflow (`.github/workflows/dependency-report.yml`) runs every Monday and publishes a consolidated report (vulnerabilities, outdated packages, license breakdown) as a tracking issue labelled `dependencies, automated`. Review it weekly and remediate any **critical** findings before they block PRs.
 
 ## Architecture Decisions
 
@@ -626,3 +663,22 @@ If you have questions, please:
 - Reach out to maintainers
 
 Thank you for contributing to Health Watchers! 🎉
+## Performance Requirements
+
+Critical API paths have k6 p95 baselines checked in CI:
+
+| Endpoint or flow | Threshold |
+| --- | ---: |
+| `GET /api/v1/patients` | 200ms |
+| `POST /api/v1/encounters` | 500ms |
+| `POST /api/v1/payments/intent` | 1s |
+| `GET /health` | 50ms |
+| List endpoints | 200ms |
+
+Run locally after starting the API:
+
+```bash
+BASE_URL=http://localhost:3001 AUTH_TOKEN=your-token k6 run performance/scripts/k6-baseline.js
+```
+
+CI fails if any p95 metric exceeds its baseline by more than 20%.

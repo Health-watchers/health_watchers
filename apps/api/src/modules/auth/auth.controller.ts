@@ -49,7 +49,8 @@ const MAX_MFA_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 // Roles that must have 2FA enabled
-const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN']);
+const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'NURSE']);
+const MFA_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /** SHA-256 hash of a token for safe storage */
 function hashToken(token: string): string {
@@ -120,8 +121,8 @@ router.post(
     const rawToken = crypto.randomBytes(32).toString('hex');
     user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     await user.save();
-    await sendVerificationEmail(user.email, rawToken);
-    sendWelcomeEmail(user.email, user.fullName);
+    await sendVerificationEmail(user.email, rawToken, user.preferences?.language);
+    sendWelcomeEmail(user.email, user.fullName, user.preferences?.language);
 
     const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
@@ -176,17 +177,48 @@ router.post(
       });
     }
 
-    // Enforce 2FA for admin roles — block login if not set up
+    // Enforce 2FA for required roles — with 7-day grace period for DOCTOR/NURSE
     if (MFA_REQUIRED_ROLES.has(user.role) && !user.mfaEnabled) {
-      return res.status(403).json({
-        error: 'MfaRequired',
-        message: '2FA is mandatory for your role. Please set up 2FA before logging in.',
-        requiresMfaSetup: true,
-        tempToken: signTempToken(user.id),
+      const now = new Date();
+
+      // Assign grace period on first login after becoming required
+      if (!user.mfaGracePeriodEndsAt) {
+        user.mfaGracePeriodEndsAt = new Date(now.getTime() + MFA_GRACE_PERIOD_MS);
+        await user.save();
+      }
+
+      // Grace period expired — block login
+      if (user.mfaGracePeriodEndsAt <= now) {
+        return res.status(403).json({
+          error: 'MfaRequired',
+          message: '2FA is mandatory for your role. Please set up 2FA to log in.',
+          requiresMfaSetup: true,
+          tempToken: signTempToken(user.id),
+        });
+      }
+
+      // Within grace period — allow login with a warning
+      const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+      const { token: refreshToken, jti, family } = signRefreshToken(p);
+      await RefreshTokenModel.create({
+        jti,
+        userId: user.id,
+        family,
+        consumed: false,
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+      });
+      return res.json({
+        status: 'success',
+        data: {
+          accessToken: signAccessToken(p),
+          refreshToken,
+          warning: 'mfa_required',
+          mfaGracePeriodEndsAt: user.mfaGracePeriodEndsAt,
+        },
       });
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -237,7 +269,7 @@ router.post(
     existing.consumed = true;
     await existing.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
     const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
     await RefreshTokenModel.create({
       jti,
@@ -410,7 +442,7 @@ router.post(
       await user.save();
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -455,7 +487,7 @@ router.post(
     user.mfaBackupCodes.splice(idx, 1);
     await user.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -549,6 +581,79 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
 
 /**
  * @swagger
+ * /auth/switch-clinic:
+ *   post:
+ *     summary: Switch the active clinic for a SUPER_ADMIN and obtain tokens scoped to it
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clinicId]
+ *             properties:
+ *               clinicId: { type: string, description: MongoDB ObjectId of the target clinic }
+ *     responses:
+ *       200:
+ *         description: New access + refresh tokens scoped to the selected clinic
+ *       400: { description: Missing or invalid clinicId }
+ *       403: { description: Caller is not a SUPER_ADMIN }
+ *       404: { description: Clinic not found }
+ */
+router.post('/switch-clinic', authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== 'SUPER_ADMIN')
+    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+
+  const { clinicId } = req.body as { clinicId?: string };
+  if (!clinicId || !/^[a-f\d]{24}$/i.test(clinicId))
+    return res.status(400).json({ error: 'BadRequest', message: 'A valid clinicId is required' });
+
+  const clinic = await ClinicModel.findById(clinicId);
+  if (!clinic || clinic.isActive === false)
+    return res.status(404).json({ error: 'NotFound', message: 'Clinic not found or inactive' });
+
+  const user = await UserModel.findById(req.user!.userId);
+  if (!user || !user.isActive)
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
+
+  const previousClinicId = req.user!.clinicId;
+  const p = { userId: user.id, role: user.role, clinicId, isSuperAdmin: true };
+  const { token: refreshToken, jti, family } = signRefreshToken(p);
+  await RefreshTokenModel.create({
+    jti,
+    userId: user.id,
+    family,
+    consumed: false,
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+  });
+
+  await auditLog(
+    {
+      action: 'CLINIC_SWITCH',
+      userId: user.id,
+      clinicId,
+      resourceType: 'Clinic',
+      resourceId: clinicId,
+      metadata: { from: previousClinicId, to: clinicId },
+    },
+    req
+  );
+
+  return res.json({
+    status: 'success',
+    data: {
+      accessToken: signAccessToken(p),
+      refreshToken,
+      clinic: { id: String(clinic._id), name: clinic.name },
+    },
+  });
+});
+
+/**
+ * @swagger
  * /auth/verify-email:
  *   get:
  *     summary: Verify email address using the token sent during registration
@@ -594,7 +699,7 @@ router.post(
       user.resetPasswordTokenHash = hashToken(rawToken);
       user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
       await user.save();
-      await sendPasswordResetEmail(user.email, rawToken);
+      await sendPasswordResetEmail(user.email, rawToken, user.preferences?.language);
     }
     return res.json({
       status: 'success',

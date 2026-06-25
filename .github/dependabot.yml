@@ -7,25 +7,27 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - "dependencies"
+      - "automated"
+    # Group minor & patch updates into a single PR per dependency-type so the
+    # security-scan job runs once per batch instead of per-package.
     groups:
-      development-dependencies:
-        dependency-type: "development"
-        update-types:
-          - "minor"
-          - "patch"
-      production-dependencies:
+      production-minor-patch:
         dependency-type: "production"
         update-types:
           - "minor"
           - "patch"
+      development-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    # Major bumps are opened individually and never auto-merged (manual review).
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-    labels:
-      - "dependencies"
-      - "automated"
-    versioning-strategy: increase
-    auto-merged-enabled: true
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -38,3 +40,8 @@ updates:
       - "github-actions"
       - "dependencies"
       - "automated"
+    groups:
+      github-actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"

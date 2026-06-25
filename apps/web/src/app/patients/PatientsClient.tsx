@@ -2,12 +2,18 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { type Patient, formatDate } from '@health-watchers/types';
-import { ErrorMessage, TableSkeleton, ModuleEmptyState, Badge } from '@/components/ui';
+import {
+  ErrorMessage,
+  TableSkeleton,
+  ModuleEmptyState,
+  Badge,
+  SectionErrorBoundary,
+  Button,
+} from '@/components/ui';
 import PatientThumbnail from '@/components/patients/PatientThumbnail';
-import { queryKeys } from '@/lib/queryKeys';
-import { API_URL } from '@/lib/api';
+import PatientImport from '@/components/patients/PatientImport';
+import { usePatients, type PatientFilters } from '@/lib/queries/usePatients';
 
 interface Labels {
   title: string;
@@ -23,9 +29,6 @@ interface Labels {
   registerNew: string;
 }
 
-import { API_URL } from '@/lib/api';
-import PatientImport from '@/components/patients/PatientImport';
-
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 function riskVariant(level?: RiskLevel) {
@@ -36,29 +39,45 @@ function riskVariant(level?: RiskLevel) {
   return 'default';
 }
 
+const DEFAULT_FILTERS: PatientFilters = {
+  q: '',
+  status: '',
+  sex: '',
+  dobFrom: '',
+  dobTo: '',
+  condition: '',
+};
+
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const debounceTimer = useRef<NodeJS.Timeout>();
+  const [filters, setFilters] = useState<PatientFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<PatientFilters>(DEFAULT_FILTERS);
   const [inputValue, setInputValue] = useState('');
+  const debounceTimer = useRef<NodeJS.Timeout>();
 
-  const { data: patients = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.patients.list(searchQuery || undefined),
-    queryFn: async () => {
-      const url = searchQuery
-        ? `${API_URL}/api/v1/patients/search?q=${encodeURIComponent(searchQuery)}`
-        : `${API_URL}/api/v1/patients`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data || [];
-    },
+  const { data: patients = [], isLoading, error } = usePatients({
+    ...appliedFilters,
+    q: searchQuery,
   });
 
   const handleSearch = (value: string) => {
     setInputValue(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => setSearchQuery(value), 300);
+    debounceTimer.current = setTimeout(() => setSearchQuery(value.trim()), 300);
   };
+
+  const applyFilters = () => {
+    setAppliedFilters(filters);
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setSearchQuery('');
+    setInputValue('');
+    setAppliedFilters(DEFAULT_FILTERS);
+  };
+
+  const activeFilterCount = Object.values(appliedFilters).filter(Boolean).length + (searchQuery ? 1 : 0);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -74,22 +93,119 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         </Link>
       </div>
 
-      {/* ── CSV Import ────────────────────────────────────── */}
-      <div className="mb-6">
-        <PatientImport />
-      </div>
+      <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          <div className="xl:col-span-2">
+            <label htmlFor="patient-search" className="sr-only">
+              {labels.search}
+            </label>
+            <div className="relative">
+              <input
+                id="patient-search"
+                type="search"
+                value={inputValue}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder={`${labels.search} / medical condition`}
+                className="w-full rounded-md border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700 placeholder-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                aria-label={labels.search}
+              />
+            </div>
+          </div>
 
-      {/* ── Search bar ────────────────────────────────────── */}
-      <div className="mb-6">
-        <input
-          id="patient-search"
-          type="search"
-          placeholder={labels.search}
-          value={inputValue}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          aria-label={labels.search}
-        />
+          <div>
+            <label htmlFor="filter-status" className="block text-xs font-semibold text-gray-500 uppercase">
+              Status
+            </label>
+            <select
+              id="filter-status"
+              value={filters.status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+            >
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="discharged">Discharged</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="filter-sex" className="block text-xs font-semibold text-gray-500 uppercase">
+              Sex
+            </label>
+            <select
+              id="filter-sex"
+              value={filters.sex}
+              onChange={(e) => setFilters((prev) => ({ ...prev, sex: e.target.value }))}
+              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+            >
+              <option value="">All</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="filter-condition" className="block text-xs font-semibold text-gray-500 uppercase">
+              Medical condition
+            </label>
+            <input
+              id="filter-condition"
+              type="text"
+              value={filters.condition}
+              onChange={(e) => setFilters((prev) => ({ ...prev, condition: e.target.value }))}
+              placeholder="e.g. hypertension"
+              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
+            <div>
+              <label htmlFor="filter-dob-from" className="block text-xs font-semibold text-gray-500 uppercase">
+                DOB from
+              </label>
+              <input
+                id="filter-dob-from"
+                type="date"
+                value={filters.dobFrom}
+                onChange={(e) => setFilters((prev) => ({ ...prev, dobFrom: e.target.value }))}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="filter-dob-to" className="block text-xs font-semibold text-gray-500 uppercase">
+                DOB to
+              </label>
+              <input
+                id="filter-dob-to"
+                type="date"
+                value={filters.dobTo}
+                onChange={(e) => setFilters((prev) => ({ ...prev, dobTo: e.target.value }))}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={applyFilters} className="rounded-md px-4 py-2 text-sm">
+              Apply filters
+            </Button>
+            <Button variant="outline" onClick={resetFilters} className="rounded-md px-4 py-2 text-sm">
+              Clear filters
+            </Button>
+            {activeFilterCount > 0 && (
+              <span className="text-sm text-gray-600">
+                {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500">
+            Showing {patients.length} patient{patients.length !== 1 ? 's' : ''}
+          </p>
+        </div>
       </div>
 
       {isLoading ? (
@@ -114,8 +230,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           }
         />
       ) : (
-        <>
-          {/* Mobile cards */}
+        <SectionErrorBoundary name="patient list">
           <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
@@ -152,7 +267,6 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             ))}
           </div>
 
-          {/* Desktop table */}
           <div className="hidden overflow-x-auto md:block">
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
@@ -203,7 +317,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               </tbody>
             </table>
           </div>
-        </>
+        </SectionErrorBoundary>
       )}
     </main>
   );

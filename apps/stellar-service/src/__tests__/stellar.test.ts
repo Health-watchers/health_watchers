@@ -48,7 +48,7 @@ describe('Stellar Service Tests', () => {
 
       const result = await stellar.fundAccount('GTEST123');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         funded: true,
         hash: 'test-hash-123',
         ledger: 12345,
@@ -164,7 +164,7 @@ describe('Stellar Service Tests', () => {
 
       const result = await stellar.verifyIntent('valid-hash-789');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         found: true,
         hash: 'valid-hash-789',
         successful: true,

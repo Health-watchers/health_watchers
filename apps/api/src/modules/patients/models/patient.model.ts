@@ -4,6 +4,9 @@ import { sanitizeText } from '@api/utils/sanitize';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
+// Insurance PHI fields that must be encrypted at rest
+const INSURANCE_PHI_FIELDS = ['policyNumber', 'groupNumber'] as const;
+
 export interface IAllergy {
   allergen: string;
   allergenType: 'drug' | 'food' | 'environmental' | 'other';
@@ -24,6 +27,20 @@ export interface IEmergencyContact {
   isPrimary: boolean;
 }
 
+export type CoverageType = 'HMO' | 'PPO' | 'EPO' | 'POS' | 'HDHP' | 'Medicare' | 'Medicaid' | 'other';
+
+export interface IInsurance {
+  provider: string;
+  /** Encrypted PHI */
+  policyNumber: string;
+  /** Encrypted PHI */
+  groupNumber?: string;
+  coverageType: CoverageType;
+  effectiveDate?: string;
+  expirationDate?: string;
+  isPrimary: boolean;
+}
+
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Patient {
@@ -39,10 +56,13 @@ export interface Patient {
   isActive: boolean;
   allergies: IAllergy[];
   emergencyContacts?: IEmergencyContact[];
+  insurance?: IInsurance[];
   riskScore?: number;
   riskLevel?: RiskLevel;
   riskFactors?: string[];
+  riskFactorWeights?: Record<string, number>;
   lastRiskCalculatedAt?: Date;
+  lastSummaryGeneratedAt?: Date;
   nextRiskReviewDate?: Date;
   photoUrl?: string;
   thumbnailUrl?: string;
@@ -82,6 +102,23 @@ const emergencyContactSchema = new Schema<IEmergencyContact>(
   { _id: true }
 );
 
+const insuranceSchema = new Schema<IInsurance>(
+  {
+    provider: { type: String, required: true, trim: true },
+    policyNumber: { type: String, required: true },
+    groupNumber: { type: String },
+    coverageType: {
+      type: String,
+      enum: ['HMO', 'PPO', 'EPO', 'POS', 'HDHP', 'Medicare', 'Medicaid', 'other'],
+      required: true,
+    },
+    effectiveDate: { type: String },
+    expirationDate: { type: String },
+    isPrimary: { type: Boolean, default: false },
+  },
+  { _id: true }
+);
+
 const patientSchema = new Schema<Patient>(
   {
     systemId: { type: String, required: true, unique: true },
@@ -96,10 +133,13 @@ const patientSchema = new Schema<Patient>(
     isActive: { type: Boolean, default: true, index: true },
     allergies: { type: [allergySchema], default: [] },
     emergencyContacts: { type: [emergencyContactSchema], default: [] },
+    insurance: { type: [insuranceSchema], default: [] },
     riskScore: { type: Number, min: 0, max: 100 },
     riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
     riskFactors: { type: [String], default: undefined },
+    riskFactorWeights: { type: Map, of: Number, default: undefined },
     lastRiskCalculatedAt: { type: Date },
+    lastSummaryGeneratedAt: { type: Date },
     nextRiskReviewDate: { type: Date },
     photoUrl: { type: String },
     thumbnailUrl: { type: String },
@@ -115,6 +155,15 @@ patientSchema.pre('save', function () {
   for (const field of PHI_FIELDS) {
     const val = this[field] as string | undefined;
     if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
+  }
+  // Encrypt PHI fields within each insurance entry
+  if (this.insurance) {
+    for (const ins of this.insurance) {
+      for (const field of INSURANCE_PHI_FIELDS) {
+        const val = ins[field] as string | undefined;
+        if (val) (ins as unknown as Record<string, unknown>)[field] = encrypt(val);
+      }
+    }
   }
 });
 
@@ -134,6 +183,15 @@ function decryptDoc(doc: unknown) {
   for (const field of PHI_FIELDS) {
     const val = d[field] as string | undefined;
     if (val) d[field] = decrypt(val);
+  }
+  // Decrypt PHI fields within each insurance entry
+  if (Array.isArray(d.insurance)) {
+    for (const ins of d.insurance as Record<string, unknown>[]) {
+      for (const field of INSURANCE_PHI_FIELDS) {
+        const val = ins[field] as string | undefined;
+        if (val) ins[field] = decrypt(val);
+      }
+    }
   }
 }
 

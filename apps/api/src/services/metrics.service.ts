@@ -117,6 +117,13 @@ export const aiRequestsTotal = new client.Counter({
   registers: [register],
 });
 
+export const securityHeaderViolationsTotal = new client.Counter({
+  name: 'security_header_violations_total',
+  help: 'Total number of responses missing required security headers',
+  labelNames: ['header', 'path'] as const,
+  registers: [register],
+});
+
 // ── Payment Expiration Job Metrics ────────────────────────────────────────────
 
 export const paymentExpirationJobErrorsTotal = new client.Counter({
@@ -143,6 +150,32 @@ export const paymentExpirationJobConsecutiveFailures = new client.Gauge({
   registers: [register],
 });
 
+// ── XLM Exchange Rate Job Metrics ─────────────────────────────────────────────
+
+export const xlmRateFetchErrorsTotal = new client.Counter({
+  name: 'xlm_rate_fetch_errors_total',
+  help: 'Total number of XLM/USD exchange rate fetch failures',
+  registers: [register],
+});
+
+export const xlmRateLastValueUsd = new client.Gauge({
+  name: 'xlm_rate_last_value_usd',
+  help: 'Most recently fetched XLM/USD exchange rate',
+  registers: [register],
+});
+
+export const xlmRateLastFetchTimestamp = new client.Gauge({
+  name: 'xlm_rate_last_fetch_timestamp_seconds',
+  help: 'Unix timestamp (seconds) of the last successful XLM/USD rate fetch',
+  registers: [register],
+});
+
+export const xlmRateStale = new client.Gauge({
+  name: 'xlm_rate_stale',
+  help: 'Whether the cached XLM/USD rate is older than the staleness threshold (1 = stale, 0 = fresh)',
+  registers: [register],
+});
+
 // ── System Metrics ────────────────────────────────────────────────────────────
 
 export const mongodbConnectionPoolSize = new client.Gauge({
@@ -160,6 +193,15 @@ export const mongodbPoolWaitQueueSize = new client.Gauge({
 export const mongodbKeyDecryptionFailures = new client.Counter({
   name: 'mongodb_keypair_decryption_failures_total',
   help: 'Total number of Stellar keypair decryption failures',
+  registers: [register],
+});
+
+// ── Subscription Metrics ──────────────────────────────────────────────────────
+
+export const subscriptionLimitViolations = new client.Counter({
+  name: 'subscription_limit_violations_total',
+  help: 'Total number of subscription limit violations by tier and resource',
+  labelNames: ['tier', 'resource'] as const,
   registers: [register],
 });
 

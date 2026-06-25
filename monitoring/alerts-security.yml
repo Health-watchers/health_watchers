@@ -1,0 +1,78 @@
+groups:
+  - name: security
+    rules:
+      # Alert on sustained high rate of 401 Unauthorized responses (brute-force indicator)
+      - alert: HighAuthFailureRate
+        expr: >
+          sum(rate(http_requests_total{job="health-watchers-api",status="401"}[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: "High authentication failure rate"
+          description: >
+            Authentication failure rate is {{ $value | humanize }} req/s (threshold: 1/s).
+            This may indicate a brute-force attack or misconfigured clients.
+          runbook_url: "https://wiki.internal/runbooks/auth-failures"
+
+      # Alert on sustained high rate of 403 Forbidden responses (privilege escalation attempts)
+      - alert: HighForbiddenRate
+        expr: >
+          sum(rate(http_requests_total{job="health-watchers-api",status="403"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: "High forbidden request rate"
+          description: >
+            Forbidden (403) rate is {{ $value | humanize }} req/s (threshold: 0.5/s).
+            This may indicate privilege escalation attempts or misconfigured roles.
+
+      # Alert on sustained high rate of 429 Too Many Requests (rate limit abuse)
+      - alert: HighRateLimitViolationRate
+        expr: >
+          sum(rate(http_requests_total{job="health-watchers-api",status="429"}[5m])) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: "High rate limit violation rate"
+          description: >
+            Rate limit violation (429) rate is {{ $value | humanize }} req/s (threshold: 2/s).
+            Review client behaviour and consider tightening rate limits.
+
+      # Alert immediately on any Stellar keypair decryption failure
+      - alert: StellarKeypairDecryptionFailure
+        expr: increase(mongodb_keypair_decryption_failures_total{job="health-watchers-api"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: "Stellar keypair decryption failure detected"
+          description: >
+            One or more Stellar keypair decryption failures occurred in the last 5 minutes.
+            This may indicate key rotation issues or data corruption.
+          runbook_url: "https://wiki.internal/runbooks/stellar-keypair"
+
+      # Alert on subscription limit violations spike (potential abuse)
+      - alert: SubscriptionLimitViolationSpike
+        expr: >
+          sum(rate(subscription_limit_violations_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: "Subscription limit violations spiking"
+          description: >
+            Subscription limit violation rate is {{ $value | humanize }} req/s.
+            Multiple clinics may be hitting their plan limits or attempting to bypass them.

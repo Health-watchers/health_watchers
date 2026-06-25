@@ -39,6 +39,8 @@ export interface PaymentRecord {
   // Expiry fields
   expiresAt?: Date;
   paymentType?: 'immediate' | 'multisig' | 'escrow';
+  // Claimable balance expiry notification flag
+  claimableExpiryNotificationSent?: boolean;
   idempotencyKey?: string;
 }
 
@@ -87,6 +89,8 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     // Expiry fields
     expiresAt: { type: Date, index: true },
     paymentType: { type: String, enum: ['immediate', 'multisig', 'escrow'], default: 'immediate' },
+    // Claimable balance expiry notification flag
+    claimableExpiryNotificationSent: { type: Boolean, default: false, index: true },
     idempotencyKey: { type: String, index: true, sparse: true, unique: true },
   },
   { timestamps: true, versionKey: false }

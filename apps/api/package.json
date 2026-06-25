@@ -30,6 +30,7 @@
     "@sentry/profiling-node": "^8.0.0",
     "@types/multer": "^2.1.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/socket.io": "^3.0.1",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
@@ -56,7 +57,7 @@
     "rate-limit-redis": "^4.2.0",
     "redis": "^4.7.0",
     "sharp": "^0.33.5",
-    "socket.io": "^4.8.1",
+    "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "zod": "^3.22.0"

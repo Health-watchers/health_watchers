@@ -1,0 +1,138 @@
+groups:
+  - name: business-kpis
+    rules:
+      # Alert when patient creation rate drops to zero for an extended period
+      # (may indicate API issues or data pipeline problems)
+      - alert: PatientCreationRateZero
+        expr: >
+          sum(rate(patients_created_total[30m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          team: product
+          dashboard: hw-business-kpis
+        annotations:
+          summary: "No patients created in the last 30 minutes"
+          description: >
+            The patient creation rate has been zero for 30 minutes.
+            This may indicate an API issue or an unusually quiet period.
+            Verify the API is healthy and check recent deployments.
+
+      # Alert when encounter creation rate drops to zero
+      - alert: EncounterCreationRateZero
+        expr: >
+          sum(rate(encounters_created_total[30m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          team: product
+          dashboard: hw-business-kpis
+        annotations:
+          summary: "No encounters created in the last 30 minutes"
+          description: >
+            The encounter creation rate has been zero for 30 minutes.
+            This may indicate an API issue or an unusually quiet period.
+
+      # Alert when AI request rate drops to zero (AI service may be down)
+      - alert: AIRequestRateZero
+        expr: >
+          sum(rate(ai_requests_total[15m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          team: product
+          dashboard: hw-business-kpis
+        annotations:
+          summary: "No AI requests in the last 15 minutes"
+          description: >
+            The AI request rate has been zero for 15 minutes.
+            The AI service may be unavailable or the Gemini API key may be invalid.
+
+      # Alert when subscription limit violations are high (revenue opportunity)
+      - alert: HighSubscriptionLimitViolations
+        expr: >
+          sum(increase(subscription_limit_violations_total[1h])) > 50
+        for: 0m
+        labels:
+          severity: info
+          team: product
+          dashboard: hw-business-kpis
+        annotations:
+          summary: "High subscription limit violations in the last hour"
+          description: >
+            {{ $value | humanize }} subscription limit violations occurred in the last hour.
+            Consider reaching out to affected clinics about plan upgrades.
+
+  - name: api-health
+    rules:
+      # Alert when API is down
+      - alert: APIDown
+        expr: up{job="health-watchers-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: "Health Watchers API is down"
+          description: "The API has been unreachable for more than 1 minute"
+          runbook_url: "https://wiki.internal/runbooks/api-down"
+
+      # Alert when error rate exceeds 5% over 5 minutes
+      - alert: HighErrorRate
+        expr: >
+          (
+            sum(rate(http_requests_total{job="health-watchers-api",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="health-watchers-api"}[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: "High HTTP error rate on API"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Alert when p99 latency exceeds 2 seconds
+      - alert: HighP99Latency
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="health-watchers-api"}[5m])) by (le)
+          ) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: "High p99 latency on API"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+  - name: mongodb-health
+    rules:
+      # Alert when MongoDB connection pool utilization exceeds 80%
+      - alert: MongoDBPoolHighUtilization
+        expr: >
+          mongodb_connection_pool_size{job="health-watchers-api"} / 10 > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-mongodb
+        annotations:
+          summary: "MongoDB connection pool utilization high"
+          description: "MongoDB pool utilization has exceeded 80% for more than 2 minutes"
+
+      # Alert when MongoDB pool wait queue is non-zero (connections queuing)
+      - alert: MongoDBPoolWaitQueueNonEmpty
+        expr: mongodb_pool_wait_queue_size{job="health-watchers-api"} > 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-mongodb
+        annotations:
+          summary: "MongoDB connection pool wait queue is non-empty"
+          description: "Requests are waiting for MongoDB connections — pool may be exhausted"
+          runbook_url: "https://wiki.internal/runbooks/mongodb-pool"

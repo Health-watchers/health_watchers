@@ -9,6 +9,9 @@ alerting:
 
 rule_files:
   - "alerts.yml"
+  - "alerts-payments.yml"
+  - "alerts-security.yml"
+  - "alerts-business.yml"
 
 scrape_configs:
   - job_name: "health-watchers-api"

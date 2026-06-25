@@ -2,6 +2,9 @@ import { ReimbursementModel } from '../models/reimbursement.model';
 import logger from '../../../utils/logger';
 import crypto from 'crypto';
 
+const CLAIM_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
 export async function processReimbursementWebhook(payload: {
   claimId: string;
   clinicId: string;
@@ -10,6 +13,12 @@ export async function processReimbursementWebhook(payload: {
   currency: 'XLM' | 'USDC';
   insuranceStellarAddress: string;
 }): Promise<void> {
+  if (!CLAIM_ID_REGEX.test(payload.claimId)) {
+    throw new Error('Invalid claimId format');
+  }
+  if (!OBJECT_ID_REGEX.test(payload.clinicId)) {
+    throw new Error('Invalid clinicId format');
+  }
   try {
     const reimbursement = await ReimbursementModel.findOneAndUpdate(
       { claimId: payload.claimId },
@@ -41,7 +50,11 @@ export async function matchPaymentToReimbursement(
       return;
     }
 
-    const claimId = claimIdMatch[1];
+   const claimId = claimIdMatch[1];
+    if (!CLAIM_ID_REGEX.test(claimId)) {
+      logger.warn(`[Reimbursement] Invalid claimId format extracted from memo: ${claimId}`);
+      return;
+    }
     const reimbursement = await ReimbursementModel.findOneAndUpdate(
       { claimId, clinicId },
       {

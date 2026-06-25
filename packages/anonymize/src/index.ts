@@ -35,7 +35,7 @@ export interface AnonymizedPatientData {
 // PII regex patterns for clinical notes
 const PII_PATTERNS: [RegExp, string][] = [
   [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],
-  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],
+  [/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[EMAIL]'],
   [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],
   [/\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd)\b/gi, '[ADDRESS]'],
   [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DATE]'],

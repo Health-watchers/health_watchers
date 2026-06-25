@@ -308,3 +308,26 @@ See [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) for detailed OWASP Top 10 a
 
 **Last Updated**: 2026-05-27  
 **Next Review**: 2026-08-27
+## HIPAA Breach Notification Procedure
+
+Under 45 CFR §164.400-414, covered entities must notify affected individuals, the
+Department of Health and Human Services, and for breaches affecting more than 500
+individuals, prominent media outlets within 60 calendar days of breach discovery.
+
+1. Record the breach immediately with `POST /api/v1/admin/breach-incidents`.
+2. The system computes `notificationDeadline` as `discoveredAt + 60 days` and
+   queues affected-patient notifications.
+3. Monitor missed deadlines with `GET /api/v1/admin/breach-incidents/overdue`.
+4. Generate the HHS report payload with
+   `GET /api/v1/admin/breach-incidents/:id/hhs-report`.
+5. Mark the incident `COMPLETE` only after patient, HHS, and required media
+   notifications are sent and acknowledged.
+
+Severity levels:
+
+| Level | Action |
+| --- | --- |
+| LOW | Internal review; notify if PHI was exposed. |
+| MEDIUM | Notify patients and HHS within 60 days. |
+| HIGH | Notify patients, HHS, and media if more than 500 people are affected. |
+| CRITICAL | Escalate immediately to leadership and legal counsel. |

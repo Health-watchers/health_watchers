@@ -1,0 +1,113 @@
+name: Dependabot Security Scan
+
+# Runs security & license checks on every Dependabot PR. The critical-audit job
+# is intended to be a required status check (configure branch protection on main
+# to require "Critical Vulnerability Gate") so critical vulnerabilities block merge.
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Only run the heavier scans for Dependabot-authored PRs.
+jobs:
+  critical-audit:
+    name: Critical Vulnerability Gate
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      # Hard gate: any critical vulnerability fails the job and blocks the PR.
+      - name: npm audit (fail on critical)
+        run: npm audit --audit-level=critical
+
+  license-compatibility:
+    name: License Compatibility
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify production dependency licenses are compatible
+        run: |
+          npx license-checker --production \
+            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense;CC-BY-4.0;Python-2.0" \
+            --excludePrivatePackages
+
+  snyk-pr-comment:
+    name: Snyk PR Comment
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Snyk test (machine-readable output)
+        id: snyk
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "SNYK_TOKEN not configured — skipping Snyk scan." > snyk-summary.txt
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx snyk test --severity-threshold=low --json > snyk-report.json || true
+          npx snyk-to-html -i snyk-report.json -o snyk-report.html || true
+          # Build a concise markdown summary of vulnerabilities for the PR comment.
+          node .github/scripts/snyk-summary.js snyk-report.json > snyk-summary.txt || \
+            echo "Could not parse Snyk report." > snyk-summary.txt
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+      - name: Comment vulnerability details on PR
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            try {
+              body = fs.readFileSync('snyk-summary.txt', 'utf8');
+            } catch {
+              body = 'Snyk report unavailable.';
+            }
+            const marker = '<!-- snyk-vulnerability-report -->';
+            const fullBody = `${marker}\n## 🔒 Snyk Vulnerability Report\n\n${body}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: fullBody });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: fullBody });
+            }
+      - name: Upload Snyk report artifact
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: snyk-report
+          path: |
+            snyk-report.json
+            snyk-report.html
+          retention-days: 30
+          if-no-files-found: ignore

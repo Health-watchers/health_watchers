@@ -1,0 +1,256 @@
+{
+  "title": "MongoDB Performance",
+  "uid": "hw-mongodb",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["mongodb", "database", "health-watchers"],
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "interval",
+        "type": "interval",
+        "label": "Interval",
+        "options": [
+          { "text": "1m", "value": "1m" },
+          { "text": "5m", "value": "5m" },
+          { "text": "10m", "value": "10m" }
+        ],
+        "current": { "text": "5m", "value": "5m" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Connection Pool Size",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "mongodb_connection_pool_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 8 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" }
+    },
+    {
+      "id": 2,
+      "title": "Wait Queue Size",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "mongodb_pool_wait_queue_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Waiting"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 3,
+      "title": "Pool Utilization (%)",
+      "type": "gauge",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "100 * mongodb_connection_pool_size{job=\"health-watchers-api\"} / 10",
+          "legendFormat": "Pool Utilization"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Keypair Decryption Failures",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "increase(mongodb_keypair_decryption_failures_total{job=\"health-watchers-api\"}[1h])",
+          "legendFormat": "Failures (1h)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "title": "Connection Pool Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "mongodb_connection_pool_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Active Connections"
+        },
+        {
+          "expr": "mongodb_pool_wait_queue_size{job=\"health-watchers-api\"}",
+          "legendFormat": "Wait Queue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 8 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Keypair Decryption Failures Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "increase(mongodb_keypair_decryption_failures_total{job=\"health-watchers-api\"}[$interval])",
+          "legendFormat": "Decryption Failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2 },
+          "color": { "fixedColor": "red", "mode": "fixed" }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "DB-Bound Request Rate (write operations)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",method=~\"POST|PUT|PATCH|DELETE\"}[$interval]))",
+          "legendFormat": "Write Requests/s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",method=\"GET\"}[$interval]))",
+          "legendFormat": "Read Requests/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "API Latency vs DB Pool Pressure",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"health-watchers-api\"}[$interval])) by (le))",
+          "legendFormat": "p99 Latency (s)"
+        },
+        {
+          "expr": "mongodb_pool_wait_queue_size{job=\"health-watchers-api\"}",
+          "legendFormat": "DB Wait Queue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p99 Latency (s)" },
+            "properties": [{ "id": "unit", "value": "s" }, { "id": "custom.axisPlacement", "value": "left" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "DB Wait Queue" },
+            "properties": [{ "id": "custom.axisPlacement", "value": "right" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "title": "Node.js Heap (API process)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "nodejs_heap_size_used_bytes{job=\"health-watchers-api\"}",
+          "legendFormat": "Heap Used"
+        },
+        {
+          "expr": "nodejs_heap_size_total_bytes{job=\"health-watchers-api\"}",
+          "legendFormat": "Heap Total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Payment Expiration Job Health",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "payment_expiration_job_consecutive_failures{job=\"health-watchers-api\"}",
+          "legendFormat": "Consecutive Failures"
+        },
+        {
+          "expr": "payment_expiration_job_last_run_expired{job=\"health-watchers-api\"}",
+          "legendFormat": "Payments Expired (last run)"
+        }
+      ]
+    }
+  ]
+}

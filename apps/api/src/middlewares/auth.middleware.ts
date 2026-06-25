@@ -22,6 +22,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     role: payload.role as AppRole,
     clinicId: payload.clinicId,
     patientId: payload.patientId,
+    isSuperAdmin: payload.isSuperAdmin ?? payload.role === 'SUPER_ADMIN',
   };
   req.tokenJti = payload.jti;
   return next();

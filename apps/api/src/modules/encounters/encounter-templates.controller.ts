@@ -65,20 +65,39 @@ router.post(
   })
 );
 
-// PUT /encounter-templates/:id
+// PUT /encounter-templates/:id — create a new version instead of overwriting
 router.put(
   '/:id',
   WRITE_ROLES,
   validateRequest({ body: templateBodySchema.partial() }),
   asyncHandler(async (req: Request, res: Response) => {
-    const template = await EncounterTemplateModel.findOneAndUpdate(
-      { _id: req.params.id, clinicId: req.user!.clinicId, isActive: true },
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!template)
+    const current = await EncounterTemplateModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+      isLatest: true,
+    });
+    if (!current)
       return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
-    return res.json({ status: 'success', data: template });
+
+    // Mark the current version as no longer latest
+    await EncounterTemplateModel.updateOne({ _id: current._id }, { isLatest: false });
+
+    // Create the new version
+    const newVersion = await EncounterTemplateModel.create({
+      ...current.toObject(),
+      _id: undefined,
+      ...req.body,
+      clinicId: req.user!.clinicId,
+      createdBy: req.user!.userId,
+      version: current.version + 1,
+      previousVersionId: current._id,
+      isLatest: true,
+      usageCount: 0,
+      createdAt: undefined,
+      updatedAt: undefined,
+    });
+    return res.json({ status: 'success', data: newVersion });
   })
 );
 
@@ -98,7 +117,149 @@ router.delete(
   })
 );
 
-// ── Marketplace endpoints ─────────────────────────────────────────────────────
+// ── Versioning & clinic customization ────────────────────────────────────────
+
+/**
+ * @swagger
+ * /encounter-templates/{id}/clone:
+ *   post:
+ *     summary: Clone a template for clinic-specific customization
+ *     description: >
+ *       Creates a clinic-owned copy of any template (including global ones).
+ *       The clone starts at version 1 and is linked to the source via previousVersionId.
+ *     tags: [Encounter Templates]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, description: "Override the cloned template's name" }
+ *     responses:
+ *       201: { description: Cloned template }
+ *       404: { description: Source template not found }
+ */
+router.post(
+  '/:id/clone',
+  WRITE_ROLES,
+  validateRequest({ body: z.object({ name: z.string().min(1).max(200).optional() }) }),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Allow cloning from own clinic or from global templates
+    const source = await EncounterTemplateModel.findOne({
+      _id: req.params.id,
+      isActive: true,
+      $or: [{ clinicId: req.user!.clinicId }, { isGlobal: true }],
+    });
+    if (!source)
+      return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
+
+    const { _id, createdAt, updatedAt, ...rest } = source.toObject();
+    const clone = await EncounterTemplateModel.create({
+      ...rest,
+      name: req.body.name ?? `${source.name} (copy)`,
+      clinicId: req.user!.clinicId,
+      isGlobal: false,
+      createdBy: req.user!.userId,
+      version: 1,
+      previousVersionId: source._id,
+      isLatest: true,
+      usageCount: 0,
+      isApproved: false,
+      approvedBy: undefined,
+      publishedAt: undefined,
+      publishedBy: undefined,
+      visibility: 'clinic',
+    });
+    return res.status(201).json({ status: 'success', data: clone });
+  })
+);
+
+/**
+ * @swagger
+ * /encounter-templates/{id}/history:
+ *   get:
+ *     summary: Get the version history of a template lineage
+ *     description: Returns all versions in the lineage, newest first.
+ *     tags: [Encounter Templates]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Version history array }
+ *       404: { description: Template not found }
+ */
+router.get(
+  '/:id/history',
+  asyncHandler(async (req: Request, res: Response) => {
+    const template = await EncounterTemplateModel.findOne({
+      _id: req.params.id,
+      $or: [{ clinicId: req.user!.clinicId }, { isGlobal: true }],
+    });
+    if (!template)
+      return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
+
+    // Walk the lineage: collect the root id by following previousVersionId chain,
+    // then fetch all documents sharing that root.
+    // Simpler approach: find all docs whose lineage includes this id by matching
+    // on the name+clinicId lineage, or by traversing previousVersionId.
+    // We use a forward-lookup: find all templates in the same clinic that share
+    // a common ancestor (the earliest previousVersionId or the template itself).
+    const history = await EncounterTemplateModel.find({
+      clinicId: template.clinicId,
+      isActive: true,
+      $or: [
+        { _id: template._id },
+        { previousVersionId: template._id },
+        // Also include the ancestors of this template
+        { _id: template.previousVersionId },
+      ],
+    })
+      .sort({ version: -1 })
+      .select('_id name version previousVersionId isLatest createdAt createdBy')
+      .lean();
+
+    return res.json({ status: 'success', data: history });
+  })
+);
+
+/**
+ * @swagger
+ * /encounter-templates/{id}/preview:
+ *   get:
+ *     summary: Preview a template without recording usage
+ *     tags: [Encounter Templates]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Full template document }
+ *       404: { description: Template not found }
+ */
+router.get(
+  '/:id/preview',
+  asyncHandler(async (req: Request, res: Response) => {
+    const template = await EncounterTemplateModel.findOne({
+      _id: req.params.id,
+      isActive: true,
+      $or: [{ clinicId: req.user!.clinicId }, { isGlobal: true }],
+    }).lean();
+    if (!template)
+      return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
+    return res.json({ status: 'success', data: template });
+  })
+);
 
 // POST /encounter-templates/:id/publish — Publish template to marketplace
 router.post(

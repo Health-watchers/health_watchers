@@ -8,6 +8,9 @@ export interface TokenPayload {
   role: string;
   clinicId: string;
   patientId?: string;
+  /** True for platform administrators; preserved across clinic switches so a
+   *  SUPER_ADMIN scoped to a clinic is still recognised as a super admin. */
+  isSuperAdmin?: boolean;
 }
 
 export interface AccessTokenPayload extends TokenPayload {
@@ -82,6 +85,7 @@ export function verifyAccessToken(token: string): (TokenPayload & { jti?: string
       role: decoded.role,
       clinicId: decoded.clinicId,
       patientId: decoded.patientId,
+      isSuperAdmin: decoded.isSuperAdmin,
       jti: decoded.jti,
     };
   } catch {

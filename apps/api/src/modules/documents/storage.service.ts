@@ -69,6 +69,38 @@ export async function getDownloadUrl(storageKey: string): Promise<string> {
   return `/api/v1/documents/_local/${encodeURIComponent(storageKey)}`;
 }
 
+async function streamToBuffer(stream: unknown): Promise<Buffer> {
+  if (!stream) {
+    return Buffer.alloc(0);
+  }
+
+  if (typeof (stream as any).transformToByteArray === 'function') {
+    return Buffer.from(await (stream as any).transformToByteArray());
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream as any) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+export async function downloadFile(storageKey: string): Promise<Buffer> {
+  if (config.storage.driver === 's3') {
+    const response = await s3().send(
+      new GetObjectCommand({
+        Bucket: config.storage.s3Bucket,
+        Key: storageKey,
+      })
+    );
+    return await streamToBuffer(response.Body);
+  }
+
+  const filePath = path.join(config.storage.localUploadDir, storageKey);
+  return fs.readFileSync(filePath);
+}
+
 // ── Delete ───────────────────────────────────────────────────────────────────
 
 export async function deleteFile(storageKey: string): Promise<void> {

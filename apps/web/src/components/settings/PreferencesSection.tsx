@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 
 export interface NotificationTypes {
   referral_received: boolean;
@@ -14,6 +15,7 @@ export interface NotificationTypes {
 
 export interface UserPreferences {
   language: string;
+  theme: 'light' | 'dark' | 'system';
   emailNotifications: boolean;
   inAppNotifications: boolean;
   notificationTypes?: NotificationTypes;
@@ -41,7 +43,9 @@ const DEFAULT_TYPES: NotificationTypes = {
   system: true,
 };
 
-async function patchPreferences(patch: Partial<UserPreferences & { notificationTypes: Partial<NotificationTypes> }>): Promise<void> {
+async function patchPreferences(
+  patch: Partial<UserPreferences & { notificationTypes: Partial<NotificationTypes> }>
+): Promise<void> {
   const res = await fetch('/api/settings/preferences', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -55,8 +59,12 @@ async function patchPreferences(patch: Partial<UserPreferences & { notificationT
 
 export function PreferencesSection({ preferences }: PreferencesSectionProps) {
   const router = useRouter();
+  const { setTheme } = useTheme();
 
   const [language, setLanguage] = useState(preferences.language);
+  const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>(
+    preferences.theme ?? 'system'
+  );
   const [emailNotifications, setEmailNotifications] = useState(preferences.emailNotifications);
   const [inAppNotifications, setInAppNotifications] = useState(preferences.inAppNotifications);
   const [notifTypes, setNotifTypes] = useState<NotificationTypes>(
@@ -77,6 +85,22 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
     } catch (err) {
       setLanguage(prev);
       setError(err instanceof Error ? err.message : 'Failed to update language');
+    }
+  };
+
+  const handleThemeChange = async (newTheme: 'light' | 'dark' | 'system') => {
+    const prev = theme;
+    setThemeState(newTheme);
+    setTheme(newTheme);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      await patchPreferences({ theme: newTheme });
+      setSuccessMessage('Preferences saved');
+    } catch (err) {
+      setThemeState(prev);
+      setTheme(prev);
+      setError(err instanceof Error ? err.message : 'Failed to update theme preference');
     }
   };
 
@@ -125,33 +149,64 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-neutral-900">Preferences</h2>
-        <p className="text-sm text-neutral-500">Manage your language and notification settings.</p>
+        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Preferences</h2>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Manage your language, appearance, and notification settings.
+        </p>
       </div>
 
       <div className="max-w-md space-y-6">
         {/* Language selector */}
         <div className="flex flex-col gap-1">
-          <label htmlFor="language-select" className="text-sm font-medium text-neutral-700">
+          <label htmlFor="language-select" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
             Language
           </label>
           <select
             id="language-select"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2"
+            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 focus:outline-none focus-visible:ring-2"
           >
             <option value="en">English</option>
             <option value="fr">French</option>
           </select>
         </div>
 
+        {/* Appearance / Theme */}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Appearance</span>
+          <div className="flex gap-2" role="group" aria-label="Theme selection">
+            {(['light', 'dark', 'system'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => handleThemeChange(option)}
+                aria-pressed={theme === option}
+                className={[
+                  'flex-1 rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                  theme === option
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                    : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700',
+                ].join(' ')}
+              >
+                {option === 'light' && '☀️ '}
+                {option === 'dark' && '🌙 '}
+                {option === 'system' && '💻 '}
+                {option.charAt(0).toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            "System" follows your device's dark mode setting.
+          </p>
+        </div>
+
         {/* Global notification toggles */}
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-neutral-700">Notifications</h3>
+          <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Notifications</h3>
 
           <div className="flex items-center justify-between">
-            <label htmlFor="email-notifications" className="text-sm text-neutral-700">
+            <label htmlFor="email-notifications" className="text-sm text-neutral-700 dark:text-neutral-300">
               Email Notifications
             </label>
             <input
@@ -166,7 +221,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <label htmlFor="inapp-notifications" className="text-sm text-neutral-700">
+            <label htmlFor="inapp-notifications" className="text-sm text-neutral-700 dark:text-neutral-300">
               In-App Notifications
             </label>
             <input
@@ -183,12 +238,14 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
 
         {/* Per-type notification preferences */}
         {inAppNotifications && (
-          <div className="space-y-3 border-t border-neutral-200 pt-4">
-            <h3 className="text-sm font-medium text-neutral-700">Notification Types</h3>
-            <p className="text-xs text-neutral-500">Choose which in-app notifications you receive.</p>
+          <div className="space-y-3 border-t border-neutral-200 dark:border-neutral-700 pt-4">
+            <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Notification Types</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Choose which in-app notifications you receive.
+            </p>
             {(Object.keys(NOTIFICATION_TYPE_LABELS) as (keyof NotificationTypes)[]).map((type) => (
               <div key={type} className="flex items-center justify-between">
-                <label htmlFor={`notif-type-${type}`} className="text-sm text-neutral-700">
+                <label htmlFor={`notif-type-${type}`} className="text-sm text-neutral-700 dark:text-neutral-300">
                   {NOTIFICATION_TYPE_LABELS[type]}
                 </label>
                 <input
@@ -205,7 +262,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
           </div>
         )}
 
-        {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
+        {successMessage && <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>}
         {error && <p className="text-danger-500 text-sm">{error}</p>}
       </div>
     </div>

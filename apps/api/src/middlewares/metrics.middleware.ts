@@ -8,8 +8,17 @@ import {
   httpRequestDurationSeconds,
   httpRequestSizeBytes,
   httpResponseSizeBytes,
+  securityHeaderViolationsTotal,
   normalisePath,
 } from '../services/metrics.service';
+
+const REQUIRED_SECURITY_HEADERS = [
+  'content-security-policy',
+  'strict-transport-security',
+  'x-content-type-options',
+  'x-frame-options',
+  'referrer-policy',
+] as const;
 
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction): void {
   const start = process.hrtime.bigint();
@@ -26,9 +35,18 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     const durationNs = process.hrtime.bigint() - start;
     const durationSec = Number(durationNs) / 1e9;
     const status = String(res.statusCode);
+    const pathLabel = path;
 
     httpRequestsTotal.inc({ method, path, status });
     httpRequestDurationSeconds.observe({ method, path }, durationSec);
+
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      for (const header of REQUIRED_SECURITY_HEADERS) {
+        if (!res.getHeader(header)) {
+          securityHeaderViolationsTotal.inc({ header, path: pathLabel });
+        }
+      }
+    }
 
     const resSize = parseInt(res.getHeader('content-length') as string ?? '0', 10) || 0;
     if (resSize > 0) {

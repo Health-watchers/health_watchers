@@ -33,6 +33,10 @@ export const cancelAppointmentSchema = z.object({
   cancellationReason: z.string().min(1, 'Cancellation reason is required'),
 });
 
+export const videoStartSchema = z.object({
+  recordingConsent: z.boolean().optional(),
+});
+
 export const appointmentIdParamsSchema = z.object({ id: z.string().min(1) });
 export const doctorIdParamsSchema = z.object({ doctorId: z.string().min(1) });
 

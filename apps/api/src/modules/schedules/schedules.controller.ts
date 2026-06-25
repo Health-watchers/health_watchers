@@ -7,13 +7,20 @@ import {
   updateScheduleSchema,
   listSchedulesQuerySchema,
   coverageCheckSchema,
+  createStaffScheduleSchema,
+  staffAvailabilityQuerySchema,
   CreateScheduleInput,
   UpdateScheduleInput,
   ListSchedulesQuery,
   CoverageCheckInput,
+  StaffAvailabilityQuery,
 } from './schedules.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import logger from '@api/utils/logger';
+import {
+  createStaffSchedule,
+  findStaffAvailability,
+} from './staff-availability.service';
 
 const router = Router();
 router.use(authenticate);
@@ -117,6 +124,53 @@ router.get(
       data: schedules,
       meta: { total, page, limit },
     });
+  })
+);
+
+// POST /schedules/staff - Create staff availability with overlap checks
+router.post(
+  '/staff',
+  validateRequest({ body: createStaffScheduleSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canManageSchedules(req.user!.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only clinic admins can create staff schedules',
+      });
+    }
+
+    const clinicId =
+      req.user!.role === 'SUPER_ADMIN' && req.body.clinicId ? req.body.clinicId : req.user!.clinicId;
+    const result = await createStaffSchedule(req.body, clinicId, req.user!.userId);
+    if (result.conflict) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Staff member already has an overlapping shift for this date',
+      });
+    }
+
+    logger.info({ scheduleId: result.schedule!._id, clinicId }, 'Staff schedule created');
+    return res.status(201).json({ status: 'success', data: result.schedule });
+  })
+);
+
+// GET /schedules/staff - Query staff availability
+router.get(
+  '/staff',
+  validateRequest({ query: staffAvailabilityQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!canViewSchedules(req.user!.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions to view staff schedules',
+      });
+    }
+
+    const schedules = await findStaffAvailability(
+      req.query as unknown as StaffAvailabilityQuery,
+      req.user!.clinicId
+    );
+    return res.json({ status: 'success', data: schedules });
   })
 );
 

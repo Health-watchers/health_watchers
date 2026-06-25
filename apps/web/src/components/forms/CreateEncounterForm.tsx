@@ -26,6 +26,7 @@ export type CreateEncounterData = z.infer<typeof schema> & {
   soapNotes?: { subjective?: string; objective?: string; assessment?: string; plan?: string };
   diagnosis?: DiagnosisEntry[];
 };
+};
 
 interface Props {
   onSubmit: (data: CreateEncounterData) => Promise<void>;
@@ -164,7 +165,6 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
           </ul>
         </div>
       )}
-
       <div>
         <label className="block text-sm font-medium text-secondary-700 mb-2">SOAP Notes</label>
         <SoapNotesEditor value={soapNotes ?? {}} onChange={setSoapNotes} />

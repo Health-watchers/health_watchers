@@ -55,7 +55,7 @@ async function forgotPasswordHandler(body: { email: string }, res: ReturnType<ty
     user.resetPasswordTokenHash = hashToken(rawToken);
     user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
     await user.save();
-    await sendPasswordResetEmail(user.email, rawToken);
+    await sendPasswordResetEmail(user.email, rawToken, undefined);
   }
   return res.json({
     status: 'success',
@@ -110,7 +110,7 @@ describe('POST /auth/forgot-password', () => {
     expect(saveMock).toHaveBeenCalledTimes(1);
     expect(user.resetPasswordTokenHash).toBeDefined();
     expect(user.resetPasswordExpiresAt).toBeInstanceOf(Date);
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith('doctor@clinic.com', expect.any(String));
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith('doctor@clinic.com', expect.any(String), undefined);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
   });
 

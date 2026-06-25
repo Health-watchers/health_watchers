@@ -11,13 +11,13 @@ export interface PatientResponse {
   contactNumber?: string;
   address?: string;
   allergies: unknown[];
+  insurance: unknown[];
   createdAt: string;
   updatedAt: string;
   photoUrl?: string;
   thumbnailUrl?: string;
   age?: number | null;
   ageGroup?: string | null;
-  thumbnailUrl?: string;
 }
 
 export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
@@ -32,6 +32,7 @@ export function toPatientResponse(doc: Document & Record<string, any>): PatientR
     contactNumber: doc.contactNumber,
     address:       doc.address,
     allergies:     doc.allergies ?? [],
+    insurance:     doc.insurance ?? [],
     createdAt:     doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt:     doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
     photoUrl:      doc.photoUrl,

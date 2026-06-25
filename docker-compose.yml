@@ -20,6 +20,9 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/alerts-payments.yml:/etc/prometheus/alerts-payments.yml:ro
+      - ./monitoring/alerts-security.yml:/etc/prometheus/alerts-security.yml:ro
+      - ./monitoring/alerts-business.yml:/etc/prometheus/alerts-business.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

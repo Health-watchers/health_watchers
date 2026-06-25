@@ -32,7 +32,18 @@ interface ClinicSettings {
     appointmentReminders: boolean;
     reminderHoursBefore: number;
   };
-  branding: { clinicName: string; logoUrl?: string; primaryColor?: string };
+  branding: {
+    clinicName: string;
+    logoUrl?: string;
+    primaryColor?: string;
+    address?: string;
+    phone?: string;
+    taxId?: string;
+    headerText?: string;
+    footerText?: string;
+    signatureName?: string;
+    signatureTitle?: string;
+  };
 }
 
 async function fetchSettings(): Promise<ClinicSettings> {
@@ -65,6 +76,36 @@ export default function ClinicSettingsClient() {
     queryKey: ['clinicSettings'],
     queryFn: fetchSettings,
   });
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const uploadLogo = async (file: File) => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    setUploadingLogo(true);
+    try {
+      const res = await fetch(`${API}/api/v1/settings/logo`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to upload logo');
+      }
+      const body = await res.json();
+      const settings = body.data as ClinicSettings;
+      update({ branding: { ...merged.branding, logoUrl: settings.branding.logoUrl } });
+      qc.invalidateQueries({ queryKey: ['clinicSettings'] });
+      setToast({ msg: t('saved'), ok: true });
+      setTimeout(() => setToast(null), 3000);
+    } catch (err: any) {
+      setToast({ msg: err.message || t('error'), ok: false });
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: saveSettings,
@@ -143,6 +184,20 @@ export default function ClinicSettingsClient() {
             />
           </label>
           <label style={labelStyle}>
+            {t('uploadLogo')}
+            <input
+              style={inputStyle}
+              type="file"
+              accept="image/png,image/jpeg"
+              disabled={uploadingLogo}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadLogo(file);
+              }}
+            />
+            {uploadingLogo && <small style={{ color: '#6b7280' }}>Uploading logo...</small>}
+          </label>
+          <label style={labelStyle}>
             {t('primaryColor')}
             <input
               style={{ ...inputStyle, width: 80 }}
@@ -150,6 +205,83 @@ export default function ClinicSettingsClient() {
               value={merged.branding.primaryColor ?? '#2563eb'}
               onChange={(e) =>
                 update({ branding: { ...merged.branding, primaryColor: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoiceAddress')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.address ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, address: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoicePhone')}
+            <input
+              style={inputStyle}
+              type="tel"
+              value={merged.branding.phone ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, phone: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('taxId')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.taxId ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, taxId: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoiceHeader')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.headerText ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, headerText: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoiceFooter')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.footerText ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, footerText: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoiceSignatureName')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.signatureName ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, signatureName: e.target.value } })
+              }
+            />
+          </label>
+          <label style={labelStyle}>
+            {t('invoiceSignatureTitle')}
+            <input
+              style={inputStyle}
+              type="text"
+              value={merged.branding.signatureTitle ?? ''}
+              onChange={(e) =>
+                update({ branding: { ...merged.branding, signatureTitle: e.target.value } })
               }
             />
           </label>

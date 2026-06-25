@@ -73,9 +73,14 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
 // POST /subscriptions — create subscription for a clinic (SUPER_ADMIN or ADMIN)
 router.post('/', authenticate, requireRoles('SUPER_ADMIN', 'ADMIN'), async (req: Request, res: Response) => {
   const { clinicId, tier = 'free', stellarPaymentAddress } = req.body;
+  const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 
   const targetClinicId = clinicId ?? req.user!.clinicId;
   if (!targetClinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+  if (!OBJECT_ID_REGEX.test(String(targetClinicId))) {
+    return res.status(400).json({ error: 'ValidationError', message: 'Invalid clinicId' });
+  }
 
   const existing = await SubscriptionModel.findOne({ clinicId: targetClinicId });
   if (existing) return res.status(409).json({ error: 'Subscription already exists for this clinic' });
@@ -155,6 +160,10 @@ router.post('/me/payment', authenticate, requireRoles('SUPER_ADMIN', 'ADMIN'), a
 router.post('/billing/invoice', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request, res: Response) => {
   const { clinicId } = req.body;
   if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+  if (!/^[a-f\d]{24}$/i.test(String(clinicId))) {
+    return res.status(400).json({ error: 'ValidationError', message: 'Invalid clinicId' });
+  }
 
   const invoice = await generateBillingInvoice(clinicId);
   if (!invoice) return res.status(400).json({ error: 'Cannot generate invoice for free tier or missing subscription' });
