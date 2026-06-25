@@ -107,6 +107,9 @@ const patientSchema = new Schema<Patient>(
   { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
+// Dashboard aggregation: filter by clinic + date range, sorted by createdAt
+patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
+
 patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
   for (const field of PHI_FIELDS) {

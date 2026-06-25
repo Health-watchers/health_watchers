@@ -24,6 +24,8 @@ import { encountersCreatedTotal } from '../../services/metrics.service';
 import cdsRulesEngine from '../cds/cds-rules-engine.js';
 import { EncounterValidationService } from './encounter-validation.service';
 import { incrementUsage } from '../subscriptions/usage.service';
+import { cache } from '@api/services/cache.service';
+import { dashboardCacheKey } from '../dashboard/dashboard.controller';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -305,6 +307,7 @@ router.post(
     emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
+    cache.del(dashboardCacheKey(String(req.user!.clinicId)));
 
     // Evaluate CDS rules for encounter creation
     const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);

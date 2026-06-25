@@ -20,6 +20,8 @@ import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
 import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { cache } from '@api/services/cache.service';
+import { dashboardCacheKey } from '../dashboard/dashboard.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -634,6 +636,7 @@ router.post(
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
     paymentsInitiatedTotal.inc({ currency: normalizedAsset });
+    cache.del(dashboardCacheKey(String(clinicId)));
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
