@@ -1,0 +1,165 @@
+---
+# Default deny-all ingress and egress for the namespace.
+# All traffic must be explicitly permitted by the policies below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: health-watchers
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow DNS egress for all pods (required for service discovery).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: health-watchers
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# Web frontend: allow ingress from the Ingress controller and egress only to API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-network-policy
+  namespace: health-watchers
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept traffic from the nginx ingress controller pods
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+  egress:
+    # Web → API only (port 3001)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - port: 3001
+          protocol: TCP
+
+---
+# API: ingress from web and ingress controller; egress to stellar-service, MongoDB, and Redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-network-policy
+  namespace: health-watchers
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept from web pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: web
+      ports:
+        - port: 3001
+          protocol: TCP
+    # Accept from ingress controller (health probes, direct API access)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 3001
+          protocol: TCP
+  egress:
+    # API → stellar-service (port 3002)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: stellar-service
+      ports:
+        - port: 3002
+          protocol: TCP
+    # API → MongoDB (port 27017)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - port: 27017
+          protocol: TCP
+    # API → Redis (port 6379)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+    # API → external SMTP / email services (port 587 / 2525)
+    - ports:
+        - port: 587
+          protocol: TCP
+        - port: 2525
+          protocol: TCP
+    # API → external HTTPS (Stellar Horizon, Gemini, etc.)
+    - ports:
+        - port: 443
+          protocol: TCP
+
+---
+# Stellar service: ingress from API only; egress to external Stellar network.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stellar-service-network-policy
+  namespace: health-watchers
+spec:
+  podSelector:
+    matchLabels:
+      app: stellar-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept from API pods only (web is explicitly NOT listed here)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - port: 3002
+          protocol: TCP
+  egress:
+    # stellar-service → external Stellar Horizon / Friendbot APIs
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
