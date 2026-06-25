@@ -60,6 +60,10 @@ jobs:
         if: matrix.check == 'typecheck'
         run: npx ts-node scripts/check-translations.ts
 
+      - name: Check email translations (FR support for all send* functions)
+        if: matrix.check == 'typecheck'
+        run: npx ts-node scripts/check-email-translations.ts
+
       - name: Upload translation report
         if: matrix.check == 'typecheck' && always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0

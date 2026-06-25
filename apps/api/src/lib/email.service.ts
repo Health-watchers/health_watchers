@@ -354,33 +354,40 @@ export function sendDisputeEvidenceSubmittedEmail(
   to: string,
   disputeId: string,
   reviewDeadline: Date,
+  language?: string,
 ): void {
   const disputeUrl = `${APP_BASE_URL()}/disputes`;
+  const isFrench = resolveLanguage(language) === 'fr';
   const deadlineStr = reviewDeadline.toUTCString();
-  const text = `Evidence has been submitted for dispute ${disputeId}. The review period ends ${deadlineStr}.\n\nView disputes: ${disputeUrl}`;
-  const html = `
-    <h3>Dispute Evidence Submitted</h3>
-    <p>Evidence has been submitted for dispute <strong>${disputeId}</strong>.</p>
-    <p>The review period ends <strong>${deadlineStr}</strong>.</p>
-    <p><a href="${disputeUrl}">View Disputes</a></p>
-  `;
-  enqueue(to, 'Dispute Evidence Submitted — Health Watchers', text, html);
+  const subject = isFrench
+    ? 'Preuves de litige soumises — Health Watchers'
+    : 'Dispute Evidence Submitted — Health Watchers';
+  const text = isFrench
+    ? `Des preuves ont été soumises pour le litige ${disputeId}. La période d'examen se termine le ${deadlineStr}.\n\nVoir les litiges : ${disputeUrl}`
+    : `Evidence has been submitted for dispute ${disputeId}. The review period ends ${deadlineStr}.\n\nView disputes: ${disputeUrl}`;
+  const html = isFrench
+    ? `<h3>Preuves de litige soumises</h3><p>Des preuves ont été soumises pour le litige <strong>${disputeId}</strong>.</p><p>La période d'examen se termine le <strong>${deadlineStr}</strong>.</p><p><a href="${disputeUrl}">Voir les litiges</a></p>`
+    : `<h3>Dispute Evidence Submitted</h3><p>Evidence has been submitted for dispute <strong>${disputeId}</strong>.</p><p>The review period ends <strong>${deadlineStr}</strong>.</p><p><a href="${disputeUrl}">View Disputes</a></p>`;
+  enqueue(to, subject, text, html);
 }
 
 /**
  * Data export ready — sends a SECURE DOWNLOAD LINK (never the data as an
  * attachment) for a patient's HIPAA Right of Access export.
  */
-export function sendDataExportReadyEmail(to: string, downloadUrl: string, expiresAt: Date): void {
+export function sendDataExportReadyEmail(to: string, downloadUrl: string, expiresAt: Date, language?: string): void {
+  const isFrench = resolveLanguage(language) === 'fr';
   const expiryStr = expiresAt.toUTCString();
-  const text = `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`;
-  const html = `
-    <h3>Your Health Record Export Is Ready</h3>
-    <p>You requested a copy of your health record. It is now ready to download.</p>
-    <p><a href="${downloadUrl}">Download your records securely</a></p>
-    <p>This link expires <strong>${expiryStr}</strong>. For your security, do not share it.</p>
-  `;
-  enqueue(to, 'Your Health Record Export Is Ready — Health Watchers', text, html);
+  const subject = isFrench
+    ? 'Votre export de dossier de santé est prêt — Health Watchers'
+    : 'Your Health Record Export Is Ready — Health Watchers';
+  const text = isFrench
+    ? `Votre export de dossier de santé est prêt.\n\nTéléchargez-le de manière sécurisée ici (le lien expire le ${expiryStr}) :\n${downloadUrl}\n\nPour votre sécurité, ce lien est à usage unique et limité dans le temps. Ne le partagez pas.`
+    : `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`;
+  const html = isFrench
+    ? `<h3>Votre export de dossier de santé est prêt</h3><p>Vous avez demandé une copie de votre dossier de santé. Il est maintenant prêt à être téléchargé.</p><p><a href="${downloadUrl}">Télécharger vos dossiers de manière sécurisée</a></p><p>Ce lien expire le <strong>${expiryStr}</strong>. Pour votre sécurité, ne le partagez pas.</p>`
+    : `<h3>Your Health Record Export Is Ready</h3><p>You requested a copy of your health record. It is now ready to download.</p><p><a href="${downloadUrl}">Download your records securely</a></p><p>This link expires <strong>${expiryStr}</strong>. For your security, do not share it.</p>`;
+  enqueue(to, subject, text, html);
 }
 
 /** Low balance warning sent when XLM balance drops below the warning threshold */
@@ -522,21 +529,21 @@ export function sendConsentVersionNotificationEmail(
   to: string,
   patientName: string,
   consentType: string,
-  version: string
+  version: string,
+  language?: string,
 ): void {
   const portalUrl = `${APP_BASE_URL()}/portal/consent`;
   const typeLabel = consentType.replace(/_/g, ' ');
-  const subject = `Action Required: Updated ${typeLabel} consent form — Health Watchers`;
-  const text = `Hi ${patientName},\n\nYour clinic has updated the ${typeLabel} consent form (version ${version}). Please review and re-consent at your earliest convenience.\n\nReview and sign: ${portalUrl}`;
-  const html = `
-    <h3>Updated Consent Form Requires Your Acceptance</h3>
-    <p>Hi <strong>${patientName}</strong>,</p>
-    <p>Your clinic has published an updated <strong>${typeLabel}</strong> consent form (version <strong>${version}</strong>).</p>
-    <p>Please review and re-accept the updated form to continue receiving care.</p>
-    <p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Review &amp; Sign</a></p>
-    <hr style="margin-top:32px">
-    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
-  `;
+  const isFrench = resolveLanguage(language) === 'fr';
+  const subject = isFrench
+    ? `Action requise : formulaire de consentement ${typeLabel} mis à jour — Health Watchers`
+    : `Action Required: Updated ${typeLabel} consent form — Health Watchers`;
+  const text = isFrench
+    ? `Bonjour ${patientName},\n\nVotre clinique a mis à jour le formulaire de consentement ${typeLabel} (version ${version}). Veuillez le consulter et re-consentir dès que possible.\n\nConsulter et signer : ${portalUrl}`
+    : `Hi ${patientName},\n\nYour clinic has updated the ${typeLabel} consent form (version ${version}). Please review and re-consent at your earliest convenience.\n\nReview and sign: ${portalUrl}`;
+  const html = isFrench
+    ? `<h3>Un formulaire de consentement mis à jour requiert votre acceptation</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>Votre clinique a publié un formulaire de consentement <strong>${typeLabel}</strong> mis à jour (version <strong>${version}</strong>).</p><p>Veuillez consulter et réaccepter le formulaire mis à jour pour continuer à recevoir des soins.</p><p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Consulter &amp; Signer</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers — Conformité HIPAA</small>`
+    : `<h3>Updated Consent Form Requires Your Acceptance</h3><p>Hi <strong>${patientName}</strong>,</p><p>Your clinic has published an updated <strong>${typeLabel}</strong> consent form (version <strong>${version}</strong>).</p><p>Please review and re-accept the updated form to continue receiving care.</p><p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Review &amp; Sign</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>`;
   enqueue(to, subject, text, html);
 }
 
@@ -545,25 +552,26 @@ export function sendMfaGracePeriodReminderEmail(
   to: string,
   name: string,
   daysRemaining: number,
-  gracePeriodEndsAt: Date
+  gracePeriodEndsAt: Date,
+  language?: string,
 ): void {
   const setupUrl = `${APP_BASE_URL()}/settings/security`;
-  const deadlineStr = gracePeriodEndsAt.toLocaleDateString('en-US', {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const deadlineStr = gracePeriodEndsAt.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const urgency = daysRemaining === 1 ? '🚨 Last day' : `⚠️ ${daysRemaining} days remaining`;
-  const subject = `${urgency}: Set up Two-Factor Authentication — Health Watchers`;
-  const text = `Hi ${name},\n\nYour account requires two-factor authentication (2FA) to be set up by ${deadlineStr}.\n\nAfter that date, you will not be able to log in until 2FA is enabled.\n\nSet it up now: ${setupUrl}`;
-  const html = `
-    <h3>${urgency}: Two-Factor Authentication Required</h3>
-    <p>Hi <strong>${name}</strong>,</p>
-    <p>Your account requires two-factor authentication (2FA) to protect patient data.</p>
-    <p><strong>Deadline:</strong> ${deadlineStr}</p>
-    <p>After this date, you will <strong>not be able to log in</strong> until 2FA is enabled.</p>
-    <p><a href="${setupUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Set Up 2FA Now</a></p>
-    <hr style="margin-top:32px">
-    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
-  `;
+  const urgency = isFrench
+    ? daysRemaining === 1 ? '🚨 Dernier jour' : `⚠️ ${daysRemaining} jours restants`
+    : daysRemaining === 1 ? '🚨 Last day' : `⚠️ ${daysRemaining} days remaining`;
+  const subject = isFrench
+    ? `${urgency} : configurez l'authentification à deux facteurs — Health Watchers`
+    : `${urgency}: Set up Two-Factor Authentication — Health Watchers`;
+  const text = isFrench
+    ? `Bonjour ${name},\n\nVotre compte requiert la configuration de l'authentification à deux facteurs (2FA) avant le ${deadlineStr}.\n\nPassé cette date, vous ne pourrez plus vous connecter tant que la 2FA ne sera pas activée.\n\nConfigurez-la maintenant : ${setupUrl}`
+    : `Hi ${name},\n\nYour account requires two-factor authentication (2FA) to be set up by ${deadlineStr}.\n\nAfter that date, you will not be able to log in until 2FA is enabled.\n\nSet it up now: ${setupUrl}`;
+  const html = isFrench
+    ? `<h3>${urgency} : authentification à deux facteurs requise</h3><p>Bonjour <strong>${name}</strong>,</p><p>Votre compte requiert l'authentification à deux facteurs (2FA) pour protéger les données des patients.</p><p><strong>Date limite :</strong> ${deadlineStr}</p><p>Passé cette date, vous <strong>ne pourrez plus vous connecter</strong> tant que la 2FA ne sera pas activée.</p><p><a href="${setupUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Configurer la 2FA maintenant</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers — Conformité HIPAA</small>`
+    : `<h3>${urgency}: Two-Factor Authentication Required</h3><p>Hi <strong>${name}</strong>,</p><p>Your account requires two-factor authentication (2FA) to protect patient data.</p><p><strong>Deadline:</strong> ${deadlineStr}</p><p>After this date, you will <strong>not be able to log in</strong> until 2FA is enabled.</p><p><a href="${setupUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Set Up 2FA Now</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>`;
   enqueue(to, subject, text, html);
 }
 
