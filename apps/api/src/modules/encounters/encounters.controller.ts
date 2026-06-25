@@ -709,4 +709,12 @@ router.delete(
 import { attachmentRoutes } from './attachments.controller';
 router.use('/:encounterId/attachments', attachmentRoutes);
 
+// ── Co-signature routes ───────────────────────────────────────────────────────
+import { CoSignatureController } from './cosignature.controller';
+
+router.get('/pending-cosignatures', asyncHandler(CoSignatureController.getPendingQueue));
+router.post('/:id/request-cosign', asyncHandler(CoSignatureController.requestCoSignature));
+router.post('/:id/cosign', asyncHandler(CoSignatureController.approveCoSignature));
+router.post('/:id/reject-cosign', asyncHandler(CoSignatureController.rejectCoSignature));
+
 export const encounterRoutes = router;
