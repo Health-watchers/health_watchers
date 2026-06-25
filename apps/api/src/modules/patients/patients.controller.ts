@@ -1382,6 +1382,25 @@ router.post(
   })
 );
 
+// ── Merge / Unmerge (CLINIC_ADMIN+ only) ─────────────────────────────────────
+
+// POST /patients/check-duplicates
+router.post('/check-duplicates', asyncHandler(DuplicateController.checkDuplicates));
+
+// POST /patients/:id/merge/:duplicateId  — body: { confirm: true }
+router.post(
+  '/:id/merge/:duplicateId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.mergePatients)
+);
+
+// POST /patients/unmerge/:mergeLogId  — body: { confirm: true }
+router.post(
+  '/unmerge/:mergeLogId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.unmergePatients)
+);
+
 export const patientRoutes = router;
 
 // GET /api/v1/patients/:id/risk-history
