@@ -6,6 +6,7 @@ const NAV = [
   { href: '/portal/records', label: 'My Records' },
   { href: '/portal/appointments', label: 'Appointments' },
   { href: '/portal/payments', label: 'Payments' },
+  { href: '/portal/health-log', label: 'Health Log' },
   { href: '/portal/consent', label: 'Consent' },
 ];
 

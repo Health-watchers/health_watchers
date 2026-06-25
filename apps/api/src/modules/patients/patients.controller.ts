@@ -1313,4 +1313,41 @@ Return ONLY valid JSON (no markdown) with this exact schema:
   })
 );
 
+// ── GET /api/v1/patients/:id/health-log (clinicians) ─────────────────────────
+import { PatientHealthLogModel } from '../portal/models/patient-health-log.model';
+router.get(
+  '/:id/health-log',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId } = req.user!;
+    const patient = await PatientModel.findOne({
+      _id: new Types.ObjectId(req.params.id),
+      clinicId: new Types.ObjectId(clinicId!),
+    }).lean();
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const metricType = req.query.metricType as string | undefined;
+    const from       = req.query.from as string | undefined;
+    const to         = req.query.to   as string | undefined;
+    const limit      = Math.min(parseInt(req.query.limit as string || '100', 10), 500);
+    const page       = Math.max(parseInt(req.query.page  as string || '1',  10), 1);
+
+    const filter: Record<string, unknown> = { patientId: new Types.ObjectId(req.params.id) };
+    if (metricType) filter.metricType = metricType;
+    if (from || to) {
+      filter.loggedAt = {
+        ...(from ? { $gte: new Date(from) } : {}),
+        ...(to   ? { $lte: new Date(to)   } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      PatientHealthLogModel.find(filter).sort({ loggedAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      PatientHealthLogModel.countDocuments(filter),
+    ]);
+
+    return res.json({ status: 'success', data, meta: { total, page, limit } });
+  })
+);
+
 export const patientRoutes = router;

@@ -495,4 +495,8 @@ router.use(portalMfaRoutes);
 import { exportRequestRoutes } from '../export/export-request.controller';
 router.use(exportRequestRoutes);
 
+// ── Health log routes ──────────────────────────────────────────────────────────
+import { healthLogRoutes } from './health-log.controller';
+router.use(healthLogRoutes);
+
 export { router as portalRoutes };
