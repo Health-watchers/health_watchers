@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![npm Version](https://img.shields.io/badge/npm-10.9.2-blue.svg)](https://www.npmjs.com/)
+[![Run in Postman](https://run.pstmn.io/button.svg)](https://www.postman.com/OWNER/health-watchers/overview)
 
 A HIPAA-compliant healthcare management platform built with Next.js, Express, and Stellar blockchain integration for secure patient data management and payment processing.
 
@@ -261,6 +262,31 @@ npm run build
 # Start production servers
 npm run start
 ```
+
+## API Explorer (Postman)
+
+[![Run in Postman](https://run.pstmn.io/button.svg)](https://www.postman.com/OWNER/health-watchers/overview)
+
+The Postman collection covers all major API workflows with automatic JWT token management.
+
+**Import locally:**
+```bash
+# Import the collection and your preferred environment file into Postman
+postman/Health-Watchers.postman_collection.json
+postman/Health-Watchers.local.postman_environment.json   # local dev
+postman/Health-Watchers.staging.postman_environment.json # staging
+```
+
+**Workflows covered:** Auth (login, register, refresh, logout, forgot-password) · Patients (CRUD, search) · Encounters (CRUD) · Payments (intent, confirm, disputes, exchange rate) · Health check
+
+**JWT is managed automatically.** The collection pre-request script refreshes the access token when it is missing or within 60 seconds of expiry. Run the **Login** request once — all subsequent calls will handle token refresh on their own.
+
+**Keeping the collection in sync:** The `.github/workflows/postman-sync.yml` workflow converts `apps/api/docs/openapi.json` to a Postman collection on every push to `main` that touches the spec. To enable auto-publishing, add these two repository secrets:
+
+| Secret | Description |
+|---|---|
+| `POSTMAN_API_KEY` | Your Postman API key (Account → API Keys) |
+| `POSTMAN_COLLECTION_UID` | UID of the target collection in your workspace |
 
 ## Contributing
 

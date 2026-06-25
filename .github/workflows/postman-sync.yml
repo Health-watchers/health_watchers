@@ -1,0 +1,61 @@
+name: Sync Postman Collection
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/docs/openapi.json'
+      - 'apps/api/src/docs/swagger.ts'
+      - 'apps/api/src/modules/payments/payments.controller.ts'
+  workflow_dispatch:
+
+jobs:
+  sync-postman:
+    name: Convert OpenAPI → Postman & Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install openapi-to-postmanv2
+        run: npm install -g openapi-to-postmanv2@4
+
+      # Generate the Postman collection from the committed openapi.json
+      - name: Convert OpenAPI spec to Postman collection
+        run: |
+          openapi2postmanv2 \
+            -s apps/api/docs/openapi.json \
+            -o postman/Health-Watchers-generated.postman_collection.json \
+            -p \
+            -O folderStrategy=Tags,requestParametersResolution=Example,optimizeConversion=true
+
+      # Validate the generated JSON is well-formed
+      - name: Validate generated collection
+        run: node -e "JSON.parse(require('fs').readFileSync('postman/Health-Watchers-generated.postman_collection.json','utf8')); console.log('Valid JSON')"
+
+      # Push the collection to Postman via API (requires POSTMAN_API_KEY and POSTMAN_COLLECTION_UID secrets)
+      - name: Push collection to Postman workspace
+        if: ${{ secrets.POSTMAN_API_KEY != '' && secrets.POSTMAN_COLLECTION_UID != '' }}
+        run: |
+          COLLECTION_JSON=$(cat postman/Health-Watchers-generated.postman_collection.json)
+          curl --silent --fail --show-error \
+            --request PUT \
+            --url "https://api.getpostman.com/collections/${{ secrets.POSTMAN_COLLECTION_UID }}" \
+            --header "X-Api-Key: ${{ secrets.POSTMAN_API_KEY }}" \
+            --header "Content-Type: application/json" \
+            --data "{\"collection\": $COLLECTION_JSON}"
+          echo "✅ Postman collection updated"
+
+      # Upload the generated collection as a CI artifact regardless of Postman push
+      - name: Upload generated collection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-collection
+          path: postman/Health-Watchers-generated.postman_collection.json
+          retention-days: 30
