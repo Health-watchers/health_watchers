@@ -11,6 +11,7 @@ k8s/
 ├── secrets.yaml                # Kubernetes Secrets (placeholder values)
 ├── external-secrets.yaml       # External Secrets Operator integration
 ├── ingress.yaml                # Ingress with TLS (cert-manager)
+├── network-policies.yaml       # NetworkPolicy resources (default-deny + per-service rules)
 ├── api/
 │   ├── deployment.yaml         # API Deployment (2 replicas)
 │   ├── service.yaml            # API ClusterIP Service
@@ -217,6 +218,52 @@ helm install external-secrets external-secrets/external-secrets -n external-secr
 # Configure your SecretStore (AWS, Vault, GCP, etc.)
 # Then apply the ExternalSecret manifest
 kubectl apply -f k8s/external-secrets.yaml
+```
+
+## Network Topology and Policies
+
+`k8s/network-policies.yaml` enforces a least-privilege network model for the `health-watchers` namespace.
+
+### Allowed traffic
+
+```
+Ingress controller ──► web (3000)
+Ingress controller ──► api  (3001)
+web                ──► api  (3001)
+api                ──► stellar-service (3002)
+api                ──► mongodb         (27017)
+api                ──► redis           (6379)
+api                ──► external HTTPS  (443)  — Stellar Horizon, Gemini AI, etc.
+api                ──► external SMTP   (587 / 2525)
+stellar-service    ──► external HTTPS  (443)  — Stellar Horizon / Friendbot
+all pods           ──► kube-dns        (53 UDP/TCP)
+```
+
+### Denied traffic (blocked by default-deny-all)
+
+| Source          | Destination      | Reason                                      |
+|-----------------|------------------|---------------------------------------------|
+| web             | stellar-service  | Must go through API auth layer              |
+| web             | mongodb          | Direct DB access not permitted              |
+| web             | redis            | Direct cache access not permitted           |
+| stellar-service | mongodb          | No DB access needed                         |
+| stellar-service | redis            | No cache access needed                      |
+
+### Applying network policies
+
+```bash
+kubectl apply -f k8s/network-policies.yaml
+# Verify
+kubectl get networkpolicies -n health-watchers
+```
+
+### Helm chart
+
+Network policies are controlled in `values.yaml` (see `helm/health-watchers/templates/network-policies.yaml`). To disable (e.g. in a local dev cluster without a CNI that enforces NetworkPolicy):
+
+```yaml
+networkPolicies:
+  enabled: false
 ```
 
 ## Helm Chart

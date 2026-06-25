@@ -190,3 +190,9 @@ redis:
       cpu: "100m"
   service:
     port: 6379
+
+# ── Network Policies ──────────────────────────────────────────────────────────
+# Set enabled: false in single-node dev clusters where the CNI does not
+# enforce NetworkPolicy (e.g. basic kubeadm without Calico/Cilium).
+networkPolicies:
+  enabled: true
