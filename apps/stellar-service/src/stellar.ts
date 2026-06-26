@@ -1,11 +1,12 @@
-import { 
-  Keypair, 
-  Horizon, 
-  TransactionBuilder, 
-  BASE_FEE, 
-  Networks, 
-  Operation, 
-  Asset 
+import {
+  Keypair,
+  Horizon,
+  TransactionBuilder,
+  Transaction,
+  BASE_FEE,
+  Networks,
+  Operation,
+  Asset
 } from '@stellar/stellar-sdk';
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
@@ -638,4 +639,217 @@ export function streamAccountTransactions(
     });
 
   return close as () => void;
+}
+
+// ── Multi-Signature Payments (Issue #868) ─────────────────────────────────────
+
+export interface MultiSigPaymentParams {
+  fromPublicKey: string;
+  toPublicKey: string;
+  amount: string;
+  signerPublicKeys: string[];
+}
+
+/**
+ * Build a multi-signature payment transaction XDR.
+ * Returns an unsigned envelope that must be signed by all required co-signers
+ * before submission. The source account must have its thresholds configured
+ * to require the signers listed.
+ */
+export async function buildMultiSigTransaction(params: MultiSigPaymentParams): Promise<{
+  xdr: string;
+  hash: string;
+  signerPublicKeys: string[];
+  networkPassphrase: string;
+}> {
+  const { fromPublicKey, toPublicKey, amount, signerPublicKeys } = params;
+  assertTransactionLimit(parseFloat(amount));
+
+  const start = Date.now();
+  logger.info(
+    { operation: 'buildMultiSigTransaction', from: fromPublicKey, to: toPublicKey, amount, signerCount: signerPublicKeys.length },
+    'Building multi-sig payment transaction'
+  );
+
+  try {
+    const server = getHorizonServer();
+    const account = await withHorizonCall('loadAccount', { publicKey: fromPublicKey }, () =>
+      server.loadAccount(fromPublicKey)
+    );
+    const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+
+    const transaction = new TransactionBuilder(account, {
+      fee: String(fee),
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(
+        Operation.payment({
+          destination: toPublicKey,
+          asset: Asset.native(),
+          amount,
+        })
+      )
+      .setTimeout(300)
+      .build();
+
+    const xdr = transaction.toXDR();
+    const hash = transaction.hash().toString('hex');
+
+    logger.info(
+      { operation: 'buildMultiSigTransaction', hash, signerCount: signerPublicKeys.length, outcome: 'success', durationMs: Date.now() - start },
+      'Multi-sig transaction built'
+    );
+
+    return { xdr, hash, signerPublicKeys, networkPassphrase: getNetworkPassphrase() };
+  } catch (error) {
+    logger.error(
+      { operation: 'buildMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      'Failed to build multi-sig transaction'
+    );
+    throw error;
+  }
+}
+
+/**
+ * Add a signature from a co-signer to an existing transaction XDR.
+ * Returns the updated XDR with the new signature appended.
+ */
+export function addCoSignerSignature(xdr: string, signerSecret: string): { xdr: string; signerPublicKey: string } {
+  const keypair = Keypair.fromSecret(signerSecret);
+  const transaction = new Transaction(xdr, getNetworkPassphrase());
+  transaction.sign(keypair);
+  return { xdr: transaction.toXDR(), signerPublicKey: keypair.publicKey() };
+}
+
+/**
+ * Submit a fully-signed multi-sig transaction XDR to Horizon.
+ */
+export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: string }> {
+  const start = Date.now();
+  logger.info({ operation: 'submitMultiSigTransaction' }, 'Submitting multi-sig transaction');
+
+  try {
+    const server = getHorizonServer();
+    const transaction = new Transaction(xdr, getNetworkPassphrase());
+
+    if (stellarConfig.dryRun) {
+      const hash = transaction.hash().toString('hex');
+      logger.info({ operation: 'submitMultiSigTransaction', hash, outcome: 'success', dryRun: true, durationMs: Date.now() - start }, 'Multi-sig transaction submitted (dry run)');
+      return { hash };
+    }
+
+    const result = await withHorizonCall('submitTransaction', {}, () =>
+      server.submitTransaction(transaction)
+    );
+
+    logger.info(
+      { operation: 'submitMultiSigTransaction', hash: result.hash, outcome: 'success', durationMs: Date.now() - start },
+      'Multi-sig transaction submitted'
+    );
+    return { hash: result.hash };
+  } catch (error) {
+    logger.error(
+      { operation: 'submitMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      'Failed to submit multi-sig transaction'
+    );
+    throw error;
+  }
+}
+
+// ── Batch Payment Processing (Issue #869) ─────────────────────────────────────
+
+export interface BatchPaymentItem {
+  toPublicKey: string;
+  amount: string;
+  memo?: string;
+}
+
+export interface BatchPaymentResult {
+  hash: string;
+  count: number;
+  totalAmount: string;
+  durationMs: number;
+}
+
+/**
+ * Build and submit a batch payment transaction.
+ * Bundles up to 100 payments into a single Stellar transaction for efficiency.
+ */
+export async function processBatchPayments(
+  fromPublicKey: string,
+  payments: BatchPaymentItem[]
+): Promise<BatchPaymentResult> {
+  if (!payments.length || payments.length > 100) {
+    throw new Error('Batch must contain between 1 and 100 payments');
+  }
+
+  const totalAmount = payments
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0)
+    .toFixed(7);
+
+  assertTransactionLimit(parseFloat(totalAmount));
+
+  const start = Date.now();
+  logger.info(
+    { operation: 'processBatchPayments', from: fromPublicKey, count: payments.length, totalAmount },
+    'Processing batch payments'
+  );
+
+  try {
+    const server = getHorizonServer();
+    const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const account = await withHorizonCall('loadAccount', { publicKey: fromPublicKey }, () =>
+      server.loadAccount(fromPublicKey)
+    );
+    const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+
+    // Each operation costs one base fee unit
+    const totalFee = String(parseInt(String(fee), 10) * payments.length);
+
+    const builder = new TransactionBuilder(account, {
+      fee: totalFee,
+      networkPassphrase: getNetworkPassphrase(),
+    });
+
+    for (const payment of payments) {
+      builder.addOperation(
+        Operation.payment({
+          destination: payment.toPublicKey,
+          asset: Asset.native(),
+          amount: payment.amount,
+        })
+      );
+    }
+
+    const transaction = builder.setTimeout(300).build();
+    transaction.sign(sourceKeypair);
+
+    if (stellarConfig.dryRun) {
+      const hash = transaction.hash().toString('hex');
+      const durationMs = Date.now() - start;
+      logger.info(
+        { operation: 'processBatchPayments', hash, count: payments.length, totalAmount, outcome: 'success', dryRun: true, durationMs },
+        'Batch payment built (dry run)'
+      );
+      return { hash, count: payments.length, totalAmount, durationMs };
+    }
+
+    const result = await withHorizonCall('submitTransaction', { count: payments.length, totalAmount }, () =>
+      server.submitTransaction(transaction)
+    );
+
+    const durationMs = Date.now() - start;
+    logger.info(
+      { operation: 'processBatchPayments', hash: result.hash, count: payments.length, totalAmount, outcome: 'success', durationMs },
+      'Batch payments submitted'
+    );
+
+    return { hash: result.hash, count: payments.length, totalAmount, durationMs };
+  } catch (error) {
+    logger.error(
+      { operation: 'processBatchPayments', count: payments.length, totalAmount, outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      'Failed to process batch payments'
+    );
+    throw error;
+  }
 }

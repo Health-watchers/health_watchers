@@ -21,6 +21,10 @@ import {
   getNetworkStatus,
   getHorizonServer,
   getNetworkPassphrase,
+  buildMultiSigTransaction,
+  addCoSignerSignature,
+  submitMultiSigTransaction,
+  processBatchPayments,
 } from './stellar.js';
 import {
   createClaimableBalance as buildCreateClaimableBalance,
@@ -451,6 +455,82 @@ app.post('/fee-bump', requireSecret, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /multi-sig/build — build a multi-sig payment transaction XDR
+app.post('/multi-sig/build', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { fromPublicKey, toPublicKey, amount, signerPublicKeys } = req.body;
+    if (!fromPublicKey || !toPublicKey || !amount || !Array.isArray(signerPublicKeys) || !signerPublicKeys.length) {
+      return res.status(400).json({ error: 'fromPublicKey, toPublicKey, amount, and signerPublicKeys[] are required' });
+    }
+    const result = await retryWithBackoff(
+      () => buildMultiSigTransaction({ fromPublicKey, toPublicKey, amount, signerPublicKeys }),
+      3,
+      1000
+    );
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /multi-sig/add-signature — co-signer adds their signature to an XDR
+app.post('/multi-sig/add-signature', requireSecret, async (req, res) => {
+  try {
+    const { xdr, signerSecret } = req.body;
+    if (!xdr || !signerSecret) {
+      return res.status(400).json({ error: 'xdr and signerSecret are required' });
+    }
+    const result = addCoSignerSignature(xdr, signerSecret);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /multi-sig/submit — submit a fully-signed multi-sig transaction
+app.post('/multi-sig/submit', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { xdr } = req.body;
+    if (!xdr) {
+      return res.status(400).json({ error: 'xdr is required' });
+    }
+    const result = await retryWithBackoff(() => submitMultiSigTransaction(xdr), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /batch — submit a batch of payments in a single transaction
+app.post('/batch', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { fromPublicKey, payments } = req.body;
+    if (!fromPublicKey || !Array.isArray(payments) || !payments.length) {
+      return res.status(400).json({ error: 'fromPublicKey and payments[] are required' });
+    }
+    if (payments.length > 100) {
+      return res.status(400).json({ error: 'Batch size cannot exceed 100 payments' });
+    }
+    const result = await retryWithBackoff(
+      () => processBatchPayments(fromPublicKey, payments),
+      3,
+      1000
+    );
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 

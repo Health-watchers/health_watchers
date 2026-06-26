@@ -33,6 +33,8 @@ import { documentRoutes } from './modules/documents/documents.controller';
 import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
 import { healthRoutes } from './modules/health/health.controller';
+import { backupHealthRoutes } from './modules/health/backup-health.controller';
+import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
@@ -231,6 +233,7 @@ app.use((req, res, next) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
+app.use('/health', backupHealthRoutes);
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // Must be registered before API routes so all requests are measured
@@ -340,6 +343,7 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
+  initializeBackupMetrics().catch((err) => logger.warn({ err }, 'Failed to load initial backup metrics'));
   startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus
