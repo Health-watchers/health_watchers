@@ -41,6 +41,15 @@ import {
 } from './error-handler.js';
 import { metricsMiddleware, metricsHandler } from './metrics.js';
 import { startPaymentStream } from './payment-stream.js';
+import {
+  calculateCompleteFeatures,
+  calculateBaseFee,
+  calculateSurgedFee,
+  calculateSubsidizedFee,
+  formatFeeForDisplay,
+  getAvailableSubsidyTiers,
+  getSurgePricingTiers,
+} from './fee-calculator.js';
 
 dotenv.config();
 
@@ -222,6 +231,109 @@ app.get('/fee-stats', checkCircuitBreakerMiddleware, async (_req, res) => {
     recordFailure();
     const horizonError = parseHorizonError(error);
     res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PUBLIC: POST /fees/calculate — Calculate transaction fees with surge pricing and subsidies
+app.post('/fees/calculate', checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const {
+      numberOfOperations = 1,
+      baseFeeRate,
+      pendingOperations = 0,
+      subsidyLevel = 'NONE',
+    } = req.body;
+
+    const result = calculateCompleteFeatures({
+      numberOfOperations,
+      baseFeeRate,
+      pendingOperations,
+      subsidyLevel,
+    });
+
+    const formatted = {
+      ...result,
+      display: formatFeeForDisplay(result.totalFee),
+    };
+
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Fee calculation failed');
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fees/surge-pricing — Get surge pricing tiers
+app.get('/fees/surge-pricing', (_req, res) => {
+  try {
+    const tiers = getSurgePricingTiers();
+    recordSuccess();
+    return res.json({ success: true, tiers });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fees/subsidies — Get available subsidy tiers
+app.get('/fees/subsidies', (_req, res) => {
+  try {
+    const tiers = getAvailableSubsidyTiers();
+    recordSuccess();
+    return res.json({ success: true, tiers });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/base — Calculate base fee only
+app.post('/fees/base', (req, res) => {
+  try {
+    const { numberOfOperations = 1, baseFeeRate } = req.body;
+    const baseFee = calculateBaseFee(numberOfOperations, baseFeeRate);
+    const formatted = formatFeeForDisplay(baseFee);
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/surge — Calculate surge-priced fee
+app.post('/fees/surge', (req, res) => {
+  try {
+    const { baseFee, pendingOperations = 0 } = req.body;
+    if (!baseFee) {
+      return res.status(400).json({ error: 'baseFee is required' });
+    }
+    const surgedFee = calculateSurgedFee(baseFee, pendingOperations);
+    const formatted = formatFeeForDisplay(surgedFee);
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/subsidy — Calculate subsidized fee
+app.post('/fees/subsidy', (req, res) => {
+  try {
+    const { baseFee, subsidyLevel = 'NONE' } = req.body;
+    if (!baseFee) {
+      return res.status(400).json({ error: 'baseFee is required' });
+    }
+    const result = calculateSubsidizedFee(baseFee, subsidyLevel);
+    const formatted = formatFeeForDisplay(result.subsidizedFee);
+    recordSuccess();
+    return res.json({ success: true, ...result, display: formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
   }
 });
 
