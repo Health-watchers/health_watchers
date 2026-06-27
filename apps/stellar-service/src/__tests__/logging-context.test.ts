@@ -60,7 +60,8 @@ describe('Stellar logging context', () => {
       (c) => c[0]?.horizonOp === 'feeStats' && c[0]?.phase === 'request'
     );
     const resLog = (debugSpy.mock.calls as Call[]).find(
-      (c) => c[0]?.horizonOp === 'feeStats' && c[0]?.phase === 'response' && c[0]?.outcome === 'success'
+      (c) =>
+        c[0]?.horizonOp === 'feeStats' && c[0]?.phase === 'response' && c[0]?.outcome === 'success'
     );
     expect(reqLog).toBeTruthy();
     expect(resLog).toBeTruthy();

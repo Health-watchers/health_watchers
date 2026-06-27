@@ -151,6 +151,375 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// ✅ PUBLIC: GET /monitor/status - Comprehensive network status with monitoring
+app.get('/monitor/status', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const status = await getMonitoredNetworkStatus();
+    recordSuccess();
+    return res.json({ success: true, ...status });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Failed to get monitored network status');
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/ledger - Get ledger status only
+app.get('/monitor/ledger', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const ledger = await getLedgerStatus();
+    recordSuccess();
+    return res.json({ success: true, ledger });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/backlog - Get transaction backlog info
+app.get('/monitor/backlog', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const backlog = await getTransactionBacklog();
+    recordSuccess();
+    return res.json({ success: true, backlog });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/alerts - Get current network alerts
+app.get('/monitor/alerts', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const alerts = await checkNetworkAlerts();
+    recordSuccess();
+    return res.json({ success: true, alerts, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/alerts/history - Get alert history
+app.get('/monitor/alerts/history', (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '50', 10);
+    const history = getAlertHistory(Math.min(limit, 100));
+    recordSuccess();
+    return res.json({ success: true, alerts: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: DELETE /monitor/alerts/history - Clear alert history
+app.delete('/monitor/alerts/history', requireSecret, (req, res) => {
+  try {
+    clearAlertHistory();
+    recordSuccess();
+    return res.json({ success: true, message: 'Alert history cleared' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/ledger-growth - Get ledger growth rate
+app.get('/monitor/ledger-growth', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const growth = await trackLedgerGrowth();
+    recordSuccess();
+    return res.json({ success: true, ...growth });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /reconcile — Run payment reconciliation
+app.post('/reconcile', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { expectedPayments, accountAddress, tolerance } = req.body;
+
+    if (!expectedPayments || !Array.isArray(expectedPayments) || !accountAddress) {
+      return res
+        .status(400)
+        .json({ error: 'expectedPayments array and accountAddress are required' });
+    }
+
+    const report = await runReconciliation(expectedPayments as PaymentRecord[], accountAddress, {
+      tolerance,
+    });
+    recordSuccess();
+    return res.json({ success: true, ...report });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Reconciliation failed');
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/history — Get reconciliation history
+app.get('/reconcile/history', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '20', 10);
+    const history = getReconciliationHistory(Math.min(limit, 100));
+    recordSuccess();
+    return res.json({ success: true, reports: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/statistics — Get reconciliation statistics
+app.get('/reconcile/statistics', requireSecret, (req, res) => {
+  try {
+    const stats = getReconciliationStatistics();
+    recordSuccess();
+    return res.json({ success: true, ...stats });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /reconcile/resolution — Record a discrepancy resolution
+app.post('/reconcile/resolution', requireSecret, (req, res) => {
+  try {
+    const { discrepancyId, action, notes } = req.body;
+
+    if (!discrepancyId || !action) {
+      return res.status(400).json({ error: 'discrepancyId and action are required' });
+    }
+
+    const validActions = ['mark_resolved', 'investigate', 'manual_review'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ error: `action must be one of: ${validActions.join(', ')}` });
+    }
+
+    const resolution = recordResolution({ discrepancyId, action, notes: notes || '' });
+    recordSuccess();
+    return res.json({ success: true, ...resolution });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/resolutions — Get resolution history
+app.get('/reconcile/resolutions', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '100', 10);
+    const history = getResolutionHistory(Math.min(limit, 500));
+    recordSuccess();
+    return res.json({ success: true, resolutions: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: DELETE /reconcile/history — Clear reconciliation history
+app.delete('/reconcile/history', requireSecret, (req, res) => {
+  try {
+    clearReconciliationHistory();
+    recordSuccess();
+    return res.json({ success: true, message: 'Reconciliation history cleared' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/keys — Store an encrypted keypair
+app.post('/cold-wallet/keys', requireSecret, (req, res) => {
+  try {
+    const { keypair, encryptionPassword, metadata } = req.body;
+
+    if (!keypair || !encryptionPassword) {
+      return res.status(400).json({ error: 'keypair and encryptionPassword are required' });
+    }
+
+    // Create keypair from provided secret
+    const kp = Keypair.fromSecret(keypair.secret || keypair);
+    const store = storeKeyPair(kp, encryptionPassword, metadata);
+
+    recordSuccess();
+    return res.json({
+      success: true,
+      keyId: store.keyId,
+      publicKey: store.publicKey,
+      createdAt: store.createdAt,
+    });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Failed to store keypair');
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/sign — Sign a transaction with a stored key
+app.post('/cold-wallet/sign', requireSecret, (req, res) => {
+  try {
+    const { keyId, transactionXdr, requester } = req.body;
+
+    if (!keyId || !transactionXdr || !requester) {
+      return res.status(400).json({
+        error: 'keyId, transactionXdr, and requester are required',
+      });
+    }
+
+    const request: Omit<SigningRequest, 'requestId' | 'timestamp'> = {
+      keyId,
+      transactionXdr,
+      requester,
+      signatureRequired: true,
+    };
+
+    const response = signTransaction(request);
+    recordSuccess();
+    return res.json(response);
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/rotate — Rotate a key
+app.post('/cold-wallet/rotate', requireSecret, (req, res) => {
+  try {
+    const { oldKeyId, encryptionPassword, reason, actor } = req.body;
+
+    if (!oldKeyId || !encryptionPassword || !actor) {
+      return res.status(400).json({
+        error: 'oldKeyId, encryptionPassword, and actor are required',
+      });
+    }
+
+    const { newKey, rotationEvent } = rotateKey(
+      oldKeyId,
+      encryptionPassword,
+      reason || 'Scheduled rotation',
+      actor
+    );
+    recordSuccess();
+
+    return res.json({
+      success: true,
+      oldKeyId,
+      newKeyId: newKey.keyId,
+      publicKey: newKey.publicKey,
+      rotationEvent,
+    });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/keys — List stored key IDs
+app.get('/cold-wallet/keys', requireSecret, (req, res) => {
+  try {
+    const keyIds = getStoredKeyIds();
+    const keysMetadata = keyIds.map((id) => getKeyMetadata(id)).filter(Boolean);
+
+    recordSuccess();
+    return res.json({ success: true, keys: keysMetadata, count: keysMetadata.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/keys/:keyId — Get key metadata
+app.get('/cold-wallet/keys/:keyId', requireSecret, (req, res) => {
+  try {
+    const { keyId } = req.params;
+    const metadata = getKeyMetadata(keyId);
+
+    if (!metadata) {
+      return res.status(404).json({ error: 'Key not found' });
+    }
+
+    recordSuccess();
+    return res.json({ success: true, ...metadata });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/keys/:keyId/deactivate — Deactivate a key
+app.post('/cold-wallet/keys/:keyId/deactivate', requireSecret, (req, res) => {
+  try {
+    const { keyId } = req.params;
+    const { actor } = req.body;
+
+    if (!actor) {
+      return res.status(400).json({ error: 'actor is required' });
+    }
+
+    const success = deactivateKey(keyId, actor);
+
+    if (!success) {
+      return res.status(404).json({ error: 'Key not found' });
+    }
+
+    recordSuccess();
+    return res.json({ success: true, message: 'Key deactivated' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/audit-logs — Get audit logs
+app.get('/cold-wallet/audit-logs', requireSecret, (req, res) => {
+  try {
+    const filter = {
+      keyId: req.query.keyId as string,
+      eventType: req.query.eventType as string,
+      actor: req.query.actor as string,
+      limit: parseInt((req.query.limit as string) || '100', 10),
+    };
+
+    const logs = getAuditLogs(filter);
+    recordSuccess();
+    return res.json({ success: true, logs, count: logs.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/rotations — Get key rotation history
+app.get('/cold-wallet/rotations', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '50', 10);
+    const rotations = getRotationHistory(Math.min(limit, 200));
+
+    recordSuccess();
+    return res.json({ success: true, rotations, count: rotations.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/statistics — Get cold wallet statistics
+app.get('/cold-wallet/statistics', requireSecret, (req, res) => {
+  try {
+    const stats = getColdWalletStatistics();
+    recordSuccess();
+    return res.json({ success: true, ...stats });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // ✅ PROTECTED: POST /fund (requires secret, testnet only)
 app.post('/fund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   // Return 403 on mainnet - Friendbot is testnet-only
@@ -222,6 +591,109 @@ app.get('/fee-stats', checkCircuitBreakerMiddleware, async (_req, res) => {
     recordFailure();
     const horizonError = parseHorizonError(error);
     res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PUBLIC: POST /fees/calculate — Calculate transaction fees with surge pricing and subsidies
+app.post('/fees/calculate', checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const {
+      numberOfOperations = 1,
+      baseFeeRate,
+      pendingOperations = 0,
+      subsidyLevel = 'NONE',
+    } = req.body;
+
+    const result = calculateCompleteFeatures({
+      numberOfOperations,
+      baseFeeRate,
+      pendingOperations,
+      subsidyLevel,
+    });
+
+    const formatted = {
+      ...result,
+      display: formatFeeForDisplay(result.totalFee),
+    };
+
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Fee calculation failed');
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fees/surge-pricing — Get surge pricing tiers
+app.get('/fees/surge-pricing', (_req, res) => {
+  try {
+    const tiers = getSurgePricingTiers();
+    recordSuccess();
+    return res.json({ success: true, tiers });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fees/subsidies — Get available subsidy tiers
+app.get('/fees/subsidies', (_req, res) => {
+  try {
+    const tiers = getAvailableSubsidyTiers();
+    recordSuccess();
+    return res.json({ success: true, tiers });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/base — Calculate base fee only
+app.post('/fees/base', (req, res) => {
+  try {
+    const { numberOfOperations = 1, baseFeeRate } = req.body;
+    const baseFee = calculateBaseFee(numberOfOperations, baseFeeRate);
+    const formatted = formatFeeForDisplay(baseFee);
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/surge — Calculate surge-priced fee
+app.post('/fees/surge', (req, res) => {
+  try {
+    const { baseFee, pendingOperations = 0 } = req.body;
+    if (!baseFee) {
+      return res.status(400).json({ error: 'baseFee is required' });
+    }
+    const surgedFee = calculateSurgedFee(baseFee, pendingOperations);
+    const formatted = formatFeeForDisplay(surgedFee);
+    recordSuccess();
+    return res.json({ success: true, ...formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /fees/subsidy — Calculate subsidized fee
+app.post('/fees/subsidy', (req, res) => {
+  try {
+    const { baseFee, subsidyLevel = 'NONE' } = req.body;
+    if (!baseFee) {
+      return res.status(400).json({ error: 'baseFee is required' });
+    }
+    const result = calculateSubsidizedFee(baseFee, subsidyLevel);
+    const formatted = formatFeeForDisplay(result.subsidizedFee);
+    recordSuccess();
+    return res.json({ success: true, ...result, display: formatted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
   }
 });
 
