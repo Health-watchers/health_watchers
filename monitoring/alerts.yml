@@ -13,8 +13,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High HTTP error rate on {{ $labels.job }}"
-          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          summary: 'High HTTP error rate on {{ $labels.job }}'
+          description: 'Error rate is {{ $value | humanizePercentage }} (threshold: 5%)'
 
       # Alert when p99 latency exceeds 2 seconds
       - alert: HighP99Latency
@@ -26,8 +26,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High p99 latency on {{ $labels.job }}"
-          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+          summary: 'High p99 latency on {{ $labels.job }}'
+          description: 'p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)'
 
       # Alert when API is down
       - alert: APIDown
@@ -36,8 +36,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Health Watchers API is down"
-          description: "The API has been unreachable for more than 1 minute"
+          summary: 'Health Watchers API is down'
+          description: 'The API has been unreachable for more than 1 minute'
 
       # Alert when stellar service is down
       - alert: StellarServiceDown
@@ -46,8 +46,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Stellar service is down"
-          description: "The Stellar service has been unreachable for more than 1 minute"
+          summary: 'Stellar service is down'
+          description: 'The Stellar service has been unreachable for more than 1 minute'
 
       # Alert when MongoDB connection pool utilization exceeds 80%
       - alert: MongoDBPoolHighUtilization
@@ -60,8 +60,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "MongoDB connection pool utilization high"
-          description: "MongoDB pool utilization has exceeded 80% for more than 2 minutes"
+          summary: 'MongoDB connection pool utilization high'
+          description: 'MongoDB pool utilization has exceeded 80% for more than 2 minutes'
 
       # Alert when MongoDB pool wait queue is non-zero (connections queuing)
       - alert: MongoDBPoolWaitQueueNonEmpty
@@ -70,8 +70,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "MongoDB connection pool wait queue is non-empty"
-          description: "Requests are waiting for MongoDB connections — pool may be exhausted"
+          summary: 'MongoDB connection pool wait queue is non-empty'
+          description: 'Requests are waiting for MongoDB connections — pool may be exhausted'
 
       # Alert for Stellar keypair decryption failures
       - alert: StellarKeypairDecryptionFailure
@@ -80,5 +80,5 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Stellar keypair decryption failure detected"
-          description: "One or more Stellar keypair decryption failures occurred in the last 5 minutes"
+          summary: 'Stellar keypair decryption failure detected'
+          description: 'One or more Stellar keypair decryption failures occurred in the last 5 minutes'

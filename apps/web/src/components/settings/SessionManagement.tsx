@@ -26,7 +26,11 @@ async function revokeSession(sessionId: string): Promise<void> {
 
 export function SessionManagement() {
   const queryClient = useQueryClient();
-  const { data: sessions = [], isLoading, error } = useQuery({
+  const {
+    data: sessions = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['sessions'],
     queryFn: fetchSessions,
   });
@@ -39,7 +43,7 @@ export function SessionManagement() {
   });
 
   if (isLoading) return <div className="text-sm text-neutral-500">Loading sessions...</div>;
-  if (error) return <div className="text-sm text-danger-500">Failed to load sessions</div>;
+  if (error) return <div className="text-danger-500 text-sm">Failed to load sessions</div>;
 
   return (
     <div className="space-y-4">
@@ -68,7 +72,7 @@ export function SessionManagement() {
               <button
                 onClick={() => revokeMutation.mutate(session.id)}
                 disabled={revokeMutation.isPending}
-                className="ml-4 rounded-md bg-danger-50 px-3 py-2 text-sm font-medium text-danger-600 hover:bg-danger-100 disabled:opacity-50"
+                className="bg-danger-50 text-danger-600 hover:bg-danger-100 ml-4 rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
               >
                 Revoke
               </button>

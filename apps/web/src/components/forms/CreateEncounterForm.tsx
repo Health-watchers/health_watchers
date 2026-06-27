@@ -11,9 +11,9 @@ import DifferentialDiagnosisPanel, {
 } from '@/components/encounters/DifferentialDiagnosisPanel';
 
 const schema = z.object({
-  patientId:      z.string().min(1, 'Required'),
+  patientId: z.string().min(1, 'Required'),
   chiefComplaint: z.string().min(1, 'Required'),
-  notes:          z.string().optional(),
+  notes: z.string().optional(),
 });
 
 export type DiagnosisEntry = {
@@ -25,7 +25,6 @@ export type DiagnosisEntry = {
 export type CreateEncounterData = z.infer<typeof schema> & {
   soapNotes?: { subjective?: string; objective?: string; assessment?: string; plan?: string };
   diagnosis?: DiagnosisEntry[];
-};
 };
 
 interface Props {
@@ -73,7 +72,11 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
 
   const submit = async (data: z.infer<typeof schema>) => {
     try {
-      await onSubmit({ ...data, soapNotes, diagnosis: diagnoses.length > 0 ? diagnoses : undefined });
+      await onSubmit({
+        ...data,
+        soapNotes,
+        diagnosis: diagnoses.length > 0 ? diagnoses : undefined,
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create encounter';
       setError('root', { message: msg });
@@ -83,7 +86,9 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-5">
       {errors.root && (
-        <p role="alert" className="text-sm text-red-600">{errors.root.message}</p>
+        <p role="alert" className="text-sm text-red-600">
+          {errors.root.message}
+        </p>
       )}
 
       <Input label="Patient ID" {...register('patientId')} error={errors.patientId?.message} />
@@ -134,9 +139,7 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
       {/* Added diagnoses */}
       {diagnoses.length > 0 && (
         <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">
-            Diagnoses ({diagnoses.length})
-          </p>
+          <p className="mb-2 text-sm font-medium text-gray-700">Diagnoses ({diagnoses.length})</p>
           <ul className="space-y-1.5">
             {diagnoses.map((d) => (
               <li
@@ -144,7 +147,7 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
                 className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
               >
                 <span>
-                  <span className="font-mono text-xs text-gray-500 mr-2">{d.code}</span>
+                  <span className="mr-2 font-mono text-xs text-gray-500">{d.code}</span>
                   <span className="text-gray-800">{d.description}</span>
                   {d.isPrimary && (
                     <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
@@ -166,12 +169,18 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-secondary-700 mb-2">SOAP Notes</label>
+        <label className="text-secondary-700 mb-2 block text-sm font-medium">SOAP Notes</label>
         <SoapNotesEditor value={soapNotes ?? {}} onChange={setSoapNotes} />
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting} className="flex-1">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="flex-1"
+        >
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={isSubmitting} className="flex-1">

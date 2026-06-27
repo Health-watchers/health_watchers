@@ -149,7 +149,7 @@ export default function PaymentAnalyticsClient() {
             placeholder="Clinic ID (admin only)"
             value={clinicId}
             onChange={(e) => setClinicId(e.target.value)}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
           />
           {/* Date preset */}
           {(['7d', '30d', '90d', '12m'] as const).map((p) => (
@@ -169,7 +169,7 @@ export default function PaymentAnalyticsClient() {
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
           >
             <option value="day">Daily</option>
             <option value="week">Weekly</option>
@@ -186,8 +186,15 @@ export default function PaymentAnalyticsClient() {
       </div>
 
       {isLoading && (
-        <div role="status" aria-live="polite" className="flex items-center gap-3 py-12 text-neutral-500">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700" aria-hidden="true" />
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 py-12 text-neutral-500"
+        >
+          <span
+            className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
+            aria-hidden="true"
+          />
           <span>Loading analytics…</span>
         </div>
       )}
@@ -244,8 +251,20 @@ export default function PaymentAnalyticsClient() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Area type="monotone" dataKey="XLM" stroke={COLORS.xlm} fill="url(#xlmGrad)" strokeWidth={2} />
-                <Area type="monotone" dataKey="USDC" stroke={COLORS.usdc} fill="url(#usdcGrad)" strokeWidth={2} />
+                <Area
+                  type="monotone"
+                  dataKey="XLM"
+                  stroke={COLORS.xlm}
+                  fill="url(#xlmGrad)"
+                  strokeWidth={2}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="USDC"
+                  stroke={COLORS.usdc}
+                  fill="url(#usdcGrad)"
+                  strokeWidth={2}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -255,12 +274,21 @@ export default function PaymentAnalyticsClient() {
             <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
               <SectionTitle>Transaction Count Trend</SectionTitle>
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={successRateData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                <LineChart
+                  data={successRateData}
+                  margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="period" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="transactions" stroke={COLORS.xlm} strokeWidth={2} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="transactions"
+                    stroke={COLORS.xlm}
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -290,12 +318,16 @@ export default function PaymentAnalyticsClient() {
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: COLORS.xlm }} />
                     <span className="text-neutral-600">XLM</span>
-                    <span className="ml-auto font-medium">{data.currencyDistribution.xlm.count} txns</span>
+                    <span className="ml-auto font-medium">
+                      {data.currencyDistribution.xlm.count} txns
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: COLORS.usdc }} />
                     <span className="text-neutral-600">USDC</span>
-                    <span className="ml-auto font-medium">{data.currencyDistribution.usdc.count} txns</span>
+                    <span className="ml-auto font-medium">
+                      {data.currencyDistribution.usdc.count} txns
+                    </span>
                   </div>
                 </div>
               </div>

@@ -6,11 +6,28 @@ import logger from '../utils/logger';
 const REDACTED = '[REDACTED]';
 
 const SENSITIVE_KEYS = new Set([
-  'password', 'newPassword', 'oldPassword', 'confirmPassword',
-  'privateKey', 'secretKey', 'secret', 'token', 'accessToken',
-  'refreshToken', 'authorization', 'apiKey', 'api_key',
-  'mfaSecret', 'mfaCode', 'otp', 'pin', 'ssn', 'creditCard',
-  'cardNumber', 'cvv', 'stellarSecretKey',
+  'password',
+  'newPassword',
+  'oldPassword',
+  'confirmPassword',
+  'privateKey',
+  'secretKey',
+  'secret',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'authorization',
+  'apiKey',
+  'api_key',
+  'mfaSecret',
+  'mfaCode',
+  'otp',
+  'pin',
+  'ssn',
+  'creditCard',
+  'cardNumber',
+  'cvv',
+  'stellarSecretKey',
 ]);
 
 function redact(obj: unknown, depth = 0): unknown {
@@ -51,7 +68,12 @@ function pruneOldLogs(): void {
 }
 
 // Prune once at startup
-try { ensureLogDir(); pruneOldLogs(); } catch { /* ignore */ }
+try {
+  ensureLogDir();
+  pruneOldLogs();
+} catch {
+  /* ignore */
+}
 
 function writeAuditEntry(entry: Record<string, unknown>): void {
   try {
@@ -82,7 +104,9 @@ export function requestAuditMiddleware(req: Request, res: Response, next: NextFu
       durationMs: Math.round(durationMs * 100) / 100,
       userId: (req as any).user?.userId,
       clinicId: (req as any).user?.clinicId,
-      ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.socket.remoteAddress,
+      ip:
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+        req.socket.remoteAddress,
       requestId: req.headers['x-request-id'],
     };
 

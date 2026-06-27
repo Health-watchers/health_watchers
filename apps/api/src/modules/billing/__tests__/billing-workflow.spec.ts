@@ -70,6 +70,6 @@ describe('buildAgingReport', () => {
   });
   it('returns empty buckets when no entries provided', () => {
     const report = buildAgingReport([]);
-    report.forEach(b => expect(b.encounters).toHaveLength(0));
+    report.forEach((b) => expect(b.encounters).toHaveLength(0));
   });
 });

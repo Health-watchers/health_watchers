@@ -1,5 +1,6 @@
 import { stellarConfig } from './config';
 import logger from './logger';
+import { mainnetSafetyManager } from './mainnet-safety.js';
 
 /**
  * Run at startup. Validates network configuration and exits with code 1 if:
@@ -7,22 +8,14 @@ import logger from './logger';
  * - Network and Horizon URL are inconsistent
  */
 export function assertMainnetSafety(): void {
-  const { network, mainnetConfirmed, dryRun, horizonUrl } = stellarConfig;
+  const { network, mainnetConfirmed, dryRun } = stellarConfig;
 
-  // Validate network/Horizon URL consistency
-  if (network === 'mainnet' && horizonUrl.includes('testnet')) {
-    logger.error(
-      'FATAL: mainnet network configured with testnet Horizon URL. ' +
-      'This configuration mismatch could cause transaction failures.'
-    );
-    process.exit(1);
-  }
-
-  if (network === 'testnet' && !horizonUrl.includes('testnet')) {
-    logger.error(
-      'FATAL: testnet network configured with mainnet Horizon URL. ' +
-      'This configuration mismatch could cause transaction failures.'
-    );
+  // Use the mainnet safety manager to check network consistency
+  const networkCheck = mainnetSafetyManager.detectNetworkConsistency();
+  if (!networkCheck.passed) {
+    networkCheck.errors.forEach((error) => {
+      logger.error('FATAL: ' + error);
+    });
     process.exit(1);
   }
 
@@ -32,8 +25,8 @@ export function assertMainnetSafety(): void {
     if (!mainnetConfirmed) {
       logger.error(
         "MAINNET_CONFIRMED is not set to 'true'. " +
-        "Set MAINNET_CONFIRMED=true to acknowledge mainnet operation. " +
-        "Exiting to prevent accidental real-funds usage."
+          'Set MAINNET_CONFIRMED=true to acknowledge mainnet operation. ' +
+          'Exiting to prevent accidental real-funds usage.'
       );
       process.exit(1);
     }
@@ -42,7 +35,7 @@ export function assertMainnetSafety(): void {
       logger.warn('STELLAR_DRY_RUN=true — transactions will be simulated, not submitted.');
     }
 
-    logger.warn("🚨 MAINNET MODE ACTIVE - All transactions will use real XLM 🚨");
+    logger.warn('🚨 MAINNET MODE ACTIVE - All transactions will use real XLM 🚨');
   } else {
     logger.info(`Stellar network: ${network} (testnet mode)`);
   }

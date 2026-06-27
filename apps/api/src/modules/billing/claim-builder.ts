@@ -3,12 +3,12 @@ export interface EncounterBillingInput {
   patientId: string;
   clinicId: string;
   clinicNpi: string;
-  patientDob: string;       // YYYY-MM-DD
+  patientDob: string; // YYYY-MM-DD
   patientName: string;
-  serviceDate: string;      // YYYY-MM-DD
+  serviceDate: string; // YYYY-MM-DD
   cptCodes: string[];
   diagnosisCodes: string[]; // ICD-10
-  amounts: number[];        // per CPT code, same order
+  amounts: number[]; // per CPT code, same order
 }
 
 /** CMS-1500 (02/12) form data structure — key field names match form box numbers */
@@ -49,10 +49,12 @@ export function buildEdi837(input: EncounterBillingInput): string {
     `BPR*I*${(totalCents / 100).toFixed(2)}*C*ACH~`,
     `NM1*85*2*CLINIC*****XX*${input.clinicNpi}~`,
     `NM1*QC*1*${input.patientName}*****MI*${input.patientId}~`,
-    ...input.cptCodes.map((cpt, i) =>
-      `SV1*HC:${cpt}*${(input.amounts[i] ?? 0).toFixed(2)}*UN*1***${
-        input.diagnosisCodes.slice(0, 4).map((_, j) => String.fromCharCode(65 + j)).join(':')
-      }~`
+    ...input.cptCodes.map(
+      (cpt, i) =>
+        `SV1*HC:${cpt}*${(input.amounts[i] ?? 0).toFixed(2)}*UN*1***${input.diagnosisCodes
+          .slice(0, 4)
+          .map((_, j) => String.fromCharCode(65 + j))
+          .join(':')}~`
     ),
     `SE*${8 + input.cptCodes.length}*0001~`,
     `GE*1*1~`,

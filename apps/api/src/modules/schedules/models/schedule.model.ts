@@ -57,4 +57,5 @@ scheduleSchema.index({ clinicId: 1, date: 1, role: 1 });
 scheduleSchema.index({ userId: 1, date: 1 });
 scheduleSchema.index({ userId: 1, clinicId: 1, isRecurring: 1, recurringDay: 1 });
 
-export const ScheduleModel = models.Schedule || model<Schedule>('Schedule', scheduleSchema);
+export const ScheduleModel = (models.Schedule ||
+  model<Schedule>('Schedule', scheduleSchema)) as import('mongoose').Model<Schedule>;

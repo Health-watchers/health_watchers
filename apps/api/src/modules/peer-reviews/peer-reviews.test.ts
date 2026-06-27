@@ -34,8 +34,14 @@ jest.mock('@api/modules/notifications/notification.service', () => ({
 
 // Bypass real JWT auth — inject req.user from test context
 jest.mock('@api/middlewares/auth.middleware', () => ({
-  authenticate: (req: any, _res: any, next: any) => { next(); },
-  requireRoles: (..._roles: string[]) => (_req: any, _res: any, next: any) => { next(); },
+  authenticate: (req: any, _res: any, next: any) => {
+    next();
+  },
+  requireRoles:
+    (..._roles: string[]) =>
+    (_req: any, _res: any, next: any) => {
+      next();
+    },
 }));
 
 import request from 'supertest';
@@ -52,29 +58,32 @@ jest.mock('../encounters/encounter.model');
 jest.mock('../auth/models/user.model');
 
 // ── IDs ───────────────────────────────────────────────────────────────────────
-const CLINIC_ID    = new Types.ObjectId().toHexString();
-const ADMIN_ID     = new Types.ObjectId().toHexString();
-const DOCTOR_ID    = new Types.ObjectId().toHexString();
-const REVIEWER_ID  = new Types.ObjectId().toHexString();
+const CLINIC_ID = new Types.ObjectId().toHexString();
+const ADMIN_ID = new Types.ObjectId().toHexString();
+const DOCTOR_ID = new Types.ObjectId().toHexString();
+const REVIEWER_ID = new Types.ObjectId().toHexString();
 const ENCOUNTER_ID = new Types.ObjectId().toHexString();
 
 function buildApp(userId: string, role: string, clinicId = CLINIC_ID) {
   const app = express();
   app.use(express.json());
-  app.use((req: any, _res: any, next: any) => { req.user = { userId, role, clinicId }; next(); });
+  app.use((req: any, _res: any, next: any) => {
+    req.user = { userId, role, clinicId };
+    next();
+  });
   app.use('/', peerReviewsRouter);
   return app;
 }
 
-const adminApp    = buildApp(ADMIN_ID,    'CLINIC_ADMIN');
+const adminApp = buildApp(ADMIN_ID, 'CLINIC_ADMIN');
 const reviewerApp = buildApp(REVIEWER_ID, 'DOCTOR');
 
-const mockPRCreate    = PeerReviewModel.create    as jest.Mock;
-const mockPRFindOne   = PeerReviewModel.findOne   as jest.Mock;
-const mockPRFind      = PeerReviewModel.find      as jest.Mock;
-const mockEncFindOne  = EncounterModel.findOne    as jest.Mock;
-const mockUserFindOne = UserModel.findOne         as jest.Mock;
-const mockUserFindById = UserModel.findById       as jest.Mock;
+const mockPRCreate = PeerReviewModel.create as jest.Mock;
+const mockPRFindOne = PeerReviewModel.findOne as jest.Mock;
+const mockPRFind = PeerReviewModel.find as jest.Mock;
+const mockEncFindOne = EncounterModel.findOne as jest.Mock;
+const mockUserFindOne = UserModel.findOne as jest.Mock;
+const mockUserFindById = UserModel.findById as jest.Mock;
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -82,32 +91,44 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('POST / — assign encounter for review', () => {
   it('creates a peer review when valid', async () => {
-    mockEncFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: DOCTOR_ID }) });
+    mockEncFindOne.mockReturnValue({
+      lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: DOCTOR_ID }),
+    });
     mockUserFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: REVIEWER_ID }) });
     mockPRFindOne.mockReturnValue({ lean: () => Promise.resolve(null) });
     mockPRCreate.mockResolvedValue({ _id: new Types.ObjectId(), status: 'pending' });
 
-    const res = await request(adminApp).post('/').send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
+    const res = await request(adminApp)
+      .post('/')
+      .send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('pending');
   });
 
   it('returns 400 when reviewer === reviewee (self-review prevention)', async () => {
-    mockEncFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: REVIEWER_ID }) });
+    mockEncFindOne.mockReturnValue({
+      lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: REVIEWER_ID }),
+    });
     mockUserFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: REVIEWER_ID }) });
     mockPRFindOne.mockReturnValue({ lean: () => Promise.resolve(null) });
 
-    const res = await request(adminApp).post('/').send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
+    const res = await request(adminApp)
+      .post('/')
+      .send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/same person/);
   });
 
   it('returns 409 when encounter already has a review', async () => {
-    mockEncFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: DOCTOR_ID }) });
+    mockEncFindOne.mockReturnValue({
+      lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: DOCTOR_ID }),
+    });
     mockUserFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: REVIEWER_ID }) });
     mockPRFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: 'existing' }) });
 
-    const res = await request(adminApp).post('/').send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
+    const res = await request(adminApp)
+      .post('/')
+      .send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
     expect(res.status).toBe(409);
   });
 
@@ -137,7 +158,11 @@ describe('PUT /:id — submit review', () => {
 
     const res = await request(reviewerApp)
       .put(`/${reviewId}`)
-      .send({ rating: 4, feedback: 'Good documentation', categories: { documentation: 4, diagnosis: 4, treatment: 4, followUp: 3 } });
+      .send({
+        rating: 4,
+        feedback: 'Good documentation',
+        categories: { documentation: 4, diagnosis: 4, treatment: 4, followUp: 3 },
+      });
 
     expect(res.status).toBe(200);
     expect(mockReview.status).toBe('completed');

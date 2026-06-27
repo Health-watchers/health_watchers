@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run actionlint on staged workflow files
-STAGED_WORKFLOWS=$(git diff --cached --name-only | grep '^\.github/workflows/.*\.yml$')
+STAGED_WORKFLOWS=$(git diff --cached --name-only | grep '^\.github/workflows/.*\.yml$' || true)
 if [ -n "$STAGED_WORKFLOWS" ]; then
   if command -v actionlint >/dev/null 2>&1; then
     echo "$STAGED_WORKFLOWS" | xargs actionlint

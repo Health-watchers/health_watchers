@@ -26,9 +26,7 @@ export async function getMyHealthLog(req: Request, res: Response) {
   const { metricType, limit = 50 } = req.query;
   const filter: any = { patientId };
   if (metricType) filter.metricType = metricType;
-  const logs = await PatientHealthLogModel.find(filter)
-    .sort({ loggedAt: -1 })
-    .limit(Number(limit));
+  const logs = await PatientHealthLogModel.find(filter).sort({ loggedAt: -1 }).limit(Number(limit));
   return res.json({ success: true, data: logs });
 }
 
@@ -38,8 +36,6 @@ export async function getPatientHealthLog(req: Request, res: Response) {
   const { metricType, limit = 100 } = req.query;
   const filter: any = { patientId: id };
   if (metricType) filter.metricType = metricType;
-  const logs = await PatientHealthLogModel.find(filter)
-    .sort({ loggedAt: -1 })
-    .limit(Number(limit));
+  const logs = await PatientHealthLogModel.find(filter).sort({ loggedAt: -1 }).limit(Number(limit));
   return res.json({ success: true, data: logs });
 }

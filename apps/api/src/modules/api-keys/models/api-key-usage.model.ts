@@ -10,15 +10,16 @@ export interface IApiKeyUsage {
 
 const apiKeyUsageSchema = new Schema<IApiKeyUsage>(
   {
-    apiKeyId:      { type: String, required: true, index: true },
-    clinicId:      { type: String, required: true },
-    date:          { type: String, required: true }, // YYYY-MM-DD
-    requestCount:  { type: Number, default: 0 },
-    lastEndpoint:  { type: String, default: '' },
+    apiKeyId: { type: String, required: true, index: true },
+    clinicId: { type: String, required: true },
+    date: { type: String, required: true }, // YYYY-MM-DD
+    requestCount: { type: Number, default: 0 },
+    lastEndpoint: { type: String, default: '' },
   },
   { timestamps: false, versionKey: false }
 );
 
 apiKeyUsageSchema.index({ apiKeyId: 1, date: 1 }, { unique: true });
 
-export const ApiKeyUsageModel = models.ApiKeyUsage || model<IApiKeyUsage>('ApiKeyUsage', apiKeyUsageSchema);
+export const ApiKeyUsageModel = (models.ApiKeyUsage ||
+  model<IApiKeyUsage>('ApiKeyUsage', apiKeyUsageSchema)) as import('mongoose').Model<IApiKeyUsage>;

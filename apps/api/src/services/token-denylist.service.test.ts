@@ -71,10 +71,6 @@ describe('setUserInvalidatedAt + isInvalidatedForUser', () => {
     const { cache } = await import('@api/services/cache.service');
     const ts = Math.floor(Date.now() / 1000);
     await setUserInvalidatedAt('user-2', ts);
-    expect(cache.set).toHaveBeenCalledWith(
-      'user-invalidated:user-2',
-      ts,
-      7 * 24 * 60 * 60,
-    );
+    expect(cache.set).toHaveBeenCalledWith('user-invalidated:user-2', ts, 7 * 24 * 60 * 60);
   });
 });

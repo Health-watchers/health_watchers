@@ -33,11 +33,15 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
       <div className="h-1.5 w-full rounded-full bg-neutral-200">
         <div
           className={`h-1.5 rounded-full transition-all duration-300 ${colorClass} ${
-            pct <= 20 ? 'w-1/5' : 
-            pct <= 40 ? 'w-2/5' : 
-            pct <= 60 ? 'w-3/5' : 
-            pct <= 80 ? 'w-4/5' : 
-            'w-full'
+            pct <= 20
+              ? 'w-1/5'
+              : pct <= 40
+                ? 'w-2/5'
+                : pct <= 60
+                  ? 'w-3/5'
+                  : pct <= 80
+                    ? 'w-4/5'
+                    : 'w-full'
           }`}
           role="progressbar"
           aria-valuenow={passed}

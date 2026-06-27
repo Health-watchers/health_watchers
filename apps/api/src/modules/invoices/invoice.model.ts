@@ -28,37 +28,37 @@ export interface IInvoice extends Document {
 const LineItemSchema = new Schema<ILineItem>(
   {
     description: { type: String, required: true },
-    quantity:    { type: Number, required: true, min: 1 },
-    unitPrice:   { type: String, required: true },
-    total:       { type: String, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    unitPrice: { type: String, required: true },
+    total: { type: String, required: true },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const InvoiceSchema = new Schema<IInvoice>(
   {
-    invoiceNumber:       { type: String, required: true, unique: true },
-    clinicId:            { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
-    patientId:           { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
-    encounterId:         { type: Schema.Types.ObjectId, ref: 'Encounter' },
-    lineItems:           { type: [LineItemSchema], required: true },
-    subtotal:            { type: String, required: true },
-    total:               { type: String, required: true },
-    currency:            { type: String, enum: ['XLM', 'USDC'], default: 'XLM' },
-    status:              { type: String, enum: ['draft', 'sent', 'paid', 'cancelled'], default: 'draft' },
-    dueDate:             { type: Date, required: true },
-    stellarMemo:         { type: String, required: true },
-    stellarDestination:  { type: String, required: true },
-    paymentIntentId:     { type: String },
-    paidAt:              { type: Date },
-    paidTxHash:          { type: String },
+    invoiceNumber: { type: String, required: true, unique: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
+    encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter' },
+    lineItems: { type: [LineItemSchema], required: true },
+    subtotal: { type: String, required: true },
+    total: { type: String, required: true },
+    currency: { type: String, enum: ['XLM', 'USDC'], default: 'XLM' },
+    status: { type: String, enum: ['draft', 'sent', 'paid', 'cancelled'], default: 'draft' },
+    dueDate: { type: Date, required: true },
+    stellarMemo: { type: String, required: true },
+    stellarDestination: { type: String, required: true },
+    paymentIntentId: { type: String },
+    paidAt: { type: Date },
+    paidTxHash: { type: String },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 InvoiceSchema.index({ clinicId: 1, createdAt: -1 });
 InvoiceSchema.index({ patientId: 1, createdAt: -1 });
 InvoiceSchema.index({ status: 1 });
 
-export const InvoiceModel =
-  mongoose.models.Invoice || mongoose.model<IInvoice>('Invoice', InvoiceSchema);
+export const InvoiceModel = (mongoose.models.Invoice ||
+  mongoose.model<IInvoice>('Invoice', InvoiceSchema)) as import('mongoose').Model<IInvoice>;

@@ -19,8 +19,14 @@ router.post(
   validateRequest({ body: createPreAuthSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { clinicId } = req.user!;
-    const { patientId, encounterId, procedureCode, estimatedAmount, insuranceProvider, patientPublicKey } =
-      req.body;
+    const {
+      patientId,
+      encounterId,
+      procedureCode,
+      estimatedAmount,
+      insuranceProvider,
+      patientPublicKey,
+    } = req.body;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + PRE_AUTH_EXPIRY_DAYS);
@@ -39,7 +45,10 @@ router.post(
       });
       claimableBalanceId = result.balanceId;
     } catch (err: any) {
-      logger.error({ err, patientId, procedureCode }, 'Failed to create claimable balance for pre-auth');
+      logger.error(
+        { err, patientId, procedureCode },
+        'Failed to create claimable balance for pre-auth'
+      );
       return res.status(502).json({ error: 'StellarServiceError', message: err.message });
     }
 
@@ -81,9 +90,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { clinicId } = req.user!;
     const status = (req.query.status as string) || 'pending';
-    const preAuths = await PreAuthModel.find({ clinicId, status })
-      .sort({ createdAt: -1 })
-      .lean();
+    const preAuths = await PreAuthModel.find({ clinicId, status }).sort({ createdAt: -1 }).lean();
     return res.json({ status: 'success', data: preAuths });
   })
 );
@@ -100,7 +107,10 @@ router.put(
       return res.status(404).json({ error: 'NotFound', message: 'Pre-authorization not found' });
     }
     if (preAuth.status !== 'pending') {
-      return res.status(409).json({ error: 'InvalidStatus', message: `Cannot approve a pre-auth with status '${preAuth.status}'` });
+      return res.status(409).json({
+        error: 'InvalidStatus',
+        message: `Cannot approve a pre-auth with status '${preAuth.status}'`,
+      });
     }
     if (new Date() > preAuth.expiresAt) {
       return res.status(410).json({ error: 'Expired', message: 'Pre-authorization has expired' });
@@ -127,10 +137,14 @@ router.post(
       return res.status(404).json({ error: 'NotFound', message: 'Pre-authorization not found' });
     }
     if (preAuth.status !== 'approved') {
-      return res.status(409).json({ error: 'InvalidStatus', message: 'Pre-auth must be approved before claiming' });
+      return res
+        .status(409)
+        .json({ error: 'InvalidStatus', message: 'Pre-auth must be approved before claiming' });
     }
     if (!preAuth.claimableBalanceId) {
-      return res.status(400).json({ error: 'MissingBalance', message: 'No claimable balance linked to this pre-auth' });
+      return res
+        .status(400)
+        .json({ error: 'MissingBalance', message: 'No claimable balance linked to this pre-auth' });
     }
     if (new Date() > preAuth.expiresAt) {
       return res.status(410).json({ error: 'Expired', message: 'Pre-authorization has expired' });
@@ -165,10 +179,15 @@ router.post(
       return res.status(404).json({ error: 'NotFound', message: 'Pre-authorization not found' });
     }
     if (!['pending', 'approved'].includes(preAuth.status)) {
-      return res.status(409).json({ error: 'InvalidStatus', message: `Cannot deny a pre-auth with status '${preAuth.status}'` });
+      return res.status(409).json({
+        error: 'InvalidStatus',
+        message: `Cannot deny a pre-auth with status '${preAuth.status}'`,
+      });
     }
     if (!preAuth.claimableBalanceId) {
-      return res.status(400).json({ error: 'MissingBalance', message: 'No claimable balance linked to this pre-auth' });
+      return res
+        .status(400)
+        .json({ error: 'MissingBalance', message: 'No claimable balance linked to this pre-auth' });
     }
 
     let txHash: string;

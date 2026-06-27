@@ -56,75 +56,106 @@ function withSla(reqDoc: any) {
  *     responses:
  *       201: { description: Export request created and fulfilled; secure link emailed }
  */
-router.post('/export-request', authenticate, requirePatient, async (req: Request, res: Response) => {
-  try {
-    const { patientId, clinicId, userId } = req.user!;
-    if (!patientId) return res.status(400).json({ error: 'BadRequest', message: 'No patient record linked to this account' });
+router.post(
+  '/export-request',
+  authenticate,
+  requirePatient,
+  async (req: Request, res: Response) => {
+    try {
+      const { patientId, clinicId, userId } = req.user!;
+      if (!patientId)
+        return res
+          .status(400)
+          .json({ error: 'BadRequest', message: 'No patient record linked to this account' });
 
-    const requested: ExportFormat[] = Array.isArray(req.body?.formats) ? req.body.formats : VALID_FORMATS;
-    const formats = requested.filter((f): f is ExportFormat => VALID_FORMATS.includes(f));
-    if (formats.length === 0) {
-      return res.status(400).json({ error: 'BadRequest', message: `formats must include at least one of: ${VALID_FORMATS.join(', ')}` });
-    }
+      const requested: ExportFormat[] = Array.isArray(req.body?.formats)
+        ? req.body.formats
+        : VALID_FORMATS;
+      const formats = requested.filter((f): f is ExportFormat => VALID_FORMATS.includes(f));
+      if (formats.length === 0) {
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: `formats must include at least one of: ${VALID_FORMATS.join(', ')}`,
+        });
+      }
 
-    const now = new Date();
-    const slaDeadline = new Date(now.getTime() + SLA_DAYS * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const slaDeadline = new Date(now.getTime() + SLA_DAYS * 24 * 60 * 60 * 1000);
 
-    const exportReq = await ExportRequestModel.create({
-      patientId,
-      clinicId,
-      requestedBy: userId,
-      formats,
-      status: 'processing',
-      requestedAt: now,
-      slaDeadline,
-    });
+      const exportReq = await ExportRequestModel.create({
+        patientId,
+        clinicId,
+        requestedBy: userId,
+        formats,
+        status: 'processing',
+        requestedAt: now,
+        slaDeadline,
+      });
 
-    await auditLog(
-      { action: 'DATA_EXPORT_REQUEST', userId, clinicId, resourceType: 'ExportRequest', resourceId: String(exportReq._id), metadata: { patientId, formats } },
-      req,
-    );
+      await auditLog(
+        {
+          action: 'DATA_EXPORT_REQUEST',
+          userId,
+          clinicId,
+          resourceType: 'ExportRequest',
+          resourceId: String(exportReq._id),
+          metadata: { patientId, formats },
+        },
+        req
+      );
 
-    // Verify the record can be assembled, then mark ready and issue a secure link.
-    const record = await buildComprehensiveRecord(String(patientId));
-    if (!record) {
-      exportReq.status = 'failed';
-      exportReq.failureReason = 'Patient record not found';
+      // Verify the record can be assembled, then mark ready and issue a secure link.
+      const record = await buildComprehensiveRecord(String(patientId));
+      if (!record) {
+        exportReq.status = 'failed';
+        exportReq.failureReason = 'Patient record not found';
+        await exportReq.save();
+        return res.status(404).json({ error: 'NotFound', message: 'Patient record not found' });
+      }
+
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const downloadExpiresAt = new Date(
+        now.getTime() + DOWNLOAD_WINDOW_DAYS * 24 * 60 * 60 * 1000
+      );
+      exportReq.downloadTokenHash = hashToken(rawToken);
+      exportReq.downloadExpiresAt = downloadExpiresAt;
+      exportReq.status = 'ready';
+      exportReq.fulfilledAt = new Date();
       await exportReq.save();
-      return res.status(404).json({ error: 'NotFound', message: 'Patient record not found' });
+
+      await auditLog(
+        {
+          action: 'DATA_EXPORT_FULFILLED',
+          userId,
+          clinicId,
+          resourceType: 'ExportRequest',
+          resourceId: String(exportReq._id),
+          metadata: { fulfilledAt: exportReq.fulfilledAt },
+        },
+        req
+      );
+
+      // Send the secure download link (NOT the data) to the patient's email on file.
+      const user = await UserModel.findById(userId).lean();
+      const downloadUrl = `${APP_BASE_URL()}/portal/export/download/${rawToken}`;
+      if (user?.email) sendDataExportReadyEmail(user.email, downloadUrl, downloadExpiresAt);
+
+      const obj = exportReq.toObject();
+      delete obj.downloadTokenHash;
+      return res.status(201).json({
+        status: 'success',
+        data: withSla(obj),
+        // Returned for SPA convenience; the canonical delivery is the emailed link.
+        downloadUrl,
+      });
+    } catch (err: any) {
+      logger.error({ err }, 'Export request failed');
+      return res
+        .status(500)
+        .json({ error: 'InternalError', message: 'Failed to create export request' });
     }
-
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const downloadExpiresAt = new Date(now.getTime() + DOWNLOAD_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    exportReq.downloadTokenHash = hashToken(rawToken);
-    exportReq.downloadExpiresAt = downloadExpiresAt;
-    exportReq.status = 'ready';
-    exportReq.fulfilledAt = new Date();
-    await exportReq.save();
-
-    await auditLog(
-      { action: 'DATA_EXPORT_FULFILLED', userId, clinicId, resourceType: 'ExportRequest', resourceId: String(exportReq._id), metadata: { fulfilledAt: exportReq.fulfilledAt } },
-      req,
-    );
-
-    // Send the secure download link (NOT the data) to the patient's email on file.
-    const user = await UserModel.findById(userId).lean();
-    const downloadUrl = `${APP_BASE_URL()}/portal/export/download/${rawToken}`;
-    if (user?.email) sendDataExportReadyEmail(user.email, downloadUrl, downloadExpiresAt);
-
-    const obj = exportReq.toObject();
-    delete obj.downloadTokenHash;
-    return res.status(201).json({
-      status: 'success',
-      data: withSla(obj),
-      // Returned for SPA convenience; the canonical delivery is the emailed link.
-      downloadUrl,
-    });
-  } catch (err: any) {
-    logger.error({ err }, 'Export request failed');
-    return res.status(500).json({ error: 'InternalError', message: 'Failed to create export request' });
   }
-});
+);
 
 /**
  * @swagger
@@ -135,12 +166,17 @@ router.post('/export-request', authenticate, requirePatient, async (req: Request
  *     security:
  *       - bearerAuth: []
  */
-router.get('/export-requests', authenticate, requirePatient, async (req: Request, res: Response) => {
-  const requests = await ExportRequestModel.find({ patientId: req.user!.patientId })
-    .sort({ requestedAt: -1 })
-    .lean();
-  return res.json({ status: 'success', data: requests.map(withSla) });
-});
+router.get(
+  '/export-requests',
+  authenticate,
+  requirePatient,
+  async (req: Request, res: Response) => {
+    const requests = await ExportRequestModel.find({ patientId: req.user!.patientId })
+      .sort({ requestedAt: -1 })
+      .lean();
+    return res.json({ status: 'success', data: requests.map(withSla) });
+  }
+);
 
 /**
  * @swagger
@@ -163,13 +199,16 @@ router.get('/export-requests', authenticate, requirePatient, async (req: Request
 router.get('/export/download/:token', async (req: Request, res: Response) => {
   try {
     const token = String(req.params.token || '');
-    if (!token) return res.status(404).json({ error: 'NotFound', message: 'Invalid download link' });
+    if (!token)
+      return res.status(404).json({ error: 'NotFound', message: 'Invalid download link' });
 
-    const exportReq = await ExportRequestModel.findOne({ downloadTokenHash: hashToken(token) }).select(
-      '+downloadTokenHash',
-    );
+    const exportReq = await ExportRequestModel.findOne({
+      downloadTokenHash: hashToken(token),
+    }).select('+downloadTokenHash');
     if (!exportReq || exportReq.status !== 'ready') {
-      return res.status(404).json({ error: 'NotFound', message: 'Invalid or unavailable download link' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'Invalid or unavailable download link' });
     }
     if (exportReq.downloadExpiresAt && exportReq.downloadExpiresAt < new Date()) {
       exportReq.status = 'expired';
@@ -177,13 +216,17 @@ router.get('/export/download/:token', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'NotFound', message: 'This download link has expired' });
     }
 
-    const format = (String(req.query.format || 'json').toLowerCase() as ExportFormat);
+    const format = String(req.query.format || 'json').toLowerCase() as ExportFormat;
     if (!VALID_FORMATS.includes(format) || !exportReq.formats.includes(format)) {
-      return res.status(400).json({ error: 'BadRequest', message: `format must be one of: ${exportReq.formats.join(', ')}` });
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: `format must be one of: ${exportReq.formats.join(', ')}`,
+      });
     }
 
     const record = await buildComprehensiveRecord(String(exportReq.patientId));
-    if (!record) return res.status(404).json({ error: 'NotFound', message: 'Record no longer available' });
+    if (!record)
+      return res.status(404).json({ error: 'NotFound', message: 'Record no longer available' });
 
     exportReq.downloadCount = (exportReq.downloadCount ?? 0) + 1;
     await exportReq.save();

@@ -46,7 +46,9 @@ if (vuln) {
     out.push(`| ℹ️ Info | ${info} |`);
     if (critical > 0) {
       out.push('');
-      out.push('> ⛔ **Critical vulnerabilities present — these block PR merges and must be remediated.**');
+      out.push(
+        '> ⛔ **Critical vulnerabilities present — these block PR merges and must be remediated.**'
+      );
     }
   }
 } else {
@@ -65,7 +67,9 @@ if (outdatedNames.length === 0) {
   out.push('| --- | --- | --- | --- |');
   for (const name of outdatedNames.sort().slice(0, 50)) {
     const info = outdated[name] || {};
-    out.push(`| \`${name}\` | ${info.current || '-'} | ${info.wanted || '-'} | ${info.latest || '-'} |`);
+    out.push(
+      `| \`${name}\` | ${info.current || '-'} | ${info.wanted || '-'} | ${info.latest || '-'} |`
+    );
   }
   if (outdatedNames.length > 50) {
     out.push('');

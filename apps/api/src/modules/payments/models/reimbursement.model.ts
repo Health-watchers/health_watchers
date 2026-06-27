@@ -34,4 +34,7 @@ const reimbursementSchema = new Schema<Reimbursement>(
   { timestamps: true }
 );
 
-export const ReimbursementModel = mongoose.model<Reimbursement>('Reimbursement', reimbursementSchema);
+export const ReimbursementModel = mongoose.model<Reimbursement>(
+  'Reimbursement',
+  reimbursementSchema
+);

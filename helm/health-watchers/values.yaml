@@ -43,6 +43,11 @@ api:
     path: /health/ready
     initialDelaySeconds: 10
     periodSeconds: 10
+  startupProbe:
+    path: /health/startup
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 24
   env:
     NODE_ENV: "production"
     API_PORT: "3001"
@@ -172,6 +177,7 @@ secrets:
   smtpPass: ""
   metricsUsername: "admin"
   metricsPassword: ""
+  sentryDsn: ""
 
 # ── Redis (optional) ──────────────────────────────────────────────────────────
 redis:
@@ -190,3 +196,9 @@ redis:
       cpu: "100m"
   service:
     port: 6379
+
+# ── Network Policies ──────────────────────────────────────────────────────────
+# Set enabled: false in single-node dev clusters where the CNI does not
+# enforce NetworkPolicy (e.g. basic kubeadm without Calico/Cilium).
+networkPolicies:
+  enabled: true

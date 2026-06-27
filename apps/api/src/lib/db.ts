@@ -9,10 +9,10 @@ export async function connectDB(): Promise<void> {
   if (mongoose.connection.readyState !== 0) return; // already connected / connecting
 
   await mongoose.connect(config.mongoUri, {
-    maxPoolSize:              config.mongoMaxPool, // configurable via MONGO_MAX_POOL_SIZE
-    minPoolSize:              2,
+    maxPoolSize: config.mongoMaxPool, // configurable via MONGO_MAX_POOL_SIZE
+    minPoolSize: 2,
     serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS:          45000,
+    socketTimeoutMS: 45000,
   });
 }
 

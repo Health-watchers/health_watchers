@@ -67,10 +67,10 @@ export default function PortalMFAVerification() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Verify Your Identity</h1>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-xl">
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 text-3xl font-bold text-gray-900">Verify Your Identity</h1>
           <p className="text-gray-600">
             {useBackupCode
               ? 'Enter one of your backup codes'
@@ -81,14 +81,14 @@ export default function PortalMFAVerification() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{error}</p>
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         <form onSubmit={handleVerify} className="space-y-6">
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="code" className="mb-2 block text-sm font-medium text-gray-700">
               {useBackupCode ? 'Backup Code' : 'Verification Code'}
             </label>
             <input
@@ -101,7 +101,7 @@ export default function PortalMFAVerification() {
               }}
               placeholder={useBackupCode ? 'Enter backup code' : '000000'}
               maxLength={useBackupCode ? 32 : 6}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-2xl tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-center font-mono text-2xl tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
               autoFocus
               disabled={loading}
             />
@@ -110,16 +110,16 @@ export default function PortalMFAVerification() {
           <button
             type="submit"
             disabled={loading || code.length < (useBackupCode ? 8 : 6)}
-            className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+            className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
             {loading ? 'Verifying...' : 'Verify'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
+        <div className="mt-6 border-t border-gray-200 pt-6">
           <button
             onClick={handleBackupCodeToggle}
-            className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="w-full text-center text-sm font-medium text-blue-600 hover:text-blue-700"
           >
             {useBackupCode ? 'Use verification code instead' : 'Use backup code instead'}
           </button>

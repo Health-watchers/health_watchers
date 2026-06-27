@@ -23,7 +23,7 @@
     "@google/generative-ai": "^0.24.1",
     "@health-watchers/config": "*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/auto-instrumentations-node": "^0.73.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.77.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
     "@opentelemetry/sdk-node": "^0.215.0",
     "@sentry/node": "^8.0.0",
@@ -40,14 +40,14 @@
     "express": "^4.18.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.5.0",
-    "ioredis": "^5.10.1",
     "helmet": "^8.1.0",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.0",
     "migrate-mongo": "^14.0.7",
     "mongoose": "^8.23.1",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.6",
+    "nodemailer": "^9.0.1",
     "otplib": "^12.0.1",
     "pdfkit": "^0.18.0",
     "pino": "^10.3.1",
@@ -85,8 +85,9 @@
     "mongodb-memory-server": "^10.1.4",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.9",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "5.9.3"
+    "typescript": "^5.9.3"
   }
 }

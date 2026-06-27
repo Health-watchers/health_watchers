@@ -57,14 +57,12 @@ function PatientCard({ patient }: { patient: PatientSummary }) {
       <p className="font-semibold text-gray-900">
         {patient.firstName} {patient.lastName}
       </p>
-      <p className="text-gray-500 text-xs">{patient.systemId}</p>
+      <p className="text-xs text-gray-500">{patient.systemId}</p>
       <p className="text-gray-600">DOB: {patient.dateOfBirth}</p>
-      {patient.contactNumber && (
-        <p className="text-gray-600">Phone: {patient.contactNumber}</p>
-      )}
+      {patient.contactNumber && <p className="text-gray-600">Phone: {patient.contactNumber}</p>}
       <Link
         href={`/patients/${patient._id}`}
-        className="mt-1 inline-block text-blue-600 hover:underline text-xs"
+        className="mt-1 inline-block text-xs text-blue-600 hover:underline"
         target="_blank"
       >
         View record ↗
@@ -79,7 +77,12 @@ export default function DuplicatesClient() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [mergeError, setMergeError] = useState<string | null>(null);
 
-  const { data: pairs = [], isLoading, error, refetch } = useQuery({
+  const {
+    data: pairs = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['potential-duplicates', minConfidence],
     queryFn: () => fetchPairs(minConfidence),
   });
@@ -94,9 +97,7 @@ export default function DuplicatesClient() {
     onError: (e: Error) => setMergeError(e.message),
   });
 
-  const visible = pairs.filter(
-    (p) => !dismissed.has(`${p.patientA._id}-${p.patientB._id}`)
-  );
+  const visible = pairs.filter((p) => !dismissed.has(`${p.patientA._id}-${p.patientB._id}`));
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -109,7 +110,7 @@ export default function DuplicatesClient() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor="min-confidence" className="text-sm text-gray-600 whitespace-nowrap">
+          <label htmlFor="min-confidence" className="text-sm whitespace-nowrap text-gray-600">
             Min confidence:
           </label>
           <select
@@ -119,24 +120,33 @@ export default function DuplicatesClient() {
             className="rounded border border-gray-300 px-2 py-1 text-sm"
           >
             {[50, 60, 70, 80, 90].map((v) => (
-              <option key={v} value={v}>{v}%</option>
+              <option key={v} value={v}>
+                {v}%
+              </option>
             ))}
           </select>
         </div>
       </div>
 
       {mergeError && (
-        <div role="alert" className="mb-4 rounded bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div
+          role="alert"
+          className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
           {mergeError}
         </div>
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <div className="flex justify-center py-16">
+          <Spinner />
+        </div>
       ) : error ? (
-        <div className="rounded bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           Failed to load duplicates.{' '}
-          <button onClick={() => refetch()} className="underline">Retry</button>
+          <button onClick={() => refetch()} className="underline">
+            Retry
+          </button>
         </div>
       ) : visible.length === 0 ? (
         <div className="rounded border border-gray-200 bg-gray-50 px-6 py-12 text-center text-gray-500">
@@ -148,28 +158,23 @@ export default function DuplicatesClient() {
           {visible.map((pair) => {
             const key = `${pair.patientA._id}-${pair.patientB._id}`;
             return (
-              <div
-                key={key}
-                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-              >
+              <div key={key} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="mb-3 flex items-center justify-between">
                   <Badge variant={confidenceVariant(pair.confidence)}>
                     {pair.confidence}% confidence
                   </Badge>
-                  <span className="text-xs text-gray-400">
-                    {pair.matchReasons.join(' · ')}
-                  </span>
+                  <span className="text-xs text-gray-400">{pair.matchReasons.join(' · ')}</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="mb-1 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    <p className="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase">
                       Patient A (keep as primary)
                     </p>
                     <PatientCard patient={pair.patientA} />
                   </div>
                   <div>
-                    <p className="mb-1 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    <p className="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase">
                       Patient B (will be merged)
                     </p>
                     <PatientCard patient={pair.patientB} />

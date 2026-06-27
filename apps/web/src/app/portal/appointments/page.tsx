@@ -40,7 +40,7 @@ export default function PortalAppointmentsPage() {
   const [joining, setJoining] = useState(false);
   const [leavingWaitlist, setLeavingWaitlist] = useState(false);
   const [form, setForm] = useState({
-    appointmentType: 'consultation' as typeof APPOINTMENT_TYPES[number],
+    appointmentType: 'consultation' as (typeof APPOINTMENT_TYPES)[number],
     priority: 'routine' as 'routine' | 'urgent',
     requestedDate: '',
   });
@@ -49,10 +49,12 @@ export default function PortalAppointmentsPage() {
     Promise.all([
       portalGet<Appointment[]>('/appointments').catch(() => []),
       portalGet<WaitlistEntry | null>('/waitlist/position').catch(() => null),
-    ]).then(([appts, pos]) => {
-      setAppointments(appts);
-      setWaitlist(pos);
-    }).finally(() => setLoading(false));
+    ])
+      .then(([appts, pos]) => {
+        setAppointments(appts);
+        setWaitlist(pos);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const requestCancellation = async (id: string) => {
@@ -61,7 +63,7 @@ export default function PortalAppointmentsPage() {
     try {
       await portalFetch(`/appointments/${id}/cancel`, { method: 'POST' });
       setAppointments((prev) =>
-        prev.map((a) => (a._id === id ? { ...a, status: 'cancelled' } : a)),
+        prev.map((a) => (a._id === id ? { ...a, status: 'cancelled' } : a))
       );
     } catch {
       alert('Could not cancel appointment. Please contact the clinic.');
@@ -71,7 +73,10 @@ export default function PortalAppointmentsPage() {
   };
 
   const joinWaitlist = async () => {
-    if (!form.requestedDate) { alert('Please select a preferred date.'); return; }
+    if (!form.requestedDate) {
+      alert('Please select a preferred date.');
+      return;
+    }
     setJoining(true);
     try {
       const res = await portalFetch('/waitlist', {
@@ -120,13 +125,17 @@ export default function PortalAppointmentsPage() {
 
       {/* Waitlist status banner */}
       {waitlist && (
-        <div className={`rounded-xl border p-4 ${waitlist.status === 'notified' ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-blue-50'}`}>
+        <div
+          className={`rounded-xl border p-4 ${waitlist.status === 'notified' ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-blue-50'}`}
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="font-semibold text-gray-800">
-                {waitlist.status === 'notified' ? '🎉 A slot is available for you!' : `You are #${waitlist.position} on the waitlist`}
+                {waitlist.status === 'notified'
+                  ? '🎉 A slot is available for you!'
+                  : `You are #${waitlist.position} on the waitlist`}
               </p>
-              <p className="text-sm text-gray-600 mt-0.5">
+              <p className="mt-0.5 text-sm text-gray-600">
                 {waitlist.status === 'notified'
                   ? `Book before ${waitlist.expiresAt ? new Date(waitlist.expiresAt).toLocaleString() : 'your window expires'}`
                   : `Priority: ${waitlist.priority} · Type: ${waitlist.appointmentType}`}
@@ -135,7 +144,7 @@ export default function PortalAppointmentsPage() {
             <button
               onClick={leaveWaitlist}
               disabled={leavingWaitlist}
-              className="text-xs text-red-500 hover:underline disabled:opacity-50 shrink-0"
+              className="shrink-0 text-xs text-red-500 hover:underline disabled:opacity-50"
             >
               {leavingWaitlist ? 'Leaving…' : 'Leave waitlist'}
             </button>
@@ -146,7 +155,9 @@ export default function PortalAppointmentsPage() {
       {/* Join waitlist CTA */}
       {!waitlist && (
         <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center">
-          <p className="text-sm text-gray-500 mb-2">No slots available? Join the waitlist and we'll notify you when one opens.</p>
+          <p className="mb-2 text-sm text-gray-500">
+            No slots available? Join the waitlist and we'll notify you when one opens.
+          </p>
           <button
             onClick={() => setShowWaitlistForm(true)}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -158,24 +169,35 @@ export default function PortalAppointmentsPage() {
 
       {/* Join waitlist form */}
       {showWaitlistForm && (
-        <div className="rounded-xl border border-blue-200 bg-white p-5 shadow-sm space-y-4">
+        <div className="space-y-4 rounded-xl border border-blue-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-gray-800">Join Waitlist</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm text-gray-700">
               Appointment Type
               <select
                 value={form.appointmentType}
-                onChange={(e) => setForm((f) => ({ ...f, appointmentType: e.target.value as typeof APPOINTMENT_TYPES[number] }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    appointmentType: e.target.value as (typeof APPOINTMENT_TYPES)[number],
+                  }))
+                }
                 className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
-                {APPOINTMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {APPOINTMENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm text-gray-700">
               Priority
               <select
                 value={form.priority}
-                onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as 'routine' | 'urgent' }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, priority: e.target.value as 'routine' | 'urgent' }))
+                }
                 className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="routine">Routine</option>
@@ -193,8 +215,13 @@ export default function PortalAppointmentsPage() {
               />
             </label>
           </div>
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowWaitlistForm(false)} className="text-sm text-gray-500 hover:underline">Cancel</button>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowWaitlistForm(false)}
+              className="text-sm text-gray-500 hover:underline"
+            >
+              Cancel
+            </button>
             <button
               onClick={joinWaitlist}
               disabled={joining}
@@ -253,11 +280,9 @@ function AppointmentRow({
   return (
     <div className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0">
       <div>
-        <p className="text-sm font-medium capitalize text-gray-800">{appt.type}</p>
+        <p className="text-sm font-medium text-gray-800 capitalize">{appt.type}</p>
         <p className="text-xs text-gray-500">{new Date(appt.scheduledAt).toLocaleString()}</p>
-        {appt.chiefComplaint && (
-          <p className="text-xs text-gray-400">{appt.chiefComplaint}</p>
-        )}
+        {appt.chiefComplaint && <p className="text-xs text-gray-400">{appt.chiefComplaint}</p>}
       </div>
       <div className="flex items-center gap-3">
         <span

@@ -33,13 +33,23 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -103,11 +113,11 @@ const DISPUTE_ID = '507f1f77bcf86cd799439020';
 const INTENT_ID = 'intent-test-1';
 
 function makeToken(role = 'CLINIC_ADMIN') {
-  return jwt.sign(
-    { userId: USER_ID, role, clinicId: CLINIC_ID },
-    'test-access-secret',
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
-  );
+  return jwt.sign({ userId: USER_ID, role, clinicId: CLINIC_ID }, 'test-access-secret', {
+    expiresIn: '15m',
+    issuer: 'health-watchers-api',
+    audience: 'health-watchers-client',
+  });
 }
 
 const mockPayment = {
@@ -230,7 +240,9 @@ describe('PUT /api/v1/payments/disputes/:id/resolve — review period & auto-ref
     const dispute = makeDispute({ status: 'evidence_submitted', reviewDeadline: undefined });
     (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue(dispute);
     (PaymentRecordModel.findOne as jest.Mock).mockResolvedValue(mockPayment);
-    (stellarClient.issueRefund as jest.Mock).mockResolvedValue({ transactionHash: 'tx-auto-refund' });
+    (stellarClient.issueRefund as jest.Mock).mockResolvedValue({
+      transactionHash: 'tx-auto-refund',
+    });
     (PaymentRecordModel.create as jest.Mock).mockResolvedValue({ intentId: 'refund-auto' });
 
     const res = await request(app)

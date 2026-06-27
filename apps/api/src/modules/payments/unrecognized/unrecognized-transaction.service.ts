@@ -11,7 +11,7 @@ interface StellarTx {
 export async function detectUnrecognizedTransactions(
   incomingTxs: StellarTx[],
   knownTxHashes: Set<string>,
-  clinicId: string,
+  clinicId: string
 ): Promise<StellarTx[]> {
   const unrecognized = incomingTxs.filter((tx) => !knownTxHashes.has(tx.hash));
 
@@ -27,7 +27,7 @@ export async function detectUnrecognizedTransactions(
         detectedAt: new Date(),
         clinicId,
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true }
     );
   }
 

@@ -25,7 +25,9 @@ function handleMulterError(err: unknown, res: Response): boolean {
     return true;
   }
   if ((err as any)?.code === 'INVALID_FILE_TYPE') {
-    res.status(400).json({ error: 'InvalidFileType', message: 'Only JPEG, PNG, and WebP images are allowed.' });
+    res
+      .status(400)
+      .json({ error: 'InvalidFileType', message: 'Only JPEG, PNG, and WebP images are allowed.' });
     return true;
   }
   return false;
@@ -77,8 +79,18 @@ router.post(
       const thumbKey = storageKey(clinicId, patientId, 'thumb', '.jpg');
 
       await Promise.all([
-        uploadFile({ storageKey: photoKey, buffer: photoBuffer, mimeType: 'image/jpeg', encrypt: true }),
-        uploadFile({ storageKey: thumbKey, buffer: thumbBuffer, mimeType: 'image/jpeg', encrypt: true }),
+        uploadFile({
+          storageKey: photoKey,
+          buffer: photoBuffer,
+          mimeType: 'image/jpeg',
+          encrypt: true,
+        }),
+        uploadFile({
+          storageKey: thumbKey,
+          buffer: thumbBuffer,
+          mimeType: 'image/jpeg',
+          encrypt: true,
+        }),
       ]);
 
       await PatientModel.findByIdAndUpdate(patientId, {

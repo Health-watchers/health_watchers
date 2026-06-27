@@ -116,10 +116,7 @@ export class MultiSigPaymentService {
     const { MultiSigPaymentModel } = await import('../models/multisig-payment.model');
     const { PaymentRecordModel } = await import('../models/payment-record.model');
 
-    await MultiSigPaymentModel.findOneAndUpdate(
-      { paymentId },
-      { status: 'ready_for_submission' }
-    );
+    await MultiSigPaymentModel.findOneAndUpdate({ paymentId }, { status: 'ready_for_submission' });
 
     await PaymentRecordModel.findByIdAndUpdate(paymentId, {
       status: 'ready_for_submission',

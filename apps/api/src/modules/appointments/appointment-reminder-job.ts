@@ -2,7 +2,7 @@ import { AppointmentModel } from './appointment.model';
 import { UserModel } from '../auth/models/user.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { createNotification } from '../notifications/notification.service';
-import { sendEmail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import { emitToUser } from '@api/realtime/socket';
 import logger from '@api/utils/logger';
 
@@ -17,9 +17,12 @@ export function startAppointmentReminderJob() {
   sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
 
   // Then run every 15 minutes
-  reminderJobInterval = setInterval(() => {
-    sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
-  }, 15 * 60 * 1000);
+  reminderJobInterval = setInterval(
+    () => {
+      sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
+    },
+    15 * 60 * 1000
+  );
 }
 
 export function stopAppointmentReminderJob() {
@@ -65,7 +68,7 @@ async function sendAppointmentReminders() {
       await AppointmentModel.updateOne({ _id: apt._id }, { reminderSent1h: true });
     }
   } catch (err) {
-    logger.error('Error in appointment reminder job:', err);
+    logger.error(`Error in appointment reminder job: ${err}`);
   }
 }
 
@@ -114,7 +117,7 @@ async function sendReminder(appointment: any, timeframe: '24h' | '1h') {
     }
 
     if (doctor.email) {
-      await sendEmail({
+      await sendMail({
         to: doctor.email,
         subject: `Appointment Reminder: ${patient.firstName} ${patient.lastName} in ${timeText}`,
         html: `<p>You have an appointment with <strong>${patient.firstName} ${patient.lastName}</strong> in <strong>${timeText}</strong>.</p><p>Scheduled at: <strong>${appointmentTime}</strong></p>`,
@@ -145,7 +148,7 @@ async function sendReminder(appointment: any, timeframe: '24h' | '1h') {
     }
 
     if (patient.email) {
-      await sendEmail({
+      await sendMail({
         to: patient.email,
         subject: `Appointment Reminder: Dr. ${doctor.firstName} ${doctor.lastName} in ${timeText}`,
         html: `<p>Your appointment with <strong>Dr. ${doctor.firstName} ${doctor.lastName}</strong> is in <strong>${timeText}</strong>.</p><p>Scheduled at: <strong>${appointmentTime}</strong></p>`,

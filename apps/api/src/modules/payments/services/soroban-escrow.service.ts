@@ -14,7 +14,7 @@ export interface EscrowResponse {
 }
 
 export class SorobanEscrowService {
-  private stellarServiceUrl = config.stellar?.serviceUrl || 'http://localhost:3002';
+  private stellarServiceUrl = config.stellarServiceUrl || 'http://localhost:3002';
 
   async createEscrow(params: EscrowParams): Promise<EscrowResponse> {
     try {

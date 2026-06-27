@@ -91,20 +91,30 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     filter.timestamp = range;
   }
 
-  // Full-text search (requires text index on action + metadata)
+ // Full-text search (requires text index on action + metadata)
   if (req.query.q) {
-    filter.$text = { $search: req.query.q as string };
+    const searchTerm = String(req.query.q).slice(0, 200);
+    filter.$text = { $search: searchTerm };
   }
-
   // Cursor-based pagination: cursor encodes the last seen timestamp + _id
   if (req.query.cursor) {
     try {
       const { ts, id } = JSON.parse(Buffer.from(req.query.cursor as string, 'base64').toString());
-      const op = sortDir === -1 ? '$lt' : '$gt';
-      filter.$or = [
-        { timestamp: { [op]: new Date(ts) } },
-        { timestamp: new Date(ts), _id: { [op]: new Types.ObjectId(id) } },
-      ];
+      // Whitelist the operator — never derive it from user input
+      const op: '$lt' | '$gt' = sortDir === -1 ? '$lt' : '$gt';
+      const cursorTs = new Date(ts);
+      const cursorId = new Types.ObjectId(String(id));
+      if (op === '$lt') {
+        filter.$or = [
+          { timestamp: { $lt: cursorTs } },
+          { timestamp: cursorTs, _id: { $lt: cursorId } },
+        ];
+      } else {
+        filter.$or = [
+          { timestamp: { $gt: cursorTs } },
+          { timestamp: cursorTs, _id: { $gt: cursorId } },
+        ];
+      }
     } catch {
       return res.status(400).json({ error: 'BadRequest', message: 'Invalid cursor' });
     }
@@ -149,7 +159,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
   }
 });
 
@@ -198,11 +210,13 @@ router.get('/summary', authenticate, async (req: Request, res: Response) => {
 
     return res.json({
       status: 'success',
-      data: summary.map(s => ({ action: s._id, count: s.count })),
+      data: summary.map((s) => ({ action: s._id, count: s.count })),
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit summary');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
   }
 });
 
@@ -256,10 +270,7 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
 
   try {
     // Cap export at 10 000 rows to prevent memory exhaustion
-    const logs = await AuditLogModel.find(filter)
-      .sort({ timestamp: -1 })
-      .limit(10_000)
-      .lean();
+    const logs = await AuditLogModel.find(filter).sort({ timestamp: -1 }).limit(10_000).lean();
 
     const escape = (v: unknown): string => {
       const s = v == null ? '' : String(v);
@@ -268,8 +279,9 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
         : s;
     };
 
-    const header = 'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
-    const rows = logs.map(l =>
+    const header =
+      'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
+    const rows = logs.map((l) =>
       [
         l.timestamp?.toISOString() ?? '',
         l.action,
@@ -294,7 +306,9 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
     return res.send(csv);
   } catch (error) {
     logger.error({ err: error }, 'Error exporting audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
   }
 });
 

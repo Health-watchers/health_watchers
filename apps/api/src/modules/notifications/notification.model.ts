@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = [
   'unrecognized_transaction',
   'waitlist_available',
   'claimable_expiring',
+  'subscription_warning',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -36,23 +37,26 @@ export interface INotification {
 
 const notificationSchema = new Schema<INotification>(
   {
-    userId:    { type: Schema.Types.ObjectId, ref: 'User',   required: true, index: true },
-    clinicId:  { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    type:      { type: String, enum: NOTIFICATION_TYPES, required: true },
-    title:     { type: String, required: true, trim: true },
-    message:   { type: String, required: true, trim: true },
-    link:      { type: String },
-    isRead:    { type: Boolean, default: false, index: true },
-    readAt:    { type: Date },
-    metadata:  { type: Schema.Types.Mixed },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    type: { type: String, enum: NOTIFICATION_TYPES, required: true },
+    title: { type: String, required: true, trim: true },
+    message: { type: String, required: true, trim: true },
+    link: { type: String },
+    isRead: { type: Boolean, default: false, index: true },
+    readAt: { type: Date },
+    metadata: { type: Schema.Types.Mixed },
     expiresAt: { type: Date, index: { expireAfterSeconds: 0 } },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 // Compound index for efficient per-user queries
 notificationSchema.index({ userId: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, isRead: 1 });
 
-export const NotificationModel =
-  models.Notification || model<INotification>('Notification', notificationSchema);
+export const NotificationModel = (models.Notification ||
+  model<INotification>(
+    'Notification',
+    notificationSchema
+  )) as import('mongoose').Model<INotification>;

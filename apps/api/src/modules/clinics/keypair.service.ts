@@ -15,7 +15,7 @@ function getEncryptionKey() {
 
 export interface EncryptedKeypair {
   encryptedSecretKey: string; // hex: ciphertext:authTag
-  iv: string;                 // hex
+  iv: string; // hex
 }
 
 /** Encrypt a Stellar secret key with AES-256-GCM. Returns ciphertext+tag and IV separately. */
@@ -93,7 +93,7 @@ export interface RotateKeypairDeps {
  */
 export async function rotateClinicKeypair(
   clinicId: string,
-  deps: RotateKeypairDeps,
+  deps: RotateKeypairDeps
 ): Promise<RotateKeypairResult> {
   const { ClinicModel, ClinicKeypairModel, stellarClient, stellarNetwork, logger } = deps;
 
@@ -122,9 +122,11 @@ export async function rotateClinicKeypair(
   try {
     // Step 2: Fund new account on testnet (best-effort)
     if (stellarNetwork === 'testnet') {
-      await stellarClient.fundAccount(newPublicKey).catch((err: unknown) =>
-        logger.warn({ err, newPublicKey }, 'Friendbot funding failed for rotated keypair'),
-      );
+      await stellarClient
+        .fundAccount(newPublicKey)
+        .catch((err: unknown) =>
+          logger.warn({ err, newPublicKey }, 'Friendbot funding failed for rotated keypair')
+        );
     }
 
     // Step 3: Transfer balance from old account to new account (must succeed)
@@ -140,16 +142,15 @@ export async function rotateClinicKeypair(
     // Step 5: Deactivate old keypair(s)
     await ClinicKeypairModel.updateMany(
       { clinicId, isActive: true, _id: { $ne: newKeypairDoc._id } },
-      { isActive: false },
+      { isActive: false }
     );
 
     return { publicKey: newPublicKey, keyVersion: nextVersion, transferResult };
   } catch (err) {
     // Rollback: remove the new (inactive) keypair document
     await ClinicKeypairModel.findByIdAndDelete(newKeypairDoc._id).catch((rollbackErr: unknown) =>
-      logger.error({ rollbackErr }, 'Failed to rollback new keypair document during rotation'),
+      logger.error({ rollbackErr }, 'Failed to rollback new keypair document during rotation')
     );
     throw err;
   }
 }
-

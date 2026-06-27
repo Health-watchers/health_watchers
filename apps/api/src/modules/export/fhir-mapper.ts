@@ -72,7 +72,13 @@ export interface FhirCoverage {
   order?: number;
 }
 
-export type FhirResource = FhirPatient | FhirEncounter | FhirCondition | FhirObservation | FhirMedicationRequest | FhirCoverage;
+export type FhirResource =
+  | FhirPatient
+  | FhirEncounter
+  | FhirCondition
+  | FhirObservation
+  | FhirMedicationRequest
+  | FhirCoverage;
 
 export interface FhirBundle {
   resourceType: 'Bundle';
@@ -94,7 +100,8 @@ function toFhirGender(sex: string): FhirPatient['gender'] {
 function toFhirEncounterStatus(status: string): FhirEncounter['status'] {
   if (status === 'closed') return 'finished';
   if (status === 'cancelled') return 'cancelled';
-  if (status === 'open' || status === 'follow-up' || status === 'pending_cosignature') return 'in-progress';
+  if (status === 'open' || status === 'follow-up' || status === 'pending_cosignature')
+    return 'in-progress';
   return 'unknown';
 }
 
@@ -120,7 +127,10 @@ export function mapEncounter(enc: any, patientId: string): FhirEncounter {
     resourceType: 'Encounter',
     id: String(enc._id),
     status: toFhirEncounterStatus(enc.status),
-    class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: enc.type === 'telemedicine' ? 'VR' : 'AMB' },
+    class: {
+      system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+      code: enc.type === 'telemedicine' ? 'VR' : 'AMB',
+    },
     subject: { reference: `Patient/${patientId}` },
     ...(enc.chiefComplaint ? { reasonCode: [{ text: enc.chiefComplaint }] } : {}),
     ...(enc.createdAt ? { period: { start: new Date(enc.createdAt).toISOString() } } : {}),
@@ -142,12 +152,12 @@ export function mapConditions(enc: any, patientId: string): FhirCondition[] {
 }
 
 const VITAL_MAP: Record<string, { code: string; display: string; unit: string; ucum: string }> = {
-  heartRate:         { code: '8867-4',  display: 'Heart rate',           unit: '/min',  ucum: '/min' },
-  temperature:       { code: '8310-5',  display: 'Body temperature',     unit: 'Cel',   ucum: 'Cel' },
-  respiratoryRate:   { code: '9279-1',  display: 'Respiratory rate',     unit: '/min',  ucum: '/min' },
-  oxygenSaturation:  { code: '2708-6',  display: 'Oxygen saturation',    unit: '%',     ucum: '%' },
-  weight:            { code: '29463-7', display: 'Body weight',          unit: 'kg',    ucum: 'kg' },
-  height:            { code: '8302-2',  display: 'Body height',          unit: 'cm',    ucum: 'cm' },
+  heartRate: { code: '8867-4', display: 'Heart rate', unit: '/min', ucum: '/min' },
+  temperature: { code: '8310-5', display: 'Body temperature', unit: 'Cel', ucum: 'Cel' },
+  respiratoryRate: { code: '9279-1', display: 'Respiratory rate', unit: '/min', ucum: '/min' },
+  oxygenSaturation: { code: '2708-6', display: 'Oxygen saturation', unit: '%', ucum: '%' },
+  weight: { code: '29463-7', display: 'Body weight', unit: 'kg', ucum: 'kg' },
+  height: { code: '8302-2', display: 'Body height', unit: 'cm', ucum: 'cm' },
 };
 
 export function mapObservations(enc: any, patientId: string): FhirObservation[] {
@@ -165,7 +175,12 @@ export function mapObservations(enc: any, patientId: string): FhirObservation[] 
       code: { coding: [{ system: 'http://loinc.org', code: meta.code, display: meta.display }] },
       subject: { reference: `Patient/${patientId}` },
       encounter: { reference: `Encounter/${String(enc._id)}` },
-      valueQuantity: { value: val, unit: meta.unit, system: 'http://unitsofmeasure.org', code: meta.ucum },
+      valueQuantity: {
+        value: val,
+        unit: meta.unit,
+        system: 'http://unitsofmeasure.org',
+        code: meta.ucum,
+      },
       ...(enc.createdAt ? { effectiveDateTime: new Date(enc.createdAt).toISOString() } : {}),
     });
   }
@@ -175,7 +190,9 @@ export function mapObservations(enc: any, patientId: string): FhirObservation[] 
       resourceType: 'Observation',
       id: `${String(enc._id)}-obs-bp`,
       status: 'final',
-      code: { coding: [{ system: 'http://loinc.org', code: '55284-4', display: 'Blood pressure' }] },
+      code: {
+        coding: [{ system: 'http://loinc.org', code: '55284-4', display: 'Blood pressure' }],
+      },
       subject: { reference: `Patient/${patientId}` },
       encounter: { reference: `Encounter/${String(enc._id)}` },
       valueString: vs.bloodPressure,
@@ -195,11 +212,15 @@ export function mapMedicationRequests(enc: any, patientId: string): FhirMedicati
     intent: 'order' as const,
     subject: { reference: `Patient/${patientId}` },
     encounter: { reference: `Encounter/${String(enc._id)}` },
-    medicationCodeableConcept: { text: rx.genericName ? `${rx.drugName} (${rx.genericName})` : rx.drugName },
-    dosageInstruction: [{
-      text: `${rx.dosage} ${rx.frequency} for ${rx.duration}${rx.instructions ? ' — ' + rx.instructions : ''}`,
-      ...(rx.route ? { route: { text: rx.route } } : {}),
-    }],
+    medicationCodeableConcept: {
+      text: rx.genericName ? `${rx.drugName} (${rx.genericName})` : rx.drugName,
+    },
+    dosageInstruction: [
+      {
+        text: `${rx.dosage} ${rx.frequency} for ${rx.duration}${rx.instructions ? ' — ' + rx.instructions : ''}`,
+        ...(rx.route ? { route: { text: rx.route } } : {}),
+      },
+    ],
     ...(rx.prescribedAt ? { authoredOn: new Date(rx.prescribedAt).toISOString() } : {}),
   }));
 }
@@ -215,14 +236,14 @@ export function mapCoverage(patient: any): FhirCoverage[] {
 
   // Coverage type → FHIR ActCode mapping (http://terminology.hl7.org/CodeSystem/v3-ActCode)
   const COVERAGE_TYPE_MAP: Record<string, { code: string; display: string }> = {
-    HMO:      { code: 'HMO',      display: 'Health Maintenance Organization' },
-    PPO:      { code: 'PPO',      display: 'Preferred Provider Organization' },
-    EPO:      { code: 'EPO',      display: 'Exclusive Provider Organization' },
-    POS:      { code: 'POS',      display: 'Point of Service' },
-    HDHP:     { code: 'HDHP',     display: 'High Deductible Health Plan' },
-    Medicare: { code: 'RETIRE',   display: 'Retiree Health Program' },
+    HMO: { code: 'HMO', display: 'Health Maintenance Organization' },
+    PPO: { code: 'PPO', display: 'Preferred Provider Organization' },
+    EPO: { code: 'EPO', display: 'Exclusive Provider Organization' },
+    POS: { code: 'POS', display: 'Point of Service' },
+    HDHP: { code: 'HDHP', display: 'High Deductible Health Plan' },
+    Medicare: { code: 'RETIRE', display: 'Retiree Health Program' },
     Medicaid: { code: 'PUBLICPOL', display: 'Public Healthcare' },
-    other:    { code: 'pay',      display: 'Payer' },
+    other: { code: 'pay', display: 'Payer' },
   };
 
   const patientId = String(patient._id);

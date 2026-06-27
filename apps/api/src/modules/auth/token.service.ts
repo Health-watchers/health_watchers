@@ -98,19 +98,14 @@ export function verifyAccessToken(token: string): (TokenPayload & { jti?: string
  * Use this in the authenticate middleware.
  */
 export async function verifyAccessTokenAsync(
-  token: string,
+  token: string
 ): Promise<(TokenPayload & { jti?: string }) | null> {
   const payload = verifyAccessToken(token);
   if (!payload) return null;
 
   if (payload.jti) {
     if (await isDenylisted(payload.jti)) return null;
-    if (
-      await isInvalidatedForUser(
-        payload.userId,
-        (jwt.decode(token) as JwtPayload)?.iat ?? 0,
-      )
-    )
+    if (await isInvalidatedForUser(payload.userId, (jwt.decode(token) as JwtPayload)?.iat ?? 0))
       return null;
   }
 

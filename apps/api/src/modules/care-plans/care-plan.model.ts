@@ -106,4 +106,5 @@ const carePlanSchema = new Schema<ICarePlan>(
   { timestamps: true, versionKey: false }
 );
 
-export const CarePlanModel = models.CarePlan || model<ICarePlan>('CarePlan', carePlanSchema);
+export const CarePlanModel = (models.CarePlan ||
+  model<ICarePlan>('CarePlan', carePlanSchema)) as import('mongoose').Model<ICarePlan>;

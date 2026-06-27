@@ -42,6 +42,11 @@ import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+function validateObjectId(id: string): boolean {
+  return OBJECT_ID_REGEX.test(id);
+}
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -679,6 +684,9 @@ router.get(
 router.get(
   '/:id/lab-results',
   asyncHandler(async (req: Request, res: Response) => {
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const patient = await PatientModel.findOne({
       _id: req.params.id,
       clinicId: req.user!.clinicId,
@@ -1374,6 +1382,25 @@ router.post(
   })
 );
 
+// ── Merge / Unmerge (CLINIC_ADMIN+ only) ─────────────────────────────────────
+
+// POST /patients/check-duplicates
+router.post('/check-duplicates', asyncHandler(DuplicateController.checkDuplicates));
+
+// POST /patients/:id/merge/:duplicateId  — body: { confirm: true }
+router.post(
+  '/:id/merge/:duplicateId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.mergePatients)
+);
+
+// POST /patients/unmerge/:mergeLogId  — body: { confirm: true }
+router.post(
+  '/unmerge/:mergeLogId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.unmergePatients)
+);
+
 export const patientRoutes = router;
 
 // GET /api/v1/patients/:id/risk-history
@@ -1523,6 +1550,9 @@ router.get(
 
     // Fetch last 2 risk history entries to compute factor trends
     const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
+    if (!validateObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
+    }
     const history = await RiskScoreHistoryModel.find({
       patientId: req.params.id,
       clinicId: req.user!.clinicId,
@@ -1539,26 +1569,16 @@ router.get(
         ? Object.fromEntries((patient as any).riskFactorWeights)
         : ((patient as any).riskFactorWeights ?? {});
 
-    const totalWeight = Object.values(rawWeights).reduce((s, v) => s + v, 0) || 1;
-
-    const factorWeights = patient.riskFactors.map((factor) => {
-      const weight = rawWeights[factor] ?? 0;
-      const wasPresent = previousFactors.includes(factor);
-      // A factor that is new is "worsening"; one that disappeared would not appear here
-      const trend: 'improving' | 'stable' | 'worsening' =
-        history.length < 2 ? 'stable' : wasPresent ? 'stable' : 'worsening';
-      return {
-        factor,
-        weight,
-        percentage: Math.round((weight / totalWeight) * 100),
-        trend,
-      };
-    });
+    const { buildFactorBreakdown, getImprovedFactors } = await import('../ai/risk-calculator');
+    const factorWeights = buildFactorBreakdown(
+      patient.riskFactors,
+      rawWeights,
+      previousFactors,
+      history.length >= 2
+    );
 
     // Factors that were present before but are gone now = improving
-    const improvedFactors = previousFactors.filter(
-      (f) => !patient.riskFactors!.includes(f)
-    );
+    const improvedFactors = getImprovedFactors(patient.riskFactors, previousFactors);
 
     // Generate AI explanation + recommendations
     const { isAIServiceAvailable, AI_DISCLAIMER } = await import('../ai/ai.service');

@@ -9,16 +9,19 @@ export async function uploadDocument(req: Request, res: Response) {
   if (!file) return res.status(400).json({ success: false, message: 'No file provided.' });
 
   const validation = validateUploadedFile(file.mimetype, file.size, file.originalname);
-  if (!validation.valid) return res.status(400).json({ success: false, message: validation.reason });
+  if (!validation.valid)
+    return res.status(400).json({ success: false, message: validation.reason });
 
   const { category = 'other', visibility = 'care_team' } = req.body;
 
   const doc = await PortalDocumentModel.create({
-    patientId, clinicId,
-    fileName:   file.originalname,
-    mimeType:   file.mimetype,
-    sizeBytes:  file.size,
-    category, visibility,
+    patientId,
+    clinicId,
+    fileName: file.originalname,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    category,
+    visibility,
     storageKey: `portal/${patientId}/${Date.now()}_${file.originalname}`,
     uploadedAt: new Date(),
   });

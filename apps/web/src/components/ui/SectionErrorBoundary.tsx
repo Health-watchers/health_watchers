@@ -29,12 +29,8 @@ export function SectionErrorBoundary({ name, children }: SectionErrorBoundaryPro
           <div className="text-3xl" aria-hidden="true">
             ⚠️
           </div>
-          <p className="text-sm font-semibold text-red-900">
-            This section couldn’t be displayed
-          </p>
-          <p className="text-xs text-red-700">
-            {error.message || `The ${name} failed to load.`}
-          </p>
+          <p className="text-sm font-semibold text-red-900">This section couldn’t be displayed</p>
+          <p className="text-xs text-red-700">{error.message || `The ${name} failed to load.`}</p>
           <Button onClick={reset} variant="secondary" size="sm">
             Retry
           </Button>

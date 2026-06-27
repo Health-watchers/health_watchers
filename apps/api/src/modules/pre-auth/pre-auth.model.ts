@@ -41,4 +41,5 @@ const preAuthSchema = new Schema<IPreAuth>(
 preAuthSchema.index({ clinicId: 1, status: 1 });
 preAuthSchema.index({ clinicId: 1, createdAt: -1 });
 
-export const PreAuthModel = models.PreAuth || model<IPreAuth>('PreAuth', preAuthSchema);
+export const PreAuthModel = (models.PreAuth ||
+  model<IPreAuth>('PreAuth', preAuthSchema)) as import('mongoose').Model<IPreAuth>;

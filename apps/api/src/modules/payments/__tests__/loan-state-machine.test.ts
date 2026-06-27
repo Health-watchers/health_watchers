@@ -86,8 +86,16 @@ describe('LoanStateMachine', () => {
       m.transition('active', 'loan approved');
       m.transition('repaid', 'full repayment received');
       expect(m.history).toHaveLength(2);
-      expect(m.history[0]).toMatchObject({ from: 'pending', to: 'active', reason: 'loan approved' });
-      expect(m.history[1]).toMatchObject({ from: 'active', to: 'repaid', reason: 'full repayment received' });
+      expect(m.history[0]).toMatchObject({
+        from: 'pending',
+        to: 'active',
+        reason: 'loan approved',
+      });
+      expect(m.history[1]).toMatchObject({
+        from: 'active',
+        to: 'repaid',
+        reason: 'full repayment received',
+      });
     });
 
     it('history is immutable (readonly array)', () => {

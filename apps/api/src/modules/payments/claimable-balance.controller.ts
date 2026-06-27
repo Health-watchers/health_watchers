@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export async function createClaimableBalance(req: Request, res: Response): Promise<void> {
   const { clinicId } = req.user!;
-  const { amount, claimantPublicKey, claimableAfter, claimableUntil, encounterId, patientId } = req.body;
+  const { amount, claimantPublicKey, claimableAfter, claimableUntil, encounterId, patientId } =
+    req.body;
 
   if (!amount || !claimantPublicKey || !claimableAfter || !claimableUntil) {
     res.status(400).json({

@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { getBackupVerificationStatus, isBackupVerificationStale } from '../../services/backup-metrics.service';
+import {
+  getBackupVerificationStatus,
+  isBackupVerificationStale,
+} from '../../services/backup-metrics.service';
 import logger from '../../utils/logger';
 
 const router = Router();
@@ -53,17 +56,23 @@ router.get('/backup/detailed', (req: Request, res: Response) => {
   let recommendations: string[] = [];
 
   if (status.status === 'unknown') {
-    recommendations.push('Backup verification has never run. Ensure the backup-verify.yml workflow is configured.');
+    recommendations.push(
+      'Backup verification has never run. Ensure the backup-verify.yml workflow is configured.'
+    );
   }
 
   if (status.status === 'failure') {
-    recommendations.push('Last backup verification failed. Investigate the backup integrity immediately.');
+    recommendations.push(
+      'Last backup verification failed. Investigate the backup integrity immediately.'
+    );
     recommendations.push('Check the backup-verify.yml workflow logs for details.');
     recommendations.push('Consider running a manual backup if needed.');
   }
 
   if (isStale) {
-    recommendations.push('Backup verification is stale (>8 days). Check if the weekly schedule is working.');
+    recommendations.push(
+      'Backup verification is stale (>8 days). Check if the weekly schedule is working.'
+    );
     recommendations.push('Verify that the backup-verify.yml workflow is enabled and running.');
   }
 

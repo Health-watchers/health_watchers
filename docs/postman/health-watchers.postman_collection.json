@@ -14,17 +14,19 @@
       "item": [
         {
           "name": "Login",
-          "event": [{
-            "listen": "test",
-            "script": {
-              "exec": [
-                "const res = pm.response.json();",
-                "if (res.data && res.data.token) {",
-                "  pm.environment.set('jwt_token', res.data.token);",
-                "}"
-              ]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "  pm.environment.set('jwt_token', res.data.token);",
+                  "}"
+                ]
+              }
             }
-          }],
+          ],
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/v1/auth/login",

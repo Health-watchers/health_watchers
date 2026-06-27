@@ -5,9 +5,7 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:3001';
 const AUTH_TOKEN = __ENV.AUTH_TOKEN || '';
 
 export const options = {
-  stages: [
-    { duration: '1m', target: 1 },
-  ],
+  stages: [{ duration: '1m', target: 1 }],
   thresholds: {
     http_req_duration: ['p(95)<500', 'p(99)<2000'],
     http_req_failed: ['rate<0.01'],

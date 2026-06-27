@@ -109,7 +109,7 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
     };
 
     // Update last used timestamp
-    ApiKeyModel.updateOne({ _id: apiKey._id }, { lastUsedAt: new Date() }).catch(err =>
+    ApiKeyModel.updateOne({ _id: apiKey._id }, { lastUsedAt: new Date() }).catch((err) =>
       console.error('Failed to update lastUsedAt:', err)
     );
 
@@ -137,7 +137,18 @@ export const validateApiKeyScopes = async (req: Request, res: Response, next: Ne
   const hasAccess = scopes.some((scope: any) => scopeGrantsAccess(scope, endpoint, method));
 
   if (!hasAccess) {
-    await logApiKeyUsage(apiKeyId, userId, clinicId, method, endpoint, 403, scopes, false, req, 'Insufficient scopes');
+    await logApiKeyUsage(
+      apiKeyId,
+      userId,
+      clinicId,
+      method,
+      endpoint,
+      403,
+      scopes,
+      false,
+      req,
+      'Insufficient scopes'
+    );
     return res.status(403).json({
       error: 'Forbidden',
       message: 'API key does not have permission to access this endpoint',

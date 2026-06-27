@@ -16,7 +16,9 @@ export const httpLogger = pinoHttp({
     return incoming ?? randomUUID();
   },
   // Attach the id back onto req so other middleware can read it
-  customReceivedMessage(_req) { return undefined as unknown as string; },
+  customReceivedMessage(_req) {
+    return undefined as unknown as string;
+  },
 });
 
 /**

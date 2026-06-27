@@ -7,7 +7,13 @@ export interface Notification {
   _id: string;
   userId: string;
   clinicId: string;
-  type: 'referral_received' | 'payment_confirmed' | 'appointment_reminder' | 'ai_summary_ready' | 'lab_result_ready' | 'system';
+  type:
+    | 'referral_received'
+    | 'payment_confirmed'
+    | 'appointment_reminder'
+    | 'ai_summary_ready'
+    | 'lab_result_ready'
+    | 'system';
   title: string;
   message: string;
   link?: string;
@@ -24,7 +30,9 @@ interface NotificationsResponse {
 }
 
 async function fetchNotifications(page = 1, limit = 20): Promise<NotificationsResponse> {
-  const res = await fetch(`/api/notifications?page=${page}&limit=${limit}`, { credentials: 'include' });
+  const res = await fetch(`/api/notifications?page=${page}&limit=${limit}`, {
+    credentials: 'include',
+  });
   if (!res.ok) throw new Error('Failed to fetch notifications');
   return res.json();
 }
@@ -55,7 +63,9 @@ export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      fetch(`/api/notifications/${id}/read`, { method: 'PUT', credentials: 'include' }).then((r) => r.json()),
+      fetch(`/api/notifications/${id}/read`, { method: 'PUT', credentials: 'include' }).then((r) =>
+        r.json()
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
     },
@@ -66,7 +76,9 @@ export function useMarkAllRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      fetch('/api/notifications/read-all', { method: 'PUT', credentials: 'include' }).then((r) => r.json()),
+      fetch('/api/notifications/read-all', { method: 'PUT', credentials: 'include' }).then((r) =>
+        r.json()
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
     },
@@ -77,9 +89,23 @@ export function useDeleteNotification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      fetch(`/api/notifications/${id}`, { method: 'DELETE', credentials: 'include' }).then((r) => r.json()),
+      fetch(`/api/notifications/${id}`, { method: 'DELETE', credentials: 'include' }).then((r) =>
+        r.json()
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
     },
+  });
+}
+
+export function usePendingCosignatures() {
+  return useQuery({
+    queryKey: queryKeys.encounters.pendingCosignatures(),
+    queryFn: async () => {
+      const res = await fetch('/api/encounters/pending-cosignatures', { credentials: 'include' });
+      if (!res.ok) return { count: 0, data: [] };
+      return res.json();
+    },
+    refetchInterval: 60_000,
   });
 }

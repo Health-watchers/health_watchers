@@ -2,7 +2,7 @@ import type { RiskLevel } from '../patients/models/patient.model';
 
 export interface RiskInput {
   ageYears: number;
-  diagnoses: string[];          // ICD-10 descriptions / codes
+  diagnoses: string[]; // ICD-10 descriptions / codes
   recentHospitalization: boolean;
   missedAppointments: number;
   abnormalLabCount: number;
@@ -36,13 +36,28 @@ export function calculateRiskScore(input: RiskInput): RiskResult {
   for (const d of input.diagnoses) {
     const lower = d.toLowerCase();
     if (lower.includes('diabetes') && !chronicMatches.has('diabetes')) {
-      score += 15; factors.push('Diabetes'); factorWeights['Diabetes'] = 15; chronicMatches.add('diabetes');
+      score += 15;
+      factors.push('Diabetes');
+      factorWeights['Diabetes'] = 15;
+      chronicMatches.add('diabetes');
     }
-    if ((lower.includes('hypertension') || lower.includes('high blood pressure')) && !chronicMatches.has('hypertension')) {
-      score += 15; factors.push('Hypertension'); factorWeights['Hypertension'] = 15; chronicMatches.add('hypertension');
+    if (
+      (lower.includes('hypertension') || lower.includes('high blood pressure')) &&
+      !chronicMatches.has('hypertension')
+    ) {
+      score += 15;
+      factors.push('Hypertension');
+      factorWeights['Hypertension'] = 15;
+      chronicMatches.add('hypertension');
     }
-    if ((lower.includes('copd') || lower.includes('chronic obstructive')) && !chronicMatches.has('copd')) {
-      score += 15; factors.push('COPD'); factorWeights['COPD'] = 15; chronicMatches.add('copd');
+    if (
+      (lower.includes('copd') || lower.includes('chronic obstructive')) &&
+      !chronicMatches.has('copd')
+    ) {
+      score += 15;
+      factors.push('COPD');
+      factorWeights['COPD'] = 15;
+      chronicMatches.add('copd');
     }
   }
 
@@ -96,6 +111,54 @@ export function scoreToLevel(score: number): RiskLevel {
   if (score >= 45) return 'high';
   if (score >= 20) return 'medium';
   return 'low';
+}
+
+export type FactorTrend = 'improving' | 'stable' | 'worsening';
+
+export interface FactorBreakdown {
+  factor: string;
+  weight: number;
+  /** Share of the total weight this factor represents (0–100, rounded). */
+  percentage: number;
+  trend: FactorTrend;
+}
+
+/**
+ * Build the per-factor breakdown shown in the risk explanation: each current
+ * factor with its point weight, its percentage of the total, and a trend
+ * relative to the previous assessment.
+ *
+ * Trend rules (a factor only appears here if it's currently present):
+ *  - no prior assessment            → 'stable'
+ *  - present in the prior assessment too → 'stable'
+ *  - newly appeared since last time  → 'worsening'
+ */
+export function buildFactorBreakdown(
+  currentFactors: string[],
+  weights: Record<string, number>,
+  previousFactors: string[],
+  hasHistory: boolean
+): FactorBreakdown[] {
+  const totalWeight = Object.values(weights).reduce((s, v) => s + v, 0) || 1;
+  return currentFactors.map((factor) => {
+    const weight = weights[factor] ?? 0;
+    const wasPresent = previousFactors.includes(factor);
+    const trend: FactorTrend = !hasHistory ? 'stable' : wasPresent ? 'stable' : 'worsening';
+    return {
+      factor,
+      weight,
+      percentage: Math.round((weight / totalWeight) * 100),
+      trend,
+    };
+  });
+}
+
+/**
+ * Factors that were present in the previous assessment but are no longer
+ * present — i.e. risk factors the patient has resolved/improved on.
+ */
+export function getImprovedFactors(currentFactors: string[], previousFactors: string[]): string[] {
+  return previousFactors.filter((f) => !currentFactors.includes(f));
 }
 
 export { CHRONIC_KEYWORDS };

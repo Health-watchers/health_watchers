@@ -8,24 +8,24 @@ alerting:
         - targets: []
 
 rule_files:
-  - "alerts.yml"
-  - "alerts-payments.yml"
-  - "alerts-security.yml"
-  - "alerts-business.yml"
+  - 'alerts.yml'
+  - 'alerts-payments.yml'
+  - 'alerts-security.yml'
+  - 'alerts-business.yml'
 
 scrape_configs:
-  - job_name: "health-watchers-api"
+  - job_name: 'health-watchers-api'
     static_configs:
-      - targets: ["api:3001"]
+      - targets: ['api:3001']
     metrics_path: /metrics
     basic_auth:
-      username: "${METRICS_USERNAME}"
-      password: "${METRICS_PASSWORD}"
+      username: '${METRICS_USERNAME}'
+      password: '${METRICS_PASSWORD}'
 
-  - job_name: "health-watchers-stellar"
+  - job_name: 'health-watchers-stellar'
     static_configs:
-      - targets: ["stellar-service:3002"]
+      - targets: ['stellar-service:3002']
     metrics_path: /metrics
     basic_auth:
-      username: "${METRICS_USERNAME}"
-      password: "${METRICS_PASSWORD}"
+      username: '${METRICS_USERNAME}'
+      password: '${METRICS_PASSWORD}'

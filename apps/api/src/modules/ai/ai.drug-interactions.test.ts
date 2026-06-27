@@ -1,4 +1,9 @@
-import { extractJSON, checkDrugInteractions, DRUG_INTERACTION_FALLBACK, DrugInteractionResult } from './ai.service';
+import {
+  extractJSON,
+  checkDrugInteractions,
+  DRUG_INTERACTION_FALLBACK,
+  DrugInteractionResult,
+} from './ai.service';
 
 // ── extractJSON unit tests ────────────────────────────────────────────────────
 
@@ -58,9 +63,12 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const mockGenerateContent = jest.fn();
 const mockGetGenerativeModel = jest.fn(() => ({ generateContent: mockGenerateContent }));
 
-(GoogleGenerativeAI as jest.MockedClass<typeof GoogleGenerativeAI>).mockImplementation(() => ({
-  getGenerativeModel: mockGetGenerativeModel,
-}) as any);
+(GoogleGenerativeAI as jest.MockedClass<typeof GoogleGenerativeAI>).mockImplementation(
+  () =>
+    ({
+      getGenerativeModel: mockGetGenerativeModel,
+    }) as any
+);
 
 // Reset module-level client singleton between tests
 beforeEach(() => {
@@ -128,7 +136,9 @@ describe('checkDrugInteractions', () => {
       summary: 'No interactions found.',
     });
     mockGenerateContent
-      .mockResolvedValueOnce({ response: { text: () => 'Sorry, I cannot provide that information.' } })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Sorry, I cannot provide that information.' },
+      })
       .mockResolvedValueOnce({ response: { text: () => validPayload } });
 
     const { checkDrugInteractions: check } = await import('./ai.service');
@@ -143,7 +153,8 @@ describe('checkDrugInteractions', () => {
       response: { text: () => 'I am unable to process this request.' },
     });
 
-    const { checkDrugInteractions: check, DRUG_INTERACTION_FALLBACK: fallback } = await import('./ai.service');
+    const { checkDrugInteractions: check, DRUG_INTERACTION_FALLBACK: fallback } =
+      await import('./ai.service');
     const result = await check(['DrugA', 'DrugB']);
 
     expect(result.severity).toBe('none');
@@ -154,7 +165,8 @@ describe('checkDrugInteractions', () => {
   it('returns safe fallback when Gemini throws an error', async () => {
     mockGenerateContent.mockRejectedValue(new Error('Network error'));
 
-    const { checkDrugInteractions: check, DRUG_INTERACTION_FALLBACK: fallback } = await import('./ai.service');
+    const { checkDrugInteractions: check, DRUG_INTERACTION_FALLBACK: fallback } =
+      await import('./ai.service');
     const result = await check(['DrugA', 'DrugB']);
 
     expect(result.severity).toBe('none');

@@ -180,7 +180,12 @@ describe('sendClaimableExpiryNotifications — happy path', () => {
     mockFind([makeRecord({ _id: 'pay_1' }), makeRecord({ _id: 'pay_2', patientId: 'patient_2' })]);
     findByIdMock
       .mockReturnValueOnce({ lean: () => Promise.resolve(makePatient()) })
-      .mockReturnValueOnce({ lean: () => Promise.resolve(makePatient({ _id: 'patient_2', email: 'p2@example.com', fullName: 'John Smith' })) });
+      .mockReturnValueOnce({
+        lean: () =>
+          Promise.resolve(
+            makePatient({ _id: 'patient_2', email: 'p2@example.com', fullName: 'John Smith' })
+          ),
+      });
 
     const count = await sendClaimableExpiryNotifications();
     expect(count).toBe(2);
@@ -239,7 +244,9 @@ describe('sendClaimableExpiryNotifications — edge cases', () => {
   it('does not throw when socket emit fails', async () => {
     mockFind([makeRecord()]);
     mockFindById(makePatient());
-    emitToUserMock.mockImplementation(() => { throw new Error('Socket not initialised'); });
+    emitToUserMock.mockImplementation(() => {
+      throw new Error('Socket not initialised');
+    });
 
     await expect(sendClaimableExpiryNotifications()).resolves.toBe(1);
     // Notification and email should still be sent

@@ -13,7 +13,7 @@ export class ResearchController {
   static async exportAnonymizedData(req: Request, res: Response): Promise<void> {
     try {
       const { irbApproval, includeEncounters } = req.query;
-      
+
       // Validate IRB approval flag
       if (irbApproval !== 'true') {
         res.status(400).json({
@@ -22,28 +22,28 @@ export class ResearchController {
         });
         return;
       }
-      
+
       // Fetch all patients
       const patients = await PatientModel.find({ isActive: true }).lean();
-      
+
       // Convert to PatientData format
-      const patientData: PatientData[] = patients.map(p => ({
+      const patientData: PatientData[] = patients.map((p) => ({
         firstName: p.firstName,
         lastName: p.lastName,
         dateOfBirth: p.dateOfBirth,
         contactNumber: p.contactNumber,
         address: p.address,
-        email: p.email,
+        email: (p as any).email,
         systemId: p.systemId,
         sex: p.sex,
       }));
-      
+
       // Apply Level 3 anonymization (aggregation only)
       const anonymizedData = anonymizeBatch(patientData, {
         level: 'aggregation',
         purpose: 'research',
       });
-      
+
       // Optionally include encounter statistics
       let encounterStats = {};
       if (includeEncounters === 'true') {
@@ -57,7 +57,7 @@ export class ResearchController {
           }, {}),
         };
       }
-      
+
       // Create audit log
       const auditLog = createAuditLog(
         ['firstName', 'lastName', 'dateOfBirth', 'contactNumber', 'address', 'email', 'systemId'],
@@ -66,15 +66,15 @@ export class ResearchController {
         'aggregation',
         patients.length
       );
-      
+
       // Log to audit service
       await AuditService.log({
         userId: req.user?.userId,
         clinicId: req.user?.clinicId,
         action: 'research_export',
-        resource: 'research',
+        resourceType: 'research',
         resourceId: 'export',
-        details: {
+        metadata: {
           recordCount: patients.length,
           anonymizationLevel: 'aggregation',
           irbApproval: true,
@@ -83,7 +83,7 @@ export class ResearchController {
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
-      
+
       res.status(200).json({
         success: true,
         data: {

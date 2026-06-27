@@ -27,4 +27,5 @@ const usageSchema = new Schema<IUsageRecord>(
 
 usageSchema.index({ clinicId: 1, periodStart: -1 });
 
-export const UsageModel = models.UsageRecord || model<IUsageRecord>('UsageRecord', usageSchema);
+export const UsageModel = (models.UsageRecord ||
+  model<IUsageRecord>('UsageRecord', usageSchema)) as import('mongoose').Model<IUsageRecord>;

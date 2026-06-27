@@ -28,21 +28,24 @@ async function hasConflict(
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-  const query: Record<string, unknown> = {
+  const filter: Record<string, unknown> = {
     doctorId: new Types.ObjectId(doctorId),
     status: { $in: ['scheduled', 'confirmed'] },
     scheduledAt: { $lt: proposedEnd },
-    $expr: {
-      $gt: [
-        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
-        scheduledAt.getTime(),
-      ],
-    },
   };
 
-  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
+  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  return (await AppointmentModel.countDocuments(query)) > 0;
+  const candidates = await AppointmentModel.find(filter)
+    .select('scheduledAt duration')
+    .lean();
+
+  return candidates.some((appt) => {
+    const apptEnd = new Date(
+      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+    );
+    return apptEnd > scheduledAt;
+  });
 }
 
 async function emitAppointmentStatusChange(
@@ -66,7 +69,6 @@ async function emitAppointmentStatusChange(
       ...additionalData,
     });
 
-    // Also emit to clinic for staff notifications
     socketService.emitToClinic(appointment.clinicId.toString(), event, {
       appointmentId,
       appointment,
@@ -82,15 +84,15 @@ appointmentRoutes.post(
   async (req: Request, res: Response) => {
     try {
       const { clinicId } = req.user!;
-      const appointment = await AppointmentModel.findOne({ 
-        _id: req.params.id, 
-        clinicId 
+      const appointment = await AppointmentModel.findOne({
+        _id: req.params.id,
+        clinicId,
       });
-      
+
       if (!appointment) {
-        return res.status(404).json({ 
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+        return res.status(404).json({
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -103,14 +105,13 @@ appointmentRoutes.post(
 
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { 
+        {
           status: 'patient_arrived',
           checkedInAt: new Date(),
         },
         { new: true, runValidators: true }
       ).lean();
 
-      // Emit real-time event
       await emitAppointmentStatusChange(
         req.params.id,
         'patient_arrived',
@@ -118,7 +119,6 @@ appointmentRoutes.post(
         { checkedInAt: updated.checkedInAt }
       );
 
-      // Create notification for staff
       await NotificationModel.create({
         userId: appointment.doctorId,
         clinicId: appointment.clinicId,
@@ -131,15 +131,15 @@ appointmentRoutes.post(
         },
       });
 
-      return res.json({ 
-        status: 'success', 
+      return res.json({
+        status: 'success',
         data: updated,
-        message: 'Patient checked in successfully'
+        message: 'Patient checked in successfully',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
-        error: 'InternalError', 
-        message: err.message 
+      return res.status(500).json({
+        error: 'InternalError',
+        message: err.message,
       });
     }
   },
@@ -157,14 +157,20 @@ appointmentRoutes.get(
 
       const filter: Record<string, unknown> = { clinicId };
 
-      // RBAC: patients can only see their own appointments
       if (role === 'PATIENT') filter.patientId = userId;
       else {
         if (doctorId) filter.doctorId = new Types.ObjectId(doctorId);
         if (patientId) filter.patientId = new Types.ObjectId(patientId);
       }
 
-      if (status) filter.status = status;
+      if (status) {
+        const ALLOWED_STATUSES = new Set(['scheduled', 'confirmed', 'cancelled', 'completed', 'patient_arrived']);
+        if (!ALLOWED_STATUSES.has(String(status))) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+        }
+        filter.status = String(status);
+      }
+
       if (dateFrom || dateTo) {
         filter.scheduledAt = {};
         if (dateFrom) (filter.scheduledAt as any).$gte = new Date(dateFrom);
@@ -183,15 +189,14 @@ appointmentRoutes.get(
         AppointmentModel.countDocuments(filter),
       ]);
 
-      // V2 enhanced response format
       return res.json({
         success: true,
         data: {
           appointments: data,
-          pagination: { 
-            page: Number(page), 
-            limit: Number(limit), 
-            total, 
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
             pages: Math.ceil(total / Number(limit)),
             hasNext: Number(page) < Math.ceil(total / Number(limit)),
             hasPrev: Number(page) > 1,
@@ -206,10 +211,10 @@ appointmentRoutes.get(
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
   },
@@ -224,10 +229,10 @@ appointmentRoutes.put(
       const { clinicId } = req.user!;
       const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
       if (!existing) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -249,23 +254,21 @@ appointmentRoutes.put(
 
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { 
-          scheduledAt: newStart, 
-          duration: newDuration, 
-          type, 
-          status, 
-          chiefComplaint, 
-          notes, 
-          encounterId 
+        {
+          scheduledAt: newStart,
+          duration: newDuration,
+          type,
+          status,
+          chiefComplaint,
+          notes,
+          encounterId,
         },
         { new: true, runValidators: true },
       ).lean();
 
-      // Emit real-time events for status changes
       if (status && status !== oldStatus) {
         await emitAppointmentStatusChange(req.params.id, status, updated);
-        
-        // Create notification
+
         await NotificationModel.create({
           userId: existing.patientId,
           clinicId: existing.clinicId,
@@ -280,7 +283,6 @@ appointmentRoutes.put(
         });
       }
 
-      // Emit rescheduled event if time changed
       if (scheduledAt && newStart.getTime() !== oldScheduledAt.getTime()) {
         await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
           oldScheduledAt: oldScheduledAt.toISOString(),
@@ -288,16 +290,16 @@ appointmentRoutes.put(
         });
       }
 
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         data: updated,
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
   },
@@ -312,10 +314,10 @@ appointmentRoutes.delete(
       const { clinicId, userId } = req.user!;
       const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
       if (!appointment) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -332,13 +334,11 @@ appointmentRoutes.delete(
         { new: true },
       ).lean();
 
-      // Emit real-time cancellation event
       await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
         cancelledBy: userId,
         cancellationReason,
       });
 
-      // Create notifications for both patient and doctor
       const notifications = [
         {
           userId: appointment.patientId,
@@ -366,16 +366,16 @@ appointmentRoutes.delete(
         )
       );
 
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         data: updated,
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
   },

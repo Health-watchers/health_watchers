@@ -63,7 +63,9 @@ export default function PortalEncountersPage() {
     }
   }, []);
 
-  useEffect(() => { load(page); }, [page, load]);
+  useEffect(() => {
+    load(page);
+  }, [page, load]);
 
   const submitNote = async (encounterId: string) => {
     const note = noteInputs[encounterId]?.trim();
@@ -104,28 +106,30 @@ export default function PortalEncountersPage() {
           {encounters.map((encounter) => (
             <article
               key={encounter._id}
-              className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+              className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
             >
               {/* Header row */}
               <button
-                className="w-full flex items-start justify-between gap-4 p-5 text-left hover:bg-gray-50 transition-colors"
-                onClick={() => setExpandedId((prev) => (prev === encounter._id ? null : encounter._id))}
+                className="flex w-full items-start justify-between gap-4 p-5 text-left transition-colors hover:bg-gray-50"
+                onClick={() =>
+                  setExpandedId((prev) => (prev === encounter._id ? null : encounter._id))
+                }
                 aria-expanded={expandedId === encounter._id}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800 truncate">{encounter.chiefComplaint}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-gray-800">{encounter.chiefComplaint}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">
                     {new Date(encounter.createdAt).toLocaleDateString(undefined, {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
                     })}
                     {encounter.type && (
-                      <span className="ml-2 capitalize text-gray-400">· {encounter.type}</span>
+                      <span className="ml-2 text-gray-400 capitalize">· {encounter.type}</span>
                     )}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[encounter.status] ?? 'bg-gray-100 text-gray-600'}`}
                   >
@@ -148,17 +152,17 @@ export default function PortalEncountersPage() {
 
               {/* Expanded content */}
               {expandedId === encounter._id && (
-                <div className="border-t border-gray-100 px-5 pb-5 pt-4 space-y-4">
+                <div className="space-y-4 border-t border-gray-100 px-5 pt-4 pb-5">
                   {/* AI summary */}
-                  <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
-                    <div className="flex items-center gap-2 mb-2">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                    <div className="mb-2 flex items-center gap-2">
                       <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-white">
                         AI
                       </span>
                       <span className="text-sm font-medium text-gray-700">Visit Summary</span>
                     </div>
                     {encounter.patientFriendlySummary ? (
-                      <p className="text-sm text-gray-600 leading-relaxed">
+                      <p className="text-sm leading-relaxed text-gray-600">
                         {encounter.patientFriendlySummary}
                       </p>
                     ) : (
@@ -174,7 +178,7 @@ export default function PortalEncountersPage() {
                   {/* Diagnosis */}
                   {encounter.diagnosis && encounter.diagnosis.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
                         Diagnosis
                       </p>
                       <ul className="space-y-1">
@@ -191,7 +195,7 @@ export default function PortalEncountersPage() {
                   {/* Follow-up */}
                   {encounter.followUpDate && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
                         Follow-up Date
                       </p>
                       <p className="text-sm text-gray-700">
@@ -206,25 +210,25 @@ export default function PortalEncountersPage() {
 
                   {/* Patient notes */}
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
                       My Notes & Questions
                     </p>
                     {encounter.patientNotes.length > 0 ? (
-                      <ul className="space-y-2 mb-3">
+                      <ul className="mb-3 space-y-2">
                         {encounter.patientNotes.map((n) => (
                           <li
                             key={n._id}
-                            className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2"
+                            className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
                           >
                             <p className="text-sm text-gray-700">{n.note}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">
+                            <p className="mt-0.5 text-xs text-gray-400">
                               {new Date(n.createdAt).toLocaleString()}
                             </p>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-gray-400 mb-3">No notes yet.</p>
+                      <p className="mb-3 text-sm text-gray-400">No notes yet.</p>
                     )}
 
                     {/* Add note form */}
@@ -237,13 +241,15 @@ export default function PortalEncountersPage() {
                         placeholder="Add a note or question about this visit…"
                         maxLength={1000}
                         rows={2}
-                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         aria-label="Add a note or question"
                       />
                       <button
                         onClick={() => submitNote(encounter._id)}
-                        disabled={submitting === encounter._id || !noteInputs[encounter._id]?.trim()}
-                        className="self-end rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={
+                          submitting === encounter._id || !noteInputs[encounter._id]?.trim()
+                        }
+                        className="self-end rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submitting === encounter._id ? 'Saving…' : 'Save'}
                       </button>

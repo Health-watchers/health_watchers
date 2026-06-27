@@ -9,7 +9,7 @@ export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
   return (
     <div
       role="alert"
-      className="bg-danger-50 border-danger-200 text-danger-600 flex items-center justify-between gap-4 rounded-md border px-4 py-3 text-sm"
+      className="bg-danger-50 border-danger-200 text-danger-600 dark:bg-danger-900/30 dark:border-danger-800 dark:text-danger-300 flex items-center justify-between gap-4 rounded-md border px-4 py-3 text-sm"
     >
       <span>{message}</span>
       {onRetry && (

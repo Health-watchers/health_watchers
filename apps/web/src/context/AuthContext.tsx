@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
 import { useRouter } from 'next/navigation';
 
 export type AppRole =
@@ -92,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }, REFRESH_INTERVAL_MS);
     },
-    [clearRefreshTimer],
+    [clearRefreshTimer]
   );
 
   const logout = useCallback(async () => {
@@ -129,7 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [scheduleRefresh, logout, clearRefreshTimer]);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<{ mfaRequired: boolean; tempToken?: string }> => {
+    async (
+      email: string,
+      password: string
+    ): Promise<{ mfaRequired: boolean; tempToken?: string }> => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { mfaRequired: false };
     },
-    [scheduleRefresh, logout],
+    [scheduleRefresh, logout]
   );
 
   return (

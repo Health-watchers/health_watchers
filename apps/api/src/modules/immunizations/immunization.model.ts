@@ -132,7 +132,7 @@ const adverseReactionSchema = new Schema<IAdverseReaction>(
     resolvedDate: { type: Date },
     reportedToVAERS: { type: Boolean, default: false },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const immunizationSchema = new Schema<IImmunization>(
@@ -164,20 +164,13 @@ const immunizationSchema = new Schema<IImmunization>(
     },
     route: {
       type: String,
-      enum: [
-        'Intramuscular',
-        'Subcutaneous',
-        'Intradermal',
-        'Oral',
-        'Intranasal',
-        'Intravenous',
-      ],
+      enum: ['Intramuscular', 'Subcutaneous', 'Intradermal', 'Oral', 'Intranasal', 'Intravenous'],
     },
     adverseReaction: { type: adverseReactionSchema },
     notes: { type: String, trim: true },
     isActive: { type: Boolean, default: true, index: true },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 // Compound indexes for efficient queries
@@ -185,5 +178,8 @@ immunizationSchema.index({ patientId: 1, clinicId: 1, administeredDate: -1 });
 immunizationSchema.index({ patientId: 1, vaccineCode: 1 });
 immunizationSchema.index({ clinicId: 1, administeredDate: -1 });
 
-export const ImmunizationModel =
-  models.Immunization || model<IImmunization>('Immunization', immunizationSchema);
+export const ImmunizationModel = (models.Immunization ||
+  model<IImmunization>(
+    'Immunization',
+    immunizationSchema
+  )) as import('mongoose').Model<IImmunization>;

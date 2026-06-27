@@ -69,4 +69,5 @@ const cdsRuleSchema = new Schema<CDSRule>(
   { timestamps: true, versionKey: false }
 );
 
-export const CDSRuleModel = models.CDSRule || model<CDSRule>('CDSRule', cdsRuleSchema);
+export const CDSRuleModel = (models.CDSRule ||
+  model<CDSRule>('CDSRule', cdsRuleSchema)) as import('mongoose').Model<CDSRule>;

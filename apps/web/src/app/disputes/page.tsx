@@ -27,7 +27,10 @@ interface Dispute {
   refundIntentId?: string;
 }
 
-const STATUS_VARIANT: Record<DisputeStatus, 'warning' | 'primary' | 'success' | 'default' | 'danger'> = {
+const STATUS_VARIANT: Record<
+  DisputeStatus,
+  'warning' | 'primary' | 'success' | 'default' | 'danger'
+> = {
   open: 'warning',
   under_review: 'primary',
   resolved_refund: 'success',
@@ -47,11 +50,18 @@ async function fetchDisputes(): Promise<Dispute[]> {
 export default function DisputesPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Dispute | null>(null);
-  const [resolveForm, setResolveForm] = useState({ status: 'resolved_no_action', resolutionNotes: '' });
+  const [resolveForm, setResolveForm] = useState({
+    status: 'resolved_no_action',
+    resolutionNotes: '',
+  });
   const [refundForm, setRefundForm] = useState({ amount: '', destinationPublicKey: '' });
   const [actionMsg, setActionMsg] = useState('');
 
-  const { data: disputes = [], isLoading, error } = useQuery({
+  const {
+    data: disputes = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['disputes'],
     queryFn: fetchDisputes,
   });
@@ -100,22 +110,29 @@ export default function DisputesPage() {
 
   const isResolved = (d: Dispute) => ['resolved_refund', 'closed'].includes(d.status);
 
-  if (isLoading) return <div className="flex justify-center p-8"><Spinner /></div>;
+  if (isLoading)
+    return (
+      <div className="flex justify-center p-8">
+        <Spinner />
+      </div>
+    );
   if (error) return <p className="p-8 text-red-600">{(error as Error).message}</p>;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-6">Dispute Management</h1>
+    <div className="mx-auto max-w-5xl p-6">
+      <h1 className="mb-6 text-2xl font-semibold">Dispute Management</h1>
 
       {disputes.length === 0 ? (
         <p className="text-gray-500">No disputes found.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 uppercase text-xs">
+            <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
               <tr>
                 {['Payment ID', 'Patient', 'Reason', 'Status', 'Opened', ''].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left font-medium">
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -124,18 +141,25 @@ export default function DisputesPage() {
                 <tr key={d._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs">{d.paymentIntentId.slice(0, 14)}…</td>
                   <td className="px-4 py-3 text-gray-700">{d.patientId}</td>
-                  <td className="px-4 py-3 text-gray-700 capitalize">{d.reason.replace(/_/g, ' ')}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[d.status]}>
-                      {d.status.replace(/_/g, ' ')}
-                    </Badge>
+                  <td className="px-4 py-3 text-gray-700 capitalize">
+                    {d.reason.replace(/_/g, ' ')}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(d.openedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={STATUS_VARIANT[d.status]}>{d.status.replace(/_/g, ' ')}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {new Date(d.openedAt).toLocaleDateString()}
+                  </td>
                   <td className="px-4 py-3">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => { setSelected(d); setActionMsg(''); setResolveForm({ status: 'resolved_no_action', resolutionNotes: '' }); setRefundForm({ amount: '', destinationPublicKey: '' }); }}
+                      onClick={() => {
+                        setSelected(d);
+                        setActionMsg('');
+                        setResolveForm({ status: 'resolved_no_action', resolutionNotes: '' });
+                        setRefundForm({ amount: '', destinationPublicKey: '' });
+                      }}
                     >
                       Manage
                     </Button>
@@ -150,22 +174,43 @@ export default function DisputesPage() {
       {selected && (
         <Modal open onClose={() => setSelected(null)} title={`Dispute — ${selected._id.slice(-8)}`}>
           <div className="space-y-3 text-sm">
-            <div><span className="font-medium">Payment:</span> <span className="font-mono text-xs">{selected.paymentIntentId}</span></div>
-            <div><span className="font-medium">Reason:</span> {selected.reason.replace(/_/g, ' ')}</div>
-            <div><span className="font-medium">Description:</span> {selected.description}</div>
-            <div><span className="font-medium">Status:</span> <Badge variant={STATUS_VARIANT[selected.status]}>{selected.status.replace(/_/g, ' ')}</Badge></div>
-            {selected.resolutionNotes && <div><span className="font-medium">Resolution Notes:</span> {selected.resolutionNotes}</div>}
-            {selected.refundIntentId && <div><span className="font-medium">Refund Intent:</span> <span className="font-mono text-xs">{selected.refundIntentId}</span></div>}
+            <div>
+              <span className="font-medium">Payment:</span>{' '}
+              <span className="font-mono text-xs">{selected.paymentIntentId}</span>
+            </div>
+            <div>
+              <span className="font-medium">Reason:</span> {selected.reason.replace(/_/g, ' ')}
+            </div>
+            <div>
+              <span className="font-medium">Description:</span> {selected.description}
+            </div>
+            <div>
+              <span className="font-medium">Status:</span>{' '}
+              <Badge variant={STATUS_VARIANT[selected.status]}>
+                {selected.status.replace(/_/g, ' ')}
+              </Badge>
+            </div>
+            {selected.resolutionNotes && (
+              <div>
+                <span className="font-medium">Resolution Notes:</span> {selected.resolutionNotes}
+              </div>
+            )}
+            {selected.refundIntentId && (
+              <div>
+                <span className="font-medium">Refund Intent:</span>{' '}
+                <span className="font-mono text-xs">{selected.refundIntentId}</span>
+              </div>
+            )}
 
             {!isResolved(selected) && (
               <>
                 <hr className="my-4" />
                 <h3 className="font-semibold">Resolve Dispute</h3>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-wrap gap-2">
                   <select
                     value={resolveForm.status}
                     onChange={(e) => setResolveForm((f) => ({ ...f, status: e.target.value }))}
-                    className="border rounded px-2 py-1 text-sm"
+                    className="rounded border px-2 py-1 text-sm"
                   >
                     <option value="resolved_no_action">Resolved – No Action</option>
                     <option value="closed">Closed</option>
@@ -173,8 +218,10 @@ export default function DisputesPage() {
                   <input
                     placeholder="Resolution notes"
                     value={resolveForm.resolutionNotes}
-                    onChange={(e) => setResolveForm((f) => ({ ...f, resolutionNotes: e.target.value }))}
-                    className="border rounded px-2 py-1 text-sm flex-1 min-w-[200px]"
+                    onChange={(e) =>
+                      setResolveForm((f) => ({ ...f, resolutionNotes: e.target.value }))
+                    }
+                    className="min-w-[200px] flex-1 rounded border px-2 py-1 text-sm"
                   />
                   <Button
                     size="sm"
@@ -187,12 +234,12 @@ export default function DisputesPage() {
 
                 <hr className="my-4" />
                 <h3 className="font-semibold">Issue Refund</h3>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-wrap gap-2">
                   <input
                     placeholder="Amount (XLM)"
                     value={refundForm.amount}
                     onChange={(e) => setRefundForm((f) => ({ ...f, amount: e.target.value }))}
-                    className="border rounded px-2 py-1 text-sm w-32"
+                    className="w-32 rounded border px-2 py-1 text-sm"
                     type="number"
                     min="0"
                     step="0.01"
@@ -200,14 +247,20 @@ export default function DisputesPage() {
                   <input
                     placeholder="Patient Stellar public key"
                     value={refundForm.destinationPublicKey}
-                    onChange={(e) => setRefundForm((f) => ({ ...f, destinationPublicKey: e.target.value }))}
-                    className="border rounded px-2 py-1 text-sm flex-1 min-w-[260px] font-mono text-xs"
+                    onChange={(e) =>
+                      setRefundForm((f) => ({ ...f, destinationPublicKey: e.target.value }))
+                    }
+                    className="min-w-[260px] flex-1 rounded border px-2 py-1 font-mono text-sm text-xs"
                   />
                   <Button
                     size="sm"
                     variant="primary"
                     onClick={() => refundMutation.mutate(selected._id)}
-                    disabled={refundMutation.isPending || !refundForm.amount || !refundForm.destinationPublicKey}
+                    disabled={
+                      refundMutation.isPending ||
+                      !refundForm.amount ||
+                      !refundForm.destinationPublicKey
+                    }
                   >
                     {refundMutation.isPending ? <Spinner size="sm" /> : 'Issue Refund'}
                   </Button>
@@ -216,7 +269,9 @@ export default function DisputesPage() {
             )}
 
             {actionMsg && (
-              <p className={`mt-3 text-sm font-medium ${actionMsg.includes('Failed') || actionMsg.includes('error') ? 'text-red-600' : 'text-green-600'}`}>
+              <p
+                className={`mt-3 text-sm font-medium ${actionMsg.includes('Failed') || actionMsg.includes('error') ? 'text-red-600' : 'text-green-600'}`}
+              >
                 {actionMsg}
               </p>
             )}

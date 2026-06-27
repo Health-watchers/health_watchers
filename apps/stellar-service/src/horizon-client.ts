@@ -48,11 +48,11 @@ interface HorizonEndpoint {
   circuitOpenedAt: number;
 }
 
-const CIRCUIT_BREAKER_THRESHOLD = 5;       // open after N consecutive failures
-const CIRCUIT_BREAKER_RESET_MS   = 60_000; // try again after 60 s
-const SLOW_RESPONSE_THRESHOLD_MS = 5_000;  // treat as failure if > 5 s
-const HEALTH_CHECK_INTERVAL_MS   = 30_000;
-const HEALTH_CHECK_TIMEOUT_MS    = 5_000;
+const CIRCUIT_BREAKER_THRESHOLD = 5; // open after N consecutive failures
+const CIRCUIT_BREAKER_RESET_MS = 60_000; // try again after 60 s
+const SLOW_RESPONSE_THRESHOLD_MS = 5_000; // treat as failure if > 5 s
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
+const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 
 // ── ResilientHorizonClient ────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ class ResilientHorizonClient {
   }
 
   private async runHealthChecks(): Promise<void> {
-    await Promise.all(this.endpoints.map(ep => this.checkEndpointHealth(ep)));
+    await Promise.all(this.endpoints.map((ep) => this.checkEndpointHealth(ep)));
 
     if (!this.isEndpointUsable(this.endpoints[this.currentIndex])) {
       const next = this.selectEndpoint();
@@ -192,7 +192,7 @@ class ResilientHorizonClient {
   private switchEndpoint(newIndex: number): void {
     if (newIndex === this.currentIndex) return;
     const from = this.endpoints[this.currentIndex].url;
-    const to   = this.endpoints[newIndex].url;
+    const to = this.endpoints[newIndex].url;
     logger.info({ from, to }, 'Switching Horizon endpoint');
     horizonFailoversTotal.inc({ from, to });
     this.currentIndex = newIndex;
@@ -216,10 +216,7 @@ class ResilientHorizonClient {
     if (this.healthCheckInterval) return;
     logger.info('Starting Horizon health checks');
     this.runHealthChecks();
-    this.healthCheckInterval = setInterval(
-      () => this.runHealthChecks(),
-      HEALTH_CHECK_INTERVAL_MS
-    );
+    this.healthCheckInterval = setInterval(() => this.runHealthChecks(), HEALTH_CHECK_INTERVAL_MS);
   }
 
   stopHealthChecks(): void {
@@ -233,7 +230,13 @@ class ResilientHorizonClient {
   async getNetworkStatus(): Promise<{
     currentEndpoint: string;
     latency: number;
-    endpoints: Array<{ url: string; healthy: boolean; latency: number; circuitOpen: boolean; consecutiveFailures: number }>;
+    endpoints: Array<{
+      url: string;
+      healthy: boolean;
+      latency: number;
+      circuitOpen: boolean;
+      consecutiveFailures: number;
+    }>;
     stellarStatus: { status: string; incidents: number } | null;
   }> {
     const current = this.getCurrentEndpoint();
@@ -257,7 +260,7 @@ class ResilientHorizonClient {
     return {
       currentEndpoint: current.url,
       latency: current.latency,
-      endpoints: this.endpoints.map(ep => ({
+      endpoints: this.endpoints.map((ep) => ({
         url: ep.url,
         healthy: ep.healthy,
         latency: ep.latency,

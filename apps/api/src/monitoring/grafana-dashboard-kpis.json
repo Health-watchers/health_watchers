@@ -61,9 +61,7 @@
         "reduceOptions": {
           "values": false,
           "fields": "",
-          "calcs": [
-            "lastNotNull"
-          ]
+          "calcs": ["lastNotNull"]
         },
         "showThresholdLabels": false,
         "showThresholdMarkers": true
@@ -472,10 +470,7 @@
   "refresh": "30s",
   "schemaVersion": 27,
   "style": "dark",
-  "tags": [
-    "business-kpis",
-    "health-watchers"
-  ],
+  "tags": ["business-kpis", "health-watchers"],
   "templating": {
     "list": []
   },

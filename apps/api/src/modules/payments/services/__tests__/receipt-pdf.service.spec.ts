@@ -1,19 +1,19 @@
 import { buildStellarExplorerUrl, buildReceiptPayload } from '../receipt-pdf.service';
 
 const sampleInput = {
-  paymentId:       'pay_001',
-  stellarTxHash:   'abc123def456',
-  stellarNetwork:  'public' as const,
-  amount:          '150.00',
-  asset:           'USDC',
-  paidAt:          new Date('2024-03-15T10:00:00Z'),
-  patientName:     'Jane Doe',
-  patientId:       'pat_001',
-  clinicBranding:  {
-    name:    'Health Clinic',
+  paymentId: 'pay_001',
+  stellarTxHash: 'abc123def456',
+  stellarNetwork: 'public' as const,
+  amount: '150.00',
+  asset: 'USDC',
+  paidAt: new Date('2024-03-15T10:00:00Z'),
+  patientName: 'Jane Doe',
+  patientId: 'pat_001',
+  clinicBranding: {
+    name: 'Health Clinic',
     address: '123 Main St, Abuja',
-    phone:   '+234 800 0000',
-    email:   'billing@clinic.com',
+    phone: '+234 800 0000',
+    email: 'billing@clinic.com',
   },
   description: 'Consultation fee',
 };

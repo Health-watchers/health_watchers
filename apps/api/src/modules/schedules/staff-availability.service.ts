@@ -1,7 +1,15 @@
 import { ScheduleModel } from './models/schedule.model';
 import { CreateStaffScheduleInput, StaffAvailabilityQuery } from './schedules.validation';
 
-const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
+const DAYS = [
+  'SUNDAY',
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+] as const;
 
 function dayBounds(date: Date) {
   const start = new Date(date);
@@ -15,7 +23,10 @@ function overlaps(startA: string, endA: string, startB: string, endB: string): b
   return startA < endB && endA > startB;
 }
 
-export async function findConflictingStaffSchedule(input: CreateStaffScheduleInput, clinicId: string) {
+export async function findConflictingStaffSchedule(
+  input: CreateStaffScheduleInput,
+  clinicId: string
+) {
   const date = new Date(input.date);
   const { start, end } = dayBounds(date);
   const schedules = await ScheduleModel.find({
@@ -30,7 +41,11 @@ export async function findConflictingStaffSchedule(input: CreateStaffScheduleInp
   );
 }
 
-export async function createStaffSchedule(input: CreateStaffScheduleInput, clinicId: string, createdBy: string) {
+export async function createStaffSchedule(
+  input: CreateStaffScheduleInput,
+  clinicId: string,
+  createdBy: string
+) {
   const conflict = await findConflictingStaffSchedule(input, clinicId);
   if (conflict) return { conflict };
 
@@ -58,7 +73,11 @@ export function findStaffAvailability(query: StaffAvailabilityQuery, callerClini
   return ScheduleModel.find(filter).sort({ date: 1, shiftStart: 1 }).lean();
 }
 
-export async function isStaffAvailable(userId: string, clinicId: string, date: Date): Promise<boolean> {
+export async function isStaffAvailable(
+  userId: string,
+  clinicId: string,
+  date: Date
+): Promise<boolean> {
   const { start, end } = dayBounds(date);
   const schedule = await ScheduleModel.findOne({
     userId,

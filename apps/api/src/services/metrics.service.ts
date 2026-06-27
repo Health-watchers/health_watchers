@@ -196,6 +196,15 @@ export const mongodbKeyDecryptionFailures = new client.Counter({
   registers: [register],
 });
 
+// ── Balance Monitoring Metrics ────────────────────────────────────────────────
+
+export const clinicXlmBalanceGauge = new client.Gauge({
+  name: 'clinic_xlm_balance',
+  help: 'Current XLM balance for each clinic Stellar account',
+  labelNames: ['clinicId'] as const,
+  registers: [register],
+});
+
 // ── Subscription Metrics ──────────────────────────────────────────────────────
 
 export const subscriptionLimitViolations = new client.Counter({
@@ -210,8 +219,8 @@ export const subscriptionLimitViolations = new client.Counter({
 // to avoid high-cardinality label explosion.
 export function normalisePath(path: string): string {
   return path
-    .replace(/\/[a-f0-9]{24}/gi, '/:id')          // MongoDB ObjectIds
-    .replace(/\/[0-9a-f-]{36}/gi, '/:uuid')        // UUIDs
-    .replace(/\/\d+/g, '/:n')                      // plain numbers
-    .replace(/\?.*$/, '');                          // strip query string
+    .replace(/\/[a-f0-9]{24}/gi, '/:id') // MongoDB ObjectIds
+    .replace(/\/[0-9a-f-]{36}/gi, '/:uuid') // UUIDs
+    .replace(/\/\d+/g, '/:n') // plain numbers
+    .replace(/\?.*$/, ''); // strip query string
 }

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import logger from '@api/utils/logger';
 import { validateWebhookUrl } from '@api/utils/url-validator';
-import { WebhookDeliveryModel } from './webhook.model';
+import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
 
 export function generateWebhookSecret(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -126,3 +126,22 @@ async function deliverWebhookWithRetry(
 
 // Legacy export for backward compatibility
 export const deliverWebhook = enqueueWebhookDelivery;
+
+/**
+ * Dispatch an event to all active webhooks registered for a clinic.
+ * Each delivery is enqueued non-blocking with automatic retries.
+ */
+export async function dispatchWebhookEvent(
+  clinicId: string,
+  event: string,
+  data: Record<string, any>
+): Promise<void> {
+  const webhooks = await WebhookModel.find({ clinicId, events: event, isActive: true });
+  for (const wh of webhooks) {
+    enqueueWebhookDelivery(String(wh._id), event, wh.url, wh.secret, { event, data }).catch(
+      (err) => {
+        logger.error({ webhookId: String(wh._id), event, err }, 'Failed to enqueue webhook event');
+      }
+    );
+  }
+}

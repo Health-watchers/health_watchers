@@ -21,22 +21,19 @@ export async function notifyNextOnWaitlist(params: {
   // Find next waiting entry: urgent first, then FIFO
   const next = await WaitlistModel.findOneAndUpdate(
     {
-      clinicId:  new Types.ObjectId(clinicId),
-      status:    'waiting',
-      $or: [
-        { doctorId: new Types.ObjectId(doctorId) },
-        { doctorId: { $exists: false } },
-      ],
+      clinicId: new Types.ObjectId(clinicId),
+      status: 'waiting',
+      $or: [{ doctorId: new Types.ObjectId(doctorId) }, { doctorId: { $exists: false } }],
     },
     {
-      status:     'notified',
+      status: 'notified',
       notifiedAt: new Date(),
-      expiresAt:  new Date(Date.now() + NOTIFY_WINDOW_HOURS * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + NOTIFY_WINDOW_HOURS * 60 * 60 * 1000),
     },
     {
       // Sort: urgent (priorityOrder=1) before routine (priorityOrder=0), then FIFO
-      sort:  { priorityOrder: -1, addedAt: 1 },
-      new:   true,
+      sort: { priorityOrder: -1, addedAt: 1 },
+      new: true,
     }
   );
 
@@ -53,12 +50,12 @@ export async function notifyNextOnWaitlist(params: {
 
   // In-app notification
   await createNotification({
-    userId:   user._id as Types.ObjectId,
+    userId: user._id as Types.ObjectId,
     clinicId: new Types.ObjectId(clinicId),
-    type:     'waitlist_available',
-    title:    'Appointment Slot Available',
-    message:  `A slot opened on ${dateStr}. You have ${NOTIFY_WINDOW_HOURS} hours to book it.`,
-    link:     '/portal/appointments',
+    type: 'waitlist_available',
+    title: 'Appointment Slot Available',
+    message: `A slot opened on ${dateStr}. You have ${NOTIFY_WINDOW_HOURS} hours to book it.`,
+    link: '/portal/appointments',
     metadata: { waitlistId: String(next._id), scheduledAt: scheduledAt.toISOString() },
     expiresAt: next.expiresAt,
   });

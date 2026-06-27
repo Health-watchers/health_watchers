@@ -35,7 +35,6 @@ export async function calculatePopulationMetrics(clinicId: string) {
     averageVitalSigns,
     medicationUsagePatterns,
     screeningComplianceRate,
-    screeningComplianceRate,
     chronicDiseaseManagementRate,
   };
 }
@@ -72,7 +71,7 @@ Format as JSON with keys: keyTrends (array), highRiskSegments (array), recommend
 
     return JSON.parse(jsonMatch[0]);
   } catch (err) {
-    logger.error('Error generating population insights:', err);
+    logger.error(`Error generating population insights: ${err}`);
     throw err;
   }
 }
@@ -198,6 +197,8 @@ function calculateScreeningCompliance(patients: any[]) {
 }
 
 function calculateChronicDiseaseManagement(patients: any[]) {
-  const withChronic = patients.filter((p) => p.chronicConditions && p.chronicConditions.length > 0).length;
+  const withChronic = patients.filter(
+    (p) => p.chronicConditions && p.chronicConditions.length > 0
+  ).length;
   return patients.length > 0 ? Math.round((withChronic / patients.length) * 100) : 0;
 }

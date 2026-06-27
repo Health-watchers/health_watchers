@@ -39,7 +39,22 @@ export function useRealtimeUpdates(accessToken: string | null) {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
     });
 
-    socket.on("notification:new", () => {
+    socket.on('notification:new', () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    });
+
+    socket.on('cosignature:requested', () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.encounters.pendingCosignatures() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    });
+
+    socket.on('cosignature:completed', () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.encounters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    });
+
+    socket.on('cosignature:rejected', () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.encounters.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     });
 
@@ -50,6 +65,9 @@ export function useRealtimeUpdates(accessToken: string | null) {
       socket.off('encounter:updated');
       socket.off('payment:confirmed');
       socket.off('notification:new');
+      socket.off('cosignature:requested');
+      socket.off('cosignature:completed');
+      socket.off('cosignature:rejected');
       disconnectSocket();
     };
   }, [accessToken, queryClient]);

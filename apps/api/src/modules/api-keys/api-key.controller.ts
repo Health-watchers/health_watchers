@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ApiKeyModel, generateApiKey, getKeyPrefix, hashApiKey } from './models/api-key.model';
 import { ApiKeyUsageModel } from './models/api-key-usage.model';
 import { CreateApiKeyDto, UpdateApiKeyDto, ListApiKeysQuery } from './api-key.validation';
-import { AuthenticatedUser } from '@health-watchers/types';
+import { AuthenticatedUser } from '@api/types/express';
 
 type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 
@@ -33,7 +33,7 @@ export const createApiKey = async (req: AuthenticatedRequest, res: Response) => 
       data: {
         id: apiKey._id,
         name: apiKey.name,
-        keyPrefix: apiKey.keyPrefix,
+        keyPrefix: apiKey.prefix,
         key: rawKey, // Only returned once at creation
         scopes: apiKey.scopes,
         isActive: apiKey.isActive,
@@ -43,7 +43,9 @@ export const createApiKey = async (req: AuthenticatedRequest, res: Response) => 
     });
   } catch (err) {
     console.error('Create API key error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to create API key' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to create API key' });
   }
 };
 
@@ -52,7 +54,7 @@ export const createApiKey = async (req: AuthenticatedRequest, res: Response) => 
  */
 export const listApiKeys = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { page, limit, isActive } = req.query as ListApiKeysQuery;
+    const { page, limit, isActive } = req.query as unknown as ListApiKeysQuery;
     const { userId, clinicId } = req.user;
 
     const filter: any = { userId, clinicId };
@@ -62,11 +64,7 @@ export const listApiKeys = async (req: AuthenticatedRequest, res: Response) => {
 
     const skip = (page - 1) * limit;
     const [keys, total] = await Promise.all([
-      ApiKeyModel.find(filter, { key: 0 })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      ApiKeyModel.find(filter, { key: 0 }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       ApiKeyModel.countDocuments(filter),
     ]);
 
@@ -82,7 +80,9 @@ export const listApiKeys = async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (err) {
     console.error('List API keys error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to list API keys' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to list API keys' });
   }
 };
 
@@ -94,10 +94,7 @@ export const getApiKey = async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const { userId, clinicId } = req.user;
 
-    const apiKey = await ApiKeyModel.findOne(
-      { _id: id, userId, clinicId },
-      { key: 0 }
-    ).lean();
+    const apiKey = await ApiKeyModel.findOne({ _id: id, userId, clinicId }, { key: 0 }).lean();
 
     if (!apiKey) {
       return res.status(404).json({ error: 'NotFound', message: 'API key not found' });
@@ -106,7 +103,9 @@ export const getApiKey = async (req: AuthenticatedRequest, res: Response) => {
     return res.json({ status: 'success', data: apiKey });
   } catch (err) {
     console.error('Get API key error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve API key' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve API key' });
   }
 };
 
@@ -132,7 +131,9 @@ export const updateApiKey = async (req: AuthenticatedRequest, res: Response) => 
     return res.json({ status: 'success', data: apiKey });
   } catch (err) {
     console.error('Update API key error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to update API key' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to update API key' });
   }
 };
 
@@ -157,7 +158,9 @@ export const revokeApiKey = async (req: AuthenticatedRequest, res: Response) => 
     return res.json({ status: 'success', message: 'API key revoked', data: apiKey });
   } catch (err) {
     console.error('Revoke API key error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to revoke API key' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to revoke API key' });
   }
 };
 
@@ -201,7 +204,9 @@ export const getApiKeyUsage = async (req: AuthenticatedRequest, res: Response) =
     });
   } catch (err) {
     console.error('Get API key usage error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve usage logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve usage logs' });
   }
 };
 
@@ -222,6 +227,8 @@ export const getAvailableScopes = async (_req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('Get available scopes error:', err);
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve scopes' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve scopes' });
   }
 };

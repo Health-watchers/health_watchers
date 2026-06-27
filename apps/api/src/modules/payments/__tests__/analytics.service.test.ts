@@ -76,13 +76,15 @@ async function seedRate(date: Date = new Date()) {
   await storeXLMRate(date, XLM_RATE);
 }
 
-async function seedPayment(overrides: Partial<{
-  clinicId: string;
-  amount: string;
-  assetCode: string;
-  status: 'confirmed' | 'pending' | 'failed';
-  createdAt: Date;
-}> = {}) {
+async function seedPayment(
+  overrides: Partial<{
+    clinicId: string;
+    amount: string;
+    assetCode: string;
+    status: 'confirmed' | 'pending' | 'failed';
+    createdAt: Date;
+  }> = {}
+) {
   const now = new Date();
   return PaymentRecordModel.create({
     intentId: new mongoose.Types.ObjectId().toString(),
@@ -112,10 +114,10 @@ describe('storeXLMRate / getXLMRate', () => {
 
   it('upserts — calling twice with different rates keeps the latest', async () => {
     const today = new Date();
-    await storeXLMRate(today, 0.10);
-    await storeXLMRate(today, 0.20);
+    await storeXLMRate(today, 0.1);
+    await storeXLMRate(today, 0.2);
     const rate = await getXLMRate(today);
-    expect(rate).toBe(0.20);
+    expect(rate).toBe(0.2);
   });
 });
 
@@ -178,8 +180,18 @@ describe('getPaymentAnalytics', () => {
   });
 
   it('sums XLM and USDC revenue separately', async () => {
-    await seedPayment({ assetCode: 'XLM', amount: '50.0000000', status: 'confirmed', createdAt: mid });
-    await seedPayment({ assetCode: 'XLM', amount: '30.0000000', status: 'confirmed', createdAt: mid });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '50.0000000',
+      status: 'confirmed',
+      createdAt: mid,
+    });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '30.0000000',
+      status: 'confirmed',
+      createdAt: mid,
+    });
     await seedPayment({ assetCode: 'USDC', amount: '20.00', status: 'confirmed', createdAt: mid });
 
     const result = await getPaymentAnalytics(CLINIC, from, to);
@@ -189,7 +201,12 @@ describe('getPaymentAnalytics', () => {
 
   it('calculates USD equivalent using XLM rate', async () => {
     await storeXLMRate(mid, 0.5); // $0.50 per XLM
-    await seedPayment({ assetCode: 'XLM', amount: '100.0000000', status: 'confirmed', createdAt: mid });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '100.0000000',
+      status: 'confirmed',
+      createdAt: mid,
+    });
 
     const result = await getPaymentAnalytics(CLINIC, from, to);
     // 100 XLM * $0.50 = $50
@@ -256,10 +273,25 @@ describe('getPaymentAnalytics', () => {
   });
 
   it('calculates average transaction value for confirmed payments', async () => {
-    await seedPayment({ assetCode: 'XLM', amount: '20.0000000', status: 'confirmed', createdAt: mid });
-    await seedPayment({ assetCode: 'XLM', amount: '40.0000000', status: 'confirmed', createdAt: mid });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '20.0000000',
+      status: 'confirmed',
+      createdAt: mid,
+    });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '40.0000000',
+      status: 'confirmed',
+      createdAt: mid,
+    });
     // failed payment should not affect average
-    await seedPayment({ assetCode: 'XLM', amount: '100.0000000', status: 'failed', createdAt: mid });
+    await seedPayment({
+      assetCode: 'XLM',
+      amount: '100.0000000',
+      status: 'failed',
+      createdAt: mid,
+    });
 
     const result = await getPaymentAnalytics(CLINIC, from, to);
     // avg XLM = (20 + 40) / 2 = 30

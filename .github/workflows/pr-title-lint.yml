@@ -1,0 +1,31 @@
+name: Lint PR Title
+
+# The existing "Lint Commit Messages" workflow validates the individual commits
+# in a PR. This workflow additionally validates the PR *title*, because squash
+# merges use the PR title as the resulting commit subject on `main` — so the
+# title must also follow Conventional Commits for the changelog/release tooling
+# to classify it correctly.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install commitlint
+        run: npm install @commitlint/cli @commitlint/config-conventional
+      - name: Validate PR title against Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint --verbose

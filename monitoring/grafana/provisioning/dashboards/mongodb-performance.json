@@ -46,7 +46,12 @@
           "mappings": []
         }
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      }
     },
     {
       "id": 2,
@@ -208,7 +213,10 @@
         "overrides": [
           {
             "matcher": { "id": "byName", "options": "p99 Latency (s)" },
-            "properties": [{ "id": "unit", "value": "s" }, { "id": "custom.axisPlacement", "value": "left" }]
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.axisPlacement", "value": "left" }
+            ]
           },
           {
             "matcher": { "id": "byName", "options": "DB Wait Queue" },

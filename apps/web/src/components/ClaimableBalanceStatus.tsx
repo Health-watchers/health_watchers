@@ -70,23 +70,23 @@ export function ClaimableBalanceStatus({ balanceId, onClaim }: ClaimableBalanceS
   };
 
   if (loading) {
-    return <div className="text-center py-4">Loading...</div>;
+    return <div className="py-4 text-center">Loading...</div>;
   }
 
   if (!balance) {
-    return <div className="text-center py-4 text-red-600">{error || 'Balance not found'}</div>;
+    return <div className="py-4 text-center text-red-600">{error || 'Balance not found'}</div>;
   }
 
   const getStatusIcon = () => {
     switch (balance.status) {
       case 'pending':
-        return <Clock className="w-6 h-6 text-yellow-500" />;
+        return <Clock className="h-6 w-6 text-yellow-500" />;
       case 'claimable':
-        return <AlertCircle className="w-6 h-6 text-blue-500" />;
+        return <AlertCircle className="h-6 w-6 text-blue-500" />;
       case 'claimed':
-        return <CheckCircle className="w-6 h-6 text-green-500" />;
+        return <CheckCircle className="h-6 w-6 text-green-500" />;
       case 'expired':
-        return <XCircle className="w-6 h-6 text-red-500" />;
+        return <XCircle className="h-6 w-6 text-red-500" />;
     }
   };
 
@@ -106,23 +106,25 @@ export function ClaimableBalanceStatus({ balanceId, onClaim }: ClaimableBalanceS
   const canClaim = balance.status === 'claimable' && !balance.claimed;
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 space-y-4">
+    <div className="space-y-4 rounded-lg border border-gray-200 p-6">
       <div className="flex items-center gap-3">
         {getStatusIcon()}
         <div>
-          <h4 className="font-semibold text-lg">Escrow Payment</h4>
+          <h4 className="text-lg font-semibold">Escrow Payment</h4>
           <p className="text-sm text-gray-600">{getStatusText()}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
         <div>
           <span className="text-gray-600">Amount:</span>
           <span className="ml-2 font-medium">{balance.amount} XLM</span>
         </div>
         <div>
           <span className="text-gray-600">Balance ID:</span>
-          <span className="ml-2 font-mono text-xs">{balance.claimableBalanceId.slice(0, 16)}...</span>
+          <span className="ml-2 font-mono text-xs">
+            {balance.claimableBalanceId.slice(0, 16)}...
+          </span>
         </div>
         <div>
           <span className="text-gray-600">Claimable After:</span>
@@ -135,7 +137,7 @@ export function ClaimableBalanceStatus({ balanceId, onClaim }: ClaimableBalanceS
       </div>
 
       {balance.claimed && balance.claimedAt && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
           <p className="text-sm text-green-700">
             Claimed on {new Date(balance.claimedAt).toLocaleString()}
           </p>
@@ -143,7 +145,7 @@ export function ClaimableBalanceStatus({ balanceId, onClaim }: ClaimableBalanceS
       )}
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
@@ -152,7 +154,7 @@ export function ClaimableBalanceStatus({ balanceId, onClaim }: ClaimableBalanceS
         <button
           onClick={handleClaim}
           disabled={claiming}
-          className="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+          className="min-h-[44px] w-full rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400 md:w-auto"
         >
           {claiming ? 'Claiming...' : 'Claim Balance'}
         </button>

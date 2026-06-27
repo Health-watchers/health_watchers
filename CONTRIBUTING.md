@@ -293,11 +293,28 @@ Closes #(issue number)
 ### TypeScript Requirements
 
 - Use **TypeScript** for all new code
-- Enable **strict mode** in tsconfig.json (already configured)
+- **Strict mode is enforced** across all packages — the root `tsconfig.base.json` enables `strict: true`, `noUncheckedIndexedAccess: true`, and `exactOptionalPropertyTypes: true`
 - **No `any` types** - use proper typing or `unknown` with type guards
+- **Array indexing** — `noUncheckedIndexedAccess` means `arr[0]` returns `T | undefined`; always guard or use `.at()` with a non-null assertion when the index is guaranteed
+- **Optional properties** — `exactOptionalPropertyTypes` means `{ foo?: string }` cannot be set to `undefined`; use `delete obj.foo` or omit the property instead of assigning `undefined`
 - **All functions must have return type annotations**
 - Use **interfaces** for object shapes
 - Use **enums** or **union types** for fixed sets of values
+
+#### TypeScript Configuration
+
+The monorepo uses a shared base config (`tsconfig.base.json`) extended by each app:
+
+| Flag | Value | Why |
+| --- | --- | --- |
+| `strict` | `true` | Enables all strict sub-checks (nullability, function types, etc.) |
+| `noUncheckedIndexedAccess` | `true` | Array/object indexing returns `T \| undefined`, preventing out-of-bounds crashes |
+| `exactOptionalPropertyTypes` | `true` | Distinguishes missing optional properties from `undefined`-valued ones |
+| `noUnusedLocals` | `true` | Dead code is a compile error |
+| `noUnusedParameters` | `true` | Unused parameters are a compile error |
+| `noImplicitReturns` | `true` | All code paths must return a value |
+
+Run `npm run typecheck` locally before pushing. CI fails on any TypeScript error.
 
 Example:
 ```typescript
@@ -497,6 +514,12 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
 
+### Pull Request Titles
+
+Because pull requests are squash-merged, **the PR title becomes the commit subject on `main`** and feeds the automated changelog/release tooling. PR titles must therefore also follow the Conventional Commits format (e.g. `feat(patients): add insurance tab`).
+
+This is enforced in CI by the **Lint PR Title** workflow, which runs `commitlint` against the PR title whenever it is opened or edited. A non-conforming title will fail the check until it is corrected.
+
 ## Release Process
 
 We use [Changesets](https://github.com/changesets/changesets) for automated versioning and release management. For details, see [docs/RELEASE.md](docs/RELEASE.md).
@@ -676,3 +699,34 @@ BASE_URL=http://localhost:3001 AUTH_TOKEN=your-token k6 run performance/scripts/
 ```
 
 CI fails if any p95 metric exceeds its baseline by more than 20%.
+
+## License Policy
+
+Health Watchers is a commercial application. All production dependencies **must** use one of the following approved licenses:
+
+| License | Allowed |
+|---------|--------|
+| MIT | ✅ |
+| Apache-2.0 | ✅ |
+| BSD-2-Clause | ✅ |
+| BSD-3-Clause | ✅ |
+| ISC | ✅ |
+| 0BSD | ✅ |
+| CC0-1.0 | ✅ |
+| Unlicense | ✅ |
+| GPL (any) | ❌ |
+| LGPL (any) | ❌ |
+| AGPL (any) | ❌ |
+| SSPL | ❌ |
+
+### Adding a Dependency with a Non-Approved License
+
+1. Open an issue describing the package, its license, and why it's needed.
+2. Get sign-off from a maintainer before merging.
+3. If approved, add the package name to the `excludePackages` field in `.license-checker.json`.
+4. Document the exception in this section.
+
+### How the Check Works
+
+- **CI**: The `security-scan` job runs `license-checker --onlyAllow` and **fails the build** if any unlisted license is detected. A `licenses.csv` report is uploaded as a CI artifact.
+- **Pre-commit**: When `package.json` is staged, the pre-commit hook runs the same check locally (skipped if `node_modules` is absent).

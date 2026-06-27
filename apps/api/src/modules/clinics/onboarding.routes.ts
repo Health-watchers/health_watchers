@@ -78,11 +78,9 @@ router.put('/step/:step', async (req: Request, res: Response) => {
 
     // Cannot skip steps
     if (step > (clinic.onboardingStep ?? 1) + 1) {
-      return res
-        .status(400)
-        .json({
-          error: `Cannot skip to step ${step}. Complete step ${clinic.onboardingStep} first.`,
-        });
+      return res.status(400).json({
+        error: `Cannot skip to step ${step}. Complete step ${clinic.onboardingStep} first.`,
+      });
     }
 
     const { data } = req.body as { data: Record<string, unknown> };

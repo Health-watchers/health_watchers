@@ -97,7 +97,10 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   const signatureName = branding.signatureName?.trim();
   const signatureTitle = branding.signatureTitle?.trim();
 
-  const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 90, left: 50, right: 50 } });
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 60, bottom: 90, left: 50, right: 50 },
+  });
   const stream = new PassThrough();
   doc.pipe(stream);
 
@@ -106,7 +109,7 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   const logoBuffer = await fetchLogoBuffer(branding);
   if (logoBuffer) {
     try {
-      doc.image(logoBuffer, logoX, logoY, { fit: [120, 60], align: 'left' });
+      doc.image(logoBuffer, logoX, logoY, { fit: [120, 60] });
     } catch {
       // swallow invalid logo image
     }
@@ -142,7 +145,8 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   const colX = [50, 310, 395, 470];
   doc.fontSize(10).fillColor('#fff').rect(50, doc.y, 485, 20).fill(primaryColor);
   const headerY2 = doc.y - 16;
-  doc.fillColor('#fff')
+  doc
+    .fillColor('#fff')
     .text('Description', colX[0], headerY2)
     .text('Qty', colX[1], headerY2, { width: 60, align: 'right' })
     .text('Unit Price', colX[2], headerY2, { width: 80, align: 'right' })
@@ -153,9 +157,13 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   invoice.lineItems.forEach((item, i) => {
     const rowY = doc.y;
     if (i % 2 === 0) {
-      doc.rect(50, rowY - 2, 485, 18).fill('#f7f9fc').fillColor('#000');
+      doc
+        .rect(50, rowY - 2, 485, 18)
+        .fill('#f7f9fc')
+        .fillColor('#000');
     }
-    doc.fontSize(9)
+    doc
+      .fontSize(9)
       .text(item.description, colX[0], rowY, { width: 260 })
       .text(String(item.quantity), colX[1], rowY, { width: 60, align: 'right' })
       .text(`${item.unitPrice} ${invoice.currency}`, colX[2], rowY, { width: 80, align: 'right' })
@@ -168,11 +176,14 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   doc.strokeColor('#ddd').lineWidth(0.5).moveTo(50, separatorY).lineTo(535, separatorY).stroke();
   doc.moveDown(0.6);
 
-  doc.fontSize(10)
+  doc
+    .fontSize(10)
     .text('Subtotal:', 350, doc.y, { width: 120, align: 'right' })
     .text(`${invoice.subtotal} ${invoice.currency}`, 470, doc.y, { width: 80, align: 'right' });
   doc.moveDown(0.4);
-  doc.fontSize(12).font('Helvetica-Bold')
+  doc
+    .fontSize(12)
+    .font('Helvetica-Bold')
     .text('Total:', 350, doc.y, { width: 120, align: 'right' })
     .text(`${invoice.total} ${invoice.currency}`, 470, doc.y, { width: 80, align: 'right' });
   doc.font('Helvetica');
@@ -215,7 +226,10 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
         const isAbsolute = /^https?:\/\//i.test(branding.signatureUrl);
         if (isAbsolute) {
           try {
-            const r = await axios.get<ArrayBuffer>(branding.signatureUrl, { responseType: 'arraybuffer', timeout: 5000 });
+            const r = await axios.get<ArrayBuffer>(branding.signatureUrl, {
+              responseType: 'arraybuffer',
+              timeout: 5000,
+            });
             return Buffer.from(r.data);
           } catch {
             return null;
@@ -257,13 +271,21 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   const footerLines: string[] = [];
   if (footerText) footerLines.push(footerText);
   if (!footerText) {
-    const contactParts = [clinicName, resolvedAddress, resolvedPhone ? `Phone: ${resolvedPhone}` : undefined, resolvedTaxId ? `Tax ID: ${resolvedTaxId}` : undefined].filter(Boolean);
+    const contactParts = [
+      clinicName,
+      resolvedAddress,
+      resolvedPhone ? `Phone: ${resolvedPhone}` : undefined,
+      resolvedTaxId ? `Tax ID: ${resolvedTaxId}` : undefined,
+    ].filter(Boolean);
     footerLines.push(contactParts.join(' • '));
   }
-  doc.fontSize(8).fillColor('#888').text(footerLines.join(' | '), 50, footerY, {
-    width: doc.page.width - 100,
-    align: 'center',
-  });
+  doc
+    .fontSize(8)
+    .fillColor('#888')
+    .text(footerLines.join(' | '), 50, footerY, {
+      width: doc.page.width - 100,
+      align: 'center',
+    });
 
   doc.end();
   return stream;

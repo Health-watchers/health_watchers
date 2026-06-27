@@ -206,8 +206,22 @@ Each alert includes a `dashboard` label pointing to the relevant Grafana dashboa
 | `http_requests_total` | Counter | `method`, `path`, `status` | Total HTTP requests |
 | `http_request_duration_seconds` | Histogram | `method`, `path` | Request duration |
 | `stellar_transactions_total` | Counter | `type`, `status` | Stellar transactions processed |
+| `stellar_confirmed_payments_total` | Counter | — | Payments auto-confirmed by the Horizon stream |
+| `stellar_payment_queue_depth` | Gauge | — | Payments waiting to be processed |
+| `stellar_stream_health` | Gauge | — | `1` when the Horizon payment stream is active, `0` when disconnected |
 
 All services also export standard Node.js metrics with the `nodejs_` prefix (heap, GC, event loop lag, etc.) and `process_` metrics.
+
+### Where metrics are exported
+
+Every metric used by the dashboards above is registered in code, so the dashboards never reference a metric that no service emits:
+
+| Service | Source file | Exposed at |
+|---|---|---|
+| `health-watchers-api` | `apps/api/src/services/metrics.service.ts` (business + infra metrics) and `apps/api/src/middlewares/metrics.middleware.ts` (per-request HTTP metrics) | `GET /metrics` |
+| `health-watchers-stellar` | `apps/stellar-service/src/metrics.ts` | `GET /metrics` |
+
+Both `/metrics` endpoints are scraped by Prometheus per `prometheus.yml`. When adding a panel, confirm the metric name exists in one of these files first.
 
 ---
 
