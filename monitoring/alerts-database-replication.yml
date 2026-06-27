@@ -1,0 +1,129 @@
+groups:
+  - name: mongodb-replication-alerts
+    interval: 30s
+    rules:
+      # Alert when replica set loses members
+      - alert: MongoDBReplicaSetMemberDown
+        expr: |
+          (count(mongodb_replset_member_health) - count(mongodb_replset_member_health{state="1"})) > 1
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: 'MongoDB Replica Set member is down'
+          description: 'One or more members of the replica set {{ $labels.replset }} are not healthy'
+          dashboard: 'http://grafana:3100/d/mongodb-replication'
+
+      # Alert when primary is unavailable
+      - alert: MongoDBPrimaryDown
+        expr: |
+          mongodb_replset_member_health{state="1"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: 'MongoDB Primary is down'
+          description: 'The MongoDB replica set primary is unavailable'
+          runbook: '/monitoring/runbooks/MONGODB_PRIMARY_DOWN.md'
+
+      # Alert when replication lag is high
+      - alert: MongoDBReplicationLag
+        expr: |
+          (mongodb_replset_member_replication_lag_seconds) > 30
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'MongoDB replication lag detected'
+          description: 'Secondary {{ $labels.member }} is {{ $value }}s behind primary'
+          runbook: '/monitoring/runbooks/MONGODB_REPLICATION_LAG.md'
+
+      # Alert when oplog is running out of space
+      - alert: MongoDBOplogNearFull
+        expr: |
+          (mongodb_replset_oplog_used_bytes / mongodb_replset_oplog_size_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'MongoDB oplog is nearly full'
+          description: 'Oplog usage is at {{ $value | humanizePercentage }}'
+          runbook: '/monitoring/runbooks/MONGODB_OPLOG_FULL.md'
+
+      # Alert when secondary cannot keep up with oplog
+      - alert: MongoDBSecondaryFalling
+        expr: |
+          rate(mongodb_replset_member_replication_lag_seconds[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'MongoDB secondary falling behind primary'
+          description: 'Secondary {{ $labels.member }} is falling behind - lag increasing at {{ $value }}/s'
+          runbook: '/monitoring/runbooks/MONGODB_SECONDARY_FALLING.md'
+
+      # Alert when backup is stale
+      - alert: MongoDBBackupStale
+        expr: |
+          (time() - mongodb_backup_last_timestamp_seconds) > 86400
+        for: 30m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'MongoDB backup is stale'
+          description: 'Last backup was {{ $value | humanizeDuration }} ago'
+
+      # Alert on connection pool issues
+      - alert: MongoDBConnectionPoolExhausted
+        expr: |
+          (mongodb_connection_pool_checkedOutCount / mongodb_connection_pool_size) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: 'MongoDB connection pool exhausted'
+          description: 'Connection pool utilization is {{ $value | humanizePercentage }}'
+          runbook: '/monitoring/runbooks/MONGODB_POOL_EXHAUSTED.md'
+
+      # Alert on high query latency
+      - alert: MongoDBHighQueryLatency
+        expr: |
+          histogram_quantile(0.95, rate(mongodb_op_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'MongoDB query latency is high'
+          description: 'P95 query latency is {{ $value | humanizeDuration }}'
+
+      # Alert on storage engine issues
+      - alert: MongoDBStorageError
+        expr: |
+          increase(mongodb_storage_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: 'MongoDB storage error detected'
+          description: '{{ $value }} storage errors in the last 5 minutes'
+
+      # Alert on page faults
+      - alert: MongoDBPageFaults
+        expr: |
+          rate(mongodb_page_faults_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: 'High page fault rate on MongoDB'
+          description: '{{ $value | humanize }} page faults per second'

@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
+import { ApiErrorCode } from '@health-watchers/types';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -55,6 +56,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     );
     res.status(err.statusCode).json({
       error: err.category,
+      code: err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
       message: err.message,
       requestId: req.requestId,
       ...(isDev && err.stack ? { stack: err.stack } : {}),
@@ -67,6 +69,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
     res.status(400).json({
       error: 'ValidationError',
+      code: ApiErrorCode.VALIDATION_ERROR,
       message: 'Request validation failed',
       details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
       requestId: req.requestId,
@@ -80,6 +83,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx, details }, 'Mongoose validation error');
     res.status(400).json({
       error: 'ValidationError',
+      code: ApiErrorCode.VALIDATION_ERROR,
       message: err.message,
       details,
       requestId: req.requestId,
@@ -92,6 +96,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
     res.status(400).json({
       error: 'BadRequest',
+      code: ApiErrorCode.BAD_REQUEST,
       message: `Invalid value for field: ${err.path}`,
       requestId: req.requestId,
     });
@@ -105,6 +110,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.warn({ ...ctx, field }, 'Duplicate key conflict');
     res.status(409).json({
       error: 'Conflict',
+      code: ApiErrorCode.CONFLICT,
       message: `Duplicate value for field: ${field}`,
       field,
       requestId: req.requestId,
@@ -117,6 +123,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx }, 'JWT token expired');
     res.status(401).json({
       error: 'TokenExpired',
+      code: ApiErrorCode.TOKEN_EXPIRED,
       message: 'Token has expired',
       requestId: req.requestId,
     });
@@ -128,6 +135,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx }, 'Invalid JWT token');
     res.status(401).json({
       error: 'InvalidToken',
+      code: ApiErrorCode.INVALID_TOKEN,
       message: 'Invalid token',
       requestId: req.requestId,
     });
@@ -144,6 +152,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   const stack = isDev && err instanceof Error ? err.stack : undefined;
   res.status(500).json({
     error: 'InternalServerError',
+    code: ApiErrorCode.INTERNAL_SERVER_ERROR,
     message: 'An unexpected error occurred',
     requestId: req.requestId,
     ...(stack ? { stack } : {}),

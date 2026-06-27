@@ -1,0 +1,14 @@
+#!/bin/sh
+# Check licenses when package.json files are staged
+if git diff --cached --name-only | grep -q 'package\.json$'; then
+  if [ ! -d node_modules ]; then
+    echo "⚠️  node_modules not found — skipping license check (run npm ci first)"
+    exit 0
+  fi
+  echo "🔍 Checking dependency licenses..."
+  npx license-checker --production --excludePrivatePackages \
+    --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" || {
+    echo "❌ License check failed — see above for incompatible packages"
+    exit 1
+  }
+fi

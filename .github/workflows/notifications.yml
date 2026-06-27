@@ -1,0 +1,161 @@
+name: CI/CD Notifications
+
+on:
+  workflow_run:
+    workflows:
+      - CI/CD Pipeline
+      - Docker Build & Push
+    types:
+      - completed
+
+jobs:
+  slack-notification:
+    name: Send Slack Notifications
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download workflow artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234f26e4f1c1fb8bcd # v4.1.8
+        continue-on-error: true
+
+      - name: Prepare notification message
+        id: message
+        run: |
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          COMMIT_SHA="${{ github.event.workflow_run.head_commit.id }}"
+          COMMIT_MSG="${{ github.event.workflow_run.head_commit.message }}"
+          AUTHOR="${{ github.event.workflow_run.actor.login }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+
+          REPO="${{ github.repository }}"
+          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+
+          if [ "$CONCLUSION" = "success" ]; then
+            STATUS="✅ PASSED"
+            COLOR="good"
+          else
+            STATUS="❌ FAILED"
+            COLOR="danger"
+          fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "color=$COLOR" >> $GITHUB_OUTPUT
+          echo "workflow=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "run_url=$RUN_URL" >> $GITHUB_OUTPUT
+          echo "commit_sha=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{ steps.message.outputs.color }}",
+                  "title": "${{ steps.message.outputs.status }} - ${{ steps.message.outputs.workflow }}",
+                  "text": "Build on branch `${{ steps.message.outputs.branch }}`",
+                  "fields": [
+                    {
+                      "title": "Commit",
+                      "value": "${{ steps.message.outputs.commit_sha }} - ${{ steps.message.outputs.commit_msg }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Author",
+                      "value": "${{ steps.message.outputs.author }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Repository",
+                      "value": "${{ github.repository }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ steps.message.outputs.branch }}",
+                      "short": true
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "type": "button",
+                      "text": "View Details",
+                      "url": "${{ steps.message.outputs.run_url }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
+
+  github-notification:
+    name: GitHub Deployment Status
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Create deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflow = context.payload.workflow_run;
+            const deployment = await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: workflow.id,
+              state: workflow.conclusion,
+              description: `CI workflow ${workflow.name} completed`,
+              environment_url: `https://github.com/${{ github.repository }}/actions/runs/${workflow.id}`,
+              auto_merge: false
+            });
+            console.log('Deployment status created:', deployment);
+        continue-on-error: true
+
+  email-notification:
+    name: Email Notification on Failure
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "🚨 CI/CD Pipeline Failed - ${{ github.repository }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: "CI/CD Pipeline <ci-pipeline@health-watchers.app>"
+          body: |
+            The CI/CD pipeline has failed!
+
+            Workflow: ${{ github.event.workflow_run.name }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.event.workflow_run.head_branch }}
+            Commit: ${{ github.event.workflow_run.head_commit.sha }}
+            Author: ${{ github.event.workflow_run.actor.login }}
+
+            Details: https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+
+            Please investigate and fix the issue.
+        continue-on-error: true

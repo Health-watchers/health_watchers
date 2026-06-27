@@ -1,3 +1,5 @@
+import { ApiErrorCode } from '@health-watchers/types';
+
 export type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type ErrorCategory =
   | 'validation'
@@ -15,6 +17,7 @@ export class AppError extends Error {
   readonly category: ErrorCategory;
   readonly isOperational: boolean;
   readonly context?: Record<string, unknown>;
+  readonly code?: ApiErrorCode;
 
   constructor(
     message: string,
@@ -24,6 +27,7 @@ export class AppError extends Error {
       category?: ErrorCategory;
       isOperational?: boolean;
       context?: Record<string, unknown>;
+      code?: ApiErrorCode;
     } = {}
   ) {
     super(message);
@@ -33,31 +37,32 @@ export class AppError extends Error {
     this.category = options.category ?? 'internal';
     this.isOperational = options.isOperational ?? true;
     this.context = options.context;
+    this.code = options.code;
     Error.captureStackTrace(this, this.constructor);
   }
 
   static badRequest(message: string, context?: Record<string, unknown>): AppError {
-    return new AppError(message, 400, { severity: 'low', category: 'validation', context });
+    return new AppError(message, 400, { severity: 'low', category: 'validation', context, code: ApiErrorCode.BAD_REQUEST });
   }
 
   static unauthorized(message = 'Unauthorized'): AppError {
-    return new AppError(message, 401, { severity: 'low', category: 'authentication' });
+    return new AppError(message, 401, { severity: 'low', category: 'authentication', code: ApiErrorCode.UNAUTHORIZED });
   }
 
   static forbidden(message = 'Forbidden'): AppError {
-    return new AppError(message, 403, { severity: 'medium', category: 'authorization' });
+    return new AppError(message, 403, { severity: 'medium', category: 'authorization', code: ApiErrorCode.FORBIDDEN });
   }
 
   static notFound(resource: string): AppError {
-    return new AppError(`${resource} not found`, 404, { severity: 'low', category: 'not_found' });
+    return new AppError(`${resource} not found`, 404, { severity: 'low', category: 'not_found', code: ApiErrorCode.NOT_FOUND });
   }
 
   static conflict(message: string): AppError {
-    return new AppError(message, 409, { severity: 'low', category: 'conflict' });
+    return new AppError(message, 409, { severity: 'low', category: 'conflict', code: ApiErrorCode.CONFLICT });
   }
 
   static tooManyRequests(message = 'Too many requests'): AppError {
-    return new AppError(message, 429, { severity: 'medium', category: 'rate_limit' });
+    return new AppError(message, 429, { severity: 'medium', category: 'rate_limit', code: ApiErrorCode.RATE_LIMITED });
   }
 
   static internal(message = 'Internal server error', context?: Record<string, unknown>): AppError {
@@ -66,6 +71,7 @@ export class AppError extends Error {
       category: 'internal',
       isOperational: false,
       context,
+      code: ApiErrorCode.INTERNAL_SERVER_ERROR,
     });
   }
 

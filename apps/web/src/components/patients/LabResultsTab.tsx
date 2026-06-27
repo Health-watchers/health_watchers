@@ -25,6 +25,27 @@ interface LabResult {
   notes?: string;
 }
 
+function exportLabResultsCSV(labResults: LabResult[], patientId: string) {
+  const rows = [['Test', 'Code', 'Status', 'Ordered', 'Resulted', 'Parameter', 'Value', 'Unit', 'Reference', 'Flag']];
+  for (const lab of labResults) {
+    if (lab.results?.length) {
+      for (const r of lab.results) {
+        rows.push([lab.testName, lab.testCode ?? '', lab.status, lab.orderedAt, lab.resultedAt ?? '', r.parameter, r.value, r.unit, r.referenceRange, r.flag ?? '']);
+      }
+    } else {
+      rows.push([lab.testName, lab.testCode ?? '', lab.status, lab.orderedAt, lab.resultedAt ?? '', '', '', '', '', '']);
+    }
+  }
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lab-results-${patientId}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function flagVariant(flag?: string) {
   if (flag === 'HH' || flag === 'LL') return 'danger';
   if (flag === 'H' || flag === 'L') return 'warning';
@@ -138,6 +159,11 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
         <Button size="sm" variant="primary" onClick={() => setShowOrderForm((v) => !v)}>
           {showOrderForm ? 'Cancel' : '+ Order Test'}
         </Button>
+        {labResults.length > 0 && (
+          <Button size="sm" variant="outline" onClick={() => exportLabResultsCSV(labResults, patientId)}>
+            ↓ Export CSV
+          </Button>
+        )}
       </div>
 
       {/* Order form */}

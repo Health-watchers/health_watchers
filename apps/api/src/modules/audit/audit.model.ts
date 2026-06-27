@@ -93,6 +93,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'CLINIC_SWITCH',
         'DATA_EXPORT_REQUEST',
         'DATA_EXPORT_FULFILLED',
+        'CONSENT_VERSION_ACCEPTED',
       ],
       index: true,
     },

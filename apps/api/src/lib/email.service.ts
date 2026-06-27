@@ -657,6 +657,36 @@ export function sendMfaGracePeriodReminderEmail(
   enqueue(to, subject, text, html);
 }
 
+/** Backup codes regenerated — sent to staff user (DOCTOR/NURSE/ADMIN) when new codes are generated */
+export function sendMfaBackupCodesRegeneratedEmail(
+  to: string,
+  name: string,
+  backupCodes: string[]
+): void {
+  const setupUrl = `${APP_BASE_URL()}/settings/security`;
+  const codesHtml = backupCodes
+    .map(
+      (code) =>
+        `<code style="background:#f3f4f6;padding:4px 8px;margin:4px;display:inline-block;font-family:monospace">${code}</code>`
+    )
+    .join('');
+  const subject = 'MFA Backup Codes Regenerated — Health Watchers';
+  const text = `Hi ${name},\n\nYour MFA backup codes have been regenerated. All previous codes are now invalid.\n\nNew backup codes:\n${backupCodes.join('\n')}\n\nStore them in a safe place. Each code can only be used once.\n\nManage security settings: ${setupUrl}`;
+  const html = `
+    <h3>MFA Backup Codes Regenerated</h3>
+    <p>Hi <strong>${name}</strong>,</p>
+    <p>Your MFA backup codes have been regenerated. <strong>All previous codes are now invalid.</strong></p>
+    <p><strong>New Backup Codes:</strong></p>
+    <div style="background:#f9fafb;padding:16px;border-radius:6px;margin:16px 0;font-family:monospace">${codesHtml}</div>
+    <p style="color:#dc2626"><strong>Important:</strong> Each code can only be used once. Store them securely and do not share them.</p>
+    <p>If you did not request this, contact your administrator immediately.</p>
+    <p><a href="${setupUrl}">Manage Security Settings</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
+  `;
+  enqueue(to, subject, text, html);
+}
+
 /** Referral outcome notification sent to referring doctor */
 export function sendOutcomeNotificationEmail(
   to: string,

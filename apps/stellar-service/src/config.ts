@@ -15,6 +15,10 @@ export const stellarConfig = {
   platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
   // Server-side signing key — never exposed to clients
   stellarSecretKey: process.env.STELLAR_SECRET_KEY || '',
+  // API base URL for posting payment confirmations back to the API
+  apiUrl: process.env.API_URL || 'http://localhost:3000',
+  // Shared secret used to authenticate internal callbacks to the API
+  sharedSecret: process.env.STELLAR_SERVICE_SECRET || '',
   horizonUrl:
     process.env.STELLAR_NETWORK === 'mainnet'
       ? 'https://horizon.stellar.org'

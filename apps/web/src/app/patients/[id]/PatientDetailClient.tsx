@@ -20,6 +20,7 @@ import {
   TabsTrigger,
   Toast,
 } from '@/components/ui';
+import { SectionErrorBoundary } from '@/components/ui/SectionErrorBoundary';
 import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
 import {
   CreatePaymentIntentForm,
@@ -588,20 +589,24 @@ export default function PatientDetailClient({
 
         {/* Lab Results tab */}
         <TabsContent value="lab-results">
-          <LabResultsTab patientId={patientId} />
+          <SectionErrorBoundary name="Lab Results">
+            <LabResultsTab patientId={patientId} />
+          </SectionErrorBoundary>
         </TabsContent>
 
         {/* Vitals & Analytics tab */}
         <TabsContent value="vitals">
-          {vitalsLoading || analyticsLoading ? (
-            <div className="space-y-3" aria-busy="true">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />
-              ))}
-            </div>
-          ) : (
-            <VitalSignsCharts vitals={vitals} analytics={analytics} />
-          )}
+          <SectionErrorBoundary name="Vitals & Analytics">
+            {vitalsLoading || analyticsLoading ? (
+              <div className="space-y-3" aria-busy="true">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />
+                ))}
+              </div>
+            ) : (
+              <VitalSignsCharts vitals={vitals} analytics={analytics} />
+            )}
+          </SectionErrorBoundary>
         </TabsContent>
 
         {/* Allergies tab */}
@@ -761,12 +766,16 @@ export default function PatientDetailClient({
         </TabsContent>
         {/* Risk tab */}
         <TabsContent value="risk">
-          <RiskTab patient={patient} patientId={patientId} apiV1={API_V1} />
+          <SectionErrorBoundary name="Risk Assessment">
+            <RiskTab patient={patient} patientId={patientId} apiV1={API_V1} />
+          </SectionErrorBoundary>
         </TabsContent>
 
         {/* Referrals tab */}
         <TabsContent value="referrals">
-          <PatientReferralsTab patientId={patientId} />
+          <SectionErrorBoundary name="Referrals">
+            <PatientReferralsTab patientId={patientId} />
+          </SectionErrorBoundary>
         </TabsContent>
 
         {/* Documents tab */}

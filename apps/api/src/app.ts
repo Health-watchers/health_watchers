@@ -112,6 +112,9 @@ import { v2Router } from './routes/v2';
 import { SocketService } from './services/socket.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+// npm install cookie-parser @types/cookie-parser
+import cookieParser from 'cookie-parser';
+import { csrfMiddleware } from './middlewares/csrf.middleware';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
 import onboardingRoutes from './modules/clinics/onboarding.routes';
@@ -182,7 +185,7 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   })
 );
 app.options('*', cors());
@@ -208,10 +211,12 @@ app.use(
 app.use(requestIdPropagationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
+app.use(cookieParser());
 app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(requestAuditMiddleware);
+app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)

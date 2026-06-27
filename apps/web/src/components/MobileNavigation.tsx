@@ -1,3 +1,5 @@
+'use client';
+
 import { Home, Users, FileText, DollarSign, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';

@@ -10,3 +10,6 @@ npx lint-staged
 
 # Run translation check on staged translation files
 . "$(dirname "$0")/pre-commit-translations"
+
+# Run license check on staged package.json files
+. "$(dirname "$0")/pre-commit-licenses"

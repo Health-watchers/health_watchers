@@ -138,8 +138,17 @@ jobs:
 
       - name: Check dependency licenses
         run: |
-          npx license-checker --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" || echo "License check failed - review manually"
-        continue-on-error: true
+          npx license-checker --production --excludePrivatePackages \
+            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" \
+            --csv --out licenses.csv
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: license-report
+          path: licenses.csv
+          retention-days: 30
 
       - name: Run Snyk security scan
         uses: snyk/actions/node@b98d498629f1c5e001c83c1c765c35173f58905 # v0.4.0
