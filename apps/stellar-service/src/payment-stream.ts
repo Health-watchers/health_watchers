@@ -46,6 +46,10 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
       .cursor('now')
       .stream({
         onmessage: async (record: any) => {
+          // Reset reconnect counter only after the stream successfully delivers a message
+          reconnectAttempts = 0;
+          stellarStreamHealth.set(1);
+
           const payment = await parseIncomingPayment(record);
           if (!payment) return;
 
@@ -62,22 +66,29 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
         onerror: (err: any) => {
           stellarStreamHealth.set(0);
           logger.error({ err }, 'Payment stream error');
+          if (closeHandle) {
+            try { closeHandle(); } catch { /* ignore */ }
+            closeHandle = undefined;
+          }
           scheduleReconnect();
         },
       }) as () => void;
 
-    reconnectAttempts = 0;
+    // Mark stream healthy as soon as the SSE connection is established
     stellarStreamHealth.set(1);
   };
 
   const scheduleReconnect = () => {
-    if (stopped || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      logger.error({ reconnectAttempts }, 'Payment stream reconnect stopped');
+    if (stopped) return;
+
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      logger.error({ reconnectAttempts }, 'Payment stream reconnect limit reached — giving up');
       return;
     }
 
     reconnectAttempts += 1;
     const delay = RECONNECT_DELAY_MS * Math.pow(2, Math.min(reconnectAttempts - 1, 5));
+    logger.info({ attempt: reconnectAttempts, delayMs: delay }, 'Scheduling payment stream reconnect');
     setTimeout(connect, delay);
   };
 
@@ -122,4 +133,77 @@ export function registerPaymentConfirmationListener(
   }) => Promise<void> | void
 ): void {
   paymentStreamEvents.on('payment:confirmed', onConfirmed);
+}
+
+/**
+ * Notify the API about a confirmed Stellar payment.
+ * POSTs to /webhooks/stellar using the shared secret for authentication.
+ * Retries up to 3 times with a 1-second delay on failure.
+ */
+export async function notifyApiOfPayment(payment: {
+  memo: string;
+  amount: string;
+  transactionHash: string;
+  from: string;
+  confirmedAt: Date;
+}): Promise<void> {
+  const apiUrl = stellarConfig.apiUrl;
+  const secret = stellarConfig.sharedSecret;
+
+  if (!apiUrl) {
+    logger.warn('API_URL not configured — skipping payment:confirmed notification');
+    return;
+  }
+
+  const body = JSON.stringify({
+    memo: payment.memo,
+    txHash: payment.transactionHash,
+    amount: payment.amount,
+    from: payment.from,
+  });
+
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(`${apiUrl}/webhooks/stellar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+        },
+        body,
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        logger.warn(
+          { memo: payment.memo, txHash: payment.transactionHash, status: response.status, body: text, attempt },
+          'API payment notification returned non-2xx'
+        );
+        // Don't retry 4xx — they are permanent errors (e.g. no matching intent)
+        if (response.status >= 400 && response.status < 500) return;
+      } else {
+        logger.info(
+          { memo: payment.memo, txHash: payment.transactionHash },
+          'API notified of confirmed payment'
+        );
+        return;
+      }
+    } catch (err) {
+      logger.error(
+        { err, memo: payment.memo, txHash: payment.transactionHash, attempt },
+        'Failed to notify API of confirmed payment'
+      );
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1_000 * attempt));
+    }
+  }
+
+  logger.error(
+    { memo: payment.memo, txHash: payment.transactionHash },
+    'Exhausted retries notifying API of payment — payment may need manual confirmation'
+  );
 }

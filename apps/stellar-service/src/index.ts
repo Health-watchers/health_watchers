@@ -40,7 +40,7 @@ import {
   getCircuitBreakerState,
 } from './error-handler.js';
 import { metricsMiddleware, metricsHandler } from './metrics.js';
-import { startPaymentStream } from './payment-stream.js';
+import { startPaymentStream, registerPaymentConfirmationListener, notifyApiOfPayment } from './payment-stream.js';
 
 dotenv.config();
 
@@ -486,6 +486,9 @@ app.get('/monitor/stream', requireSecret, (req, res): any => {
 const closePaymentStream = startPaymentStream((payment) => {
   logger.info({ memo: payment.memo, txHash: payment.txHash }, 'Stellar payment confirmed');
 });
+
+// Automatically notify the API whenever a matching payment is detected
+registerPaymentConfirmationListener(notifyApiOfPayment);
 
 const server: Server = app.listen(PORT, () => {
   logger.info(

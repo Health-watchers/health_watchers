@@ -14,6 +14,7 @@ import {
   ResetPasswordDto,
   MfaBackupCodeDto,
   MfaDisableDto,
+  MfaBackupCodesRegenerateDto,
   loginSchema,
   refreshSchema,
   registerSchema,
@@ -23,8 +24,9 @@ import {
   resetPasswordSchema,
   mfaBackupCodeSchema,
   mfaDisableSchema,
+  mfaBackupCodesRegenerateSchema,
 } from './auth.validation';
-import { sendPasswordResetEmail } from '@api/lib/email.service';
+import { sendPasswordResetEmail, sendMfaBackupCodesRegeneratedEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -779,6 +781,116 @@ router.post(
     return res.json({
       status: 'success',
       data: { message: 'Password has been reset successfully.' },
+    });
+  }
+);
+
+/**
+ * @swagger
+ * /auth/mfa/backup-codes/count:
+ *   get:
+ *     summary: Get the number of remaining (unused) MFA backup codes
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/mfa/backup-codes/count', authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).select('+mfaBackupCodes');
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  if (!user.mfaEnabled) {
+    return res.status(409).json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
+  }
+
+  const remaining = (user.mfaBackupCodes ?? []).length;
+  return res.json({
+    status: 'success',
+    data: {
+      remaining,
+      total: 10,
+      low: remaining < 3,
+    },
+  });
+});
+
+/**
+ * @swagger
+ * /auth/mfa/backup-codes/regenerate:
+ *   post:
+ *     summary: Regenerate MFA backup codes — invalidates all existing codes
+ *     description: Requires current password and either a valid TOTP code or an existing backup code.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  '/mfa/backup-codes/regenerate',
+  authenticate,
+  validateRequest({ body: mfaBackupCodesRegenerateSchema }),
+  async (req: Request<Record<string, never>, unknown, MfaBackupCodesRegenerateDto>, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId).select(
+      '+mfaSecret +mfaBackupCodes +password'
+    );
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      return res
+        .status(409)
+        .json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
+    }
+
+    // Verify current password
+    const passwordMatch = await bcrypt.compare(req.body.password, user.password);
+    if (!passwordMatch) {
+      return res
+        .status(400)
+        .json({ error: 'InvalidCredentials', message: 'Current password is incorrect' });
+    }
+
+    // Verify TOTP or backup code (second factor)
+    let totpVerified = false;
+    let backupCodeVerified = false;
+
+    if (req.body.totp) {
+      const plainSecret = decrypt(user.mfaSecret);
+      totpVerified = totpService.verify(req.body.totp, plainSecret);
+      if (!totpVerified) {
+        return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+      }
+    } else if (req.body.backupCode) {
+      const codeHash = hashToken(req.body.backupCode);
+      const idx = (user.mfaBackupCodes ?? []).indexOf(codeHash);
+      if (idx === -1) {
+        return res
+          .status(400)
+          .json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
+      }
+      backupCodeVerified = true;
+    }
+
+    const { plain, hashed } = generateBackupCodes();
+    user.mfaBackupCodes = hashed;
+    await user.save();
+
+    // Fire-and-forget email notification
+    sendMfaBackupCodesRegeneratedEmail(user.email, user.fullName, plain);
+
+    await auditLog(
+      {
+        action: 'MFA_BACKUP_CODES_REGENERATED',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        details: { totpVerified, backupCodeVerified },
+      },
+      req
+    );
+
+    return res.json({
+      status: 'success',
+      data: {
+        backupCodes: plain,
+        message: 'Backup codes regenerated. Store them securely — they will not be shown again.',
+      },
     });
   }
 );

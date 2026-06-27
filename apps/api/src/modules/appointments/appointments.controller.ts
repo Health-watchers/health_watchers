@@ -17,6 +17,7 @@ import { SocketService } from '../../services/socket.service';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
+import { isStaffAvailable } from '../schedules/schedules.service';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -290,11 +291,20 @@ appointmentRoutes.post(
       const { patientId, doctorId, scheduledAt, duration, type, chiefComplaint, notes } = req.body;
 
       const start = new Date(scheduledAt);
+      const dur = duration ?? 30;
 
-      if (await hasConflict(doctorId, start, duration ?? 30)) {
+      if (await hasConflict(doctorId, start, dur)) {
         return res.status(409).json({
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
+        });
+      }
+
+      const available = await isStaffAvailable(doctorId, clinicId, start, dur);
+      if (!available) {
+        return res.status(409).json({
+          error: 'DoctorUnavailable',
+          message: 'The doctor is not available at this time',
         });
       }
 
@@ -354,6 +364,16 @@ appointmentRoutes.put(
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
         });
+      }
+
+      if (scheduledAt || duration) {
+        const available = await isStaffAvailable(newDoctorId, clinicId, newStart, newDuration);
+        if (!available) {
+          return res.status(409).json({
+            error: 'DoctorUnavailable',
+            message: 'The doctor is not available at this time',
+          });
+        }
       }
 
       const updated = await AppointmentModel.findByIdAndUpdate(

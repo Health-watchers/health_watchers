@@ -22,6 +22,8 @@ const config: Config = {
     [`^${srcRoot.replace(/\\/g, '\\\\')}/middlewares/rate-limit\\.middleware$`]: `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
     // Mock pino-http so tests don't need a real pino logger with .child()
     '^pino-http$': `${srcRoot}/__mocks__/pino-http.ts`,
+    // Mock Sentry profiling native binary — not available in test environments
+    '^@sentry/profiling-node$': `${srcRoot}/__mocks__/sentry-profiling-node.ts`,
   },
 
   // Tell Jest to look in the API workspace's node_modules first, then the root
