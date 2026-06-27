@@ -26,6 +26,16 @@ import {
   createClaimableBalance as buildCreateClaimableBalance,
   claimClaimableBalance as buildClaimClaimableBalance,
 } from './operations/claimable-balance.js';
+import {
+  createEscrow,
+  claimEscrow,
+  refundEscrow,
+  getClaimableBalances as getClaimableBalancesFromEscrow,
+  getClaimableBalanceById,
+} from './operations/escrow.js';
+import { paymentStateMachine, PaymentState, PaymentStateContext } from './payment-state-machine.js';
+import { mainnetSafetyManager } from './mainnet-safety.js';
+import { exchangeRateManager } from './exchange-rates.js';
 import { Keypair, Asset } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -953,6 +963,286 @@ app.get('/monitor/stream', requireSecret, (req, res): any => {
     close();
     logger.info({ publicKey }, 'SSE client disconnected, stream closed');
   });
+});
+
+// ✅ PUBLIC: GET /exchange-rates — Get current exchange rates
+app.get('/exchange-rates', async (req, res) => {
+  try {
+    const { from = 'XLM', to = 'USD' } = req.query;
+
+    if (typeof from !== 'string' || typeof to !== 'string') {
+      return res.status(400).json({ error: 'from and to must be strings' });
+    }
+
+    const rate = await exchangeRateManager.getExchangeRate(from, to);
+    recordSuccess();
+    return res.json({ success: true, ...rate });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /convert-currency — Convert amount between currencies
+app.post('/convert-currency', async (req, res) => {
+  try {
+    const { amount, from = 'XLM', to = 'USD' } = req.body;
+
+    if (!amount || typeof amount !== 'number') {
+      return res.status(400).json({ error: 'amount is required and must be a number' });
+    }
+
+    const converted = await exchangeRateManager.convertCurrency(amount, from, to);
+    recordSuccess();
+    return res.json({ success: true, amount, from, to, converted });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /exchange-rates/cache-stats — Get cache statistics
+app.get('/exchange-rates/cache-stats', (_req, res) => {
+  const stats = exchangeRateManager.getCacheStats();
+  return res.json({ success: true, ...stats });
+});
+
+// ✅ PROTECTED: POST /exchange-rates/refresh — Manually refresh rates
+app.post('/exchange-rates/refresh', requireSecret, async (req, res) => {
+  try {
+    await exchangeRateManager.refreshAllRates();
+    recordSuccess();
+    return res.json({ success: true, message: 'Exchange rates refreshed' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /safety-check — Perform mainnet safety checks
+app.post('/safety-check', (req, res) => {
+  try {
+    const { amount = 0, requireConfirmation = true } = req.body;
+
+    if (typeof amount !== 'number') {
+      return res.status(400).json({ error: 'amount must be a number' });
+    }
+
+    const result = mainnetSafetyManager.performSafetyCheck(amount, requireConfirmation);
+
+    return res.json({
+      success: result.passed,
+      ...result,
+      network: mainnetSafetyManager.getNetwork(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /payment-state-machine/validate — Validate state transition
+app.get('/payment-state-machine/validate', (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    if (typeof from !== 'string' || typeof to !== 'string') {
+      return res.status(400).json({ error: 'from and to query parameters are required' });
+    }
+
+    const isValid = paymentStateMachine.isValidTransition(from as PaymentState, to as PaymentState);
+
+    return res.json({
+      success: true,
+      from,
+      to,
+      isValid,
+      validTransitions: [
+        'PENDING->SUBMITTED',
+        'SUBMITTED->CONFIRMED',
+        'SUBMITTED->FAILED',
+        'PENDING->FAILED',
+        'FAILED->ROLLED_BACK',
+        'SUBMITTED->ROLLED_BACK',
+      ],
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /escrow/create — Create escrow with refund capability
+app.post('/escrow/create', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const {
+      fromPublicKey,
+      claimantPublicKey,
+      refundPublicKey,
+      amount,
+      claimableAfter,
+      claimableUntil,
+    } = req.body;
+
+    if (!fromPublicKey || !claimantPublicKey || !refundPublicKey || !amount || !claimableUntil) {
+      return res.status(400).json({
+        error:
+          'fromPublicKey, claimantPublicKey, refundPublicKey, amount, and claimableUntil are required',
+      });
+    }
+
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const sourceAccount = await server.loadAccount(fromPublicKey);
+    const fee = await server.fetchBaseFee();
+
+    const claimableAfterDate = claimableAfter ? new Date(claimableAfter) : new Date();
+    const claimableUntilDate = new Date(claimableUntil);
+
+    const tx = createEscrow({
+      sourceAccount,
+      amount,
+      asset: Asset.native(),
+      claimantPublicKey,
+      refundPublicKey,
+      claimableAfter: claimableAfterDate,
+      claimableUntil: claimableUntilDate,
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      const balanceId = `dry-run-escrow-${Date.now()}`;
+      return res.json({ success: true, balanceId, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    const balanceId = (result as any).id ?? `escrow-${result.hash}`;
+    recordSuccess();
+    return res.json({ success: true, balanceId, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /escrow/:balanceId/claim — Claim escrow funds
+app.post(
+  '/escrow/:balanceId/claim',
+  requireSecret,
+  checkCircuitBreakerMiddleware,
+  async (req, res) => {
+    try {
+      const { balanceId } = req.params;
+      const { claimerPublicKey } = req.body;
+
+      if (!claimerPublicKey) {
+        return res.status(400).json({ error: 'claimerPublicKey is required' });
+      }
+
+      const server = getHorizonServer();
+      const claimerKeypair = Keypair.fromPublicKey(claimerPublicKey);
+      const claimerAccount = await server.loadAccount(claimerPublicKey);
+      const fee = await server.fetchBaseFee();
+
+      const tx = claimEscrow({
+        claimerAccount,
+        balanceId: decodeURIComponent(balanceId),
+        networkPassphrase: getNetworkPassphrase(),
+        baseFee: String(fee),
+      });
+
+      if (stellarConfig.stellarSecretKey) {
+        const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+        tx.sign(platformKeypair);
+      }
+
+      if (stellarConfig.dryRun) {
+        return res.json({
+          success: true,
+          txHash: `dry-run-claim-escrow-${Date.now()}`,
+          dryRun: true,
+        });
+      }
+
+      const result = await server.submitTransaction(tx);
+      recordSuccess();
+      return res.json({ success: true, txHash: result.hash });
+    } catch (error: any) {
+      recordFailure();
+      const horizonError = parseHorizonError(error);
+      return res.status(horizonError.statusCode).json(horizonError);
+    }
+  }
+);
+
+// ✅ PROTECTED: POST /escrow/:balanceId/refund — Refund escrow after expiration
+app.post(
+  '/escrow/:balanceId/refund',
+  requireSecret,
+  checkCircuitBreakerMiddleware,
+  async (req, res) => {
+    try {
+      const { balanceId } = req.params;
+      const { refunderPublicKey } = req.body;
+
+      if (!refunderPublicKey) {
+        return res.status(400).json({ error: 'refunderPublicKey is required' });
+      }
+
+      const server = getHorizonServer();
+      const refunderAccount = await server.loadAccount(refunderPublicKey);
+      const fee = await server.fetchBaseFee();
+
+      const tx = refundEscrow({
+        refunderAccount,
+        balanceId: decodeURIComponent(balanceId),
+        networkPassphrase: getNetworkPassphrase(),
+        baseFee: String(fee),
+      });
+
+      if (stellarConfig.stellarSecretKey) {
+        const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+        tx.sign(platformKeypair);
+      }
+
+      if (stellarConfig.dryRun) {
+        return res.json({
+          success: true,
+          txHash: `dry-run-refund-escrow-${Date.now()}`,
+          dryRun: true,
+        });
+      }
+
+      const result = await server.submitTransaction(tx);
+      recordSuccess();
+      return res.json({ success: true, txHash: result.hash });
+    } catch (error: any) {
+      recordFailure();
+      const horizonError = parseHorizonError(error);
+      return res.status(horizonError.statusCode).json(horizonError);
+    }
+  }
+);
+
+// ✅ PUBLIC: GET /escrow/:balanceId — Get escrow balance details
+app.get('/escrow/:balanceId', async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const server = getHorizonServer();
+    const balance = await getClaimableBalanceById(server, decodeURIComponent(balanceId));
+
+    if (!balance) {
+      return res.status(404).json({ error: 'Escrow balance not found' });
+    }
+
+    recordSuccess();
+    return res.json({ success: true, ...balance });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 const closePaymentStream = startPaymentStream((payment) => {
