@@ -13,7 +13,6 @@ const compression = require('compression') as ((...args: any[]) => any) & {
 };
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
-import mongoose from 'mongoose';
 import { connectDB, getPoolMetrics } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
@@ -107,11 +106,14 @@ import {
   cvxCodesRouter,
 } from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
+import { registerGracefulShutdown } from './utils/graceful-shutdown';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import { v2Router } from './routes/v2';
 import { SocketService } from './services/socket.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+import { mutationAuditMiddleware } from './middlewares/mutation-audit.middleware';
+import { responseFilterMiddleware } from './middlewares/response-filter.middleware';
 // npm install cookie-parser @types/cookie-parser
 import cookieParser from 'cookie-parser';
 import { csrfMiddleware } from './middlewares/csrf.middleware';
@@ -216,6 +218,7 @@ app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(requestAuditMiddleware);
+app.use(mutationAuditMiddleware);
 app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
@@ -247,6 +250,9 @@ app.get('/api/versions', (_req, res) => {
   const versions = getSupportedVersions();
   res.json(versions);
 });
+
+// ── Role-based response field filtering ──────────────────────────────────────
+app.use('/api', responseFilterMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
 app.use('/api/v1', v1DeprecationWarning);
@@ -354,60 +360,18 @@ async function startServer() {
     mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
-  // Graceful shutdown handler
-  const shutdown = async (signal: string) => {
-    logger.info(`${signal} received, starting graceful shutdown`);
-
-    // Stop accepting new connections
-    server.close(async () => {
-      logger.info('HTTP server closed');
-
-      try {
-        // Stop payment expiration job
-        stopPaymentExpirationJob();
-        stopReconciliationJob();
-        stopRiskRecalculationJob();
-        stopBalanceMonitoringJob();
-        stopWaitlistExpiryJob();
-        stopAppointmentReminderJob();
-        stopClaimableExpiryNotificationJob();
-        stopXLMRateJob();
-        stopMfaGracePeriodJob();
-        logger.info('All background jobs stopped');
-
-        // Close database connection
-        await mongoose.connection.close();
-        logger.info('MongoDB connection closed');
-
-        logger.info('Graceful shutdown completed');
-        process.exit(0);
-      } catch (err) {
-        logger.error({ err }, 'Error during graceful shutdown');
-        process.exit(1);
-      }
-    });
-
-    // Force exit after 30 seconds if graceful shutdown hangs
-    setTimeout(() => {
-      logger.error('Graceful shutdown timeout (30s), forcing exit');
-      process.exit(1);
-    }, 30000);
-  };
-
-  // Handle termination signals
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (err: unknown) => {
-    logger.error({ err }, 'Uncaught exception');
-    shutdown('uncaughtException');
-  });
-
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason: unknown) => {
-    logger.error({ reason }, 'Unhandled rejection');
-    // Log but don't exit - let the process continue
+  registerGracefulShutdown(server, {
+    stopJobs: [
+      stopPaymentExpirationJob,
+      stopReconciliationJob,
+      stopRiskRecalculationJob,
+      stopBalanceMonitoringJob,
+      stopWaitlistExpiryJob,
+      stopAppointmentReminderJob,
+      stopClaimableExpiryNotificationJob,
+      stopXLMRateJob,
+      stopMfaGracePeriodJob,
+    ],
   });
 }
 
