@@ -179,7 +179,7 @@ describe('Portal Timeline Routes', () => {
       } as any);
 
       const res = await request(app).get(
-        '/api/v1/portal/timeline?startDate=2024-03-01T00:00:00.000Z&endDate=2024-03-31T23:59:59.999Z',
+        '/api/v1/portal/timeline?startDate=2024-03-01T00:00:00.000Z&endDate=2024-03-31T23:59:59.999Z'
       );
 
       expect(res.status).toBe(200);

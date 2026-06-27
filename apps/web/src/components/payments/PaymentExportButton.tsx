@@ -33,7 +33,11 @@ export function PaymentExportButton({ onError }: Props) {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ format: opts.format, status: opts.status, currency: opts.currency });
+      const params = new URLSearchParams({
+        format: opts.format,
+        status: opts.status,
+        currency: opts.currency,
+      });
       if (opts.from) params.set('from', new Date(opts.from).toISOString());
       if (opts.to) {
         // Include the full end day
@@ -42,7 +46,9 @@ export function PaymentExportButton({ onError }: Props) {
         params.set('to', to.toISOString());
       }
 
-      const res = await fetch(`/api/payments/export?${params.toString()}`, { credentials: 'include' });
+      const res = await fetch(`/api/payments/export?${params.toString()}`, {
+        credentials: 'include',
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.message ?? `Export failed (${res.status})`);
@@ -79,9 +85,11 @@ export function PaymentExportButton({ onError }: Props) {
           aria-modal="true"
           aria-labelledby="export-dialog-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+          <div className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6 shadow-xl">
             <h2 id="export-dialog-title" className="text-lg font-semibold text-neutral-900">
               Export Payments
             </h2>
@@ -93,7 +101,7 @@ export function PaymentExportButton({ onError }: Props) {
                   type="date"
                   value={opts.from}
                   onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))}
-                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-700">
@@ -102,7 +110,7 @@ export function PaymentExportButton({ onError }: Props) {
                   type="date"
                   value={opts.to}
                   onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))}
-                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </label>
             </div>
@@ -112,7 +120,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.format}
                 onChange={(e) => setOpts((o) => ({ ...o, format: e.target.value as Format }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="csv">CSV</option>
                 <option value="xlsx">Excel (.xlsx)</option>
@@ -124,7 +132,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.status}
                 onChange={(e) => setOpts((o) => ({ ...o, status: e.target.value as Status }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="all">All</option>
                 <option value="confirmed">Confirmed</option>
@@ -138,7 +146,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.currency}
                 onChange={(e) => setOpts((o) => ({ ...o, currency: e.target.value as Currency }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="all">All</option>
                 <option value="XLM">XLM</option>
@@ -153,7 +161,10 @@ export function PaymentExportButton({ onError }: Props) {
               <Button onClick={handleExport} disabled={loading}>
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true" />
+                    <span
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                      aria-hidden="true"
+                    />
                     Exporting…
                   </span>
                 ) : (

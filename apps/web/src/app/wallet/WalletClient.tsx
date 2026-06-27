@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
 import {
@@ -50,10 +58,15 @@ function FederationAddressCard({ address }: { address: string }) {
         <Badge variant="default">Stellar</Badge>
       </CardHeader>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <canvas ref={canvasRef} aria-label={`QR code for ${address}`} className="rounded border border-neutral-100" />
+        <canvas
+          ref={canvasRef}
+          aria-label={`QR code for ${address}`}
+          className="rounded border border-neutral-100"
+        />
         <div className="flex flex-col gap-2">
           <p className="text-sm text-neutral-500">
-            Patients can send payments using this human-readable address instead of the full public key.
+            Patients can send payments using this human-readable address instead of the full public
+            key.
           </p>
           <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 font-mono text-sm font-medium text-neutral-800">
             {address}
@@ -137,12 +150,14 @@ function useBalanceAlerts() {
       const res = await fetch(`${API}/api/v1/settings`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load settings');
       const body = await res.json();
-      return body.data?.balanceAlerts ?? {
-        lowBalanceWarningXlm: 100,
-        criticalBalanceXlm: 10,
-        largeTransactionXlm: 1000,
-        alertsEnabled: true,
-      };
+      return (
+        body.data?.balanceAlerts ?? {
+          lowBalanceWarningXlm: 100,
+          criticalBalanceXlm: 10,
+          largeTransactionXlm: 1000,
+          alertsEnabled: true,
+        }
+      );
     },
   });
 }
@@ -325,7 +340,7 @@ function AlertThresholdSettings({
           type="checkbox"
           checked={form.alertsEnabled}
           onChange={(e) => handleChange('alertsEnabled', e.target.checked)}
-          className="h-4 w-4 rounded border-neutral-300 text-primary-600"
+          className="text-primary-600 h-4 w-4 rounded border-neutral-300"
         />
         <label htmlFor="alertsEnabled" className="text-sm font-medium text-neutral-700">
           Enable balance alerts
@@ -366,7 +381,11 @@ function AlertThresholdSettings({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" loading={saving} disabled={!form.alertsEnabled && !settings.alertsEnabled}>
+        <Button
+          type="submit"
+          loading={saving}
+          disabled={!form.alertsEnabled && !settings.alertsEnabled}
+        >
           Save Alert Settings
         </Button>
       </div>
@@ -583,9 +602,7 @@ export default function WalletClient() {
           </Card>
 
           {/* Federation Address */}
-          {wallet.federationAddress && (
-            <FederationAddressCard address={wallet.federationAddress} />
-          )}
+          {wallet.federationAddress && <FederationAddressCard address={wallet.federationAddress} />}
 
           {/* Send Payment Form */}
           {showSendForm && !pendingPayment && (

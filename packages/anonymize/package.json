@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "test": "jest dist",
+    "test": "jest --config jest.config.js",
     "build": "tsc"
   },
   "dependencies": {

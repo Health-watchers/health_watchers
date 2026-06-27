@@ -1,0 +1,162 @@
+# ============================================================
+# MongoDB Replica Set Configuration
+#
+# High Availability setup with automatic failover
+# ============================================================
+
+version: '3.8'
+
+services:
+  # Primary MongoDB instance
+  mongodb-primary:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-primary
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: health_watchers
+    command: mongod --replSet rs0 --bind_ip_all --auth
+    volumes:
+      - mongodb_primary_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./k8s/mongodb-replica-set-init.js:/scripts/replica-set-init.js:ro
+    ports:
+      - '27017:27017'
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers -u ${MONGO_ROOT_USERNAME} -p ${MONGO_ROOT_PASSWORD} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - health-watchers-db
+
+  # Secondary MongoDB instance 1
+  mongodb-secondary-1:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-secondary-1
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: health_watchers
+    command: mongod --replSet rs0 --bind_ip_all --auth
+    volumes:
+      - mongodb_secondary_1_data:/data/db
+    ports:
+      - '27018:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers -u ${MONGO_ROOT_USERNAME} -p ${MONGO_ROOT_PASSWORD} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - health-watchers-db
+
+  # Secondary MongoDB instance 2
+  mongodb-secondary-2:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-secondary-2
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: health_watchers
+    command: mongod --replSet rs0 --bind_ip_all --auth
+    volumes:
+      - mongodb_secondary_2_data:/data/db
+    ports:
+      - '27019:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers -u ${MONGO_ROOT_USERNAME} -p ${MONGO_ROOT_PASSWORD} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - health-watchers-db
+
+  # Arbiter for replica set tie-breaking (lightweight, no data)
+  mongodb-arbiter:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-arbiter
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: health_watchers
+    command: mongod --replSet rs0 --bind_ip_all --auth
+    volumes:
+      - mongodb_arbiter_data:/data/db
+    ports:
+      - '27020:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers -u ${MONGO_ROOT_USERNAME} -p ${MONGO_ROOT_PASSWORD} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - health-watchers-db
+
+  # Replica Set Initializer
+  mongodb-replica-init:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-replica-init
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+      mongodb-secondary-1:
+        condition: service_healthy
+      mongodb-secondary-2:
+        condition: service_healthy
+      mongodb-arbiter:
+        condition: service_healthy
+    volumes:
+      - ./k8s/mongodb-replica-set-init.js:/scripts/replica-set-init.js:ro
+    command: >
+      mongosh mongodb-primary:27017/admin
+      -u ${MONGO_ROOT_USERNAME}
+      -p ${MONGO_ROOT_PASSWORD}
+      /scripts/replica-set-init.js
+    networks:
+      - health-watchers-db
+
+  # MongoDB Exporter for Prometheus metrics
+  mongodb-exporter:
+    image: percona/mongodb_exporter:latest
+    container_name: health-watchers-mongodb-exporter
+    restart: always
+    environment:
+      MONGODB_URI: 'mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb-primary:27017/admin'
+    ports:
+      - '9216:9216'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    networks:
+      - health-watchers-db
+    command:
+      - '--mongodb.uri=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb-primary:27017/admin'
+      - '--collect-all'
+
+volumes:
+  mongodb_primary_data:
+    driver: local
+  mongodb_secondary_1_data:
+    driver: local
+  mongodb_secondary_2_data:
+    driver: local
+  mongodb_arbiter_data:
+    driver: local
+
+networks:
+  health-watchers-db:
+    driver: bridge

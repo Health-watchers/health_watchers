@@ -1,7 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { usePreAuths, useApprovePreAuth, useClaimPreAuth, useDenyPreAuth } from '@/lib/queries/usePreAuth';
+import {
+  usePreAuths,
+  useApprovePreAuth,
+  useClaimPreAuth,
+  useDenyPreAuth,
+} from '@/lib/queries/usePreAuth';
 import { PreAuthStatusBadge } from './PreAuthStatusBadge';
 
 const STATUS_TABS = ['pending', 'approved', 'denied', 'claimed', 'reclaimed'] as const;
@@ -52,17 +57,19 @@ export function PreAuthList() {
 
       <ul className="divide-y rounded-lg border">
         {preAuths.map((pa) => (
-          <li key={pa._id} className="p-4 space-y-2">
+          <li key={pa._id} className="space-y-2 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <span className="font-medium text-sm">CPT: {pa.procedureCode}</span>
+                <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
                 <span className="ml-2 text-xs text-gray-500">{pa.insuranceProvider}</span>
               </div>
               <PreAuthStatusBadge status={pa.status} />
             </div>
 
-            <div className="text-xs text-gray-600 space-y-0.5">
-              <p>Amount: <strong>{pa.estimatedAmount} XLM</strong></p>
+            <div className="space-y-0.5 text-xs text-gray-600">
+              <p>
+                Amount: <strong>{pa.estimatedAmount} XLM</strong>
+              </p>
               {pa.preAuthNumber && <p>Pre-auth #: {pa.preAuthNumber}</p>}
               <p>Expires: {new Date(pa.expiresAt).toLocaleDateString()}</p>
               {pa.claimableBalanceId && (

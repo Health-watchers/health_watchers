@@ -31,12 +31,12 @@ const PatientHealthLogSchema = new Schema<IPatientHealthLog>(
     notes: { type: String, maxlength: 500 },
     flagged: { type: Boolean, default: false },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 PatientHealthLogSchema.index({ patientId: 1, metricType: 1, loggedAt: -1 });
 
 export const PatientHealthLogModel = mongoose.model<IPatientHealthLog>(
   'PatientHealthLog',
-  PatientHealthLogSchema,
+  PatientHealthLogSchema
 );

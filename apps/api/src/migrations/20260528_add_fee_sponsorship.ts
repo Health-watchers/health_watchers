@@ -12,10 +12,9 @@ export async function up(db: Db): Promise<void> {
   );
 
   // Create index for feeBumpHash
-  await db.collection('payment_records').createIndex(
-    { feeBumpHash: 1 },
-    { background: true, name: 'feeBumpHash_1', sparse: true }
-  );
+  await db
+    .collection('payment_records')
+    .createIndex({ feeBumpHash: 1 }, { background: true, name: 'feeBumpHash_1', sparse: true });
 }
 
 export async function down(db: Db): Promise<void> {
@@ -32,5 +31,8 @@ export async function down(db: Db): Promise<void> {
   );
 
   // Drop index
-  await db.collection('payment_records').dropIndex('feeBumpHash_1').catch(() => {});
+  await db
+    .collection('payment_records')
+    .dropIndex('feeBumpHash_1')
+    .catch(() => {});
 }

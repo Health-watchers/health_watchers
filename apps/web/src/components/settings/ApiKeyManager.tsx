@@ -6,13 +6,16 @@ import { Button, Card, CardHeader, CardTitle, CardContent } from '@/components/u
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 const ALL_SCOPES = [
-  'patients:read', 'patients:write',
-  'encounters:read', 'encounters:write',
-  'payments:read', 'payments:write',
+  'patients:read',
+  'patients:write',
+  'encounters:read',
+  'encounters:write',
+  'payments:read',
+  'payments:write',
   'lab-results:write',
 ] as const;
 
-type Scope = typeof ALL_SCOPES[number];
+type Scope = (typeof ALL_SCOPES)[number];
 
 interface ApiKey {
   _id: string;
@@ -46,7 +49,8 @@ export default function ApiKeyManager() {
   const [selectedScopes, setSelectedScopes] = useState<Scope[]>([]);
   const [expiresAt, setExpiresAt] = useState('');
 
-  const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
+  const getToken = () =>
+    typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
 
   const fetchKeys = useCallback(async () => {
     setLoading(true);
@@ -61,11 +65,13 @@ export default function ApiKeyManager() {
     }
   }, []);
 
-  useEffect(() => { fetchKeys(); }, [fetchKeys]);
+  useEffect(() => {
+    fetchKeys();
+  }, [fetchKeys]);
 
   const toggleScope = (scope: Scope) => {
-    setSelectedScopes(prev =>
-      prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]
+    setSelectedScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
     );
   };
 
@@ -77,13 +83,19 @@ export default function ApiKeyManager() {
       const res = await fetch(`${API_BASE}/api/v1/api-keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ name: name.trim(), scopes: selectedScopes, expiresAt: expiresAt || undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          scopes: selectedScopes,
+          expiresAt: expiresAt || undefined,
+        }),
       });
       const json = await res.json();
       if (json.status === 'success') {
         setNewKeyResult(json.data);
         setShowForm(false);
-        setName(''); setSelectedScopes([]); setExpiresAt('');
+        setName('');
+        setSelectedScopes([]);
+        setExpiresAt('');
         fetchKeys();
       }
     } finally {
@@ -112,11 +124,11 @@ export default function ApiKeyManager() {
       {/* One-time key display */}
       {newKeyResult && (
         <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4">
-          <p className="text-sm font-semibold text-yellow-800 mb-1">
+          <p className="mb-1 text-sm font-semibold text-yellow-800">
             Save your API key — it will only be shown once.
           </p>
-          <div className="flex items-center gap-3 mt-2">
-            <code className="flex-1 break-all rounded bg-yellow-100 px-3 py-2 text-xs text-yellow-900 font-mono">
+          <div className="mt-2 flex items-center gap-3">
+            <code className="flex-1 rounded bg-yellow-100 px-3 py-2 font-mono text-xs break-all text-yellow-900">
               {newKeyResult.key}
             </code>
             <Button size="sm" variant="secondary" onClick={copyKey}>
@@ -133,7 +145,13 @@ export default function ApiKeyManager() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>API Keys</CardTitle>
-            <Button size="sm" onClick={() => { setShowForm(v => !v); setNewKeyResult(null); }}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setShowForm((v) => !v);
+                setNewKeyResult(null);
+              }}
+            >
               {showForm ? 'Cancel' : '+ New API Key'}
             </Button>
           </div>
@@ -141,30 +159,33 @@ export default function ApiKeyManager() {
         <CardContent>
           {/* Create form */}
           {showForm && (
-            <form onSubmit={handleCreate} className="mb-6 space-y-4 rounded-lg border border-secondary-200 p-4">
+            <form
+              onSubmit={handleCreate}
+              className="border-secondary-200 mb-6 space-y-4 rounded-lg border p-4"
+            >
               <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">Name</label>
+                <label className="text-secondary-700 mb-1 block text-sm font-medium">Name</label>
                 <input
-                  className="w-full rounded-md border border-secondary-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="border-secondary-300 focus:ring-primary-500 w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                   placeholder="e.g. Lab System Integration"
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-2">Scopes</label>
+                <label className="text-secondary-700 mb-2 block text-sm font-medium">Scopes</label>
                 <div className="flex flex-wrap gap-2">
-                  {ALL_SCOPES.map(scope => (
+                  {ALL_SCOPES.map((scope) => (
                     <button
                       key={scope}
                       type="button"
                       onClick={() => toggleScope(scope)}
-                      className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         selectedScopes.includes(scope)
-                          ? 'bg-primary-600 text-white border-primary-600'
-                          : 'bg-white text-secondary-700 border-secondary-300 hover:border-primary-400'
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'text-secondary-700 border-secondary-300 hover:border-primary-400 bg-white'
                       }`}
                     >
                       {scope}
@@ -172,23 +193,26 @@ export default function ApiKeyManager() {
                   ))}
                 </div>
                 {selectedScopes.length === 0 && (
-                  <p className="mt-1 text-xs text-error-600">Select at least one scope</p>
+                  <p className="text-error-600 mt-1 text-xs">Select at least one scope</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
+                <label className="text-secondary-700 mb-1 block text-sm font-medium">
                   Expiry date <span className="text-secondary-400">(optional)</span>
                 </label>
                 <input
                   type="date"
-                  className="rounded-md border border-secondary-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="border-secondary-300 focus:ring-primary-500 rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
                   value={expiresAt}
-                  onChange={e => setExpiresAt(e.target.value)}
+                  onChange={(e) => setExpiresAt(e.target.value)}
                 />
               </div>
 
-              <Button type="submit" disabled={creating || !name.trim() || selectedScopes.length === 0}>
+              <Button
+                type="submit"
+                disabled={creating || !name.trim() || selectedScopes.length === 0}
+              >
                 {creating ? 'Generating…' : 'Generate API Key'}
               </Button>
             </form>
@@ -196,47 +220,52 @@ export default function ApiKeyManager() {
 
           {/* Keys table */}
           {loading ? (
-            <p className="text-sm text-secondary-500">Loading…</p>
+            <p className="text-secondary-500 text-sm">Loading…</p>
           ) : keys.length === 0 ? (
-            <p className="text-sm text-secondary-500">No API keys yet.</p>
+            <p className="text-secondary-500 text-sm">No API keys yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-secondary-200 text-left text-xs text-secondary-500 uppercase tracking-wide">
-                    <th className="pb-2 pr-4">Name</th>
-                    <th className="pb-2 pr-4">Prefix</th>
-                    <th className="pb-2 pr-4">Scopes</th>
-                    <th className="pb-2 pr-4">Last Used</th>
-                    <th className="pb-2 pr-4">Expires</th>
-                    <th className="pb-2 pr-4">Status</th>
+                  <tr className="border-secondary-200 text-secondary-500 border-b text-left text-xs tracking-wide uppercase">
+                    <th className="pr-4 pb-2">Name</th>
+                    <th className="pr-4 pb-2">Prefix</th>
+                    <th className="pr-4 pb-2">Scopes</th>
+                    <th className="pr-4 pb-2">Last Used</th>
+                    <th className="pr-4 pb-2">Expires</th>
+                    <th className="pr-4 pb-2">Status</th>
                     <th className="pb-2" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-secondary-100">
-                  {keys.map(k => (
+                <tbody className="divide-secondary-100 divide-y">
+                  {keys.map((k) => (
                     <tr key={k._id} className="py-2">
-                      <td className="py-3 pr-4 font-medium text-secondary-900">{k.name}</td>
-                      <td className="py-3 pr-4 font-mono text-secondary-600">hw_{k.prefix}…</td>
+                      <td className="text-secondary-900 py-3 pr-4 font-medium">{k.name}</td>
+                      <td className="text-secondary-600 py-3 pr-4 font-mono">hw_{k.prefix}…</td>
                       <td className="py-3 pr-4">
                         <div className="flex flex-wrap gap-1">
-                          {k.scopes.map(s => (
-                            <span key={s} className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-700">
+                          {k.scopes.map((s) => (
+                            <span
+                              key={s}
+                              className="bg-primary-50 text-primary-700 rounded-full px-2 py-0.5 text-xs"
+                            >
                               {s}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="py-3 pr-4 text-secondary-500">
+                      <td className="text-secondary-500 py-3 pr-4">
                         {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : '—'}
                       </td>
-                      <td className="py-3 pr-4 text-secondary-500">
+                      <td className="text-secondary-500 py-3 pr-4">
                         {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : 'Never'}
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          k.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            k.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}
+                        >
                           {k.isActive ? 'Active' : 'Revoked'}
                         </span>
                       </td>

@@ -34,21 +34,25 @@ jest.mock('@api/middlewares/auth.middleware', () => ({
 
 // Stub out sub-routes that pull in heavy dependencies
 jest.mock('../portal-mfa.routes', () => ({ portalMfaRoutes: require('express').Router() }));
-jest.mock('../../export/export-request.controller', () => ({ exportRequestRoutes: require('express').Router() }));
+jest.mock('../../export/export-request.controller', () => ({
+  exportRequestRoutes: require('express').Router(),
+}));
 
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../../ai/ai.service';
 import { EncounterModel } from '../../encounters/encounter.model';
 import { portalRoutes } from '../portal.controller';
 
-const mockGenerate = generatePatientFriendlySummary as jest.MockedFunction<typeof generatePatientFriendlySummary>;
+const mockGenerate = generatePatientFriendlySummary as jest.MockedFunction<
+  typeof generatePatientFriendlySummary
+>;
 const mockAIAvailable = isAIServiceAvailable as jest.MockedFunction<typeof isAIServiceAvailable>;
 
 // ── Shared IDs ────────────────────────────────────────────────────────────────
 
 const testPatientId = new mongoose.Types.ObjectId().toString();
-const testClinicId  = new mongoose.Types.ObjectId().toString();
-const testUserId    = new mongoose.Types.ObjectId().toString();
-const doctorId      = new mongoose.Types.ObjectId();
+const testClinicId = new mongoose.Types.ObjectId().toString();
+const testUserId = new mongoose.Types.ObjectId().toString();
+const doctorId = new mongoose.Types.ObjectId();
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
 
@@ -77,7 +81,7 @@ afterEach(async () => {
 function baseEncounter(overrides: Record<string, unknown> = {}) {
   return {
     patientId: new mongoose.Types.ObjectId(testPatientId),
-    clinicId:  new mongoose.Types.ObjectId(testClinicId),
+    clinicId: new mongoose.Types.ObjectId(testClinicId),
     attendingDoctorId: doctorId,
     chiefComplaint: 'Headache and fever',
     status: 'closed',
@@ -105,9 +109,9 @@ describe('generatePatientFriendlySummary', () => {
   it('propagates errors from the AI model', async () => {
     mockGenerate.mockRejectedValueOnce(new Error('API quota exceeded'));
 
-    await expect(
-      generatePatientFriendlySummary({ chiefComplaint: 'Chest pain' })
-    ).rejects.toThrow('API quota exceeded');
+    await expect(generatePatientFriendlySummary({ chiefComplaint: 'Chest pain' })).rejects.toThrow(
+      'API quota exceeded'
+    );
   });
 });
 
@@ -130,7 +134,9 @@ describe('POST /api/v1/portal/encounters/:id/notes', () => {
     const enc = await EncounterModel.create(baseEncounter());
 
     await request(app).post(`/api/v1/portal/encounters/${enc._id}/notes`).send({ note: 'First' });
-    const res = await request(app).post(`/api/v1/portal/encounters/${enc._id}/notes`).send({ note: 'Second' });
+    const res = await request(app)
+      .post(`/api/v1/portal/encounters/${enc._id}/notes`)
+      .send({ note: 'Second' });
 
     expect(res.status).toBe(200);
     expect(res.body.data.patientNotes).toHaveLength(2);
@@ -249,7 +255,9 @@ describe('GET /api/v1/portal/encounters', () => {
     expect(mockGenerate).toHaveBeenCalledTimes(1);
     expect(res.body.data[0].patientFriendlySummary).toBe('AI-generated summary.');
 
-    const stored = await EncounterModel.findOne({ patientId: new mongoose.Types.ObjectId(testPatientId) });
+    const stored = await EncounterModel.findOne({
+      patientId: new mongoose.Types.ObjectId(testPatientId),
+    });
     expect(stored?.patientFriendlySummary).toBe('AI-generated summary.');
   });
 

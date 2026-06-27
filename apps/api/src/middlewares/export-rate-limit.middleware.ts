@@ -4,10 +4,13 @@ import { Request, Response, NextFunction } from 'express';
  * In-memory rate limiter: max 5 export requests per clinic per hour.
  * For production, replace with Redis-backed store.
  */
-const WINDOW_MS  = 60 * 60 * 1000; // 1 hour
+const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS = 5;
 
-interface RateEntry { count: number; resetAt: number; }
+interface RateEntry {
+  count: number;
+  resetAt: number;
+}
 const store = new Map<string, RateEntry>();
 
 export function exportRateLimit(req: Request, res: Response, next: NextFunction) {
@@ -25,15 +28,15 @@ export function exportRateLimit(req: Request, res: Response, next: NextFunction)
 
   entry.count += 1;
 
-  res.set('X-RateLimit-Limit',     String(MAX_REQUESTS));
+  res.set('X-RateLimit-Limit', String(MAX_REQUESTS));
   res.set('X-RateLimit-Remaining', String(Math.max(0, MAX_REQUESTS - entry.count)));
-  res.set('X-RateLimit-Reset',     String(Math.ceil(entry.resetAt / 1000)));
+  res.set('X-RateLimit-Reset', String(Math.ceil(entry.resetAt / 1000)));
 
   if (entry.count > MAX_REQUESTS) {
     const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
     res.set('Retry-After', String(retryAfter));
     return res.status(429).json({
-      error:   'TooManyRequests',
+      error: 'TooManyRequests',
       message: `Export limit of ${MAX_REQUESTS} requests per hour exceeded. Retry after ${retryAfter}s.`,
     });
   }

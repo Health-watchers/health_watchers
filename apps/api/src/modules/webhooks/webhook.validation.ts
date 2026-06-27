@@ -2,10 +2,13 @@ import { z } from 'zod';
 import { validateWebhookUrl } from '@api/utils/url-validator';
 
 export const registerWebhookSchema = z.object({
-  url: z.string().url().refine(
-    (url) => validateWebhookUrl(url).valid,
-    (url) => ({ message: validateWebhookUrl(url).reason ?? 'URL is not allowed' })
-  ),
+  url: z
+    .string()
+    .url()
+    .refine(
+      (url) => validateWebhookUrl(url).valid,
+      (url) => ({ message: validateWebhookUrl(url).reason ?? 'URL is not allowed' })
+    ),
   events: z.array(z.enum(['payment.confirmed', 'payment.failed'])).min(1),
 });
 

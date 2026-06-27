@@ -89,11 +89,11 @@ const CLINIC_A = 'clinic-aaa';
 const CLINIC_B = 'clinic-bbb';
 
 function makeToken(clinicId: string, role = 'CLINIC_ADMIN'): string {
-  return jwt.sign(
-    { userId: new mongoose.Types.ObjectId().toString(), role, clinicId },
-    SECRET,
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
-  );
+  return jwt.sign({ userId: new mongoose.Types.ObjectId().toString(), role, clinicId }, SECRET, {
+    expiresIn: '15m',
+    issuer: 'health-watchers-api',
+    audience: 'health-watchers-client',
+  });
 }
 
 // ── MongoDB Memory Server lifecycle ──────────────────────────────────────────
@@ -202,8 +202,14 @@ describe('POST /api/v1/payments/intent — idempotency', () => {
     expect(firstB.body.data.intentId).not.toBe(firstA.body.data.intentId);
 
     // Two distinct records exist — one per clinic
-    const recordA = await PaymentRecordModel.findOne({ idempotencyKey: sharedKey, clinicId: CLINIC_A });
-    const recordB = await PaymentRecordModel.findOne({ idempotencyKey: sharedKey, clinicId: CLINIC_B });
+    const recordA = await PaymentRecordModel.findOne({
+      idempotencyKey: sharedKey,
+      clinicId: CLINIC_A,
+    });
+    const recordB = await PaymentRecordModel.findOne({
+      idempotencyKey: sharedKey,
+      clinicId: CLINIC_B,
+    });
     expect(recordA).not.toBeNull();
     expect(recordB).not.toBeNull();
     expect(recordA!.intentId).not.toBe(recordB!.intentId);

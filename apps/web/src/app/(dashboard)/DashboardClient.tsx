@@ -53,12 +53,12 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
   const pendingPayments: Record<string, unknown>[] = data?.pendingPayments ?? [];
 
   return (
-    <PageWrapper className="py-8 space-y-8">
+    <PageWrapper className="space-y-8 py-8">
       <PageHeader
         title={labels.title}
         subtitle={`${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
         actions={
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2">
             <Button asChild variant="primary" size="sm">
               <Link href="/patients?new=1">{labels.newPatient}</Link>
             </Button>
@@ -73,7 +73,7 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
       />
 
       {isError ? (
-        <div className="rounded-lg border border-error-200 bg-error-50 p-4 text-sm text-error-700">
+        <div className="border-error-200 bg-error-50 text-error-700 rounded-lg border p-4 text-sm">
           {labels.apiError}
         </div>
       ) : (

@@ -130,12 +130,17 @@ export default function PaymentsClient() {
         <PageHeader title="Payments" />
         <div className="flex items-center gap-3">
           {polling && (
-            <span className="flex items-center gap-1.5 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
-              <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" aria-hidden="true" />
+            <span className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs text-yellow-700">
+              <span
+                className="h-2 w-2 animate-pulse rounded-full bg-yellow-400"
+                aria-hidden="true"
+              />
               Polling for updates…
             </span>
           )}
-          <Button variant="outline" onClick={() => window.location.href = '/invoices'}>Invoices</Button>
+          <Button variant="outline" onClick={() => (window.location.href = '/invoices')}>
+            Invoices
+          </Button>
           <PaymentExportButton onError={(msg) => setToast({ message: msg, type: 'error' })} />
           <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
         </div>
@@ -158,9 +163,7 @@ export default function PaymentsClient() {
       {error && (
         <ErrorMessage
           message={getPaymentsErrorMessage(error)}
-          onRetry={() =>
-            queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })
-          }
+          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })}
         />
       )}
 

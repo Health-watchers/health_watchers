@@ -55,12 +55,15 @@ const batchPaymentSchema = new Schema<IBatchPayment>(
     timestamps: true,
     versionKey: false,
     collection: 'batch_payments',
-  },
+  }
 );
 
 // Indexes
 batchPaymentSchema.index({ clinicId: 1, status: 1 });
 batchPaymentSchema.index({ clinicId: 1, createdAt: -1 });
 
-export const BatchPaymentModel =
-  models.BatchPayment || model<IBatchPayment>('BatchPayment', batchPaymentSchema);
+export const BatchPaymentModel = (models.BatchPayment ||
+  model<IBatchPayment>(
+    'BatchPayment',
+    batchPaymentSchema
+  )) as import('mongoose').Model<IBatchPayment>;

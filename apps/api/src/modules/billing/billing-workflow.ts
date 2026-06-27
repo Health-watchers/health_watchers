@@ -1,11 +1,11 @@
 export type BillingStatus = 'unbilled' | 'billed' | 'paid' | 'denied' | 'resubmitted';
 
 const VALID_TRANSITIONS: Record<BillingStatus, BillingStatus[]> = {
-  unbilled:     ['billed'],
-  billed:       ['paid', 'denied'],
-  paid:         [],
-  denied:       ['resubmitted'],
-  resubmitted:  ['billed', 'paid', 'denied'],
+  unbilled: ['billed'],
+  billed: ['paid', 'denied'],
+  paid: [],
+  denied: ['resubmitted'],
+  resubmitted: ['billed', 'paid', 'denied'],
 };
 
 export interface TransitionResult {
@@ -18,8 +18,9 @@ export function canTransition(from: BillingStatus, to: BillingStatus): Transitio
   if (!allowed) {
     return {
       allowed: false,
-      reason: `Invalid billing transition: "${from}" → "${to}". ` +
-              `Allowed next states from "${from}": [${(VALID_TRANSITIONS[from] ?? []).join(', ') || 'none'}]`,
+      reason:
+        `Invalid billing transition: "${from}" → "${to}". ` +
+        `Allowed next states from "${from}": [${(VALID_TRANSITIONS[from] ?? []).join(', ') || 'none'}]`,
     };
   }
   return { allowed: true };

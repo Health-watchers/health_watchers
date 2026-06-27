@@ -18,7 +18,24 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // Excludes payment spec so it runs in the dedicated project below
+      testIgnore: ['**/payment-flow.spec.ts'],
+    },
+    {
+      name: 'payment-flow',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Record video for every payment test run so the artifact is always
+        // available when a test fails (not only on retry).
+        video: 'retain-on-failure',
+        screenshot: 'only-on-failure',
+        trace: 'retain-on-failure',
+      },
+      testMatch: ['**/payment-flow.spec.ts'],
+    },
   ],
   timeout: 30_000,
 });

@@ -10,17 +10,18 @@ interface CDSRuleFormProps {
   isLoading: boolean;
 }
 
-const categories: RuleCategory[] = ['drug_interaction', 'screening', 'vital_sign', 'care_gap', 'allergy'];
+const categories: RuleCategory[] = [
+  'drug_interaction',
+  'screening',
+  'vital_sign',
+  'care_gap',
+  'allergy',
+];
 const triggers: RuleTrigger[] = ['encounter_create', 'prescription_add', 'vital_sign_record'];
 const actions: AlertAction[] = ['alert', 'recommendation', 'block'];
 const severities: AlertSeverity[] = ['info', 'warning', 'critical'];
 
-export function CDSRuleForm({
-  initialRule,
-  onSubmit,
-  onCancel,
-  isLoading,
-}: CDSRuleFormProps) {
+export function CDSRuleForm({ initialRule, onSubmit, onCancel, isLoading }: CDSRuleFormProps) {
   const [formData, setFormData] = useState({
     ruleId: initialRule?.ruleId || `rule_${Date.now()}`,
     name: initialRule?.name || '',
@@ -54,7 +55,10 @@ export function CDSRuleForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-neutral-200 bg-white p-6">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 rounded-lg border border-neutral-200 bg-white p-6"
+    >
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-neutral-700">Rule ID</label>
@@ -127,10 +131,11 @@ export function CDSRuleForm({
           onChange={(e) => setConditionsJson(e.target.value)}
           required
           rows={6}
-          className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm font-mono text-xs"
+          className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm text-xs"
         />
         <p className="mt-1 text-xs text-neutral-500">
-          Define rule conditions as JSON. Example: {'{'}type: "vital_sign", bloodPressure: {'{'}critical: true{'}'}
+          Define rule conditions as JSON. Example: {'{'}type: "vital_sign", bloodPressure: {'{'}
+          critical: true{'}'}
         </p>
       </div>
 
@@ -210,7 +215,7 @@ export function CDSRuleForm({
         <button
           type="submit"
           disabled={isLoading}
-          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          className="bg-primary-600 hover:bg-primary-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {isLoading ? 'Saving…' : 'Save Rule'}
         </button>

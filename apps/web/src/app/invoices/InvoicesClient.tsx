@@ -2,14 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Badge,
-  Button,
-  EmptyState,
-  ErrorMessage,
-  PageWrapper,
-  Toast,
-} from '@/components/ui';
+import { Badge, Button, EmptyState, ErrorMessage, PageWrapper, Toast } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 
 type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
@@ -43,7 +36,11 @@ export default function InvoicesClient() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const { data: invoices = [], isLoading, error } = useQuery<Invoice[]>({
+  const {
+    data: invoices = [],
+    isLoading,
+    error,
+  } = useQuery<Invoice[]>({
     queryKey: ['invoices'],
     queryFn: fetchInvoices,
   });
@@ -79,7 +76,10 @@ export default function InvoicesClient() {
 
   const handleSend = async (id: string) => {
     try {
-      const res = await fetch(`${API_V1}/invoices/${id}/send`, { method: 'POST', credentials: 'include' });
+      const res = await fetch(`${API_V1}/invoices/${id}/send`, {
+        method: 'POST',
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error('Failed to send invoice');
       setToast({ message: 'Invoice sent to patient', type: 'success' });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -94,15 +94,20 @@ export default function InvoicesClient() {
 
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-neutral-900">Invoices</h1>
-        <Button onClick={() => window.location.href = '/invoices/new'}>+ New Invoice</Button>
+        <Button onClick={() => (window.location.href = '/invoices/new')}>+ New Invoice</Button>
       </div>
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />)}
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />
+          ))}
         </div>
       ) : error ? (
-        <ErrorMessage message="Failed to load invoices" onRetry={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })} />
+        <ErrorMessage
+          message="Failed to load invoices"
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })}
+        />
       ) : invoices.length === 0 ? (
         <EmptyState title="No invoices yet" icon="📄" />
       ) : (
@@ -125,8 +130,12 @@ export default function InvoicesClient() {
                   <td className="px-4 py-3">
                     {inv.patientId ? `${inv.patientId.firstName} ${inv.patientId.lastName}` : '—'}
                   </td>
-                  <td className="px-4 py-3 font-medium">{inv.total} {inv.currency}</td>
-                  <td className="px-4 py-3 text-neutral-600">{new Date(inv.dueDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {inv.total} {inv.currency}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-600">
+                    {new Date(inv.dueDate).toLocaleDateString()}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant={STATUS_VARIANT[inv.status]}>{inv.status}</Badge>
                   </td>
@@ -134,20 +143,20 @@ export default function InvoicesClient() {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handlePreviewPDF(inv._id)}
-                        className="text-xs text-primary-600 hover:underline"
+                        className="text-primary-600 text-xs hover:underline"
                       >
                         Preview
                       </button>
                       <button
                         onClick={() => handleDownloadPDF(inv._id, inv.invoiceNumber)}
-                        className="text-xs text-primary-600 hover:underline"
+                        className="text-primary-600 text-xs hover:underline"
                       >
                         Download
                       </button>
                       {inv.status === 'draft' && (
                         <button
                           onClick={() => handleSend(inv._id)}
-                          className="text-xs text-primary-600 hover:underline"
+                          className="text-primary-600 text-xs hover:underline"
                         >
                           Send
                         </button>

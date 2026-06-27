@@ -10,6 +10,32 @@ export interface PaginationMeta {
   nextCursor: string | null;
 }
 
+/**
+ * Recursively removes MongoDB operator keys that could allow
+ * user-controlled data to alter query logic (NoSQL injection).
+ */
+function sanitizeQuery<T>(query: FilterQuery<T>): FilterQuery<T> {
+  const BLOCKED_OPERATORS = new Set([
+    '$where',
+    '$expr',
+    '$function',
+    '$accumulator',
+  ]);
+
+  function sanitize(obj: unknown): unknown {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitize);
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (BLOCKED_OPERATORS.has(key)) continue;
+      clean[key] = sanitize(value);
+    }
+    return clean;
+  }
+
+  return sanitize(query) as FilterQuery<T>;
+}
+
 export async function paginate<T>(
   model: Model<T>,
   query: FilterQuery<T>,
@@ -17,10 +43,11 @@ export async function paginate<T>(
   limit: number,
   sort: Record<string, 1 | -1> = { createdAt: -1 }
 ): Promise<{ data: T[]; meta: PaginationMeta }> {
+  const safeQuery = sanitizeQuery(query);
   const [total, data] = await Promise.all([
-    model.countDocuments(query),
+    model.countDocuments(safeQuery),
     model
-      .find(query)
+      .find(safeQuery)
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -31,7 +58,6 @@ export async function paginate<T>(
   const hasPrevPage = page > 1;
   const lastDoc = data[data.length - 1] as (T & { _id?: Types.ObjectId }) | undefined;
   const nextCursor = hasNextPage && lastDoc?._id ? lastDoc._id.toString() : null;
-
   return {
     data,
     meta: { total, page, limit, totalPages, hasNextPage, hasPrevPage, nextCursor },
@@ -39,7 +65,7 @@ export async function paginate<T>(
 }
 
 export function parsePagination(
-  query: Record<string, any>
+  query: Record<string, unknown>
 ): { page: number; limit: number } | null {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = parseInt(query.limit as string) || 20;
@@ -64,32 +90,25 @@ export async function paginateCursor<T>(
   cursor?: string,
   sort: Record<string, 1 | -1> = { _id: -1 }
 ): Promise<CursorPaginationResult<T>> {
-  const baseQuery: FilterQuery<T> = { ...query };
-
+  const baseQuery: FilterQuery<T> = { ...sanitizeQuery(query) };
   if (cursor) {
     const cursorId = new Types.ObjectId(cursor);
-    // Descending: fetch documents with _id less than cursor
-    // Ascending: fetch documents with _id greater than cursor
     const direction = (sort._id ?? -1) === -1 ? '$lt' : '$gt';
     (baseQuery as Record<string, unknown>)._id = { [direction]: cursorId };
   }
-
   const data = (await model
     .find(baseQuery)
     .sort(sort)
     .limit(limit + 1)
     .lean()) as (T & { _id?: Types.ObjectId })[];
-
   const hasNextPage = data.length > limit;
   if (hasNextPage) data.pop();
-
   const lastDoc = data[data.length - 1];
   const nextCursor = hasNextPage && lastDoc?._id ? lastDoc._id.toString() : null;
-
   return { data: data as T[], meta: { limit, hasNextPage, nextCursor } };
 }
 
-export function parseCursorPagination(query: Record<string, any>): {
+export function parseCursorPagination(query: Record<string, unknown>): {
   limit: number;
   cursor: string | undefined;
 } | null {

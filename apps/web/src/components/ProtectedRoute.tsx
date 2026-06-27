@@ -35,7 +35,7 @@ export function ProtectedRoute({ children, fallback = null }: ProtectedRouteProp
         className="flex min-h-screen items-center justify-center"
       >
         <span
-          className="h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-primary-500"
+          className="border-t-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200"
           aria-hidden="true"
         />
         <span className="sr-only">Loading…</span>

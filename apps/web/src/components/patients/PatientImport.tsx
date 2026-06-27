@@ -110,10 +110,18 @@ export default function PatientImport() {
       {status === 'done' && result && (
         <div className="mt-4 space-y-2 text-sm" role="status" aria-live="polite">
           <div className="flex gap-4">
-            <span className="text-gray-600">Total: <strong>{result.total}</strong></span>
-            <span className="text-green-700">Imported: <strong>{result.imported}</strong></span>
-            <span className="text-yellow-700">Skipped: <strong>{result.skipped}</strong></span>
-            <span className="text-red-700">Errors: <strong>{result.errors.length}</strong></span>
+            <span className="text-gray-600">
+              Total: <strong>{result.total}</strong>
+            </span>
+            <span className="text-green-700">
+              Imported: <strong>{result.imported}</strong>
+            </span>
+            <span className="text-yellow-700">
+              Skipped: <strong>{result.skipped}</strong>
+            </span>
+            <span className="text-red-700">
+              Errors: <strong>{result.errors.length}</strong>
+            </span>
           </div>
 
           {result.errors.length > 0 && (

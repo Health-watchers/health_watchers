@@ -34,7 +34,7 @@ async function initializeRedisStore(): Promise<void> {
 
     const client = createClient({ url: redisUrl });
     client.on('error', (err: Error) => {
-      logger.error('[rate-limit] Redis connection error:', err.message);
+      logger.error(`[rate-limit] Redis connection error: ${err.message}`);
       logger.warn('[rate-limit] Falling back to in-memory store for rate limiting');
     });
 
@@ -44,14 +44,18 @@ async function initializeRedisStore(): Promise<void> {
     });
     logger.info('[rate-limit] Redis store initialized successfully');
   } catch (err) {
-    logger.error('[rate-limit] Failed to initialize Redis store:', err instanceof Error ? err.message : String(err));
-    logger.warn('[rate-limit] Falling back to in-memory store. Multi-instance deployments are NOT protected.');
+    logger.error(
+      `[rate-limit] Failed to initialize Redis store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    logger.warn(
+      '[rate-limit] Falling back to in-memory store. Multi-instance deployments are NOT protected.'
+    );
   }
 }
 
 // Initialize Redis on module load
 initializeRedisStore().catch((err) => {
-  logger.error('[rate-limit] Unexpected error during Redis initialization:', err);
+  logger.error(`[rate-limit] Unexpected error during Redis initialization: ${err}`);
 });
 
 function make(windowMs: number, max: number, message: object): RateLimitRequestHandler {
@@ -118,11 +122,7 @@ export const generalLimiter: RateLimitRequestHandler = make(15 * 60 * 1000, 300,
 });
 
 // ── Per-user limiters (keyed by userId from JWT) ──────────────────────────────
-function makeUserLimiter(
-  windowMs: number,
-  max: number,
-  message: object
-): RateLimitRequestHandler {
+function makeUserLimiter(windowMs: number, max: number, message: object): RateLimitRequestHandler {
   return rateLimit({
     windowMs,
     max,
@@ -136,18 +136,16 @@ function makeUserLimiter(
 }
 
 // Bulk export: 5 req / 1 hour per user
-export const bulkExportLimiter: RateLimitRequestHandler = makeUserLimiter(
-  60 * 60 * 1000,
-  5,
-  { error: 'TooManyRequests', message: 'Bulk export limit: 5 per hour. Try again later.' }
-);
+export const bulkExportLimiter: RateLimitRequestHandler = makeUserLimiter(60 * 60 * 1000, 5, {
+  error: 'TooManyRequests',
+  message: 'Bulk export limit: 5 per hour. Try again later.',
+});
 
 // Patient search: 100 req / 1 min per user
-export const patientSearchLimiter: RateLimitRequestHandler = makeUserLimiter(
-  60 * 1000,
-  100,
-  { error: 'TooManyRequests', message: 'Search rate limit exceeded. Try again in 1 minute.' }
-);
+export const patientSearchLimiter: RateLimitRequestHandler = makeUserLimiter(60 * 1000, 100, {
+  error: 'TooManyRequests',
+  message: 'Search rate limit exceeded. Try again in 1 minute.',
+});
 
 // Report generation: 10 req / 1 hour per user
 export const reportGenerationLimiter: RateLimitRequestHandler = makeUserLimiter(

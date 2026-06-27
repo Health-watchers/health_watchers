@@ -51,10 +51,10 @@ router.post('/insurance-reimbursement', async (req: Request, res: Response) => {
       insuranceStellarAddress,
     });
 
-    res.json({ success: true, message: 'Reimbursement processed' });
+    return res.json({ success: true, message: 'Reimbursement processed' });
   } catch (err) {
-    logger.error('Error processing reimbursement webhook:', err);
-    res.status(500).json({ error: 'InternalServerError' });
+    logger.error(`Error processing reimbursement webhook: ${err}`);
+    return res.status(500).json({ error: 'InternalServerError' });
   }
 });
 
@@ -65,11 +65,14 @@ router.get(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   async (req: Request, res: Response) => {
     try {
-      const { status, overdue } = req.query;
-      let query: any = { clinicId: req.user!.clinicId };
-
+     const { status, overdue } = req.query;
+      const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected', 'paid', 'cancelled']);
+      let query: Record<string, unknown> = { clinicId: req.user!.clinicId };
       if (status) {
-        query.reimbursementStatus = status;
+        if (!ALLOWED_STATUSES.has(String(status))) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+        }
+        query.reimbursementStatus = String(status);
       }
 
       let reimbursements = await ReimbursementModel.find(query).sort({ createdAt: -1 });
@@ -85,7 +88,7 @@ router.get(
         0
       );
 
-      res.json({
+      return res.json({
         reimbursements,
         summary: {
           total: reimbursements.length,
@@ -94,8 +97,8 @@ router.get(
         },
       });
     } catch (err) {
-      logger.error('Error fetching reimbursements:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error fetching reimbursements: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
@@ -112,10 +115,10 @@ router.get('/reimbursements/:claimId', authenticate, async (req: Request, res: R
       return res.status(404).json({ error: 'NotFound', message: 'Reimbursement not found' });
     }
 
-    res.json(reimbursement);
+    return res.json(reimbursement);
   } catch (err) {
-    logger.error('Error fetching reimbursement:', err);
-    res.status(500).json({ error: 'InternalServerError' });
+    logger.error(`Error fetching reimbursement: ${err}`);
+    return res.status(500).json({ error: 'InternalServerError' });
   }
 });
 

@@ -32,7 +32,7 @@ async function processRefund(
   destinationPublicKey: string,
   userId: string,
   clinicId: string,
-  req: Request,
+  req: Request
 ): Promise<
   | { ok: true; transactionHash: string; refundIntentId: string; refundAmount: number }
   | { ok: false; status: number; error: string }
@@ -53,14 +53,18 @@ async function processRefund(
   const originalAmount = parseFloat(payment.amount);
   const refundAmount = parseFloat(amount);
   if (isNaN(refundAmount) || refundAmount <= 0 || refundAmount > originalAmount) {
-    return { ok: false, status: 400, error: `Refund amount must be between 0 and ${originalAmount}` };
+    return {
+      ok: false,
+      status: 400,
+      error: `Refund amount must be between 0 and ${originalAmount}`,
+    };
   }
 
   const memo = `refund-${dispute.paymentIntentId.slice(0, 16)}`;
   const { transactionHash } = await stellarClient.issueRefund(
     destinationPublicKey,
     refundAmount.toString(),
-    memo,
+    memo
   );
 
   const refundIntentId = randomUUID();
@@ -86,7 +90,7 @@ async function processRefund(
       resourceId: String(dispute._id),
       metadata: { refundIntentId, amount: refundAmount, transactionHash },
     },
-    req,
+    req
   );
 
   return { ok: true, transactionHash, refundIntentId, refundAmount };
@@ -125,7 +129,17 @@ router.post('/:intentId/dispute', async (req: Request, res: Response) => {
       openedAt: new Date(),
     });
 
-    await auditLog({ action: 'DISPUTE_OPENED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: String(dispute._id), metadata: { intentId } }, req);
+    await auditLog(
+      {
+        action: 'DISPUTE_OPENED',
+        userId,
+        clinicId,
+        resourceType: 'PaymentDispute',
+        resourceId: String(dispute._id),
+        metadata: { intentId },
+      },
+      req
+    );
     sendDisputeOpenedEmail(clinicEmail(clinicId), String(dispute._id), intentId, reason);
 
     return res.status(201).json({ status: 'success', data: dispute });
@@ -181,7 +195,10 @@ router.get('/disputes', ADMIN_ROLES, async (req: Request, res: Response) => {
 async function submitEvidenceHandler(req: Request, res: Response) {
   try {
     const disputeId = req.params.disputeId;
-    const { description, attachmentUrl } = req.body as { description?: string; attachmentUrl?: string };
+    const { description, attachmentUrl } = req.body as {
+      description?: string;
+      attachmentUrl?: string;
+    };
     const userId = req.user!.userId;
     const clinicId = req.user!.clinicId;
 
@@ -192,13 +209,20 @@ async function submitEvidenceHandler(req: Request, res: Response) {
     const dispute = await PaymentDisputeModel.findOne({ _id: disputeId, clinicId });
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
     if (['resolved_refund', 'resolved_no_action', 'closed'].includes(dispute.status)) {
-      return res.status(400).json({ error: 'Cannot submit evidence on a resolved or closed dispute' });
+      return res
+        .status(400)
+        .json({ error: 'Cannot submit evidence on a resolved or closed dispute' });
     }
 
     const now = new Date();
     const reviewDeadline = new Date(now.getTime() + REVIEW_PERIOD_MS);
 
-    dispute.evidence.push({ description: description.trim(), attachmentUrl, submittedBy: userId, submittedAt: now });
+    dispute.evidence.push({
+      description: description.trim(),
+      attachmentUrl,
+      submittedBy: userId,
+      submittedAt: now,
+    });
     // Start the review period on first evidence submission; keep the original deadline thereafter.
     if (!dispute.evidenceSubmittedAt) {
       dispute.evidenceSubmittedAt = now;
@@ -208,10 +232,21 @@ async function submitEvidenceHandler(req: Request, res: Response) {
     await dispute.save();
 
     await auditLog(
-      { action: 'DISPUTE_OPENED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: disputeId, metadata: { event: 'evidence_submitted' } },
-      req,
+      {
+        action: 'DISPUTE_OPENED',
+        userId,
+        clinicId,
+        resourceType: 'PaymentDispute',
+        resourceId: disputeId,
+        metadata: { event: 'evidence_submitted' },
+      },
+      req
     );
-    sendDisputeEvidenceSubmittedEmail(clinicEmail(clinicId), disputeId, dispute.reviewDeadline ?? reviewDeadline);
+    sendDisputeEvidenceSubmittedEmail(
+      clinicEmail(clinicId),
+      disputeId,
+      dispute.reviewDeadline ?? reviewDeadline
+    );
 
     return res.json({
       status: 'success',
@@ -249,10 +284,15 @@ router.put('/disputes/:id/resolve', ADMIN_ROLES, async (req: Request, res: Respo
 
     const dispute = await PaymentDisputeModel.findOne({ _id: id, clinicId });
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
-    if (dispute.status === 'closed') return res.status(400).json({ error: 'Dispute is already closed' });
+    if (dispute.status === 'closed')
+      return res.status(400).json({ error: 'Dispute is already closed' });
 
     // Enforce the 7-day review period once evidence has been submitted.
-    if (dispute.reviewDeadline && dispute.reviewDeadline > new Date() && req.user!.role !== 'SUPER_ADMIN') {
+    if (
+      dispute.reviewDeadline &&
+      dispute.reviewDeadline > new Date() &&
+      req.user!.role !== 'SUPER_ADMIN'
+    ) {
       const retryAfter = Math.ceil((dispute.reviewDeadline.getTime() - Date.now()) / 1000);
       res.set('Retry-After', String(retryAfter));
       return res.status(425).json({
@@ -264,9 +304,15 @@ router.put('/disputes/:id/resolve', ADMIN_ROLES, async (req: Request, res: Respo
     // Determine outcome — explicit `outcome` wins, otherwise infer from status.
     const resolvedOutcome =
       outcome ??
-      (status === 'resolved_refund' ? 'patient_favored' : status === 'closed' ? 'no_action' : 'clinic_favored');
+      (status === 'resolved_refund'
+        ? 'patient_favored'
+        : status === 'closed'
+          ? 'no_action'
+          : 'clinic_favored');
 
-    let refundResult: { transactionHash: string; refundIntentId: string; refundAmount: number } | undefined;
+    let refundResult:
+      | { transactionHash: string; refundIntentId: string; refundAmount: number }
+      | undefined;
 
     // Automatic refund processing when resolved in the patient's favor.
     if (resolvedOutcome === 'patient_favored' || status === 'resolved_refund') {
@@ -274,7 +320,14 @@ router.put('/disputes/:id/resolve', ADMIN_ROLES, async (req: Request, res: Respo
         return res.status(409).json({ error: 'Refund already issued for this dispute' });
       }
       if (refundDestination && refundAmount != null) {
-        const result = await processRefund(dispute, String(refundAmount), refundDestination, userId, clinicId, req);
+        const result = await processRefund(
+          dispute,
+          String(refundAmount),
+          refundDestination,
+          userId,
+          clinicId,
+          req
+        );
         if (!result.ok) return res.status(result.status).json({ error: result.error });
         refundResult = result;
         dispute.refundIntentId = result.refundIntentId;
@@ -295,10 +348,31 @@ router.put('/disputes/:id/resolve', ADMIN_ROLES, async (req: Request, res: Respo
     };
     await dispute.save();
 
-    await auditLog({ action: 'DISPUTE_RESOLVED', userId, clinicId, resourceType: 'PaymentDispute', resourceId: id, metadata: { status, outcome: resolvedOutcome } }, req);
+    await auditLog(
+      {
+        action: 'DISPUTE_RESOLVED',
+        userId,
+        clinicId,
+        resourceType: 'PaymentDispute',
+        resourceId: id,
+        metadata: { status, outcome: resolvedOutcome },
+      },
+      req
+    );
     sendDisputeResolvedEmail(clinicEmail(clinicId), id, status, resolutionNotes);
 
-    return res.json({ status: 'success', data: { dispute, ...(refundResult ? { transactionHash: refundResult.transactionHash, refundIntentId: refundResult.refundIntentId } : {}) } });
+    return res.json({
+      status: 'success',
+      data: {
+        dispute,
+        ...(refundResult
+          ? {
+              transactionHash: refundResult.transactionHash,
+              refundIntentId: refundResult.refundIntentId,
+            }
+          : {}),
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -323,9 +397,17 @@ router.post('/disputes/:id/refund', ADMIN_ROLES, async (req: Request, res: Respo
 
     const dispute = await PaymentDisputeModel.findOne({ _id: id, clinicId });
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
-    if (dispute.refundIntentId) return res.status(409).json({ error: 'Refund already issued for this dispute' });
+    if (dispute.refundIntentId)
+      return res.status(409).json({ error: 'Refund already issued for this dispute' });
 
-    const result = await processRefund(dispute, String(amount), destinationPublicKey, userId, clinicId, req);
+    const result = await processRefund(
+      dispute,
+      String(amount),
+      destinationPublicKey,
+      userId,
+      clinicId,
+      req
+    );
     if (!result.ok) return res.status(result.status).json({ error: result.error });
 
     dispute.refundIntentId = result.refundIntentId;
@@ -343,7 +425,14 @@ router.post('/disputes/:id/refund', ADMIN_ROLES, async (req: Request, res: Respo
 
     sendDisputeResolvedEmail(clinicEmail(clinicId), id, 'resolved_refund');
 
-    return res.json({ status: 'success', data: { dispute, transactionHash: result.transactionHash, refundIntentId: result.refundIntentId } });
+    return res.json({
+      status: 'success',
+      data: {
+        dispute,
+        transactionHash: result.transactionHash,
+        refundIntentId: result.refundIntentId,
+      },
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

@@ -35,13 +35,23 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -103,11 +113,11 @@ const DISPUTE_ID = '507f1f77bcf86cd799439020';
 const INTENT_ID = 'intent-test-1';
 
 function makeToken(role = 'CLINIC_ADMIN') {
-  return jwt.sign(
-    { userId: USER_ID, role, clinicId: CLINIC_ID },
-    'test-access-secret',
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
-  );
+  return jwt.sign({ userId: USER_ID, role, clinicId: CLINIC_ID }, 'test-access-secret', {
+    expiresIn: '15m',
+    issuer: 'health-watchers-api',
+    audience: 'health-watchers-client',
+  });
 }
 
 const mockPayment = {
@@ -216,7 +226,11 @@ describe('PUT /api/v1/payments/disputes/:id/resolve', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('resolves a dispute with valid status', async () => {
-    const dispute = { ...mockDispute, status: 'open', save: jest.fn().mockResolvedValue(undefined) };
+    const dispute = {
+      ...mockDispute,
+      status: 'open',
+      save: jest.fn().mockResolvedValue(undefined),
+    };
     (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue(dispute);
 
     const res = await request(app)
@@ -238,7 +252,10 @@ describe('PUT /api/v1/payments/disputes/:id/resolve', () => {
   });
 
   it('returns 400 when dispute is already closed', async () => {
-    (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue({ ...mockDispute, status: 'closed' });
+    (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue({
+      ...mockDispute,
+      status: 'closed',
+    });
 
     const res = await request(app)
       .put(`/api/v1/payments/disputes/${DISPUTE_ID}/resolve`)
@@ -254,7 +271,12 @@ describe('POST /api/v1/payments/disputes/:id/refund — Issue refund', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('issues a full refund successfully', async () => {
-    const dispute = { ...mockDispute, status: 'open', refundIntentId: undefined, save: jest.fn().mockResolvedValue(undefined) };
+    const dispute = {
+      ...mockDispute,
+      status: 'open',
+      refundIntentId: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
     (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue(dispute);
     (PaymentRecordModel.findOne as jest.Mock).mockResolvedValue(mockPayment);
     (stellarClient.issueRefund as jest.Mock).mockResolvedValue({ transactionHash: 'tx-hash-abc' });
@@ -271,7 +293,12 @@ describe('POST /api/v1/payments/disputes/:id/refund — Issue refund', () => {
   });
 
   it('issues a partial refund', async () => {
-    const dispute = { ...mockDispute, status: 'open', refundIntentId: undefined, save: jest.fn().mockResolvedValue(undefined) };
+    const dispute = {
+      ...mockDispute,
+      status: 'open',
+      refundIntentId: undefined,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
     (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue(dispute);
     (PaymentRecordModel.findOne as jest.Mock).mockResolvedValue(mockPayment);
     (stellarClient.issueRefund as jest.Mock).mockResolvedValue({ transactionHash: 'tx-partial' });
@@ -306,7 +333,10 @@ describe('POST /api/v1/payments/disputes/:id/refund — Issue refund', () => {
     oldDate.setDate(oldDate.getDate() - 31);
     const dispute = { ...mockDispute, status: 'open', refundIntentId: undefined, save: jest.fn() };
     (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue(dispute);
-    (PaymentRecordModel.findOne as jest.Mock).mockResolvedValue({ ...mockPayment, createdAt: oldDate });
+    (PaymentRecordModel.findOne as jest.Mock).mockResolvedValue({
+      ...mockPayment,
+      createdAt: oldDate,
+    });
 
     const res = await request(app)
       .post(`/api/v1/payments/disputes/${DISPUTE_ID}/refund`)
@@ -319,7 +349,10 @@ describe('POST /api/v1/payments/disputes/:id/refund — Issue refund', () => {
   });
 
   it('returns 409 when refund already issued', async () => {
-    (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue({ ...mockDispute, refundIntentId: 'existing-refund' });
+    (PaymentDisputeModel.findOne as jest.Mock).mockResolvedValue({
+      ...mockDispute,
+      refundIntentId: 'existing-refund',
+    });
 
     const res = await request(app)
       .post(`/api/v1/payments/disputes/${DISPUTE_ID}/refund`)

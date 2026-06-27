@@ -16,8 +16,10 @@ export async function checkFeeBudget(clinicId: string, feeAmount: number): Promi
   const remaining = budget.monthlyBudget - budget.currentSpent;
 
   if (budget.currentSpent / budget.monthlyBudget >= ALERT_THRESHOLD) {
-    logger.warn({ clinicId, month, currentSpent: budget.currentSpent, monthlyBudget: budget.monthlyBudget },
-      'Clinic fee budget approaching limit (≥90%)');
+    logger.warn(
+      { clinicId, month, currentSpent: budget.currentSpent, monthlyBudget: budget.monthlyBudget },
+      'Clinic fee budget approaching limit (≥90%)'
+    );
   }
 
   return remaining >= feeAmount;

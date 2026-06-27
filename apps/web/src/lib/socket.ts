@@ -130,22 +130,25 @@ export function useAppointmentEvents() {
 
   React.useEffect(() => {
     const handleAppointmentEvent = (event: CustomEvent) => {
-      setEvents(prev => [...prev, { type: event.type, data: event.detail, timestamp: Date.now() }]);
+      setEvents((prev) => [
+        ...prev,
+        { type: event.type, data: event.detail, timestamp: Date.now() },
+      ]);
     };
 
     const eventTypes = [
       'appointment:confirmed',
-      'appointment:cancelled', 
+      'appointment:cancelled',
       'appointment:rescheduled',
-      'appointment:patient_arrived'
+      'appointment:patient_arrived',
     ];
 
-    eventTypes.forEach(eventType => {
+    eventTypes.forEach((eventType) => {
       window.addEventListener(eventType, handleAppointmentEvent as EventListener);
     });
 
     return () => {
-      eventTypes.forEach(eventType => {
+      eventTypes.forEach((eventType) => {
         window.removeEventListener(eventType, handleAppointmentEvent as EventListener);
       });
     };

@@ -33,13 +33,23 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -60,7 +70,11 @@ jest.mock('@api/lib/email.service', () => ({
   sendDataExportReadyEmail: jest.fn(),
 }));
 jest.mock('@api/modules/auth/models/user.model', () => ({
-  UserModel: { findById: jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ email: 'patient@example.com' }) })) },
+  UserModel: {
+    findById: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue({ email: 'patient@example.com' }),
+    })),
+  },
 }));
 
 // Mock the heavy record-building service so we don't need a database.
@@ -100,7 +114,12 @@ const USER_ID = '507f1f77bcf86cd799439044';
 
 function patientToken(withPatient = true) {
   return jwt.sign(
-    { userId: USER_ID, role: 'PATIENT', clinicId: CLINIC_ID, ...(withPatient ? { patientId: PATIENT_ID } : {}) },
+    {
+      userId: USER_ID,
+      role: 'PATIENT',
+      clinicId: CLINIC_ID,
+      ...(withPatient ? { patientId: PATIENT_ID } : {}),
+    },
     'test-access-secret-32-chars-long!!',
     { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
   );
@@ -169,7 +188,11 @@ describe('GET /api/v1/portal/export-requests', () => {
 
   it('lists the patient requests with SLA tracking', async () => {
     (ExportRequestModel.find as jest.Mock).mockReturnValue({
-      sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([makeExportReq({ status: 'ready', fulfilledAt: new Date() })]) }),
+      sort: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockResolvedValue([makeExportReq({ status: 'ready', fulfilledAt: new Date() })]),
+      }),
     });
 
     const res = await request(app)
@@ -186,7 +209,10 @@ describe('GET /api/v1/portal/export/download/:token', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('downloads JSON for a valid token', async () => {
-    const doc = makeExportReq({ status: 'ready', downloadExpiresAt: new Date(Date.now() + 86400000) });
+    const doc = makeExportReq({
+      status: 'ready',
+      downloadExpiresAt: new Date(Date.now() + 86400000),
+    });
     (ExportRequestModel.findOne as jest.Mock).mockReturnValue({
       select: jest.fn().mockResolvedValue(doc),
     });

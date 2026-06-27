@@ -30,7 +30,10 @@ type EmailRenderer = (...args: any[]) => EmailContent;
 
 const emailPlugins = new Map<string, Record<string, EmailRenderer>>();
 
-export function registerEmailTemplatePlugin(language: string, templates: Record<string, EmailRenderer>): void {
+export function registerEmailTemplatePlugin(
+  language: string,
+  templates: Record<string, EmailRenderer>
+): void {
   emailPlugins.set(language.toLowerCase(), templates);
 }
 
@@ -148,7 +151,11 @@ function buildPaymentConfirmationEmail(
   };
 }
 
-function buildAiSummaryReadyEmail(patientName: string, encounterId: string, language?: string): EmailContent {
+function buildAiSummaryReadyEmail(
+  patientName: string,
+  encounterId: string,
+  language?: string
+): EmailContent {
   const encounterUrl = `${APP_BASE_URL()}/encounters/${encounterId}`;
   if (resolveLanguage(language) === 'fr') {
     return {
@@ -189,7 +196,13 @@ export async function enqueue(to: string, subject: string, text: string, html?: 
 export const sendMail = enqueue;
 
 export function sendVerificationEmail(to: string, token: string, language?: string): void {
-  const rendered = renderTemplate('verification', language, buildVerificationEmail, token, language);
+  const rendered = renderTemplate(
+    'verification',
+    language,
+    buildVerificationEmail,
+    token,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -199,7 +212,13 @@ export function sendWelcomeEmail(to: string, name: string, language?: string): v
 }
 
 export function sendPasswordResetEmail(to: string, token: string, language?: string) {
-  const rendered = renderTemplate('passwordReset', language, buildPasswordResetEmail, token, language);
+  const rendered = renderTemplate(
+    'passwordReset',
+    language,
+    buildPasswordResetEmail,
+    token,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -210,7 +229,15 @@ export function sendAppointmentReminderEmail(
   doctorName: string,
   language?: string
 ): void {
-  const rendered = renderTemplate('appointmentReminder', language, buildAppointmentReminderEmail, patientName, date, doctorName, language);
+  const rendered = renderTemplate(
+    'appointmentReminder',
+    language,
+    buildAppointmentReminderEmail,
+    patientName,
+    date,
+    doctorName,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -222,7 +249,15 @@ export function sendPaymentConfirmationEmail(
   txHash: string,
   language?: string
 ): void {
-  const rendered = renderTemplate('paymentConfirmation', language, buildPaymentConfirmationEmail, amount, assetCode, txHash, language);
+  const rendered = renderTemplate(
+    'paymentConfirmation',
+    language,
+    buildPaymentConfirmationEmail,
+    amount,
+    assetCode,
+    txHash,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -306,21 +341,46 @@ export function sendReferralNotificationEmail(
 }
 
 /** AI summary ready notification sent when clinical summary is generated */
-export function sendAiSummaryReadyEmail(to: string, patientName: string, encounterId: string, language?: string): void {
-  const rendered = renderTemplate('aiSummaryReady', language, buildAiSummaryReadyEmail, patientName, encounterId, language);
+export function sendAiSummaryReadyEmail(
+  to: string,
+  patientName: string,
+  encounterId: string,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'aiSummaryReady',
+    language,
+    buildAiSummaryReadyEmail,
+    patientName,
+    encounterId,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
 /** @deprecated Use sendAiSummaryReadyEmail instead */
-export function sendAISummaryNotification(to: string, patientName: string, encounterId: string, language?: string): void {
+export function sendAISummaryNotification(
+  to: string,
+  patientName: string,
+  encounterId: string,
+  language?: string
+): void {
   sendAiSummaryReadyEmail(to, patientName, encounterId, language);
 }
 
 /** Dispute opened notification sent to clinic admin */
-export function sendDisputeOpenedEmail(to: string, disputeId: string, paymentIntentId: string, reason: string, language?: string): void {
+export function sendDisputeOpenedEmail(
+  to: string,
+  disputeId: string,
+  paymentIntentId: string,
+  reason: string,
+  language?: string
+): void {
   const disputeUrl = `${APP_BASE_URL()}/disputes`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? 'Litige de paiement ouvert — Health Watchers' : 'Payment Dispute Opened — Health Watchers';
+  const subject = isFrench
+    ? 'Litige de paiement ouvert — Health Watchers'
+    : 'Payment Dispute Opened — Health Watchers';
   const text = isFrench
     ? `Un nouveau litige de paiement a été ouvert.\n\nID du litige : ${disputeId}\nPaiement : ${paymentIntentId}\nMotif : ${reason}\n\nVoir les litiges : ${disputeUrl}`
     : `A new payment dispute has been opened.\n\nDispute ID: ${disputeId}\nPayment: ${paymentIntentId}\nReason: ${reason}\n\nView disputes: ${disputeUrl}`;
@@ -339,7 +399,9 @@ export function sendDisputeResolvedEmail(
   language?: string
 ): void {
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? 'Litige de paiement résolu — Health Watchers' : 'Payment Dispute Resolved — Health Watchers';
+  const subject = isFrench
+    ? 'Litige de paiement résolu — Health Watchers'
+    : 'Payment Dispute Resolved — Health Watchers';
   const text = isFrench
     ? `Le litige ${disputeId} a été résolu avec le statut : ${status}.${resolutionNotes ? `\n\nNotes : ${resolutionNotes}` : ''}`
     : `Dispute ${disputeId} has been resolved with status: ${status}.${resolutionNotes ? `\n\nNotes: ${resolutionNotes}` : ''}`;
@@ -353,7 +415,7 @@ export function sendDisputeResolvedEmail(
 export function sendDisputeEvidenceSubmittedEmail(
   to: string,
   disputeId: string,
-  reviewDeadline: Date,
+  reviewDeadline: Date
 ): void {
   const disputeUrl = `${APP_BASE_URL()}/disputes`;
   const deadlineStr = reviewDeadline.toUTCString();
@@ -393,7 +455,9 @@ export function sendLowBalanceWarningEmail(
 ): void {
   const walletUrl = `${APP_BASE_URL()}/wallet`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? `Alerte de solde faible — ${clinicName}` : `⚠️ Low Balance Warning — ${clinicName}`;
+  const subject = isFrench
+    ? `Alerte de solde faible — ${clinicName}`
+    : `⚠️ Low Balance Warning — ${clinicName}`;
   const text = isFrench
     ? `Avertissement : le solde de votre compte Stellar (${xlmBalance} XLM) est passé sous le seuil d'alerte de ${threshold} XLM.\n\nVeuillez recharger votre compte pour éviter les échecs de paiement.\n\nGérer le portefeuille : ${walletUrl}`
     : `Warning: Your clinic's Stellar account balance (${xlmBalance} XLM) has dropped below the warning threshold of ${threshold} XLM.\n\nPlease top up your account to avoid payment failures.\n\nManage wallet: ${walletUrl}`;
@@ -413,7 +477,9 @@ export function sendCriticalBalanceEmail(
 ): void {
   const walletUrl = `${APP_BASE_URL()}/wallet`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? `Alerte critique de solde — ${clinicName}` : `🚨 Critical Balance Alert — ${clinicName}`;
+  const subject = isFrench
+    ? `Alerte critique de solde — ${clinicName}`
+    : `🚨 Critical Balance Alert — ${clinicName}`;
   const text = isFrench
     ? `CRITIQUE : le solde de votre compte Stellar (${xlmBalance} XLM) est très faible (en dessous de ${threshold} XLM). Les paiements peuvent échouer immédiatement.\n\nGérer le portefeuille : ${walletUrl}`
     : `CRITICAL: Your clinic's Stellar account balance (${xlmBalance} XLM) is critically low (below ${threshold} XLM). Payments may fail immediately.\n\nManage wallet: ${walletUrl}`;
@@ -436,7 +502,9 @@ export function sendLargeTransactionEmail(
   const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
   const walletUrl = `${APP_BASE_URL()}/wallet`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? `Transaction importante détectée — ${clinicName}` : `💸 Large Transaction Detected — ${clinicName}`;
+  const subject = isFrench
+    ? `Transaction importante détectée — ${clinicName}`
+    : `💸 Large Transaction Detected — ${clinicName}`;
   const text = isFrench
     ? `Une transaction ${direction} importante de ${amount} XLM (seuil : ${threshold} XLM) a été détectée sur le compte Stellar de votre clinique.\n\nTransaction : ${txHash}\nVoir : ${explorerUrl}`
     : `A large ${direction} transaction of ${amount} XLM (threshold: ${threshold} XLM) was detected on your clinic's Stellar account.\n\nTransaction: ${txHash}\nView: ${explorerUrl}`;
@@ -458,7 +526,9 @@ export function sendUnrecognizedTransactionEmail(
   const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
   const walletUrl = `${APP_BASE_URL()}/wallet`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? `Transaction non reconnue détectée — ${clinicName}` : `🔍 Unrecognized Transaction Detected — ${clinicName}`;
+  const subject = isFrench
+    ? `Transaction non reconnue détectée — ${clinicName}`
+    : `🔍 Unrecognized Transaction Detected — ${clinicName}`;
   const text = isFrench
     ? `Une transaction non reconnue de ${amount} XLM provenant de ${from} a été détectée sur le compte Stellar de votre clinique. Cette transaction n'a pas été initiée via Health Watchers.\n\nTransaction : ${txHash}\nVoir : ${explorerUrl}`
     : `An unrecognized transaction of ${amount} XLM from ${from} was detected on your clinic's Stellar account. This transaction was not initiated through Health Watchers.\n\nTransaction: ${txHash}\nView: ${explorerUrl}`;
@@ -468,9 +538,13 @@ export function sendUnrecognizedTransactionEmail(
   enqueue(to, subject, text, html);
 }
 
-
 /** Portal MFA enabled notification sent to patient */
-export function sendPortalMfaEnabledEmail(to: string, patientName: string, method: 'totp' | 'sms', language?: string): void {
+export function sendPortalMfaEnabledEmail(
+  to: string,
+  patientName: string,
+  method: 'totp' | 'sms',
+  language?: string
+): void {
   const methodLabel = method === 'totp' ? 'authenticator app' : 'SMS';
   const portalUrl = `${APP_BASE_URL()}/portal/settings/security`;
   const isFrench = resolveLanguage(language) === 'fr';
@@ -487,7 +561,11 @@ export function sendPortalMfaEnabledEmail(to: string, patientName: string, metho
 }
 
 /** Portal MFA disabled notification sent to patient */
-export function sendPortalMfaDisabledEmail(to: string, patientName: string, language?: string): void {
+export function sendPortalMfaDisabledEmail(
+  to: string,
+  patientName: string,
+  language?: string
+): void {
   const portalUrl = `${APP_BASE_URL()}/portal/settings/security`;
   const isFrench = resolveLanguage(language) === 'fr';
   const subject = isFrench
@@ -503,17 +581,109 @@ export function sendPortalMfaDisabledEmail(to: string, patientName: string, lang
 }
 
 /** Portal MFA backup codes generated notification sent to patient */
-export function sendPortalMfaBackupCodesEmail(to: string, patientName: string, backupCodes: string[], language?: string): void {
+export function sendPortalMfaBackupCodesEmail(
+  to: string,
+  patientName: string,
+  backupCodes: string[],
+  language?: string
+): void {
   const portalUrl = `${APP_BASE_URL()}/portal/settings/security`;
-  const codesHtml = backupCodes.map((code) => `<code style="background:#f3f4f6;padding:4px 8px;margin:4px;display:inline-block">${code}</code>`).join('');
+  const codesHtml = backupCodes
+    .map(
+      (code) =>
+        `<code style="background:#f3f4f6;padding:4px 8px;margin:4px;display:inline-block">${code}</code>`
+    )
+    .join('');
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? 'Codes de secours MFA générés — Health Watchers' : 'Portal MFA Backup Codes — Health Watchers';
+  const subject = isFrench
+    ? 'Codes de secours MFA générés — Health Watchers'
+    : 'Portal MFA Backup Codes — Health Watchers';
   const text = isFrench
     ? `Vos codes de secours pour l'authentification à deux facteurs du portail ont été générés. Conservez-les dans un endroit sûr.\n\nCodes de secours :\n${backupCodes.join('\n')}\n\nGérer les paramètres de sécurité : ${portalUrl}`
     : `Your backup codes for portal two-factor authentication have been generated. Keep these codes in a safe place.\n\nBackup codes:\n${backupCodes.join('\n')}\n\nManage security settings: ${portalUrl}`;
   const html = isFrench
     ? `<h3>Codes de secours MFA du portail générés</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>Vos codes de secours pour l'authentification à deux facteurs du portail ont été générés. Conservez-les dans un endroit sûr.</p><p><strong>Codes de secours :</strong></p><div style="background:#f9fafb;padding:16px;border-radius:6px;margin:16px 0;font-family:monospace">${codesHtml}</div><p style="color:#dc2626"><strong>Important :</strong> chaque code ne peut être utilisé qu'une seule fois. Conservez-les en lieu sûr.</p><p><a href="${portalUrl}">Gérer les paramètres de sécurité</a></p>`
     : `<h3>Portal MFA Backup Codes Generated</h3><p>Hello <strong>${patientName}</strong>,</p><p>Your backup codes for portal two-factor authentication have been generated. Keep these codes in a safe place.</p><p><strong>Backup Codes:</strong></p><div style="background:#f9fafb;padding:16px;border-radius:6px;margin:16px 0;font-family:monospace">${codesHtml}</div><p style="color:#dc2626"><strong>Important:</strong> Each code can only be used once. Store them securely.</p><p><a href="${portalUrl}">Manage Security Settings</a></p>`;
+  enqueue(to, subject, text, html);
+}
+
+/** Notification sent to patient when a new consent version requires acceptance */
+export function sendConsentVersionNotificationEmail(
+  to: string,
+  patientName: string,
+  consentType: string,
+  version: string
+): void {
+  const portalUrl = `${APP_BASE_URL()}/portal/consent`;
+  const typeLabel = consentType.replace(/_/g, ' ');
+  const subject = `Action Required: Updated ${typeLabel} consent form — Health Watchers`;
+  const text = `Hi ${patientName},\n\nYour clinic has updated the ${typeLabel} consent form (version ${version}). Please review and re-consent at your earliest convenience.\n\nReview and sign: ${portalUrl}`;
+  const html = `
+    <h3>Updated Consent Form Requires Your Acceptance</h3>
+    <p>Hi <strong>${patientName}</strong>,</p>
+    <p>Your clinic has published an updated <strong>${typeLabel}</strong> consent form (version <strong>${version}</strong>).</p>
+    <p>Please review and re-accept the updated form to continue receiving care.</p>
+    <p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Review &amp; Sign</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
+  `;
+  enqueue(to, subject, text, html);
+}
+
+/** MFA grace period reminder sent to DOCTOR/NURSE who haven't set up 2FA */
+export function sendMfaGracePeriodReminderEmail(
+  to: string,
+  name: string,
+  daysRemaining: number,
+  gracePeriodEndsAt: Date
+): void {
+  const setupUrl = `${APP_BASE_URL()}/settings/security`;
+  const deadlineStr = gracePeriodEndsAt.toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const urgency = daysRemaining === 1 ? '🚨 Last day' : `⚠️ ${daysRemaining} days remaining`;
+  const subject = `${urgency}: Set up Two-Factor Authentication — Health Watchers`;
+  const text = `Hi ${name},\n\nYour account requires two-factor authentication (2FA) to be set up by ${deadlineStr}.\n\nAfter that date, you will not be able to log in until 2FA is enabled.\n\nSet it up now: ${setupUrl}`;
+  const html = `
+    <h3>${urgency}: Two-Factor Authentication Required</h3>
+    <p>Hi <strong>${name}</strong>,</p>
+    <p>Your account requires two-factor authentication (2FA) to protect patient data.</p>
+    <p><strong>Deadline:</strong> ${deadlineStr}</p>
+    <p>After this date, you will <strong>not be able to log in</strong> until 2FA is enabled.</p>
+    <p><a href="${setupUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Set Up 2FA Now</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
+  `;
+  enqueue(to, subject, text, html);
+}
+
+/** Backup codes regenerated — sent to staff user (DOCTOR/NURSE/ADMIN) when new codes are generated */
+export function sendMfaBackupCodesRegeneratedEmail(
+  to: string,
+  name: string,
+  backupCodes: string[]
+): void {
+  const setupUrl = `${APP_BASE_URL()}/settings/security`;
+  const codesHtml = backupCodes
+    .map(
+      (code) =>
+        `<code style="background:#f3f4f6;padding:4px 8px;margin:4px;display:inline-block;font-family:monospace">${code}</code>`
+    )
+    .join('');
+  const subject = 'MFA Backup Codes Regenerated — Health Watchers';
+  const text = `Hi ${name},\n\nYour MFA backup codes have been regenerated. All previous codes are now invalid.\n\nNew backup codes:\n${backupCodes.join('\n')}\n\nStore them in a safe place. Each code can only be used once.\n\nManage security settings: ${setupUrl}`;
+  const html = `
+    <h3>MFA Backup Codes Regenerated</h3>
+    <p>Hi <strong>${name}</strong>,</p>
+    <p>Your MFA backup codes have been regenerated. <strong>All previous codes are now invalid.</strong></p>
+    <p><strong>New Backup Codes:</strong></p>
+    <div style="background:#f9fafb;padding:16px;border-radius:6px;margin:16px 0;font-family:monospace">${codesHtml}</div>
+    <p style="color:#dc2626"><strong>Important:</strong> Each code can only be used once. Store them securely and do not share them.</p>
+    <p>If you did not request this, contact your administrator immediately.</p>
+    <p><a href="${setupUrl}">Manage Security Settings</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
+  `;
   enqueue(to, subject, text, html);
 }
 
@@ -525,9 +695,14 @@ export function sendOutcomeNotificationEmail(
   language?: string
 ): void {
   const referralUrl = `${APP_BASE_URL()}/referrals/${data.referralId}`;
-  const outcomeLabel = data.outcome === 'attended' ? 'Patient Attended' : data.outcome.charAt(0).toUpperCase() + data.outcome.slice(1);
+  const outcomeLabel =
+    data.outcome === 'attended'
+      ? 'Patient Attended'
+      : data.outcome.charAt(0).toUpperCase() + data.outcome.slice(1);
   const isFrench = resolveLanguage(language) === 'fr';
-  const subject = isFrench ? 'Résultat de l’orientation enregistré — Health Watchers' : 'Referral Outcome Recorded — Health Watchers';
+  const subject = isFrench
+    ? 'Résultat de l’orientation enregistré — Health Watchers'
+    : 'Referral Outcome Recorded — Health Watchers';
   const text = isFrench
     ? `Un résultat d'orientation a été enregistré : ${outcomeLabel}.\n\nID de l'orientation : ${data.referralId}\nVoir : ${referralUrl}`
     : `A referral outcome has been recorded: ${outcomeLabel}.\n\nReferral ID: ${data.referralId}\nView: ${referralUrl}`;
@@ -543,7 +718,7 @@ export function sendKeypairRotationEmail(
   clinicName: string,
   newPublicKey: string,
   keyVersion: number,
-  language?: string,
+  language?: string
 ): void {
   const isFrench = resolveLanguage(language) === 'fr';
   const subject = isFrench
@@ -568,8 +743,15 @@ export function sendClaimableExpiryEmail(
 ): void {
   const portalUrl = `${APP_BASE_URL()}/portal/payments`;
   const isFrench = resolveLanguage(language) === 'fr';
-  const expiryStr = claimableUntil.toLocaleString(isFrench ? 'fr-FR' : 'en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
-  const subject = isFrench ? 'Paiement à réclamer expirant bientôt — Health Watchers' : '⏰ Your Claimable Payment is Expiring Soon — Health Watchers';
+  const expiryStr =
+    claimableUntil.toLocaleString(isFrench ? 'fr-FR' : 'en-US', {
+      timeZone: 'UTC',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }) + ' UTC';
+  const subject = isFrench
+    ? 'Paiement à réclamer expirant bientôt — Health Watchers'
+    : '⏰ Your Claimable Payment is Expiring Soon — Health Watchers';
   const text = isFrench
     ? `Votre paiement réclamable de ${amount} XLM expire bientôt (${expiryStr}). Veuillez le réclamer avant expiration, sinon les fonds seront retournés à la clinique.\n\nRéclamer maintenant : ${portalUrl}`
     : `Your claimable payment of ${amount} XLM is expiring soon (${expiryStr}). Please claim it before it expires or the funds will be returned to the clinic.\n\nClaim now: ${portalUrl}`;

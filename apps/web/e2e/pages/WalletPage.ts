@@ -28,7 +28,10 @@ export class WalletPage {
   }
 
   async confirmPayment(transactionHash: string) {
-    await this.page.getByRole('button', { name: /confirm/i }).first().click();
+    await this.page
+      .getByRole('button', { name: /confirm/i })
+      .first()
+      .click();
     await this.page.getByLabel(/transaction.*hash|tx.*hash/i).fill(transactionHash);
     await this.page.getByRole('button', { name: /verify|confirm/i }).click();
   }

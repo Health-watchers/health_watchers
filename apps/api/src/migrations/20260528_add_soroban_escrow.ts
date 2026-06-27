@@ -14,15 +14,19 @@ export async function up(db: Db): Promise<void> {
   );
 
   // Create indexes for escrow fields
-  await db.collection('paymentrecords').createIndex(
-    { sorobanContractId: 1 },
-    { background: true, name: 'sorobanContractId_1', sparse: true }
-  );
+  await db
+    .collection('paymentrecords')
+    .createIndex(
+      { sorobanContractId: 1 },
+      { background: true, name: 'sorobanContractId_1', sparse: true }
+    );
 
-  await db.collection('paymentrecords').createIndex(
-    { escrowStatus: 1, createdAt: -1 },
-    { background: true, name: 'escrowStatus_1_createdAt_-1' }
-  );
+  await db
+    .collection('paymentrecords')
+    .createIndex(
+      { escrowStatus: 1, createdAt: -1 },
+      { background: true, name: 'escrowStatus_1_createdAt_-1' }
+    );
 }
 
 export async function down(db: Db): Promise<void> {
@@ -39,6 +43,12 @@ export async function down(db: Db): Promise<void> {
   );
 
   // Drop indexes
-  await db.collection('paymentrecords').dropIndex('sorobanContractId_1').catch(() => {});
-  await db.collection('paymentrecords').dropIndex('escrowStatus_1_createdAt_-1').catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('sorobanContractId_1')
+    .catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('escrowStatus_1_createdAt_-1')
+    .catch(() => {});
 }

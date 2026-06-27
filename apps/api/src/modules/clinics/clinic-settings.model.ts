@@ -106,5 +106,8 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
   { timestamps: true, versionKey: false }
 );
 
-export const ClinicSettingsModel =
-  models.ClinicSettings || model<IClinicSettings>('ClinicSettings', clinicSettingsSchema);
+export const ClinicSettingsModel = (models.ClinicSettings ||
+  model<IClinicSettings>(
+    'ClinicSettings',
+    clinicSettingsSchema
+  )) as import('mongoose').Model<IClinicSettings>;

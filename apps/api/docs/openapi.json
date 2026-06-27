@@ -70,10 +70,7 @@
       },
       "CreatePaymentIntentRequest": {
         "type": "object",
-        "required": [
-          "amount",
-          "destination"
-        ],
+        "required": ["amount", "destination"],
         "properties": {
           "amount": {
             "type": "string"
@@ -116,9 +113,7 @@
       },
       "ConfirmPaymentRequest": {
         "type": "object",
-        "required": [
-          "txHash"
-        ],
+        "required": ["txHash"],
         "properties": {
           "txHash": {
             "type": "string"
@@ -136,9 +131,7 @@
     "/payments/fee-estimate": {
       "get": {
         "summary": "Get Stellar network fee statistics",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -180,9 +173,7 @@
     "/payments/balance": {
       "get": {
         "summary": "Get clinic's Stellar account balance",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -249,9 +240,7 @@
     "/payments/fund": {
       "post": {
         "summary": "Fund clinic's testnet account via Friendbot (testnet only)",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -303,9 +292,7 @@
     "/payments/trustline": {
       "post": {
         "summary": "Create USDC trustline for clinic's Stellar account",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -357,9 +344,7 @@
     "/payments": {
       "get": {
         "summary": "List payments for the authenticated clinic (paginated)",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -394,12 +379,7 @@
             "name": "status",
             "schema": {
               "type": "string",
-              "enum": [
-                "pending",
-                "confirmed",
-                "failed",
-                "expired"
-              ]
+              "enum": ["pending", "confirmed", "failed", "expired"]
             }
           }
         ],
@@ -455,9 +435,7 @@
     "/payments/paths": {
       "get": {
         "summary": "Discover Stellar payment paths between assets",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -540,9 +518,7 @@
     "/payments/stellar/orderbook": {
       "get": {
         "summary": "Get Stellar DEX orderbook for an asset pair",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -614,9 +590,7 @@
       "post": {
         "summary": "Create a payment intent",
         "description": "Creates a pending payment record and returns the intent ID and memo for the Stellar transaction.",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -712,9 +686,7 @@
       "patch": {
         "summary": "Confirm a payment intent with a Stellar transaction hash",
         "description": "Verifies the transaction on Stellar and marks the payment as confirmed. Validates memo, destination, amount, and asset.",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -796,9 +768,7 @@
     "/payments/sync": {
       "post": {
         "summary": "Reconcile DB payments with Stellar Horizon (CLINIC_ADMIN only)",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -860,9 +830,7 @@
     "/payments/reconciliation": {
       "get": {
         "summary": "Get monthly reconciliation report (CLINIC_ADMIN only)",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -927,9 +895,7 @@
     "/payments/by-memo/{memo}": {
       "get": {
         "summary": "Look up a payment intent by Stellar memo",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -981,9 +947,7 @@
     "/payments/balance-snapshots": {
       "get": {
         "summary": "Get daily balance history for the clinic (up to 90 days)",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1028,9 +992,7 @@
     "/payments/analytics": {
       "get": {
         "summary": "Get payment analytics for a date range",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1062,11 +1024,7 @@
             "name": "groupBy",
             "schema": {
               "type": "string",
-              "enum": [
-                "day",
-                "week",
-                "month"
-              ],
+              "enum": ["day", "week", "month"],
               "default": "month"
             }
           }
@@ -1106,9 +1064,7 @@
     "/payments/revenue-dashboard": {
       "get": {
         "summary": "Get revenue dashboard data",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1150,9 +1106,7 @@
     "/payments/{intentId}/qr": {
       "get": {
         "summary": "Generate QR code for a payment intent",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1173,11 +1127,7 @@
             "name": "format",
             "schema": {
               "type": "string",
-              "enum": [
-                "png",
-                "svg",
-                "data-url"
-              ],
+              "enum": ["png", "svg", "data-url"],
               "default": "png"
             }
           }
@@ -1202,9 +1152,7 @@
     "/payments/{intentId}/payment-uri": {
       "get": {
         "summary": "Get Stellar payment URI (SEP-0007) for a payment intent",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1273,9 +1221,7 @@
     "/payments/{intentId}/receipt": {
       "get": {
         "summary": "Get receipt info for a confirmed payment",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1339,9 +1285,7 @@
     "/payments/{intentId}/receipt/url": {
       "get": {
         "summary": "Get pre-signed S3 URL for a payment receipt",
-        "tags": [
-          "Payments"
-        ],
+        "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
@@ -1405,9 +1349,7 @@
     "/patients/{id}/export": {
       "get": {
         "summary": "Export a patient's complete health record (HIPAA Right of Access)",
-        "tags": [
-          "Export"
-        ],
+        "tags": ["Export"],
         "security": [
           {
             "bearerAuth": []
@@ -1418,9 +1360,7 @@
     "/clinics/{id}/export": {
       "get": {
         "summary": "Export all clinic data as a ZIP archive (SUPER_ADMIN only)",
-        "tags": [
-          "Export"
-        ],
+        "tags": ["Export"],
         "security": [
           {
             "bearerAuth": []

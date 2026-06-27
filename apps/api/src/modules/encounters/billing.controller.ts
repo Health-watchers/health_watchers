@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
-import { PatientModel } from '../patients/patient.model';
+import { PatientModel } from '../patients/models/patient.model';
 import { UserModel } from '../auth/models/user.model';
 
 export async function getBillingSummary(req: Request, res: Response): Promise<void> {
@@ -98,12 +98,12 @@ export async function generateClaim(req: Request, res: Response): Promise<void> 
       npiNumber: (encounter.attendingDoctorId as any).npiNumber,
     },
     serviceDate: encounter.createdAt,
-    diagnosisCodes: encounter.diagnosis.map(d => ({
+    diagnosisCodes: encounter.diagnosis.map((d) => ({
       code: d.code,
       description: d.description,
       isPrimary: d.isPrimary,
     })),
-    procedureCodes: encounter.billing.cptCodes.map(cpt => ({
+    procedureCodes: encounter.billing.cptCodes.map((cpt) => ({
       code: cpt.code,
       description: cpt.description,
       units: cpt.units,

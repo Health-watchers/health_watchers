@@ -16,7 +16,9 @@ export interface VideoToken {
 /**
  * Create a video room for telemedicine consultation
  */
-export async function createVideoRoom(provider: 'daily.co' | 'jitsi' | 'twilio_video' = 'daily.co'): Promise<VideoRoomConfig> {
+export async function createVideoRoom(
+  provider: 'daily.co' | 'jitsi' | 'twilio_video' = 'daily.co'
+): Promise<VideoRoomConfig> {
   const roomId = `room-${uuidv4()}`;
 
   if (provider === 'daily.co') {

@@ -85,11 +85,7 @@ export async function getClaimableBalances(
   server: StellarSdk.Horizon.Server,
   claimantPublicKey: string
 ): Promise<ServerApi.ClaimableBalanceRecord[]> {
-  const balances = await server
-    .claimableBalances()
-    .claimant(claimantPublicKey)
-    .limit(200)
-    .call();
+  const balances = await server.claimableBalances().claimant(claimantPublicKey).limit(200).call();
 
   return balances.records;
 }

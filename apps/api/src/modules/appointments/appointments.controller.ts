@@ -17,6 +17,7 @@ import { SocketService } from '../../services/socket.service';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
+import { isStaffAvailable } from '../schedules/schedules.service';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -31,21 +32,28 @@ async function hasConflict(
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-  const query: Record<string, unknown> = {
+  // Fetch only scheduled/confirmed appointments for this doctor
+  // that could potentially overlap — we avoid $expr to prevent
+  // user-controlled data from influencing query operators.
+  const filter: Record<string, unknown> = {
     doctorId: new Types.ObjectId(doctorId),
     status: { $in: ['scheduled', 'confirmed'] },
     scheduledAt: { $lt: proposedEnd },
-    $expr: {
-      $gt: [
-        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
-        scheduledAt.getTime(),
-      ],
-    },
   };
 
-  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
+  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  return (await AppointmentModel.countDocuments(query)) > 0;
+  const candidates = await AppointmentModel.find(filter)
+    .select('scheduledAt duration')
+    .lean();
+
+  // Check overlap in JS — no user-controlled operators in the query
+  return candidates.some((appt) => {
+    const apptEnd = new Date(
+      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+    );
+    return apptEnd > scheduledAt;
+  });
 }
 
 async function emitAppointmentStatusChange(
@@ -122,8 +130,8 @@ appointmentRoutes.post(
       await emitAppointmentStatusChange(
         req.params.id,
         'patient_arrived',
-        updated,
-        { checkedInAt: updated.checkedInAt }
+        updated!,
+        { checkedInAt: updated?.checkedInAt }
       );
 
       // Create notification for staff
@@ -283,11 +291,20 @@ appointmentRoutes.post(
       const { patientId, doctorId, scheduledAt, duration, type, chiefComplaint, notes } = req.body;
 
       const start = new Date(scheduledAt);
+      const dur = duration ?? 30;
 
-      if (await hasConflict(doctorId, start, duration ?? 30)) {
+      if (await hasConflict(doctorId, start, dur)) {
         return res.status(409).json({
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
+        });
+      }
+
+      const available = await isStaffAvailable(doctorId, clinicId, start, dur);
+      if (!available) {
+        return res.status(409).json({
+          error: 'DoctorUnavailable',
+          message: 'The doctor is not available at this time',
         });
       }
 
@@ -347,6 +364,16 @@ appointmentRoutes.put(
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
         });
+      }
+
+      if (scheduledAt || duration) {
+        const available = await isStaffAvailable(newDoctorId, clinicId, newStart, newDuration);
+        if (!available) {
+          return res.status(409).json({
+            error: 'DoctorUnavailable',
+            message: 'The doctor is not available at this time',
+          });
+        }
       }
 
       const updated = await AppointmentModel.findByIdAndUpdate(

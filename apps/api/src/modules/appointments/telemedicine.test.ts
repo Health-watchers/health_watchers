@@ -77,7 +77,11 @@ jest.mock('@api/middlewares/auth.middleware', () => ({
 import request from 'supertest';
 import express from 'express';
 import { Types } from 'mongoose';
-import { createVideoRoom, generateVideoToken, calculateVideoDuration } from './telemedicine.service';
+import {
+  createVideoRoom,
+  generateVideoToken,
+  calculateVideoDuration,
+} from './telemedicine.service';
 import { appointmentRoutes } from './appointments.controller';
 
 const CLINIC_ID = '507f1f77bcf86cd799439001';
@@ -195,12 +199,12 @@ describe('POST /api/v1/appointments/:id/video/start', () => {
     expect(mockEmitToUser).toHaveBeenCalledWith(
       DOCTOR_ID,
       'appointment:video_started',
-      expect.objectContaining({ appointmentId: APPT_ID, recordingConsent: true }),
+      expect.objectContaining({ appointmentId: APPT_ID, recordingConsent: true })
     );
     expect(mockEmitToUser).toHaveBeenCalledWith(
       PATIENT_ID,
       'appointment:video_started',
-      expect.objectContaining({ appointmentId: APPT_ID, recordingConsent: true }),
+      expect.objectContaining({ appointmentId: APPT_ID, recordingConsent: true })
     );
   });
 
@@ -208,35 +212,33 @@ describe('POST /api/v1/appointments/:id/video/start', () => {
     mockFindOne.mockResolvedValue(baseAppointment);
     mockFindByIdAndUpdate.mockResolvedValue({ ...baseAppointment, videoStartedAt: new Date() });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/start`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/start`).send({});
 
     expect(res.status).toBe(200);
     expect(mockEmitToUser).toHaveBeenCalledWith(
       DOCTOR_ID,
       'appointment:video_started',
-      expect.objectContaining({ recordingConsent: false }),
+      expect.objectContaining({ recordingConsent: false })
     );
   });
 
   it('returns 404 when appointment not found', async () => {
     mockFindOne.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/start`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/start`).send({});
 
     expect(res.status).toBe(404);
     expect(mockEmitToUser).not.toHaveBeenCalled();
   });
 
   it('returns 400 when appointment has no video room', async () => {
-    mockFindOne.mockResolvedValue({ ...baseAppointment, isTelemedicine: false, videoRoomId: undefined });
+    mockFindOne.mockResolvedValue({
+      ...baseAppointment,
+      isTelemedicine: false,
+      videoRoomId: undefined,
+    });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/start`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/start`).send({});
 
     expect(res.status).toBe(400);
     expect(mockEmitToUser).not.toHaveBeenCalled();
@@ -258,9 +260,7 @@ describe('POST /api/v1/appointments/:id/video/end', () => {
       .mockResolvedValueOnce(undefined); // link encounter
     mockCreate.mockResolvedValue({ _id: 'enc-1', type: 'telemedicine' });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/end`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/end`).send({});
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
@@ -271,12 +271,12 @@ describe('POST /api/v1/appointments/:id/video/end', () => {
     expect(mockEmitToUser).toHaveBeenCalledWith(
       DOCTOR_ID,
       'appointment:video_ended',
-      expect.objectContaining({ appointmentId: APPT_ID }),
+      expect.objectContaining({ appointmentId: APPT_ID })
     );
     expect(mockEmitToUser).toHaveBeenCalledWith(
       PATIENT_ID,
       'appointment:video_ended',
-      expect.objectContaining({ appointmentId: APPT_ID }),
+      expect.objectContaining({ appointmentId: APPT_ID })
     );
   });
 
@@ -285,12 +285,10 @@ describe('POST /api/v1/appointments/:id/video/end', () => {
     mockFindByIdAndUpdate.mockResolvedValue({ ...startedAppointment, status: 'completed' });
     mockCreate.mockResolvedValue({ _id: 'enc-2', type: 'telemedicine', status: 'open' });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/end`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/end`).send({});
 
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'telemedicine', status: 'open' }),
+      expect.objectContaining({ type: 'telemedicine', status: 'open' })
     );
     expect(res.body.data.encounter.type).toBe('telemedicine');
   });
@@ -298,9 +296,7 @@ describe('POST /api/v1/appointments/:id/video/end', () => {
   it('returns 404 when appointment not found', async () => {
     mockFindOne.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/end`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/end`).send({});
 
     expect(res.status).toBe(404);
     expect(mockEmitToUser).not.toHaveBeenCalled();
@@ -309,9 +305,7 @@ describe('POST /api/v1/appointments/:id/video/end', () => {
   it('returns 400 when video session was never started', async () => {
     mockFindOne.mockResolvedValue({ ...baseAppointment, videoStartedAt: undefined });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video/end`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video/end`).send({});
 
     expect(res.status).toBe(400);
     expect(mockEmitToUser).not.toHaveBeenCalled();
@@ -331,25 +325,21 @@ describe('POST /api/v1/appointments/:id/video-room', () => {
       videoRoomUrl: 'https://health-watchers.daily.co/room-xyz',
     });
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video-room`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video-room`).send({});
 
     expect(res.status).toBe(200);
     expect(res.body.data.videoRoom.roomUrl).toBeTruthy();
     expect(mockFindByIdAndUpdate).toHaveBeenCalledWith(
       APPT_ID,
       expect.objectContaining({ videoRoomUrl: expect.any(String) }),
-      expect.any(Object),
+      expect.any(Object)
     );
   });
 
   it('returns 404 when appointment not found', async () => {
     mockFindOne.mockResolvedValue(null);
 
-    const res = await request(app)
-      .post(`/api/v1/appointments/${APPT_ID}/video-room`)
-      .send({});
+    const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/video-room`).send({});
 
     expect(res.status).toBe(404);
   });

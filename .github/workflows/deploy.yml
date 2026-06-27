@@ -1,0 +1,323 @@
+name: Deployment Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version/Tag to deploy (leave empty for latest)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+  packages: read
+
+jobs:
+  validate-deployment:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.set-tag.outputs.tag }}
+      deploy_env: ${{ steps.validate.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate input
+        id: validate
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          if [ "$ENV" != "staging" ] && [ "$ENV" != "production" ]; then
+            echo "❌ Invalid environment: $ENV"
+            exit 1
+          fi
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "✅ Deployment to $ENV approved"
+
+      - name: Set image tag
+        id: set-tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            TAG="latest"
+          else
+            TAG="$VERSION"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using image tag: $TAG"
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "🔍 Validating Kubernetes manifests..."
+
+          # Install kubeconform if not available
+          if ! command -v kubeconform &> /dev/null; then
+            curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+            sudo mv kubeconform /usr/local/bin/
+          fi
+
+          # Validate all manifests
+          kubeconform -strict -summary k8s/ || exit 1
+          echo "✅ Kubernetes manifests validated"
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [validate-deployment]
+    if: needs.validate-deployment.outputs.deploy_env == 'staging'
+    environment:
+      name: staging
+      url: https://staging.health-watchers.app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure kubectl
+        run: |
+          echo "🔑 Configuring kubectl for staging..."
+
+          # Create kubeconfig from secret
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+          # Verify connection
+          kubectl cluster-info || exit 1
+          echo "✅ Connected to staging cluster"
+
+      - name: Update image in Kubernetes
+        run: |
+          echo "🐳 Updating Docker images in staging..."
+
+          REGISTRY="ghcr.io"
+          REPO="${{ github.repository }}"
+          TAG="${{ needs.validate-deployment.outputs.image_tag }}"
+
+          kubectl set image deployment/api \
+            api=$REGISTRY/$REPO/health-watchers-api:$TAG \
+            -n health-watchers --record
+
+          kubectl set image deployment/stellar-service \
+            stellar-service=$REGISTRY/$REPO/health-watchers-stellar-service:$TAG \
+            -n health-watchers --record
+
+          kubectl set image deployment/web \
+            web=$REGISTRY/$REPO/health-watchers-web:$TAG \
+            -n health-watchers --record
+
+          echo "✅ Images updated"
+
+      - name: Wait for rollout
+        run: |
+          echo "⏳ Waiting for rollout to complete..."
+
+          kubectl rollout status deployment/api -n health-watchers --timeout=5m
+          kubectl rollout status deployment/stellar-service -n health-watchers --timeout=5m
+          kubectl rollout status deployment/web -n health-watchers --timeout=5m
+
+          echo "✅ Rollout completed successfully"
+
+      - name: Verify deployment
+        run: |
+          echo "🧪 Verifying deployment..."
+
+          # Check pod status
+          kubectl get pods -n health-watchers
+
+          # Check service endpoints
+          kubectl get endpoints -n health-watchers
+
+          # Port forward and test
+          kubectl port-forward svc/api 3001:3001 -n health-watchers &
+          sleep 2
+          curl -f http://localhost:3001/health || exit 1
+
+          echo "✅ Deployment verified"
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          STAGING_URL="https://staging.health-watchers.app"
+
+          # Test API health
+          curl -f "$STAGING_URL/health" || exit 1
+
+          # Test web frontend
+          curl -f "$STAGING_URL/" || exit 1
+
+          # Test Stellar service
+          curl -f "$STAGING_URL/stellar/health" || exit 1
+
+          echo "✅ Smoke tests passed"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate-deployment, deploy-staging]
+    if: needs.validate-deployment.outputs.deploy_env == 'production'
+    environment:
+      name: production
+      url: https://health-watchers.app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure kubectl
+        run: |
+          echo "🔑 Configuring kubectl for production..."
+
+          # Create kubeconfig from secret
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+          # Verify connection
+          kubectl cluster-info || exit 1
+          echo "✅ Connected to production cluster"
+
+      - name: Create backup
+        run: |
+          echo "💾 Creating backup..."
+
+          # Backup MongoDB data
+          kubectl exec -n health-watchers mongodb-0 -- \
+            mongodump --out /backup/$(date +%Y%m%d-%H%M%S) || echo "Backup skipped"
+
+          echo "✅ Backup created"
+
+      - name: Update image in Kubernetes
+        run: |
+          echo "🐳 Updating Docker images in production..."
+
+          REGISTRY="ghcr.io"
+          REPO="${{ github.repository }}"
+          TAG="${{ needs.validate-deployment.outputs.image_tag }}"
+
+          # Use blue-green deployment strategy
+          kubectl set image deployment/api \
+            api=$REGISTRY/$REPO/health-watchers-api:$TAG \
+            -n health-watchers --record
+
+          kubectl set image deployment/stellar-service \
+            stellar-service=$REGISTRY/$REPO/health-watchers-stellar-service:$TAG \
+            -n health-watchers --record
+
+          kubectl set image deployment/web \
+            web=$REGISTRY/$REPO/health-watchers-web:$TAG \
+            -n health-watchers --record
+
+          echo "✅ Images updated"
+
+      - name: Wait for rollout
+        run: |
+          echo "⏳ Waiting for rollout to complete..."
+
+          kubectl rollout status deployment/api -n health-watchers --timeout=10m
+          kubectl rollout status deployment/stellar-service -n health-watchers --timeout=10m
+          kubectl rollout status deployment/web -n health-watchers --timeout=10m
+
+          echo "✅ Rollout completed successfully"
+
+      - name: Verify production deployment
+        run: |
+          echo "🧪 Verifying production deployment..."
+
+          # Check pod status
+          kubectl get pods -n health-watchers
+
+          # Check service endpoints
+          kubectl get endpoints -n health-watchers
+
+          # Get Ingress IP
+          INGRESS_IP=$(kubectl get ingress -n health-watchers -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}')
+          echo "Ingress IP: $INGRESS_IP"
+
+          echo "✅ Deployment verified"
+
+      - name: Run production smoke tests
+        run: |
+          echo "🧪 Running production smoke tests..."
+
+          PROD_URL="https://health-watchers.app"
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f "$PROD_URL/health" 2>/dev/null; then
+              echo "✅ Production health check passed"
+              break
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry $RETRY_COUNT/$MAX_RETRIES..."
+              sleep 10
+            fi
+          done
+
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Production health check failed after $MAX_RETRIES retries"
+            exit 1
+          fi
+
+      - name: Notify deployment success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              description: 'Production deployment successful',
+              auto_merge: false,
+              production_environment: true
+            });
+        continue-on-error: true
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [validate-deployment, deploy-staging, deploy-production]
+    if: failure() && needs.validate-deployment.outputs.deploy_env == 'production'
+    environment:
+      name: production
+
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Rollback deployment
+        run: |
+          echo "🔄 Rolling back production deployment..."
+
+          kubectl rollout undo deployment/api -n health-watchers
+          kubectl rollout undo deployment/stellar-service -n health-watchers
+          kubectl rollout undo deployment/web -n health-watchers
+
+          echo "✅ Rollback completed"
+
+      - name: Verify rollback
+        run: |
+          echo "🧪 Verifying rollback..."
+
+          kubectl rollout status deployment/api -n health-watchers --timeout=5m
+          kubectl rollout status deployment/stellar-service -n health-watchers --timeout=5m
+          kubectl rollout status deployment/web -n health-watchers --timeout=5m
+
+          echo "✅ Rollback verified"

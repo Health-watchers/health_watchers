@@ -31,33 +31,54 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('@api/lib/encrypt', () => ({ encrypt: (v: string) => v, decrypt: (v: string) => v }));
-jest.mock('@api/utils/logger', () => { const pino = require('pino'); return { __esModule: true, default: pino({ level: 'silent' }) }; });
+jest.mock('@api/utils/logger', () => {
+  const pino = require('pino');
+  return { __esModule: true, default: pino({ level: 'silent' }) };
+});
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
   stopPaymentExpirationJob: jest.fn(),
 }));
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/icd10/icd10.controller', () => ({ icd10Routes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinic-settings.controller', () => ({ clinicSettingsRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/icd10/icd10.controller', () => ({
+  icd10Routes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinic-settings.controller', () => ({
+  clinicSettingsRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/audit/audit.service', () => ({ auditLog: jest.fn() }));
 
 // ── Model mocks ───────────────────────────────────────────────────────────────
 
-const ALLERGY_ID  = '507f1f77bcf86cd799430001';
-const PATIENT_ID  = '507f1f77bcf86cd799439033';
-const CLINIC_ID   = '507f1f77bcf86cd799439011';
-const DOCTOR_ID   = '507f1f77bcf86cd799439099';
+const ALLERGY_ID = '507f1f77bcf86cd799430001';
+const PATIENT_ID = '507f1f77bcf86cd799439033';
+const CLINIC_ID = '507f1f77bcf86cd799439011';
+const DOCTOR_ID = '507f1f77bcf86cd799439099';
 const ENCOUNTER_ID = '507f1f77bcf86cd799430010';
 
 const penicillinAllergy = {

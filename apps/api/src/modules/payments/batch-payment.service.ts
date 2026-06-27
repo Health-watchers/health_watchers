@@ -10,10 +10,7 @@ export interface RequestUser {
 }
 
 export class BatchPaymentService {
-  async createBatch(
-    input: CreateBatchPaymentInput,
-    user: RequestUser,
-  ): Promise<IBatchPayment> {
+  async createBatch(input: CreateBatchPaymentInput, user: RequestUser): Promise<IBatchPayment> {
     // Validate no duplicate destinations
     const destinations = new Set(input.payments.map((p) => p.destination));
     if (destinations.size !== input.payments.length) {
@@ -21,9 +18,7 @@ export class BatchPaymentService {
     }
 
     // Calculate total amount
-    const totalAmount = input.payments
-      .reduce((sum, p) => sum + parseFloat(p.amount), 0)
-      .toString();
+    const totalAmount = input.payments.reduce((sum, p) => sum + parseFloat(p.amount), 0).toString();
 
     // Create batch payment record
     const batchId = uuidv4();
@@ -64,7 +59,7 @@ export class BatchPaymentService {
     batchId: string,
     status: 'submitted' | 'confirmed' | 'failed',
     txHash?: string,
-    failureReason?: string,
+    failureReason?: string
   ): Promise<IBatchPayment | null> {
     const update: Record<string, unknown> = { status };
 

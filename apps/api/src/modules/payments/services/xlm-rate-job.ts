@@ -5,11 +5,7 @@ import {
   xlmRateLastFetchTimestamp,
   xlmRateStale,
 } from '@api/services/metrics.service';
-import {
-  refreshXLMRate,
-  getCurrentXLMRate,
-  STALENESS_THRESHOLD_MS,
-} from './xlm-rate.service';
+import { refreshXLMRate, getCurrentXLMRate, STALENESS_THRESHOLD_MS } from './xlm-rate.service';
 
 /**
  * XLM Exchange Rate Job

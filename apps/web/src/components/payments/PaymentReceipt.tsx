@@ -77,14 +77,14 @@ export function PaymentReceipt({ intentId, onClose }: PaymentReceiptProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-primary-500" />
+        <div className="border-t-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+      <div className="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border p-4 text-sm">
         {error}
       </div>
     );

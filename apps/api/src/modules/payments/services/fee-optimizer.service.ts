@@ -9,10 +9,7 @@ export interface NetworkConditions {
 
 @Injectable()
 export class FeeOptimizerService {
-  selectStrategy(
-    amountXLM: number,
-    conditions: NetworkConditions,
-  ): FeeStrategy {
+  selectStrategy(amountXLM: number, conditions: NetworkConditions): FeeStrategy {
     if (amountXLM >= 1000) return 'fast';
     if (conditions.congestionLevel === 'high') return 'fast';
     const isOffPeak = conditions.currentHour >= 0 && conditions.currentHour < 6;

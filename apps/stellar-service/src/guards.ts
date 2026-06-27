@@ -13,7 +13,7 @@ export function assertMainnetSafety(): void {
   if (network === 'mainnet' && horizonUrl.includes('testnet')) {
     logger.error(
       'FATAL: mainnet network configured with testnet Horizon URL. ' +
-      'This configuration mismatch could cause transaction failures.'
+        'This configuration mismatch could cause transaction failures.'
     );
     process.exit(1);
   }
@@ -21,7 +21,7 @@ export function assertMainnetSafety(): void {
   if (network === 'testnet' && !horizonUrl.includes('testnet')) {
     logger.error(
       'FATAL: testnet network configured with mainnet Horizon URL. ' +
-      'This configuration mismatch could cause transaction failures.'
+        'This configuration mismatch could cause transaction failures.'
     );
     process.exit(1);
   }
@@ -32,8 +32,8 @@ export function assertMainnetSafety(): void {
     if (!mainnetConfirmed) {
       logger.error(
         "MAINNET_CONFIRMED is not set to 'true'. " +
-        "Set MAINNET_CONFIRMED=true to acknowledge mainnet operation. " +
-        "Exiting to prevent accidental real-funds usage."
+          'Set MAINNET_CONFIRMED=true to acknowledge mainnet operation. ' +
+          'Exiting to prevent accidental real-funds usage.'
       );
       process.exit(1);
     }
@@ -42,7 +42,7 @@ export function assertMainnetSafety(): void {
       logger.warn('STELLAR_DRY_RUN=true — transactions will be simulated, not submitted.');
     }
 
-    logger.warn("🚨 MAINNET MODE ACTIVE - All transactions will use real XLM 🚨");
+    logger.warn('🚨 MAINNET MODE ACTIVE - All transactions will use real XLM 🚨');
   } else {
     logger.info(`Stellar network: ${network} (testnet mode)`);
   }

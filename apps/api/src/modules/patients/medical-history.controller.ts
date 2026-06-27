@@ -64,10 +64,19 @@ router.post(
     try {
       const { clinicId } = req.user!;
       const { patientId } = req.params;
-      const { pastMedicalHistory, surgicalHistory, familyHistory, socialHistory, currentMedications } = req.body;
+      const {
+        pastMedicalHistory,
+        surgicalHistory,
+        familyHistory,
+        socialHistory,
+        currentMedications,
+      } = req.body;
 
       // Check if medical history already exists
-      const existing = await MedicalHistoryModel.findOne({ patientId: new Types.ObjectId(patientId), clinicId });
+      const existing = await MedicalHistoryModel.findOne({
+        patientId: new Types.ObjectId(patientId),
+        clinicId,
+      });
       if (existing) {
         return res.status(409).json({
           error: 'Conflict',
@@ -129,7 +138,13 @@ router.put(
     try {
       const { clinicId, userId } = req.user!;
       const { patientId } = req.params;
-      const { pastMedicalHistory, surgicalHistory, familyHistory, socialHistory, currentMedications } = req.body;
+      const {
+        pastMedicalHistory,
+        surgicalHistory,
+        familyHistory,
+        socialHistory,
+        currentMedications,
+      } = req.body;
 
       const medicalHistory = await MedicalHistoryModel.findOne({
         patientId: new Types.ObjectId(patientId),

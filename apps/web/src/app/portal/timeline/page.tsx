@@ -51,7 +51,10 @@ const EVENT_COLORS: Record<string, string> = {
   appointment: 'bg-teal-100 text-teal-700 border-teal-200',
 };
 
-const EVENT_BADGE_VARIANTS: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'default'> = {
+const EVENT_BADGE_VARIANTS: Record<
+  string,
+  'primary' | 'success' | 'warning' | 'danger' | 'default'
+> = {
   encounter: 'primary',
   lab_result: 'default',
   immunization: 'success',
@@ -91,16 +94,14 @@ function EventDetailModal({
   if (!event) return null;
 
   const detailRows = Object.entries(event.details).filter(
-    ([, v]) => v !== null && v !== undefined && v !== '',
+    ([, v]) => v !== null && v !== undefined && v !== ''
   );
 
   return (
     <Modal open={open} onClose={onClose} title={event.title} size="lg">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>
-            {event.type.replace('_', ' ')}
-          </Badge>
+          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>{event.type.replace('_', ' ')}</Badge>
           <span className="text-sm text-neutral-500">{formatDateTime(event.date)}</span>
         </div>
 
@@ -111,12 +112,10 @@ function EventDetailModal({
           <dl className="divide-y divide-neutral-100">
             {detailRows.map(([key, value]) => (
               <div key={key} className="flex py-2 text-sm">
-                <dt className="w-1/3 font-medium capitalize text-neutral-500">
+                <dt className="w-1/3 font-medium text-neutral-500 capitalize">
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </dt>
-                <dd className="w-2/3 text-neutral-800">
-                  {renderDetailValue(value)}
-                </dd>
+                <dd className="w-2/3 text-neutral-800">{renderDetailValue(value)}</dd>
               </div>
             ))}
           </dl>
@@ -131,7 +130,10 @@ function renderDetailValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') {
     if (Array.isArray(value)) {
-      return value.map((v) => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ') || '\u2014';
+      return (
+        value.map((v) => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ') ||
+        '\u2014'
+      );
     }
     if (value instanceof Date) return value.toLocaleDateString();
     return JSON.stringify(value);
@@ -231,7 +233,7 @@ export default function PortalTimelinePage() {
       ) : (
         <>
           <div className="relative">
-            <div className="absolute bottom-0 left-6 top-0 w-0.5 bg-neutral-200" />
+            <div className="absolute top-0 bottom-0 left-6 w-0.5 bg-neutral-200" />
 
             <div className="space-y-6">
               {Object.entries(groupedByDate).map(([dateLabel, dateEvents]) => (
@@ -290,11 +292,7 @@ export default function PortalTimelinePage() {
 
           {meta && meta.totalPages > 1 && (
             <div className="flex justify-center pt-4">
-              <Pagination
-                page={meta.page}
-                totalPages={meta.totalPages}
-                onPageChange={setPage}
-              />
+              <Pagination page={meta.page} totalPages={meta.totalPages} onPageChange={setPage} />
             </div>
           )}
         </>

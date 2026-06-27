@@ -1,4 +1,5 @@
 import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './instrument'; // must be first — initialises Sentry before any other module
 import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
@@ -6,11 +7,14 @@ import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
-import compression from 'compression';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression') as ((...args: any[]) => any) & {
+  filter: (...args: any[]) => boolean;
+};
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
-import { connectDB } from './config/db';
+import { connectDB, getPoolMetrics } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
@@ -25,6 +29,7 @@ import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import { auditRoutes } from './modules/audit/audit.controller';
+import { documentRoutes } from './modules/documents/documents.controller';
 import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
 import { healthRoutes } from './modules/health/health.controller';
@@ -45,10 +50,10 @@ import { appointmentRoutes } from './modules/appointments/appointments.controlle
 import { waitlistRoutes } from './modules/appointments/waitlist.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
-import { 
-  apiVersionHeader, 
-  v1DeprecationWarning, 
-  getSupportedVersions 
+import {
+  apiVersionHeader,
+  v1DeprecationWarning,
+  getSupportedVersions,
 } from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
@@ -84,11 +89,12 @@ import {
   stopClaimableExpiryNotificationJob,
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
-import { getCacheMetrics } from './services/cache.service';
 import {
-  mongodbConnectionPoolSize,
-  mongodbPoolWaitQueueSize,
-} from './services/metrics.service';
+  startMfaGracePeriodJob,
+  stopMfaGracePeriodJob,
+} from './modules/auth/mfa-grace-period-job';
+import { getCacheMetrics } from './services/cache.service';
+import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
@@ -106,6 +112,9 @@ import { v2Router } from './routes/v2';
 import { SocketService } from './services/socket.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+// npm install cookie-parser @types/cookie-parser
+import cookieParser from 'cookie-parser';
+import { csrfMiddleware } from './middlewares/csrf.middleware';
 import cdsRoutes from './modules/cds/cds.controller';
 import { seedBuiltInRules } from './modules/cds/cds-seed';
 import onboardingRoutes from './modules/clinics/onboarding.routes';
@@ -116,7 +125,6 @@ import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
-
 
 const app = express();
 const server = createServer(app);
@@ -149,7 +157,7 @@ app.use(
   compression({
     level: 6,
     threshold: 1024, // only compress responses > 1KB
-    filter: (req, res) => {
+    filter: (req: any, res: any) => {
       // Skip already-compressed content types (images, PDFs, etc.)
       const contentType = res.getHeader('Content-Type') as string | undefined;
       if (contentType) {
@@ -177,7 +185,7 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   })
 );
 app.options('*', cors());
@@ -189,7 +197,11 @@ app.use(
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     autoLogging: {
-      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+      ignore: (req) =>
+        isProd &&
+        (req.url === '/health/live' ||
+          req.url === '/health/ready' ||
+          req.url === '/health/startup'),
     },
     redact: ['req.headers.authorization'],
   })
@@ -199,10 +211,12 @@ app.use(
 app.use(requestIdPropagationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
+app.use(cookieParser());
 app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(requestAuditMiddleware);
+app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
@@ -260,6 +274,7 @@ app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
 app.use('/api/v1/payments', reimbursementRoutes);
+app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/audit', auditRoutes);
@@ -330,13 +345,12 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
+  startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const pool = (mongoose.connection as any).pool;
-    const poolSize = pool?.totalConnectionCount ?? 0;
-    const waitQueueSize = pool?.waitQueueSize ?? 0;
-    mongodbConnectionPoolSize.set(poolSize);
+    const { totalConnections, waitQueueSize } = getPoolMetrics();
+    mongodbConnectionPoolSize.set(totalConnections);
     mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
@@ -358,6 +372,7 @@ async function startServer() {
         stopAppointmentReminderJob();
         stopClaimableExpiryNotificationJob();
         stopXLMRateJob();
+        stopMfaGracePeriodJob();
         logger.info('All background jobs stopped');
 
         // Close database connection

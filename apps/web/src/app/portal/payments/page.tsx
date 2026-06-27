@@ -35,7 +35,7 @@ export default function PortalPaymentsPage() {
       });
       if (!res.ok) throw new Error();
       setInvoices((prev) =>
-        prev.map((i) => (i._id === id ? { ...i, status: 'confirmed', txHash } : i)),
+        prev.map((i) => (i._id === id ? { ...i, status: 'confirmed', txHash } : i))
       );
     } catch {
       alert('Payment submission failed. Please try again.');
@@ -56,7 +56,9 @@ export default function PortalPaymentsPage() {
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 font-semibold text-gray-700">Outstanding Invoices</h2>
         {pending.length === 0 ? (
-          <p className="text-sm text-gray-400">No outstanding invoices. You&apos;re all caught up!</p>
+          <p className="text-sm text-gray-400">
+            No outstanding invoices. You&apos;re all caught up!
+          </p>
         ) : (
           pending.map((i) => (
             <div
@@ -67,7 +69,9 @@ export default function PortalPaymentsPage() {
                 <p className="text-sm font-medium text-gray-800">
                   {i.amount} {i.assetCode}
                 </p>
-                <p className="text-xs text-gray-400">{new Date(i.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-400">
+                  {new Date(i.createdAt).toLocaleDateString()}
+                </p>
               </div>
               <button
                 onClick={() => pay(i._id)}
@@ -95,7 +99,9 @@ export default function PortalPaymentsPage() {
                 <p className="text-sm font-medium text-gray-800">
                   {i.amount} {i.assetCode}
                 </p>
-                <p className="text-xs text-gray-400">{new Date(i.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-400">
+                  {new Date(i.createdAt).toLocaleDateString()}
+                </p>
               </div>
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${i.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}

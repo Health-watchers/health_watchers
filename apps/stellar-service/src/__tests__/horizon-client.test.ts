@@ -8,11 +8,19 @@ jest.mock('prom-client', () => {
   const metrics = jest.fn().mockResolvedValue('');
   const contentType = 'text/plain';
   const Registry = jest.fn().mockImplementation(() => ({ metrics, contentType }));
-  const Counter   = jest.fn().mockImplementation(() => ({ inc }));
-  const Gauge     = jest.fn().mockImplementation(() => ({ set }));
+  const Counter = jest.fn().mockImplementation(() => ({ inc }));
+  const Gauge = jest.fn().mockImplementation(() => ({ set }));
   const Histogram = jest.fn().mockImplementation(() => ({ observe }));
   const collectDefaultMetrics = jest.fn();
-  return { __esModule: true, default: { Registry, Counter, Gauge, Histogram, collectDefaultMetrics }, Registry, Counter, Gauge, Histogram, collectDefaultMetrics };
+  return {
+    __esModule: true,
+    default: { Registry, Counter, Gauge, Histogram, collectDefaultMetrics },
+    Registry,
+    Counter,
+    Gauge,
+    Histogram,
+    collectDefaultMetrics,
+  };
 });
 
 // ── Mock logger ───────────────────────────────────────────────────────────────
@@ -132,9 +140,7 @@ describe('ResilientHorizonClient', () => {
   describe('slow response failover', () => {
     it('marks endpoint unhealthy when response exceeds 5 s threshold', async () => {
       // feeStats resolves but only after a delay simulated by advancing timers
-      mockFeeStats.mockImplementation(
-        () => new Promise(resolve => setTimeout(resolve, 6_000))
-      );
+      mockFeeStats.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 6_000)));
 
       const client = makeClient(['https://primary.example.com']);
 
@@ -163,13 +169,10 @@ describe('ResilientHorizonClient', () => {
     it('switches to fallback when primary is unhealthy', async () => {
       // Primary always fails, fallback always succeeds
       mockFeeStats
-        .mockRejectedValueOnce(new Error('primary down'))  // primary check
-        .mockResolvedValueOnce({});                         // fallback check
+        .mockRejectedValueOnce(new Error('primary down')) // primary check
+        .mockResolvedValueOnce({}); // fallback check
 
-      const client = makeClient([
-        'https://primary.example.com',
-        'https://fallback.example.com',
-      ]);
+      const client = makeClient(['https://primary.example.com', 'https://fallback.example.com']);
 
       // @ts-expect-error private
       await client.runHealthChecks();

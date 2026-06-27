@@ -28,15 +28,17 @@ const ENCOUNTER = {
   createdAt: new Date('2026-01-10T09:00:00Z'),
   diagnosis: [{ code: 'G43.9', description: 'Migraine, unspecified' }],
   vitalSigns: { heartRate: 72, temperature: 36.6, bloodPressure: '120/80', oxygenSaturation: 98 },
-  prescriptions: [{
-    drugName: 'Ibuprofen',
-    genericName: 'Ibuprofen',
-    dosage: '400mg',
-    frequency: 'TID',
-    duration: '5 days',
-    route: 'oral',
-    prescribedAt: new Date('2026-01-10T09:30:00Z'),
-  }],
+  prescriptions: [
+    {
+      drugName: 'Ibuprofen',
+      genericName: 'Ibuprofen',
+      dosage: '400mg',
+      frequency: 'TID',
+      duration: '5 days',
+      route: 'oral',
+      prescribedAt: new Date('2026-01-10T09:30:00Z'),
+    },
+  ],
 };
 
 describe('fhir-mapper', () => {
@@ -86,7 +88,9 @@ describe('fhir-mapper', () => {
     });
 
     it('maps open status to in-progress', () => {
-      expect(mapEncounter({ ...ENCOUNTER, status: 'open' }, PATIENT._id).status).toBe('in-progress');
+      expect(mapEncounter({ ...ENCOUNTER, status: 'open' }, PATIENT._id).status).toBe(
+        'in-progress'
+      );
     });
 
     it('sets subject reference to Patient/{id}', () => {
@@ -150,7 +154,9 @@ describe('fhir-mapper', () => {
     });
 
     it('returns empty array when no prescriptions', () => {
-      expect(mapMedicationRequests({ ...ENCOUNTER, prescriptions: [] }, PATIENT._id)).toHaveLength(0);
+      expect(mapMedicationRequests({ ...ENCOUNTER, prescriptions: [] }, PATIENT._id)).toHaveLength(
+        0
+      );
     });
   });
 
@@ -311,7 +317,14 @@ describe('mapCoverage', () => {
   it('maps Medicare coverageType to RETIRE code', () => {
     const patient = {
       _id: '507f1f77bcf86cd799439011',
-      insurance: [{ provider: 'Medicare', policyNumber: 'MED-001', coverageType: 'Medicare', isPrimary: true }],
+      insurance: [
+        {
+          provider: 'Medicare',
+          policyNumber: 'MED-001',
+          coverageType: 'Medicare',
+          isPrimary: true,
+        },
+      ],
     };
     const [cov] = mapCoverage(patient);
     expect(cov.type?.coding[0].code).toBe('RETIRE');
@@ -320,7 +333,14 @@ describe('mapCoverage', () => {
   it('maps Medicaid coverageType to PUBLICPOL code', () => {
     const patient = {
       _id: '507f1f77bcf86cd799439011',
-      insurance: [{ provider: 'Medicaid', policyNumber: 'MCAID-001', coverageType: 'Medicaid', isPrimary: true }],
+      insurance: [
+        {
+          provider: 'Medicaid',
+          policyNumber: 'MCAID-001',
+          coverageType: 'Medicaid',
+          isPrimary: true,
+        },
+      ],
     };
     const [cov] = mapCoverage(patient);
     expect(cov.type?.coding[0].code).toBe('PUBLICPOL');
@@ -329,7 +349,9 @@ describe('mapCoverage', () => {
   it('falls back to pay code for unknown coverageType', () => {
     const patient = {
       _id: '507f1f77bcf86cd799439011',
-      insurance: [{ provider: 'Unknown', policyNumber: 'UNK-001', coverageType: 'other', isPrimary: false }],
+      insurance: [
+        { provider: 'Unknown', policyNumber: 'UNK-001', coverageType: 'other', isPrimary: false },
+      ],
     };
     const [cov] = mapCoverage(patient);
     expect(cov.type?.coding[0].code).toBe('pay');

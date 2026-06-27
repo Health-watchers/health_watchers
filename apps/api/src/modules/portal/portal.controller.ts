@@ -13,17 +13,27 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
 import { paginate, parsePagination } from '@api/utils/paginate';
-import { signAccessToken, signRefreshToken, signTempToken, verifyTempToken, REFRESH_TOKEN_EXPIRY_MS } from '../auth/token.service';
+import {
+  signAccessToken,
+  signRefreshToken,
+  signTempToken,
+  verifyTempToken,
+  REFRESH_TOKEN_EXPIRY_MS,
+} from '../auth/token.service';
 import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { portalMfaService } from './portal-mfa.service';
 import { smsOtpService } from './sms-otp.service';
 import { PortalMessageModel } from './models/portal-message.model';
-import { portalMessageCreateSchema, portalMessageQuerySchema, portalTimelineQuerySchema, type TimelineEvent } from './portal.validation';
-import { EncounterModel } from '../encounters/encounter.model';
+import {
+  portalMessageCreateSchema,
+  portalMessageQuerySchema,
+  portalTimelineQuerySchema,
+  type TimelineEvent,
+} from './portal.validation';
 import { LabResultModel } from '../lab-results/lab-result.model';
 import { ImmunizationModel } from '../immunizations/immunization.model';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
-import { sendMail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
 import { sanitizeText } from '@api/utils/sanitize';
 import crypto from 'crypto';
@@ -118,7 +128,11 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { email, dateOfBirth } = req.body as { email: string; dateOfBirth: string };
 
-    const user = await UserModel.findOne({ email: email.toLowerCase().trim(), role: 'PATIENT', isActive: true });
+    const user = await UserModel.findOne({
+      email: email.toLowerCase().trim(),
+      role: 'PATIENT',
+      isActive: true,
+    });
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid credentials' });
     }
@@ -167,7 +181,7 @@ router.post(
     });
 
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/auth/mfa/verify-login ─────────────────────────────────
@@ -248,7 +262,7 @@ router.post(
     });
 
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/me ─────────────────────────────────────────────────────
@@ -260,7 +274,7 @@ router.get(
     const patient = await PatientModel.findById(req.user!.patientId);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(patient) });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/appointments ──────────────────────────────────────────
@@ -276,7 +290,7 @@ router.get(
       .sort({ scheduledAt: -1 })
       .lean();
     return res.json({ status: 'success', data: appointments });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/invoices ───────────────────────────────────────────────
@@ -292,7 +306,7 @@ router.get(
       .sort({ createdAt: -1 })
       .lean();
     return res.json({ status: 'success', data: invoices });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/invoices/:id/pay ─────────────────────────────────────
@@ -305,17 +319,24 @@ router.post(
     const { txHash } = req.body as { txHash?: string };
 
     const invoice = await PaymentRecordModel.findOneAndUpdate(
-      { _id: req.params.id, patientId: req.user!.patientId, clinicId: req.user!.clinicId, status: 'pending' },
+      {
+        _id: req.params.id,
+        patientId: req.user!.patientId,
+        clinicId: req.user!.clinicId,
+        status: 'pending',
+      },
       { status: 'confirmed', txHash, confirmedAt: new Date() },
-      { new: true },
+      { new: true }
     );
 
     if (!invoice) {
-      return res.status(404).json({ error: 'NotFound', message: 'Invoice not found or already paid' });
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: 'Invoice not found or already paid' });
     }
 
     return res.json({ status: 'success', data: invoice });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/messages ─────────────────────────────────────────────
@@ -352,11 +373,12 @@ router.post(
       attachments,
     });
 
-    const patientName = `${(patient as any).firstName || ''} ${(patient as any).lastName || ''}`.trim() || 'Patient';
+    const patientName =
+      `${(patient as any).firstName || ''} ${(patient as any).lastName || ''}`.trim() || 'Patient';
     await notifyStaffAboutPatientMessage(message, patientName);
 
     return res.status(201).json({ status: 'success', data: message });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/messages ──────────────────────────────────────────────
@@ -369,7 +391,9 @@ router.get(
     const { clinicId, patientId } = req.user!;
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
     const { q, threadId } = req.query as { q?: string; threadId?: string };
@@ -389,7 +413,7 @@ router.get(
 
     const result = await paginate(PortalMessageModel, filter, page, limit, { createdAt: -1 });
     return res.json({ status: 'success', data: result.data, meta: result.meta });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/waitlist/position ─────────────────────────────────────
@@ -402,16 +426,16 @@ router.get(
 
     const entry = await WaitlistModel.findOne({
       patientId: new Types.ObjectId(patientId),
-      clinicId:  new Types.ObjectId(clinicId),
-      status:    { $in: ['waiting', 'notified'] },
+      clinicId: new Types.ObjectId(clinicId),
+      status: { $in: ['waiting', 'notified'] },
     }).lean();
 
     if (!entry) return res.json({ status: 'success', data: null });
 
     const ahead = await WaitlistModel.countDocuments({
-      clinicId:  new Types.ObjectId(clinicId),
-      status:    { $in: ['waiting', 'notified'] },
-      _id:       { $ne: entry._id },
+      clinicId: new Types.ObjectId(clinicId),
+      status: { $in: ['waiting', 'notified'] },
+      _id: { $ne: entry._id },
       $or: [
         { priorityOrder: { $gt: (entry as any).priorityOrder ?? 0 } },
         { priorityOrder: (entry as any).priorityOrder ?? 0, addedAt: { $lt: entry.addedAt } },
@@ -419,15 +443,18 @@ router.get(
     });
 
     return res.json({ status: 'success', data: { ...entry, position: ahead + 1 } });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/waitlist ──────────────────────────────────────────────
 const joinWaitlistSchema = z.object({
-  doctorId:        z.string().regex(/^[a-f\d]{24}$/i).optional(),
-  requestedDate:   z.string().datetime({ offset: true }),
+  doctorId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
+  requestedDate: z.string().datetime({ offset: true }),
   appointmentType: z.enum(['consultation', 'follow-up', 'procedure', 'emergency']),
-  priority:        z.enum(['routine', 'urgent']).default('routine'),
+  priority: z.enum(['routine', 'urgent']).default('routine'),
 });
 
 router.post(
@@ -441,8 +468,8 @@ router.post(
 
     const existing = await WaitlistModel.findOne({
       patientId: new Types.ObjectId(patientId),
-      clinicId:  new Types.ObjectId(clinicId),
-      status:    { $in: ['waiting', 'notified'] },
+      clinicId: new Types.ObjectId(clinicId),
+      status: { $in: ['waiting', 'notified'] },
     });
     if (existing) {
       return res.status(409).json({ error: 'Conflict', message: 'Already on the waitlist' });
@@ -451,23 +478,23 @@ router.post(
     const priorityOrder = priority === 'urgent' ? 1 : 0;
     const aheadCount = await WaitlistModel.countDocuments({
       clinicId: new Types.ObjectId(clinicId),
-      status:   { $in: ['waiting', 'notified'] },
+      status: { $in: ['waiting', 'notified'] },
       ...(priority === 'urgent' ? { priorityOrder: 1 } : {}),
     });
 
     const entry = await WaitlistModel.create({
-      patientId:       new Types.ObjectId(patientId),
-      clinicId:        new Types.ObjectId(clinicId),
-      doctorId:        doctorId ? new Types.ObjectId(doctorId) : undefined,
-      requestedDate:   new Date(requestedDate),
+      patientId: new Types.ObjectId(patientId),
+      clinicId: new Types.ObjectId(clinicId),
+      doctorId: doctorId ? new Types.ObjectId(doctorId) : undefined,
+      requestedDate: new Date(requestedDate),
       appointmentType,
       priority,
       priorityOrder,
-      position:        aheadCount + 1,
+      position: aheadCount + 1,
     });
 
     return res.status(201).json({ status: 'success', data: entry });
-  }),
+  })
 );
 
 // ── DELETE /api/v1/portal/waitlist/:id ────────────────────────────────────────
@@ -479,8 +506,8 @@ router.delete(
     const { clinicId, patientId } = req.user!;
 
     const entry = await WaitlistModel.findOneAndDelete({
-      _id:       new Types.ObjectId(req.params.id),
-      clinicId:  new Types.ObjectId(clinicId),
+      _id: new Types.ObjectId(req.params.id),
+      clinicId: new Types.ObjectId(clinicId),
       patientId: new Types.ObjectId(patientId),
     });
 
@@ -489,7 +516,7 @@ router.delete(
     }
 
     return res.json({ status: 'success', data: entry });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/encounters ─────────────────────────────────────────────
@@ -519,7 +546,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
 
@@ -547,7 +576,10 @@ router.get(
               diagnosis: encounter.diagnosis,
               prescriptions: encounter.prescriptions,
             });
-            await EncounterModel.updateOne({ _id: encounter._id }, { $set: { patientFriendlySummary: summary } });
+            await EncounterModel.updateOne(
+              { _id: encounter._id },
+              { $set: { patientFriendlySummary: summary } }
+            );
             encounter.patientFriendlySummary = summary;
           } catch {
             // Non-fatal: summary generation failure should not block the response
@@ -570,7 +602,7 @@ router.get(
     }));
 
     return res.json({ status: 'success', data: safeData, meta: result.meta });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/encounters/:id/notes ──────────────────────────────────
@@ -636,7 +668,7 @@ router.post(
     }
 
     return res.json({ status: 'success', data: { patientNotes: encounter.patientNotes } });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/appointments/history ───────────────────────────────────
@@ -666,7 +698,9 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
 
@@ -683,7 +717,7 @@ router.get(
     );
 
     return res.json({ status: 'success', data: result.data, meta: result.meta });
-  }),
+  })
 );
 
 // ── MFA Routes ────────────────────────────────────────────────────────────────

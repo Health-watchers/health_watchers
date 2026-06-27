@@ -31,7 +31,7 @@ function strip(doc: Record<string, any>): Record<string, any> {
 }
 
 export async function buildComprehensiveRecord(
-  patientId: string,
+  patientId: string
 ): Promise<ComprehensiveRecord | null> {
   if (!Types.ObjectId.isValid(patientId)) return null;
 
@@ -51,8 +51,10 @@ export async function buildComprehensiveRecord(
   const diagnoses: any[] = [];
   const medications: any[] = [];
   for (const enc of encounters as any[]) {
-    for (const d of enc.diagnosis ?? []) diagnoses.push({ ...d, encounterId: String(enc._id), date: enc.createdAt });
-    for (const p of enc.prescriptions ?? []) medications.push({ ...p, encounterId: String(enc._id), date: enc.createdAt });
+    for (const d of enc.diagnosis ?? [])
+      diagnoses.push({ ...d, encounterId: String(enc._id), date: enc.createdAt });
+    for (const p of enc.prescriptions ?? [])
+      medications.push({ ...p, encounterId: String(enc._id), date: enc.createdAt });
   }
 
   return {
@@ -96,7 +98,9 @@ export function renderCsv(record: ComprehensiveRecord): string {
   const { patient } = record;
 
   lines.push('# DEMOGRAPHICS');
-  lines.push(csvRow(['systemId', 'firstName', 'lastName', 'dateOfBirth', 'sex', 'contactNumber', 'address']));
+  lines.push(
+    csvRow(['systemId', 'firstName', 'lastName', 'dateOfBirth', 'sex', 'contactNumber', 'address'])
+  );
   lines.push(
     csvRow([
       patient.systemId,
@@ -106,49 +110,80 @@ export function renderCsv(record: ComprehensiveRecord): string {
       patient.sex,
       patient.contactNumber,
       patient.address,
-    ]),
+    ])
   );
   lines.push('');
 
   lines.push('# ENCOUNTERS');
   lines.push(csvRow(['date', 'chiefComplaint', 'notes']));
   for (const e of record.encounters) {
-    lines.push(csvRow([e.createdAt ? new Date(e.createdAt).toISOString() : '', e.chiefComplaint, e.notes]));
+    lines.push(
+      csvRow([e.createdAt ? new Date(e.createdAt).toISOString() : '', e.chiefComplaint, e.notes])
+    );
   }
   lines.push('');
 
   lines.push('# DIAGNOSES');
   lines.push(csvRow(['date', 'code', 'description']));
   for (const d of record.diagnoses) {
-    lines.push(csvRow([d.date ? new Date(d.date).toISOString() : '', d.code ?? d.icdCode, d.description ?? d.name]));
+    lines.push(
+      csvRow([
+        d.date ? new Date(d.date).toISOString() : '',
+        d.code ?? d.icdCode,
+        d.description ?? d.name,
+      ])
+    );
   }
   lines.push('');
 
   lines.push('# MEDICATIONS');
   lines.push(csvRow(['date', 'name', 'dosage', 'frequency', 'route']));
   for (const m of record.medications) {
-    lines.push(csvRow([m.date ? new Date(m.date).toISOString() : '', m.drugName ?? m.name, m.dosage, m.frequency, m.route]));
+    lines.push(
+      csvRow([
+        m.date ? new Date(m.date).toISOString() : '',
+        m.drugName ?? m.name,
+        m.dosage,
+        m.frequency,
+        m.route,
+      ])
+    );
   }
   lines.push('');
 
   lines.push('# LAB RESULTS');
   lines.push(csvRow(['testName', 'status', 'orderedAt']));
   for (const l of record.labResults) {
-    lines.push(csvRow([l.testName, l.status, l.createdAt ? new Date(l.createdAt).toISOString() : '']));
+    lines.push(
+      csvRow([l.testName, l.status, l.createdAt ? new Date(l.createdAt).toISOString() : ''])
+    );
   }
   lines.push('');
 
   lines.push('# IMMUNIZATIONS');
   lines.push(csvRow(['vaccineName', 'vaccineCode', 'administeredDate']));
   for (const im of record.immunizations) {
-    lines.push(csvRow([im.vaccineName, im.vaccineCode, im.administeredDate ? new Date(im.administeredDate).toISOString() : '']));
+    lines.push(
+      csvRow([
+        im.vaccineName,
+        im.vaccineCode,
+        im.administeredDate ? new Date(im.administeredDate).toISOString() : '',
+      ])
+    );
   }
   lines.push('');
 
   lines.push('# BILLING');
   lines.push(csvRow(['amount', 'assetCode', 'status', 'date']));
   for (const b of record.billing) {
-    lines.push(csvRow([b.amount, b.assetCode, b.status, b.createdAt ? new Date(b.createdAt).toISOString() : '']));
+    lines.push(
+      csvRow([
+        b.amount,
+        b.assetCode,
+        b.status,
+        b.createdAt ? new Date(b.createdAt).toISOString() : '',
+      ])
+    );
   }
 
   return lines.join('\n');
@@ -187,17 +222,26 @@ export function streamPdf(res: Response, record: ComprehensiveRecord) {
   doc.pipe(res);
 
   doc.fontSize(20).font('Helvetica-Bold').text('Health Watchers', { align: 'center' });
-  doc.fontSize(14).font('Helvetica').text('Complete Health Record (Right of Access)', { align: 'center' });
+  doc
+    .fontSize(14)
+    .font('Helvetica')
+    .text('Complete Health Record (Right of Access)', { align: 'center' });
   doc
     .fontSize(9)
     .fillColor('grey')
-    .text(`Generated: ${new Date().toUTCString()}  |  HIPAA — 45 CFR § 164.524`, { align: 'center' });
+    .text(`Generated: ${new Date().toUTCString()}  |  HIPAA — 45 CFR § 164.524`, {
+      align: 'center',
+    });
   doc.fillColor('black').moveDown(1);
 
   sectionHeader(doc, 'Demographics');
   field(doc, 'Patient ID', patient.systemId);
   field(doc, 'Name', `${patient.firstName} ${patient.lastName}`);
-  field(doc, 'Date of Birth', patient.dateOfBirth ? new Date(patient.dateOfBirth).toDateString() : 'N/A');
+  field(
+    doc,
+    'Date of Birth',
+    patient.dateOfBirth ? new Date(patient.dateOfBirth).toDateString() : 'N/A'
+  );
   field(doc, 'Sex', patient.sex);
   field(doc, 'Contact', patient.contactNumber);
   field(doc, 'Address', patient.address);
@@ -211,12 +255,18 @@ export function streamPdf(res: Response, record: ComprehensiveRecord) {
   if (record.encounters.length === 0) doc.text('None on record.');
 
   sectionHeader(doc, `Diagnoses (${record.diagnoses.length})`);
-  record.diagnoses.forEach((d) => field(doc, d.code ?? d.icdCode ?? 'Diagnosis', d.description ?? d.name));
+  record.diagnoses.forEach((d) =>
+    field(doc, d.code ?? d.icdCode ?? 'Diagnosis', d.description ?? d.name)
+  );
   if (record.diagnoses.length === 0) doc.text('None on record.');
 
   sectionHeader(doc, `Medications (${record.medications.length})`);
   record.medications.forEach((m) =>
-    field(doc, m.drugName ?? m.name ?? 'Medication', [m.dosage, m.frequency, m.route].filter(Boolean).join(', ')),
+    field(
+      doc,
+      m.drugName ?? m.name ?? 'Medication',
+      [m.dosage, m.frequency, m.route].filter(Boolean).join(', ')
+    )
   );
   if (record.medications.length === 0) doc.text('None on record.');
 
@@ -226,12 +276,18 @@ export function streamPdf(res: Response, record: ComprehensiveRecord) {
 
   sectionHeader(doc, `Immunizations (${record.immunizations.length})`);
   record.immunizations.forEach((im) =>
-    field(doc, im.vaccineName ?? im.vaccineCode ?? 'Vaccine', im.administeredDate ? new Date(im.administeredDate).toDateString() : 'N/A'),
+    field(
+      doc,
+      im.vaccineName ?? im.vaccineCode ?? 'Vaccine',
+      im.administeredDate ? new Date(im.administeredDate).toDateString() : 'N/A'
+    )
   );
   if (record.immunizations.length === 0) doc.text('None on record.');
 
   sectionHeader(doc, `Billing Records (${record.billing.length})`);
-  record.billing.forEach((b, i) => field(doc, `Charge ${i + 1}`, `${b.amount} ${b.assetCode ?? ''} — ${b.status}`));
+  record.billing.forEach((b, i) =>
+    field(doc, `Charge ${i + 1}`, `${b.amount} ${b.assetCode ?? ''} — ${b.status}`)
+  );
   if (record.billing.length === 0) doc.text('None on record.');
 
   doc.end();

@@ -52,10 +52,7 @@ export interface ReceiptPayload {
 /**
  * Returns the Stellar Expert URL for a transaction — used as QR code target.
  */
-export function buildStellarExplorerUrl(
-  txHash: string,
-  network: 'public' | 'testnet',
-): string {
+export function buildStellarExplorerUrl(txHash: string, network: 'public' | 'testnet'): string {
   const base =
     network === 'public'
       ? 'https://stellar.expert/explorer/public/tx'
@@ -72,19 +69,19 @@ export function buildReceiptPayload(input: PaymentReceiptInput): ReceiptPayload 
 
   return {
     receiptId: `RCT-${input.paymentId}`,
-    qrCodeUrl: explorerUrl,   // QR code encodes this URL
+    qrCodeUrl: explorerUrl, // QR code encodes this URL
     explorerUrl,
     branding: input.clinicBranding,
     payment: {
-      id:          input.paymentId,
-      amount:      input.amount,
-      asset:       input.asset,
-      paidAt:      input.paidAt.toISOString(),
-      txHash:      input.stellarTxHash,
+      id: input.paymentId,
+      amount: input.amount,
+      asset: input.asset,
+      paidAt: input.paidAt.toISOString(),
+      txHash: input.stellarTxHash,
       description: input.description,
     },
     patient: {
-      id:   input.patientId,
+      id: input.patientId,
       name: input.patientName,
     },
     generatedAt: new Date().toISOString(),

@@ -2,22 +2,22 @@ import { buildCms1500, buildEdi837 } from '../claim-builder';
 
 const baseInput = {
   encounterId: 'enc_001',
-  patientId:   'pat_001',
-  clinicId:    'cli_001',
-  clinicNpi:   '1234567890',
-  patientDob:  '1980-05-15',
+  patientId: 'pat_001',
+  clinicId: 'cli_001',
+  clinicNpi: '1234567890',
+  patientDob: '1980-05-15',
   patientName: 'Doe, John',
   serviceDate: '2024-03-01',
-  cptCodes:    ['99213', '93000'],
+  cptCodes: ['99213', '93000'],
   diagnosisCodes: ['Z00.00', 'I10'],
-  amounts:     [150.00, 75.00],
+  amounts: [150.0, 75.0],
 };
 
 describe('buildCms1500', () => {
   it('generates required CMS-1500 fields', () => {
     const form = buildCms1500(baseInput);
     expect(form.box2_patientName).toBe('Doe, John');
-    expect(form.box28_totalCharge).toBe(225.00);
+    expect(form.box28_totalCharge).toBe(225.0);
     expect((form.box24_servicelines as any[]).length).toBe(2);
     expect(form.box33_billingProviderNpi).toBe('1234567890');
   });
@@ -49,7 +49,7 @@ describe('buildEdi837', () => {
 
   it('produces one SV1 line per CPT code', () => {
     const edi = buildEdi837(baseInput);
-    const sv1Lines = edi.split('\n').filter(l => l.startsWith('SV1'));
+    const sv1Lines = edi.split('\n').filter((l) => l.startsWith('SV1'));
     expect(sv1Lines.length).toBe(2);
   });
 

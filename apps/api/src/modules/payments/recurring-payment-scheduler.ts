@@ -1,4 +1,8 @@
-import { getDuePayments, recordPaymentAttempt, notifyPatientOfPayment } from './recurring-payment.service';
+import {
+  getDuePayments,
+  recordPaymentAttempt,
+  notifyPatientOfPayment,
+} from './recurring-payment.service';
 import logger from '../../utils/logger';
 
 export async function processRecurringPayments() {
@@ -11,7 +15,7 @@ export async function processRecurringPayments() {
         const intentId = `recurring_${payment._id}_${Date.now()}`;
 
         // Notify patient
-        const { User } = await import('../auth/models/user.model');
+        const { UserModel: User } = await import('../auth/models/user.model');
         const patient = await User.findById(payment.patientId);
 
         if (patient?.email) {

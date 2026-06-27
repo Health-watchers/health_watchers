@@ -58,10 +58,10 @@ router.get(
         );
       }
 
-      res.json(insight);
+      return res.json(insight);
     } catch (err) {
-      logger.error('Error generating population health insights:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error generating population health insights: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
@@ -97,7 +97,7 @@ router.post(
 
       res.json(insight);
     } catch (err) {
-      logger.error('Error generating population insights:', err);
+      logger.error(`Error generating population insights: ${err}`);
       res.status(500).json({ error: 'InternalServerError' });
     }
   }
@@ -119,7 +119,7 @@ router.get(
 
       res.json(insights);
     } catch (err) {
-      logger.error('Error fetching population health history:', err);
+      logger.error(`Error fetching population health history: ${err}`);
       res.status(500).json({ error: 'InternalServerError' });
     }
   }

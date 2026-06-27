@@ -8,5 +8,8 @@ export async function up(db: Db): Promise<void> {
 }
 
 export async function down(db: Db): Promise<void> {
-  await db.collection('triagequeues').drop().catch(() => {});
+  await db
+    .collection('triagequeues')
+    .drop()
+    .catch(() => {});
 }

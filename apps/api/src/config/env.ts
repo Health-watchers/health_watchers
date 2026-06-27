@@ -30,6 +30,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
+
+  SENTRY_DSN: z.string().url().optional(),
 });
 
 const result = envSchema.safeParse(process.env);

@@ -134,7 +134,7 @@ async function buildXlsx(rows: ReturnType<typeof toRow>[]): Promise<Buffer> {
     });
   }
 
-  return wb.xlsx.writeBuffer() as Promise<Buffer>;
+  return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
 }
 
 const router = Router();

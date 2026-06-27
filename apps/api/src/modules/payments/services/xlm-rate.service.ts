@@ -21,10 +21,8 @@ export const FETCH_TIMEOUT_MS = 8000;
 /** Last-resort rate used only when neither the cache, the DB, nor any source is available. */
 export const FALLBACK_RATE_USD = 0.1;
 
-const COINGECKO_URL =
-  'https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd';
-const STELLAR_DEX_URL =
-  'https://api.stellar.expert/explorer/public/asset/XLM/stats';
+const COINGECKO_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd';
+const STELLAR_DEX_URL = 'https://api.stellar.expert/explorer/public/asset/XLM/stats';
 
 export interface CachedRate {
   rateUSD: number;
@@ -96,11 +94,7 @@ export async function storeHistoricalRate(
   source: string,
   at: Date
 ): Promise<void> {
-  await XLMRateModel.updateOne(
-    { date: at },
-    { date: at, rateUSD, source },
-    { upsert: true }
-  );
+  await XLMRateModel.updateOne({ date: at }, { date: at, rateUSD, source }, { upsert: true });
 }
 
 /**

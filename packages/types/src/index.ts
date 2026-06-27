@@ -67,8 +67,29 @@ export function calculateAgeInMonths(dateOfBirth: Date | string): number {
 }
 
 export function getAgeGroup(age: number): AgeGroup {
-  if (age < 1)  return 'infant';
-  if (age < 3)  return 'toddler';
-  if (age < 12) return 'child';  if (age < 18) return 'adolescent';  if (age < 65) return 'adult';
+  if (age < 1) return 'infant';
+  if (age < 3) return 'toddler';
+  if (age < 12) return 'child';
+  if (age < 18) return 'adolescent';
+  if (age < 65) return 'adult';
   return 'elderly';
+}
+
+export enum ApiErrorCode {
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  NOT_FOUND = 'NOT_FOUND',
+  PATIENT_NOT_FOUND = 'PATIENT_NOT_FOUND',
+  ENCOUNTER_NOT_FOUND = 'ENCOUNTER_NOT_FOUND',
+  PAYMENT_FAILED = 'PAYMENT_FAILED',
+  INTERNAL_SERVER_ERROR = 'INTERNAL_SERVER_ERROR',
+  CONFLICT = 'CONFLICT',
+  RATE_LIMITED = 'RATE_LIMITED',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  INVALID_TOKEN = 'INVALID_TOKEN',
+  ACCOUNT_LOCKED = 'ACCOUNT_LOCKED',
+  MFA_REQUIRED = 'MFA_REQUIRED',
+  UNSUPPORTED_MEDIA_TYPE = 'UNSUPPORTED_MEDIA_TYPE',
+  BAD_REQUEST = 'BAD_REQUEST',
 }

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
@@ -270,7 +271,7 @@ export default function EncountersPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Patient', 'Chief Complaint', 'Diagnosis', 'Status', 'Doctor', 'Date'].map((h) => (
+                  {['Patient', 'Chief Complaint', 'Diagnosis', 'Status', 'Doctor', 'Date', 'Actions'].map((h) => (
                     <th
                       key={h}
                       scope="col"
@@ -318,6 +319,14 @@ export default function EncountersPage() {
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.attendingDoctorId}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
                       {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/encounters/${e.id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        View details
+                      </Link>
                     </td>
                   </tr>
                 ))}

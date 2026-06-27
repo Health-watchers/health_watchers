@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: "Health Watchers"
+  - name: 'Health Watchers'
     orgId: 1
-    folder: "Health Watchers"
+    folder: 'Health Watchers'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

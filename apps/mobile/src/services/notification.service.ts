@@ -35,17 +35,20 @@ export class NotificationService {
 
   static useNotificationListener() {
     useEffect(() => {
-      const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-        const { appointmentId, encounterId, labResultId } = response.notification.request.content.data;
-        // Handle navigation based on notification type
-        if (appointmentId) {
-          // Navigate to appointment detail
-        } else if (encounterId) {
-          // Navigate to encounter detail
-        } else if (labResultId) {
-          // Navigate to lab result
+      const subscription = Notifications.addNotificationResponseReceivedListener(
+        (response: any) => {
+          const { appointmentId, encounterId, labResultId } =
+            response.notification.request.content.data;
+          // Handle navigation based on notification type
+          if (appointmentId) {
+            // Navigate to appointment detail
+          } else if (encounterId) {
+            // Navigate to encounter detail
+          } else if (labResultId) {
+            // Navigate to lab result
+          }
         }
-      });
+      );
 
       return () => subscription.remove();
     }, []);

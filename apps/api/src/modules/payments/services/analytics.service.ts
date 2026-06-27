@@ -1,6 +1,6 @@
-import { PaymentRecordModel } from './models/payment-record.model';
-import { XLMRateModel } from './models/xlm-rate.model';
-import logger from '../../utils/logger';
+import { PaymentRecordModel } from '../models/payment-record.model';
+import { XLMRateModel } from '../models/xlm-rate.model';
+import logger from '@api/utils/logger';
 
 export interface PaymentAnalytics {
   totalRevenue: {
@@ -107,7 +107,10 @@ export async function getPaymentAnalytics(
     if (payment.assetCode === 'XLM') {
       totalXLM += amount;
       xlmPayments.push(payment);
-      const usdEquiv = await calculateUSDEquivalent(payment.amount, payment.createdAt);
+      const usdEquiv = await calculateUSDEquivalent(
+        payment.amount,
+        payment.createdAt ?? new Date()
+      );
       totalUSD += parseFloat(usdEquiv);
     } else if (payment.assetCode === 'USDC') {
       totalUSDC += amount;

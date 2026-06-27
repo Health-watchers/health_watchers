@@ -36,18 +36,36 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 // Mock all routes that are not under test to keep the app lightweight
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -185,7 +203,7 @@ describe('POST /api/v1/auth/login', () => {
         userId: USER_ID,
         consumed: false,
         expiresAt: expect.any(Date),
-      }),
+      })
     );
   });
 
@@ -276,9 +294,7 @@ describe('POST /api/v1/auth/login', () => {
   // ── 400: validation errors ────────────────────────────────────────────────
 
   it('returns 400 when email is missing', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ password: 'ValidPass1!' });
+    const res = await request(app).post('/api/v1/auth/login').send({ password: 'ValidPass1!' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
@@ -294,18 +310,14 @@ describe('POST /api/v1/auth/login', () => {
   });
 
   it('returns 400 when password is missing', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'doctor@clinic.com' });
+    const res = await request(app).post('/api/v1/auth/login').send({ email: 'doctor@clinic.com' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
   });
 
   it('returns 400 when body is empty', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({});
+    const res = await request(app).post('/api/v1/auth/login').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
@@ -360,13 +372,16 @@ describe('POST /api/v1/auth/refresh', () => {
   it('returns 200 with new accessToken and refreshToken for a valid refresh token', async () => {
     const { token, jti, family } = signRefreshToken(userPayload);
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({
+      jti,
+      family,
+      consumed: false,
+      save: saveMock,
+    });
     (UserModel.findById as jest.Mock).mockResolvedValue(makeUser());
     (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
 
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: token });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: token });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
@@ -382,9 +397,7 @@ describe('POST /api/v1/auth/refresh', () => {
     (UserModel.findById as jest.Mock).mockResolvedValue(makeUser());
     (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
 
-    await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: token });
+    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: token });
 
     expect(existing.consumed).toBe(true);
     expect(saveMock).toHaveBeenCalled();
@@ -393,16 +406,19 @@ describe('POST /api/v1/auth/refresh', () => {
   it('issues a new refresh token with the same family', async () => {
     const { token, jti, family } = signRefreshToken(userPayload);
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({
+      jti,
+      family,
+      consumed: false,
+      save: saveMock,
+    });
     (UserModel.findById as jest.Mock).mockResolvedValue(makeUser());
     (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
 
-    await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: token });
+    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: token });
 
     expect(RefreshTokenModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ family, consumed: false }),
+      expect.objectContaining({ family, consumed: false })
     );
   });
 
@@ -422,9 +438,7 @@ describe('POST /api/v1/auth/refresh', () => {
     const { token } = signRefreshToken(userPayload);
     (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue(null);
 
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: token });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: token });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Unauthorized');
@@ -434,13 +448,19 @@ describe('POST /api/v1/auth/refresh', () => {
     // Sign a token that expired 1 second ago using the real secret
     const jwt = require('jsonwebtoken');
     const expiredToken = jwt.sign(
-      { userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID, jti: 'test-jti', family: 'test-family' },
+      {
+        userId: USER_ID,
+        role: 'DOCTOR',
+        clinicId: CLINIC_ID,
+        jti: 'test-jti',
+        family: 'test-family',
+      },
       'test-refresh-secret-32-chars-long!',
       {
         expiresIn: '-1s',
         issuer: 'health-watchers-api',
         audience: 'health-watchers-client',
-      },
+      }
     );
 
     const res = await request(app)
@@ -462,12 +482,10 @@ describe('POST /api/v1/auth/refresh', () => {
         expiresIn: '15m',
         issuer: 'health-watchers-api',
         audience: 'health-watchers-client',
-      },
+      }
     );
 
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: accessToken });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: accessToken });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Unauthorized');
@@ -479,9 +497,7 @@ describe('POST /api/v1/auth/refresh', () => {
     const { token, jti, family } = signRefreshToken(userPayload);
     (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: true });
 
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: token });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: token });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Unauthorized');
@@ -491,9 +507,7 @@ describe('POST /api/v1/auth/refresh', () => {
   // ── 400: validation ───────────────────────────────────────────────────────
 
   it('returns 400 when refreshToken field is missing', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/refresh')
-      .send({});
+    const res = await request(app).post('/api/v1/auth/refresh').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');

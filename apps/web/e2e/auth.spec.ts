@@ -34,7 +34,8 @@ test.describe('Authentication Flow', () => {
     await expect(page).not.toHaveURL(/\/login/);
 
     // Click logout — look for a logout button or link
-    const logoutBtn = page.getByRole('button', { name: /log.?out|sign.?out/i })
+    const logoutBtn = page
+      .getByRole('button', { name: /log.?out|sign.?out/i })
       .or(page.getByRole('link', { name: /log.?out|sign.?out/i }));
     await logoutBtn.click();
 

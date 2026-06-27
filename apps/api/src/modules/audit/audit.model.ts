@@ -34,7 +34,8 @@ export type AuditAction =
   | 'CRITICAL_LAB_ACKNOWLEDGED'
   | 'CLINIC_SWITCH'
   | 'DATA_EXPORT_REQUEST'
-  | 'DATA_EXPORT_FULFILLED';
+  | 'DATA_EXPORT_FULFILLED'
+  | 'CONSENT_VERSION_ACCEPTED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -92,6 +93,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'CLINIC_SWITCH',
         'DATA_EXPORT_REQUEST',
         'DATA_EXPORT_FULFILLED',
+        'CONSENT_VERSION_ACCEPTED',
       ],
       index: true,
     },

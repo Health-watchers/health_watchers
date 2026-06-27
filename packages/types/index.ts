@@ -20,8 +20,17 @@ export function formatDate(dateStr: string | undefined): string {
   });
 }
 
-export type DisputeReason = 'duplicate_payment' | 'service_not_rendered' | 'incorrect_amount' | 'other';
-export type DisputeStatus = 'open' | 'under_review' | 'resolved_refund' | 'resolved_no_action' | 'closed';
+export type DisputeReason =
+  | 'duplicate_payment'
+  | 'service_not_rendered'
+  | 'incorrect_amount'
+  | 'other';
+export type DisputeStatus =
+  | 'open'
+  | 'under_review'
+  | 'resolved_refund'
+  | 'resolved_no_action'
+  | 'closed';
 
 export interface PaymentDispute {
   id: string;

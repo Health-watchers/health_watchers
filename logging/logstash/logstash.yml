@@ -1,0 +1,28 @@
+# ============================================================
+# Logstash Configuration
+# ============================================================
+
+# Pipeline settings
+pipeline.workers: 4
+pipeline.batch.size: 125
+pipeline.batch.delay: 5
+
+# HTTP API
+http.host: '0.0.0.0'
+http.port: 9600
+
+# Monitoring
+monitoring.enabled: true
+monitoring.elasticsearch.hosts: ['http://elasticsearch:9200']
+
+# Pipeline reload
+config.reload.automatic: true
+config.reload.interval: 3s
+
+# Logging
+log.level: info
+logging.level:
+  logstash.outputs.elasticsearch: WARN
+
+# Dead Letter Queue
+dead_letter_queue.enable: false

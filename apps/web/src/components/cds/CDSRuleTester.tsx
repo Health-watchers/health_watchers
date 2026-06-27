@@ -22,7 +22,9 @@ interface TestScenario {
   };
 }
 
-async function evaluateRule(scenario: TestScenario & { trigger: string; clinicId: string }): Promise<CDSAlert[]> {
+async function evaluateRule(
+  scenario: TestScenario & { trigger: string; clinicId: string }
+): Promise<CDSAlert[]> {
   const res = await fetch('/api/cds/evaluate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -64,10 +66,7 @@ export function CDSRuleTester({ rule, onBack }: CDSRuleTesterProps) {
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={onBack}
-        className="text-sm text-primary-600 hover:text-primary-700"
-      >
+      <button onClick={onBack} className="text-primary-600 hover:text-primary-700 text-sm">
         ← Back to Rules
       </button>
 
@@ -103,7 +102,9 @@ export function CDSRuleTester({ rule, onBack }: CDSRuleTesterProps) {
               <h3 className="font-medium text-neutral-900">Vital Signs</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700">Blood Pressure</label>
+                  <label className="block text-sm font-medium text-neutral-700">
+                    Blood Pressure
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g., 150/95"
@@ -139,21 +140,29 @@ export function CDSRuleTester({ rule, onBack }: CDSRuleTesterProps) {
                     onChange={(e) =>
                       setScenario({
                         ...scenario,
-                        vitalSigns: { ...scenario.vitalSigns, temperature: parseFloat(e.target.value) },
+                        vitalSigns: {
+                          ...scenario.vitalSigns,
+                          temperature: parseFloat(e.target.value),
+                        },
                       })
                     }
                     className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700">O2 Saturation</label>
+                  <label className="block text-sm font-medium text-neutral-700">
+                    O2 Saturation
+                  </label>
                   <input
                     type="number"
                     placeholder="e.g., 88"
                     onChange={(e) =>
                       setScenario({
                         ...scenario,
-                        vitalSigns: { ...scenario.vitalSigns, oxygenSaturation: parseInt(e.target.value) },
+                        vitalSigns: {
+                          ...scenario.vitalSigns,
+                          oxygenSaturation: parseInt(e.target.value),
+                        },
                       })
                     }
                     className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
@@ -163,7 +172,9 @@ export function CDSRuleTester({ rule, onBack }: CDSRuleTesterProps) {
             </div>
           )}
 
-          {(rule.trigger === 'prescription_add' || rule.category === 'drug_interaction' || rule.category === 'allergy') && (
+          {(rule.trigger === 'prescription_add' ||
+            rule.category === 'drug_interaction' ||
+            rule.category === 'allergy') && (
             <div className="rounded-md bg-neutral-50 p-4">
               <label className="block text-sm font-medium text-neutral-700">Drug Name</label>
               <input

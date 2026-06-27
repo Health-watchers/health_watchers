@@ -38,7 +38,11 @@
           "color": { "fixedColor": "blue", "mode": "fixed" }
         }
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
     },
     {
       "id": 2,
@@ -56,7 +60,11 @@
           "color": { "fixedColor": "purple", "mode": "fixed" }
         }
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
     },
     {
       "id": 3,
@@ -74,7 +82,11 @@
           "color": { "fixedColor": "green", "mode": "fixed" }
         }
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
     },
     {
       "id": 4,
@@ -92,7 +104,11 @@
           "color": { "fixedColor": "orange", "mode": "fixed" }
         }
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
     },
     {
       "id": 5,

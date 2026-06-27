@@ -72,9 +72,7 @@ export function ScheduleCalendar({ startDate, onScheduleSelect }: ScheduleCalend
   const getSchedulesForDay = (date: Date) => {
     return schedules.filter((s) => {
       const scheduleDate = new Date(s.date);
-      return (
-        scheduleDate.toDateString() === date.toDateString() && s.status !== 'cancelled'
-      );
+      return scheduleDate.toDateString() === date.toDateString() && s.status !== 'cancelled';
     });
   };
 
@@ -85,7 +83,9 @@ export function ScheduleCalendar({ startDate, onScheduleSelect }: ScheduleCalend
   }
 
   if (error) {
-    return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>;
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+    );
   }
 
   return (
@@ -127,7 +127,11 @@ export function ScheduleCalendar({ startDate, onScheduleSelect }: ScheduleCalend
               className="rounded-lg border border-neutral-200 bg-white p-3"
             >
               <p className="text-xs font-semibold text-neutral-600">
-                {day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                {day.toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}
               </p>
               <div className="mt-2 space-y-1">
                 {daySchedules.map((schedule) => (
@@ -137,7 +141,9 @@ export function ScheduleCalendar({ startDate, onScheduleSelect }: ScheduleCalend
                     className={`cursor-pointer rounded border p-1 text-xs ${roleColors[schedule.role]}`}
                   >
                     <p className="font-semibold">{schedule.role}</p>
-                    <p>{schedule.shiftStart} - {schedule.shiftEnd}</p>
+                    <p>
+                      {schedule.shiftStart} - {schedule.shiftEnd}
+                    </p>
                     {schedule.isOnCall && <p className="text-xs">On Call</p>}
                   </div>
                 ))}

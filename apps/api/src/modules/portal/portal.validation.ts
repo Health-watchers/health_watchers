@@ -9,7 +9,10 @@ export type PortalLoginDto = z.infer<typeof portalLoginSchema>;
 
 export const portalMfaSetupSchema = z.object({
   method: z.enum(['totp', 'sms']),
-  phoneNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/).optional(),
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[1-9]\d{1,14}$/)
+    .optional(),
 });
 
 export type PortalMfaSetupDto = z.infer<typeof portalMfaSetupSchema>;
@@ -45,8 +48,14 @@ export const portalMessageCreateSchema = z.object({
       })
     )
     .optional(),
-  threadId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
-  parentMessageId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  threadId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
+  parentMessageId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
 });
 
 export type PortalMessageCreateDto = z.infer<typeof portalMessageCreateSchema>;
@@ -55,7 +64,10 @@ export const portalMessageQuerySchema = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
   q: z.string().optional(),
-  threadId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  threadId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
 });
 
 export type PortalMessageQueryDto = z.infer<typeof portalMessageQuerySchema>;

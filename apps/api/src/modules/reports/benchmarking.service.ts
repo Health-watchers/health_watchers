@@ -60,7 +60,7 @@ export async function calculateClinicMetrics(clinicId: string): Promise<ClinicMe
   // Average encounter duration (in minutes)
   const avgDuration =
     encounters.length > 0
-      ? encounters.reduce((sum, e) => {
+      ? (encounters as any[]).reduce((sum, e) => {
           const start = new Date(e.createdAt).getTime();
           const end = e.closedAt ? new Date(e.closedAt).getTime() : Date.now();
           return sum + (end - start) / (1000 * 60);
@@ -77,7 +77,9 @@ export async function calculateClinicMetrics(clinicId: string): Promise<ClinicMe
     const count = patientEncounterCounts.get(String(e.patientId)) || 0;
     patientEncounterCounts.set(String(e.patientId), count + 1);
   });
-  const returningPatients = Array.from(patientEncounterCounts.values()).filter((c) => c >= 2).length;
+  const returningPatients = Array.from(patientEncounterCounts.values()).filter(
+    (c) => c >= 2
+  ).length;
   const patientRetentionRate = totalPatients > 0 ? (returningPatients / totalPatients) * 100 : 0;
 
   // AI summary adoption rate
@@ -87,7 +89,7 @@ export async function calculateClinicMetrics(clinicId: string): Promise<ClinicMe
   const closedEncounters = encounters.filter((e) => e.closedAt);
   const avgTimeToClose =
     closedEncounters.length > 0
-      ? closedEncounters.reduce((sum, e) => {
+      ? (closedEncounters as any[]).reduce((sum, e) => {
           const start = new Date(e.createdAt).getTime();
           const end = new Date(e.closedAt!).getTime();
           return sum + (end - start) / (1000 * 60 * 60);

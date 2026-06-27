@@ -327,7 +327,13 @@ describe('PHI encryption — insurance sub-documents', () => {
         ...makeDoc(),
         insurance: [
           { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
-          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+          {
+            provider: 'Aetna',
+            policyNumber: 'POL-B',
+            groupNumber: 'GRP-B',
+            coverageType: 'HMO',
+            isPrimary: false,
+          },
         ],
       };
       const patient = await PatientModel.create(doc);
@@ -344,7 +350,13 @@ describe('PHI encryption — insurance sub-documents', () => {
         ...makeDoc(),
         insurance: [
           { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
-          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+          {
+            provider: 'Aetna',
+            policyNumber: 'POL-B',
+            groupNumber: 'GRP-B',
+            coverageType: 'HMO',
+            isPrimary: false,
+          },
         ],
       };
       const created = await PatientModel.create(doc);

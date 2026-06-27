@@ -108,5 +108,8 @@ const medicalHistorySchema = new Schema<IMedicalHistory>(
 // Index for clinic-scoped queries
 medicalHistorySchema.index({ clinicId: 1, patientId: 1 });
 
-export const MedicalHistoryModel =
-  mongoose.models.MedicalHistory || mongoose.model<IMedicalHistory>('MedicalHistory', medicalHistorySchema);
+export const MedicalHistoryModel = (mongoose.models.MedicalHistory ||
+  mongoose.model<IMedicalHistory>(
+    'MedicalHistory',
+    medicalHistorySchema
+  )) as import('mongoose').Model<IMedicalHistory>;

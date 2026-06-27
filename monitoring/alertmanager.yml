@@ -1,0 +1,101 @@
+# ============================================================
+# AlertManager Configuration
+#
+# Handles alert routing, grouping, and notification delivery
+# ============================================================
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+
+  routes:
+    # Critical alerts - immediate escalation
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 4h
+      routes:
+        - match:
+            alertname: 'APIDown|StellarServiceDown|MongoDBPoolWaitQueueNonEmpty|StellarKeypairDecryptionFailure'
+          receiver: 'pagerduty-critical'
+          continue: true
+        - match:
+            alertname: 'StellarKeypairDecryptionFailure'
+          receiver: 'security-team'
+          continue: true
+
+    # Warning alerts - email notification
+    - match:
+        severity: warning
+      receiver: 'email-alerts'
+      group_wait: 2m
+      repeat_interval: 24h
+
+    # Info alerts - logging only
+    - match:
+        severity: info
+      receiver: 'null'
+
+inhibit_rules:
+  # Inhibit warning alerts if critical is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
+
+  # Inhibit info alerts if warning is firing
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'cluster', 'service']
+
+receivers:
+  - name: 'default'
+    slack_configs:
+      - channel: '#alerts-general'
+        title: 'Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '{{ .GroupLabels.alertname }}: {{ .Alerts.Firing | len }} firing'
+        client_url: '{{ .ExternalURL }}'
+
+  - name: 'email-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        from: '${ALERT_EMAIL_FROM}'
+        smarthost: '${SMTP_SERVER}:${SMTP_PORT}'
+        auth_username: '${SMTP_USER}'
+        auth_password: '${SMTP_PASSWORD}'
+        headers:
+          Subject: '[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }}'
+
+  - name: 'security-team'
+    slack_configs:
+      - channel: '#security-alerts'
+        title: '🔒 SECURITY ALERT: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    email_configs:
+      - to: '${SECURITY_TEAM_EMAIL}'
+        from: '${ALERT_EMAIL_FROM}'
+        smarthost: '${SMTP_SERVER}:${SMTP_PORT}'
+        auth_username: '${SMTP_USER}'
+        auth_password: '${SMTP_PASSWORD}'
+
+  - name: 'null'

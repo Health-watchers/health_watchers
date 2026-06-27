@@ -149,7 +149,11 @@ describe('POST /auth/register', () => {
     await registerHandler('CLINIC_ADMIN', validBody, res);
 
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(sendVerificationEmail).toHaveBeenCalledWith('alice@clinic.com', expect.any(String), undefined);
+    expect(sendVerificationEmail).toHaveBeenCalledWith(
+      'alice@clinic.com',
+      expect.any(String),
+      undefined
+    );
     const responseData = (res.json as jest.Mock).mock.calls[0][0].data;
     expect(responseData).not.toHaveProperty('password');
     expect(responseData).not.toHaveProperty('emailVerificationTokenHash');

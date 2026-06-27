@@ -227,12 +227,10 @@ describe('Portal MFA Routes', () => {
       mockUser.portalMfaEnabled = true;
       mockUser.portalMfaMethod = 'totp';
 
-      const response = await request(app)
-        .post('/api/v1/portal/auth/login')
-        .send({
-          email: 'patient@example.com',
-          dateOfBirth: '1990-01-01',
-        });
+      const response = await request(app).post('/api/v1/portal/auth/login').send({
+        email: 'patient@example.com',
+        dateOfBirth: '1990-01-01',
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.data.mfaRequired).toBe(true);
@@ -243,12 +241,10 @@ describe('Portal MFA Routes', () => {
     it('should return access token when MFA is not enabled', async () => {
       mockUser.portalMfaEnabled = false;
 
-      const response = await request(app)
-        .post('/api/v1/portal/auth/login')
-        .send({
-          email: 'patient@example.com',
-          dateOfBirth: '1990-01-01',
-        });
+      const response = await request(app).post('/api/v1/portal/auth/login').send({
+        email: 'patient@example.com',
+        dateOfBirth: '1990-01-01',
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveProperty('accessToken');

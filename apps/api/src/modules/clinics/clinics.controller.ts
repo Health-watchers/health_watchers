@@ -58,18 +58,26 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
 
     // Fund testnet account via Friendbot (non-blocking)
     if (config.stellarNetwork === 'testnet') {
-      stellarClient.fundAccount(publicKey).catch((err) =>
-        logger.warn({ err, publicKey }, 'Friendbot funding failed — account will need manual funding'),
-      );
+      stellarClient
+        .fundAccount(publicKey)
+        .catch((err) =>
+          logger.warn(
+            { err, publicKey },
+            'Friendbot funding failed — account will need manual funding'
+          )
+        );
     }
 
-    auditLog({
-      action: 'KEYPAIR_CREATE',
-      resourceType: 'Clinic',
-      resourceId: String(clinic._id),
-      userId: req.user!.userId,
-      metadata: { stellarPublicKey: publicKey },
-    }, req);
+    auditLog(
+      {
+        action: 'KEYPAIR_CREATE',
+        resourceType: 'Clinic',
+        resourceId: String(clinic._id),
+        userId: req.user!.userId,
+        metadata: { stellarPublicKey: publicKey },
+      },
+      req
+    );
 
     return res.status(201).json({ status: 'success', data: clinic });
   } catch (err: unknown) {
@@ -118,7 +126,11 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
       role === 'SUPER_ADMIN'
         ? req.body
         : (({ name, address, phone, email, stellarPublicKey }: any) => ({
-            name, address, phone, email, stellarPublicKey,
+            name,
+            address,
+            phone,
+            email,
+            stellarPublicKey,
           }))(req.body);
 
     const updated = await ClinicModel.findByIdAndUpdate(req.params.id, allowedFields, {
@@ -197,7 +209,7 @@ router.post(
       // Archive current active keypair
       await ClinicKeypairModel.updateMany(
         { clinicId: req.params.id, isActive: true },
-        { isActive: false },
+        { isActive: false }
       );
 
       // Get next key version
@@ -230,24 +242,29 @@ router.post(
 
       // Fund testnet account (non-blocking)
       if (config.stellarNetwork === 'testnet') {
-        stellarClient.fundAccount(publicKey).catch((err) =>
-          logger.warn({ err, publicKey }, 'Friendbot funding failed for rotated keypair'),
-        );
+        stellarClient
+          .fundAccount(publicKey)
+          .catch((err) =>
+            logger.warn({ err, publicKey }, 'Friendbot funding failed for rotated keypair')
+          );
       }
 
-      auditLog({
-        action: 'KEYPAIR_ROTATE',
-        resourceType: 'Clinic',
-        resourceId: String(clinic._id),
-        userId: req.user!.userId,
-        metadata: { newPublicKey: publicKey, keyVersion: nextVersion },
-      }, req);
+      auditLog(
+        {
+          action: 'KEYPAIR_ROTATE',
+          resourceType: 'Clinic',
+          resourceId: String(clinic._id),
+          userId: req.user!.userId,
+          metadata: { newPublicKey: publicKey, keyVersion: nextVersion },
+        },
+        req
+      );
 
       return res.json({ status: 'success', data: { publicKey, keyVersion: nextVersion } });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 /**
@@ -320,16 +337,22 @@ router.post(
         logger,
       });
 
-      auditLog({
-        action: 'KEYPAIR_ROTATE',
-        resourceType: 'Clinic',
-        resourceId: String(clinic._id),
-        userId: req.user!.userId,
-        metadata: { newPublicKey: publicKey, keyVersion, transferResult },
-      }, req);
+      auditLog(
+        {
+          action: 'KEYPAIR_ROTATE',
+          resourceType: 'Clinic',
+          resourceId: String(clinic._id),
+          userId: req.user!.userId,
+          metadata: { newPublicKey: publicKey, keyVersion, transferResult },
+        },
+        req
+      );
 
       // Notify clinic admin by email (best-effort, non-blocking)
-      const admin = await UserModel.findOne({ clinicId: req.params.id, role: 'CLINIC_ADMIN' }).lean();
+      const admin = await UserModel.findOne({
+        clinicId: req.params.id,
+        role: 'CLINIC_ADMIN',
+      }).lean();
       if (admin?.email) {
         sendKeypairRotationEmail(admin.email, clinic.name, publicKey, keyVersion);
       }
@@ -339,7 +362,7 @@ router.post(
       logger.error({ err, clinicId: req.params.id }, 'Keypair rotation failed');
       return res.status(500).json({ error: 'RotationFailed', message: err.message });
     }
-  },
+  }
 );
 
 export const clinicRoutes = router;

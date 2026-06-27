@@ -14,8 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
-        {/* pb-16 reserves space for the mobile bottom tab bar */}
-        <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6 dark:bg-neutral-900 dark:text-neutral-100">
+        <main className="flex-1 overflow-y-auto p-6 dark:bg-neutral-900 dark:text-neutral-100">
           {children}
         </main>
       </div>

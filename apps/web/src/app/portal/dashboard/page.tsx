@@ -25,12 +25,11 @@ export default function PortalDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      portalGet<Appointment[]>('/appointments'),
-      portalGet<Invoice[]>('/invoices'),
-    ])
+    Promise.all([portalGet<Appointment[]>('/appointments'), portalGet<Invoice[]>('/invoices')])
       .then(([appts, invs]) => {
-        setAppointments(appts.filter((a) => a.status === 'scheduled' || a.status === 'confirmed').slice(0, 3));
+        setAppointments(
+          appts.filter((a) => a.status === 'scheduled' || a.status === 'confirmed').slice(0, 3)
+        );
         setInvoices(invs.filter((i) => i.status === 'pending').slice(0, 3));
       })
       .catch(() => {})
@@ -59,7 +58,10 @@ export default function PortalDashboardPage() {
               ))}
             </ul>
           )}
-          <Link href="/portal/appointments" className="mt-3 block text-xs text-blue-600 hover:underline">
+          <Link
+            href="/portal/appointments"
+            className="mt-3 block text-xs text-blue-600 hover:underline"
+          >
             View all →
           </Link>
         </section>
@@ -78,7 +80,10 @@ export default function PortalDashboardPage() {
               ))}
             </ul>
           )}
-          <Link href="/portal/payments" className="mt-3 block text-xs text-blue-600 hover:underline">
+          <Link
+            href="/portal/payments"
+            className="mt-3 block text-xs text-blue-600 hover:underline"
+          >
             View all →
           </Link>
         </section>
@@ -88,10 +93,16 @@ export default function PortalDashboardPage() {
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 font-semibold text-gray-700">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <Link href="/portal/records" className="rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">
+          <Link
+            href="/portal/records"
+            className="rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+          >
             View My Records
           </Link>
-          <Link href="/portal/consent" className="rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">
+          <Link
+            href="/portal/consent"
+            className="rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+          >
             Manage Consent
           </Link>
         </div>

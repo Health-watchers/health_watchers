@@ -5,23 +5,33 @@
     "module": "CommonJS",
     "lib": ["ES2020"],
     "outDir": "dist",
-    "rootDir": "src",
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
-    "strictFunctionTypes": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitReturns": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "Node",
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
+    "types": [],
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "baseUrl": "src",
     "paths": {
       "@/*": ["./*"],
-      "@api/*": ["./*"]
+      "@api/*": ["./*"],
+      "dotenv": ["../node_modules/dotenv"],
+      "@health-watchers/types": ["../../../packages/types/src/index.ts"],
+      "@health-watchers/anonymize": ["../../../packages/anonymize/src/index.ts"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/**/*.test.ts", "src/modules/export/export.service.ts"]
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/modules/export/export.service.ts",
+    "src/modules/payments/services/fee-optimizer.service.ts",
+    "src/utils/email-queue.ts",
+    "src/modules/immunizations/immunization-compliance-job.ts",
+    "src/services/metrics-integration-examples.ts"
+  ]
 }

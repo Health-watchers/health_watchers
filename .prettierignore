@@ -5,6 +5,11 @@ coverage
 *.lock
 package-lock.json
 *.md
+# Helm templates use {{ }} syntax incompatible with YAML parser
+helm/
+
 # Files with pre-existing syntax errors
 apps/api/src/modules/appointments/appointments.controller.ts
+apps/api/src/modules/auth/refresh-token-rotation.test.ts
 apps/web/src/components/ui/Toast.tsx
+scripts/seed.ts

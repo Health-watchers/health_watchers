@@ -53,14 +53,14 @@ export function QRCodeDisplay({ intentId, onClose }: QRCodeDisplayProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-primary-500" />
+        <div className="border-t-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+      <div className="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border p-4 text-sm">
         {error}
       </div>
     );
@@ -84,7 +84,7 @@ export function QRCodeDisplay({ intentId, onClose }: QRCodeDisplayProps) {
       {paymentURI && (
         <div className="rounded-lg bg-neutral-50 p-3">
           <p className="text-xs font-semibold text-neutral-600">Payment URI:</p>
-          <p className="break-all font-mono text-xs text-neutral-700">{paymentURI}</p>
+          <p className="font-mono text-xs break-all text-neutral-700">{paymentURI}</p>
         </div>
       )}
 

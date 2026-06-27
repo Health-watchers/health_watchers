@@ -1,0 +1,86 @@
+{
+  "index_patterns": ["health-watchers-*"],
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "refresh_interval": "30s",
+        "max_result_window": 50000,
+        "lifecycle": {
+          "name": "health-watchers-policy",
+          "rollover_alias": "health-watchers-write"
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "timestamp": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "log_level": {
+          "type": "keyword"
+        },
+        "message": {
+          "type": "text",
+          "analyzer": "standard"
+        },
+        "service": {
+          "type": "keyword"
+        },
+        "request_id": {
+          "type": "keyword"
+        },
+        "user_id": {
+          "type": "keyword"
+        },
+        "http_method": {
+          "type": "keyword"
+        },
+        "http_path": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            }
+          }
+        },
+        "http_status": {
+          "type": "short"
+        },
+        "response_time_ms": {
+          "type": "long"
+        },
+        "response_time_bucket": {
+          "type": "keyword"
+        },
+        "error_message": {
+          "type": "text"
+        },
+        "error_type": {
+          "type": "keyword"
+        },
+        "stack_trace": {
+          "type": "text",
+          "index": false
+        },
+        "is_error": {
+          "type": "boolean"
+        },
+        "environment": {
+          "type": "keyword"
+        },
+        "cluster": {
+          "type": "keyword"
+        },
+        "source_ip": {
+          "type": "ip"
+        },
+        "geoip": {
+          "type": "geo_point"
+        }
+      }
+    }
+  }
+}

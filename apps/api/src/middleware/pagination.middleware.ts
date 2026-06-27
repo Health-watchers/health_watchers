@@ -40,7 +40,7 @@ export function paginationMiddleware(allowedSortFields: string[]) {
         sort: { field, direction: direction as 'asc' | 'desc' },
       };
 
-      next();
+      return next();
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
@@ -48,7 +48,7 @@ export function paginationMiddleware(allowedSortFields: string[]) {
           message: error.errors[0].message,
         });
       }
-      next(error);
+      return next(error);
     }
   };
 }
