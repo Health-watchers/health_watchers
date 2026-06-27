@@ -1,0 +1,49 @@
+# ServiceAccount for health-watchers services
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: health-watchers
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+
+---
+# Role for health-watchers services
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: health-watchers
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+rules:
+  # Read ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  # Read Services for service discovery
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  # Read Pods for health checks
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+---
+# RoleBinding for health-watchers services
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: health-watchers
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: health-watchers
+subjects:
+  - kind: ServiceAccount
+    name: health-watchers
+    namespace: health-watchers

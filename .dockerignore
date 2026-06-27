@@ -2,43 +2,91 @@
 node_modules
 npm-debug.log
 yarn-error.log
+package-lock.json.bak
 
 # Environment files
 .env
 .env.local
 .env.*.local
+.env.example
 
 # Build outputs
 dist
 build
 .next
 out
+**/*.d.ts
+*.js.map
+*.ts.map
 
 # Git
 .git
 .gitignore
+.gitattributes
 
 # IDE
 .vscode
 .idea
 *.swp
 *.swo
+*.iml
+.eclipse
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
 
 # OS
 .DS_Store
 Thumbs.db
+.AppleDouble
+.LSOverride
 
 # Testing
 coverage
 .nyc_output
+**/*.test.js
+**/*.spec.js
+**/*.test.ts
+**/*.spec.ts
+jest.config.js
+vitest.config.ts
 
 # Logs
 logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
 # Documentation
 *.md
-!README.md
+README.md
+docs/
 
 # CI/CD
 .github
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Docker/Kubernetes
+docker-compose*.yml
+k8s/
+helm/
+*.dockerfile
+Dockerfile.dev
+
+# Misc
+.turbo/
+dist-ssr/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+*.tsbuildinfo
