@@ -71,7 +71,7 @@ export const v1DeprecationWarning: RequestHandler = (_req, res, next) => {
 };
 
 /**
- * Get all supported API versions with their status
+ * Get all supported API versions with their status and upgrade path.
  */
 export function getSupportedVersions() {
   return {
@@ -79,5 +79,43 @@ export function getSupportedVersions() {
     current: 'v2',
     deprecated: API_VERSIONS.filter((v) => v.status === 'deprecated'),
     sunset: API_VERSIONS.filter((v) => v.status === 'sunset'),
+    upgradePath: {
+      from: 'v1',
+      to: 'v2',
+      deprecatedAt: '2025-12-01',
+      sunsetAt: '2026-12-01',
+      breakingChanges: [
+        'Appointment response shape updated — date fields are now ISO-8601 strings',
+        'Pagination envelope moved from data[] to items[] with a meta object',
+      ],
+      migrationGuide: 'https://docs.health-watchers.io/api/migration-v1-v2',
+    },
   };
 }
+
+/**
+ * Middleware that validates the Accept-Version request header.
+ * Rejects unknown versions (406) and sunset versions (410).
+ * When a valid version is specified it overwrites the API-Version response header.
+ */
+export const acceptVersionMiddleware: RequestHandler = (req, res, next) => {
+  const requested = req.headers['accept-version'] as string | undefined;
+  if (!requested) return next();
+
+  const matched = API_VERSIONS.find((v) => v.version === requested);
+  if (!matched) {
+    return res.status(406).json({
+      error: 'NotAcceptable',
+      message: `API version '${requested}' is not supported. See /api/versions for available versions.`,
+    });
+  }
+  if (matched.status === 'sunset') {
+    return res.status(410).json({
+      error: 'Gone',
+      message: `API version '${requested}' has been sunset. Please migrate to v2. See /api/versions for upgrade path.`,
+    });
+  }
+
+  res.set('API-Version', matched.version);
+  next();
+};

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run translation check when en.json or fr.json are staged
-STAGED=$(git diff --cached --name-only | grep -E 'apps/web/messages/(en|fr)\.json')
+STAGED=$(git diff --cached --name-only | grep -E 'apps/web/messages/(en|fr)\.json' || true)
 if [ -n "$STAGED" ]; then
   echo "🌐 Running translation completeness check..."
   npx ts-node scripts/check-translations.ts

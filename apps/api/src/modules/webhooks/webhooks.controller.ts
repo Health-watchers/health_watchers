@@ -6,7 +6,11 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import logger from '@api/utils/logger';
 import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
 import { generateWebhookSecret, verifyWebhookSignature, deliverWebhook } from './webhook.service';
-import { registerWebhookSchema, inboundWebhookSchema } from './webhook.validation';
+import {
+  registerWebhookSchema,
+  updateWebhookSchema,
+  inboundWebhookSchema,
+} from './webhook.validation';
 import { confirmPayment } from '../payments/services/payment-confirmation.service';
 
 const router = Router();
@@ -171,6 +175,78 @@ router.get(
         isActive: w.isActive,
         createdAt: w.createdAt,
       })),
+    });
+  })
+);
+
+// GET /webhooks/:id (get single webhook)
+router.get(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        createdAt: webhook.createdAt,
+        updatedAt: webhook.updatedAt,
+      },
+    });
+  })
+);
+
+// PATCH /webhooks/:id (update webhook url, events, or active state)
+router.patch(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  validateRequest({ body: updateWebhookSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { url, events, isActive } = req.body;
+
+    const update: Record<string, unknown> = {};
+    if (url !== undefined) update.url = url;
+    if (events !== undefined) update.events = events;
+    if (isActive !== undefined) update.isActive = isActive;
+
+    const webhook = await WebhookModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
+      update,
+      { new: true }
+    ).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        updatedAt: webhook.updatedAt,
+      },
     });
   })
 );

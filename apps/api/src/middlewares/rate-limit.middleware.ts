@@ -5,7 +5,8 @@ import logger from '../utils/logger';
 // ── Retry-After handler ───────────────────────────────────────────────────────
 const makeHandler =
   (windowMs: number, message: Options['message']) =>
-  (_req: Request, res: Response, _next: unknown, _options: Options): void => {
+  (req: Request, res: Response, _next: unknown, _options: Options): void => {
+    logger.warn({ ip: req.ip, path: req.path, method: req.method }, '[rate-limit] limit exceeded');
     res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
     res.status(429).json(message);
   };

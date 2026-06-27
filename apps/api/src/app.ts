@@ -32,6 +32,8 @@ import { documentRoutes } from './modules/documents/documents.controller';
 import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
 import { healthRoutes } from './modules/health/health.controller';
+import { backupHealthRoutes } from './modules/health/backup-health.controller';
+import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
@@ -53,6 +55,7 @@ import {
   apiVersionHeader,
   v1DeprecationWarning,
   getSupportedVersions,
+  acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
@@ -88,10 +91,7 @@ import {
   stopClaimableExpiryNotificationJob,
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
-import {
-  startMfaGracePeriodJob,
-  stopMfaGracePeriodJob,
-} from './modules/auth/mfa-grace-period-job';
+import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
 import { getCacheMetrics } from './services/cache.service';
 import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
@@ -126,7 +126,9 @@ import federationRouter from './modules/federation/federation.router';
 import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
+import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
+import { backupHealthRoutes } from './modules/health/backup-health.controller';
 
 const app = express();
 const server = createServer(app);
@@ -209,7 +211,10 @@ app.use(
   })
 );
 
-// ── Request ID propagation ────────────────────────────────────────────────────
+// ── Request ID correlation & propagation ──────────────────────────────────────
+// correlationMiddleware: stamps req.requestId and echoes X-Request-ID header
+app.use(correlationMiddleware);
+// requestIdPropagationMiddleware: stores the ID in AsyncLocalStorage for downstream services
 app.use(requestIdPropagationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
@@ -239,6 +244,7 @@ app.use((req, res, next) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
+app.use('/health', backupHealthRoutes);
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // Must be registered before API routes so all requests are measured
@@ -251,8 +257,8 @@ app.get('/api/versions', (_req, res) => {
   res.json(versions);
 });
 
-// ── Role-based response field filtering ──────────────────────────────────────
-app.use('/api', responseFilterMiddleware);
+// ── Accept-Version header negotiation ─────────────────────────────────────────
+app.use('/api', acceptVersionMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
 app.use('/api/v1', v1DeprecationWarning);
@@ -351,6 +357,7 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
+  initializeBackupMetrics().catch((err) => logger.warn({ err }, 'Failed to load initial backup metrics'));
   startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus
