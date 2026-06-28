@@ -8,10 +8,18 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import PasswordStrengthBar from './PasswordStrengthBar';
 
+const newPasswordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .refine((p) => /[A-Z]/.test(p), 'Password must contain at least one uppercase letter')
+  .refine((p) => /[a-z]/.test(p), 'Password must contain at least one lowercase letter')
+  .refine((p) => /[0-9]/.test(p), 'Password must contain at least one digit')
+  .refine((p) => /[^A-Za-z0-9]/.test(p), 'Password must contain at least one special character');
+
 const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password is required'),
-    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    newPassword: newPasswordSchema,
     confirmPassword: z.string(),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {
