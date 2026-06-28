@@ -29,8 +29,13 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
-  // Skip CSRF check for auth endpoints (login/register) since no session exists yet
-  if (req.path.startsWith('/api/v1/auth/login') || req.path.startsWith('/api/v1/auth/register')) {
+  // Skip CSRF check for auth endpoints (login/register) since no session exists yet,
+  // and for CSP reports which are browser-generated with no user session.
+  if (
+    req.path.startsWith('/api/v1/auth/login') ||
+    req.path.startsWith('/api/v1/auth/register') ||
+    req.path.startsWith('/api/v1/csp-report')
+  ) {
     return next();
   }
 

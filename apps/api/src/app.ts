@@ -129,6 +129,7 @@ import { requestIdPropagationMiddleware } from './middlewares/request-id-propaga
 import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
 import { backupHealthRoutes } from './modules/health/backup-health.controller';
+import { cspReportRoutes } from './modules/security/csp-report.controller';
 
 const app = express();
 const server = createServer(app);
@@ -152,6 +153,7 @@ app.use(
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
+        reportUri: ['/api/v1/csp-report'],
       },
     },
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
@@ -228,11 +230,12 @@ app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
-// Bypass for multipart/form-data routes (e.g. CSV import)
+// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports
 const MULTIPART_BYPASS = ['/api/v1/patients/import', '/api/v1/patients/'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
     if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
+    if (req.path.startsWith('/api/v1/csp-report')) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
         .status(415)
@@ -313,6 +316,9 @@ app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
 app.use('/api/v1/compliance', complianceRoutes);
 app.use('/api/v1/admin/breach-incidents', breachIncidentRoutes);
+
+// ── CSP violation reporting (public, no auth, no CSRF) ───────────────────────
+app.use('/api/v1/csp-report', cspReportRoutes);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
