@@ -117,4 +117,5 @@ docker-volumes/
 *.tgz
 *.tar.gz
 pacts/*.json
-pacts/*.json
+apps/api/reports/
+.stryker-tmp/
