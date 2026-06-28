@@ -538,6 +538,26 @@ export function sendUnrecognizedTransactionEmail(
   enqueue(to, subject, text, html);
 }
 
+/** Account lockout notification — sent when too many failed login attempts lock an account */
+export function sendAccountLockedEmail(
+  to: string,
+  fullName: string,
+  lockDurationMinutes: number,
+  language?: string
+): void {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const subject = isFrench
+    ? 'Compte temporairement verrouillé — Health Watchers'
+    : 'Account Temporarily Locked — Health Watchers';
+  const text = isFrench
+    ? `Bonjour ${fullName},\n\nVotre compte Health Watchers a été temporairement verrouillé suite à plusieurs tentatives de connexion échouées. Réessayez dans ${lockDurationMinutes} minutes.\n\nSi vous n'êtes pas à l'origine de ces tentatives, veuillez contacter votre administrateur immédiatement.`
+    : `Hello ${fullName},\n\nYour Health Watchers account has been temporarily locked due to too many failed login attempts. Please try again in ${lockDurationMinutes} minutes.\n\nIf you did not attempt to log in, please contact your administrator immediately.`;
+  const html = isFrench
+    ? `<h3>Compte temporairement verrouillé</h3><p>Bonjour <strong>${fullName}</strong>,</p><p>Votre compte a été verrouillé temporairement en raison de plusieurs tentatives de connexion infructueuses.</p><p><strong>Réessayez dans ${lockDurationMinutes} minutes.</strong></p><p style="color:#dc2626">Si vous n'êtes pas à l'origine de ces tentatives, contactez votre administrateur immédiatement.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Account Temporarily Locked</h3><p>Hello <strong>${fullName}</strong>,</p><p>Your Health Watchers account has been temporarily locked due to too many failed login attempts.</p><p><strong>Please try again in ${lockDurationMinutes} minutes.</strong></p><p style="color:#dc2626">If you did not attempt to log in, please contact your administrator immediately.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
 /** Portal MFA enabled notification sent to patient */
 export function sendPortalMfaEnabledEmail(
   to: string,
@@ -639,7 +659,9 @@ export function sendMfaGracePeriodReminderEmail(
 ): void {
   const setupUrl = `${APP_BASE_URL()}/settings/security`;
   const deadlineStr = gracePeriodEndsAt.toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
   const urgency = daysRemaining === 1 ? '🚨 Last day' : `⚠️ ${daysRemaining} days remaining`;
   const subject = `${urgency}: Set up Two-Factor Authentication — Health Watchers`;

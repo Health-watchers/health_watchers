@@ -78,6 +78,9 @@ jest.mock('@api/utils/logger', () => ({
 jest.mock('@api/lib/email.service', () => ({
   sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+  sendAccountLockedEmail: jest.fn().mockResolvedValue(undefined),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+  sendMfaBackupCodesRegeneratedEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('@api/modules/auth/models/user.model', () => ({
