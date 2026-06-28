@@ -214,6 +214,13 @@ export const subscriptionLimitViolations = new client.Counter({
   registers: [register],
 });
 
+export const rateLimitHitsTotal = new client.Counter({
+  name: 'rate_limit_hits_total',
+  help: 'Total number of rate limit violations (429 responses) by limiter and HTTP method',
+  labelNames: ['limiter', 'method'] as const,
+  registers: [register],
+});
+
 // ── Normalise path helper ─────────────────────────────────────────────────────
 // Replace dynamic segments (ObjectIds, UUIDs, numbers) with placeholders
 // to avoid high-cardinality label explosion.
