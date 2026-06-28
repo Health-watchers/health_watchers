@@ -1,0 +1,59 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  contract-tests:
+    name: Consumer-Driven Contract Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
+    services:
+      mongodb:
+        image: mongo:6
+        options: >-
+          --health-cmd mongosh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate pact files (consumer)
+        run: npm run test:contract --workspace=web
+        env:
+          NODE_ENV: test
+
+      - name: Verify provider against pacts
+        run: npm run test:contract --workspace=api
+        env:
+          MONGO_URI: mongodb://localhost:27017/contract_test
+          NODE_ENV: test
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          API_PORT: 3099
+
+      - name: Upload pact files as artifact
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: pact-contracts
+          path: pacts/
+          retention-days: 30
