@@ -312,4 +312,110 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// PHI access actions per HIPAA §164.312(b) audit controls
+const PHI_ACTIONS = [
+  'PATIENT_VIEW',
+  'PATIENT_CREATE',
+  'PATIENT_UPDATE',
+  'PATIENT_DELETE',
+  'ENCOUNTER_VIEW',
+  'ENCOUNTER_CREATE',
+  'ENCOUNTER_UPDATE',
+  'PATIENT_PHOTO_UPLOAD',
+  'PATIENT_PHOTO_ACCESS',
+  'PATIENT_PHOTO_DELETE',
+  'EXPORT_PATIENT_DATA',
+  'DATA_EXPORT_REQUEST',
+  'DATA_EXPORT_FULFILLED',
+] as const;
+
+/**
+ * @swagger
+ * /audit-logs/hipaa-report:
+ *   get:
+ *     summary: HIPAA PHI access report — all PHI-touching actions grouped by user (SUPER_ADMIN only)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: clinicId
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: HIPAA PHI access report
+ */
+router.get('/hipaa-report', authenticate, async (req: Request, res: Response) => {
+  if (req.user?.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+  }
+
+  const match: Record<string, unknown> = { action: { $in: PHI_ACTIONS } };
+  if (req.query.clinicId) match.clinicId = new Types.ObjectId(req.query.clinicId as string);
+  if (req.query.dateFrom || req.query.dateTo) {
+    const range: Record<string, Date> = {};
+    if (req.query.dateFrom) range.$gte = new Date(req.query.dateFrom as string);
+    if (req.query.dateTo) range.$lte = new Date(req.query.dateTo as string);
+    match.timestamp = range;
+  }
+
+  try {
+    const [byUser, byAction, totals] = await Promise.all([
+      AuditLogModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: '$userId',
+            accessCount: { $sum: 1 },
+            actions: { $addToSet: '$action' },
+            lastAccess: { $max: '$timestamp' },
+          },
+        },
+        { $sort: { accessCount: -1 } },
+        { $limit: 100 },
+      ]),
+      AuditLogModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$action', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+      AuditLogModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            failures: { $sum: { $cond: [{ $eq: ['$outcome', 'FAILURE'] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: {
+        summary: totals[0] ?? { total: 0, failures: 0 },
+        byAction: byAction.map((r) => ({ action: r._id, count: r.count })),
+        byUser: byUser.map((r) => ({
+          userId: r._id,
+          accessCount: r.accessCount,
+          actions: r.actions,
+          lastAccess: r.lastAccess,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Error generating HIPAA PHI report');
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to generate HIPAA report' });
+  }
+});
+
 export const auditRoutes = router;
