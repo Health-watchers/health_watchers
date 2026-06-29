@@ -30,6 +30,11 @@ export interface PaymentAnalytics {
     xlm: { count: number; amount: string };
     usdc: { count: number; amount: string };
   };
+  feeStrategyBreakdown: {
+    slow: number;
+    standard: number;
+    fast: number;
+  };
 }
 
 /**
@@ -96,6 +101,7 @@ export async function getPaymentAnalytics(
   let failedCount = 0;
   const xlmPayments: any[] = [];
   const usdcPayments: any[] = [];
+  const feeStrategyBreakdown = { slow: 0, standard: 0, fast: 0 };
 
   for (const payment of payments) {
     const amount = parseFloat(payment.amount);
@@ -103,6 +109,13 @@ export async function getPaymentAnalytics(
     if (payment.status === 'confirmed') confirmedCount++;
     else if (payment.status === 'pending') pendingCount++;
     else if (payment.status === 'failed') failedCount++;
+
+    const strategy = (payment as any).feeStrategy as 'slow' | 'standard' | 'fast' | undefined;
+    if (strategy && strategy in feeStrategyBreakdown) {
+      feeStrategyBreakdown[strategy]++;
+    } else {
+      feeStrategyBreakdown.standard++;
+    }
 
     if (payment.assetCode === 'XLM') {
       totalXLM += amount;
@@ -160,6 +173,7 @@ export async function getPaymentAnalytics(
     },
     revenueByPeriod,
     currencyDistribution,
+    feeStrategyBreakdown,
   };
 }
 

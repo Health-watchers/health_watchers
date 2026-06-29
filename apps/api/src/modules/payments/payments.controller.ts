@@ -21,8 +21,14 @@ import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
-import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import {
+  paymentsInitiatedTotal,
+  paymentsConfirmedTotal,
+  feeStrategySelectedTotal,
+} from '@api/services/metrics.service';
 import { getCurrentXLMRate } from './services/xlm-rate.service';
+import { feeOptimizer } from './services/fee-optimizer.service';
+import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
 
 const router = Router();
 router.use(authenticate);
@@ -553,7 +559,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
-      feeStrategy = 'standard',
+      feeStrategy: requestedFeeStrategy,
       sponsorFee = false,
       idempotencyKey,
     } = req.body;
@@ -576,6 +582,20 @@ router.post(
     }
     // `currency` takes precedence over `assetCode` for convenience
     const normalizedAsset = (currency ?? String(assetCode)).toUpperCase().trim();
+
+    // Resolve fee strategy: explicit request > clinic preference > auto
+    let feeStrategy: 'slow' | 'standard' | 'fast';
+    if (requestedFeeStrategy) {
+      feeStrategy = requestedFeeStrategy;
+    } else {
+      const clinicSettings = await ClinicSettingsModel.findOne({ clinicId }).lean();
+      const clinicPreference = clinicSettings?.feeOptimization?.enabled
+        ? clinicSettings.feeOptimization.defaultStrategy
+        : undefined;
+      const amountXLM = normalizedAsset === 'XLM' ? parseFloat(amount) : 0;
+      feeStrategy = await feeOptimizer.selectStrategyAuto(amountXLM, clinicPreference);
+      feeStrategySelectedTotal.inc({ strategy: feeStrategy, source: 'auto' });
+    }
 
     // Generate standardized memo: HW:{8-char-intentId}
     const memo = `HW:${intentId.slice(0, 8).toUpperCase()}`;
@@ -880,6 +900,25 @@ router.patch(
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
     paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
+
+    // Record fee amount metric
+    if (updatedPayment) {
+      const { feeAmountPaidXlm } = await import('@api/services/metrics.service');
+      // Base fee is ~0.00001 XLM per strategy tier
+      const feeByStrategy: Record<string, number> = {
+        slow: 0.00001,
+        standard: 0.0001,
+        fast: 0.001,
+      };
+      const feePaid = feeByStrategy[updatedPayment.feeStrategy ?? 'standard'] ?? 0.0001;
+      feeAmountPaidXlm.observe(
+        {
+          strategy: updatedPayment.feeStrategy ?? 'standard',
+          clinicId: String(updatedPayment.clinicId),
+        },
+        feePaid
+      );
+    }
 
     // Auto-update linked invoice if any (non-blocking)
     try {

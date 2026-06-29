@@ -110,6 +110,21 @@ export const stellarTransactionFeeXlm = new client.Histogram({
   registers: [register],
 });
 
+export const feeStrategySelectedTotal = new client.Counter({
+  name: 'fee_strategy_selected_total',
+  help: 'Total number of fee strategies selected, by strategy and selection source',
+  labelNames: ['strategy', 'source'] as const,
+  registers: [register],
+});
+
+export const feeAmountPaidXlm = new client.Histogram({
+  name: 'fee_amount_paid_xlm',
+  help: 'Actual fee amounts paid in XLM per payment, by strategy',
+  labelNames: ['strategy', 'clinicId'] as const,
+  buckets: [0.00001, 0.0001, 0.001, 0.01, 0.1, 1],
+  registers: [register],
+});
+
 export const aiRequestsTotal = new client.Counter({
   name: 'ai_requests_total',
   help: 'Total number of AI endpoint requests',
