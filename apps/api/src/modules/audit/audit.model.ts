@@ -38,7 +38,11 @@ export type AuditAction =
   | 'CONSENT_VERSION_ACCEPTED'
   | 'MUTATION_CREATE'
   | 'MUTATION_UPDATE'
-  | 'MUTATION_DELETE';
+  | 'MUTATION_DELETE'
+  | 'API_KEY_CREATE'
+  | 'API_KEY_ROTATE'
+  | 'API_KEY_REVOKE'
+  | 'API_KEY_UPDATE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
