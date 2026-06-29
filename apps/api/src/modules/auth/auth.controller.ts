@@ -26,7 +26,11 @@ import {
   mfaDisableSchema,
   mfaBackupCodesRegenerateSchema,
 } from './auth.validation';
-import { sendPasswordResetEmail, sendMfaBackupCodesRegeneratedEmail } from '@api/lib/email.service';
+import {
+  sendPasswordResetEmail,
+  sendMfaBackupCodesRegeneratedEmail,
+  sendAccountLockedEmail,
+} from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -161,6 +165,12 @@ router.post(
       user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
       if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
         user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+        sendAccountLockedEmail(
+          user.email,
+          user.fullName,
+          Math.round(LOCK_DURATION_MS / 60_000),
+          user.preferences?.language
+        );
       }
       await user.save();
       return res.status(401).json({ error: 'Unauthorized', message: INVALID });
@@ -799,7 +809,9 @@ router.get('/mfa/backup-codes/count', authenticate, async (req: Request, res: Re
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   if (!user.mfaEnabled) {
-    return res.status(409).json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
+    return res
+      .status(409)
+      .json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
   }
 
   const remaining = (user.mfaBackupCodes ?? []).length;
@@ -827,7 +839,10 @@ router.post(
   '/mfa/backup-codes/regenerate',
   authenticate,
   validateRequest({ body: mfaBackupCodesRegenerateSchema }),
-  async (req: Request<Record<string, never>, unknown, MfaBackupCodesRegenerateDto>, res: Response) => {
+  async (
+    req: Request<Record<string, never>, unknown, MfaBackupCodesRegenerateDto>,
+    res: Response
+  ) => {
     const user = await UserModel.findById(req.user!.userId).select(
       '+mfaSecret +mfaBackupCodes +password'
     );

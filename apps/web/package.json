@@ -12,7 +12,8 @@
     "test:run": "jest --passWithNoTests --forceExit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:contract": "jest --config=jest.contract.config.js --passWithNoTests"
+    "test:contract": "jest --config=jest.contract.config.js --passWithNoTests",
+    "test:a11y": "playwright test --config=playwright.a11y.config.ts"
   },
   "dependencies": {
     "@health-watchers/types": "*",
@@ -41,6 +42,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
     "@babel/core": "^7.29.0",
     "@playwright/test": "^1.44.0",
     "@babel/preset-env": "^7.29.2",

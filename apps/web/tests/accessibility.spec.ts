@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import type { AxeResults } from 'axe-core';
+
+/** Format axe violations into a readable string for assertion failure messages. */
+function formatViolations(results: AxeResults): string {
+  if (results.violations.length === 0) return 'No violations';
+  return results.violations
+    .map(
+      (v) =>
+        `[${v.impact?.toUpperCase() ?? 'UNKNOWN'}] ${v.id}: ${v.description}\n` +
+        v.nodes
+          .slice(0, 3)
+          .map((n) => `  - ${n.html}`)
+          .join('\n')
+    )
+    .join('\n\n');
+}
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -22,7 +38,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('dashboard: keyboard navigation', async ({ page }) => {
@@ -48,7 +64,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('patients: keyboard navigation in table', async ({ page }) => {
@@ -83,7 +99,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('encounters: form error announcements', async ({ page }) => {
@@ -109,7 +125,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('payments: color contrast', async ({ page }) => {
@@ -117,7 +133,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
 
     const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   // ── Settings Page ────────────────────────────────────────────────────────
@@ -129,7 +145,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
-    expect(results.violations).toEqual([]);
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('settings: navigation keyboard accessible', async ({ page }) => {
@@ -304,5 +320,62 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     });
 
     expect(focused).toBeTruthy();
+  });
+});
+
+// ── Public pages (no authentication required) ─────────────────────────────
+test.describe('WCAG 2.1 AA — Public Pages', () => {
+  test('login page: no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+    await expect(page.locator('form')).toBeVisible();
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
+  });
+
+  test('login page: form inputs have accessible labels', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+
+    const inputs = await page.locator('input').all();
+    for (const input of inputs) {
+      const isVisible = await input.isVisible();
+      if (!isVisible) continue;
+      const id = await input.getAttribute('id');
+      const ariaLabel = await input.getAttribute('aria-label');
+      const ariaLabelledBy = await input.getAttribute('aria-labelledby');
+      const labelCount = id ? await page.locator(`label[for="${id}"]`).count() : 0;
+      expect(
+        labelCount + (ariaLabel ? 1 : 0) + (ariaLabelledBy ? 1 : 0),
+        `Input is missing an accessible label: ${await input.getAttribute('type')}`
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  test('login page: keyboard accessible and submit button focusable', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+
+    const submitButton = page.locator('button[type="submit"]');
+    await submitButton.focus();
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('type'));
+    expect(focused).toBe('submit');
+  });
+
+  test('login page: color contrast passes', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+
+    const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
+    expect(results.violations, formatViolations(results)).toHaveLength(0);
+  });
+
+  test('login page: ARIA landmark regions present', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+
+    const landmarks = await page
+      .locator('main, [role="main"], header, [role="banner"], nav, [role="navigation"]')
+      .all();
+    expect(landmarks.length).toBeGreaterThan(0);
   });
 });
