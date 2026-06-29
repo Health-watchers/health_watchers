@@ -43,6 +43,7 @@ interface PaymentAnalytics {
     xlm: { count: number; amount: string };
     usdc: { count: number; amount: string };
   };
+  feeStrategyBreakdown: { slow: number; standard: number; fast: number };
 }
 
 type GroupBy = 'day' | 'week' | 'month';
@@ -347,6 +348,37 @@ export default function PaymentAnalyticsClient() {
                   {statusData.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
                   ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Fee strategy breakdown */}
+          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <SectionTitle>Fee Strategy Breakdown</SectionTitle>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={[
+                  { name: 'Slow', value: data.feeStrategyBreakdown?.slow ?? 0, fill: '#10b981' },
+                  {
+                    name: 'Standard',
+                    value: data.feeStrategyBreakdown?.standard ?? 0,
+                    fill: '#6366f1',
+                  },
+                  { name: 'Fast', value: data.feeStrategyBreakdown?.fast ?? 0, fill: '#f59e0b' },
+                ]}
+                margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {[{ fill: '#10b981' }, { fill: '#6366f1' }, { fill: '#f59e0b' }].map(
+                    (entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    )
+                  )}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
