@@ -135,6 +135,18 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 4000;
 
+// Trust the first proxy hop (NGINX/load-balancer) so req.ip reflects the real client IP.
+// Without this, every request appears to come from the proxy IP and rate limiting breaks.
+// Set TRUST_PROXY=false to disable (direct connections only), or to a hop count > 1.
+if (process.env.TRUST_PROXY !== undefined) {
+  app.set(
+    'trust proxy',
+    process.env.TRUST_PROXY === 'false' ? false : Number(process.env.TRUST_PROXY)
+  );
+} else if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
 const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '10kb';
 // AI routes allow larger payloads for clinical notes (default 50kb per issue #351)
@@ -281,8 +293,8 @@ app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
-app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/patients/search', patientSearchLimiter);
+app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
