@@ -1,13 +1,48 @@
 {
   "info": {
     "name": "Health Watchers API",
-    "description": "Complete API collection for Health Watchers. Import the companion environment file before use.",
+    "description": "Complete API collection for Health Watchers. Import the companion environment file before use.\n\n**Quick start**\n1. Import `health-watchers.postman_environment.json`\n2. Set `admin_email` and `admin_password` in the environment\n3. Run **Auth → Login** — `jwt_token` is set automatically\n4. All subsequent requests use the token via collection-level bearer auth",
+    "version": "2.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
     "type": "bearer",
     "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Auto-refresh JWT if it is missing or expired",
+          "const token = pm.environment.get('jwt_token');",
+          "if (token) {",
+          "  try {",
+          "    const payload = JSON.parse(atob(token.split('.')[1]));",
+          "    const expiresIn = payload.exp - Math.floor(Date.now() / 1000);",
+          "    if (expiresIn > 60) return; // still valid",
+          "  } catch (e) {}",
+          "}",
+          "// Token missing or near-expiry — re-login",
+          "const email = pm.environment.get('admin_email');",
+          "const password = pm.environment.get('admin_password');",
+          "if (!email || !password) return;",
+          "pm.sendRequest({",
+          "  url: pm.environment.get('base_url') + '/api/v1/auth/login',",
+          "  method: 'POST',",
+          "  header: { 'Content-Type': 'application/json' },",
+          "  body: { mode: 'raw', raw: JSON.stringify({ email, password }) }",
+          "}, (err, res) => {",
+          "  if (!err && res.code === 200) {",
+          "    const data = res.json().data;",
+          "    if (data && data.token) pm.environment.set('jwt_token', data.token);",
+          "    if (data && data.refreshToken) pm.environment.set('refresh_token', data.refreshToken);",
+          "  }",
+          "});"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Auth",
@@ -19,21 +54,128 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "const res = pm.response.json();",
-                  "if (res.data && res.data.token) {",
-                  "  pm.environment.set('jwt_token', res.data.token);",
-                  "}"
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns token', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('token');",
+                  "  pm.environment.set('jwt_token', data.token);",
+                  "  if (data.refreshToken) pm.environment.set('refresh_token', data.refreshToken);",
+                  "});"
                 ]
               }
             }
           ],
           "request": {
+            "auth": { "type": "noauth" },
             "method": "POST",
             "url": "{{base_url}}/api/v1/auth/login",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\"email\": \"{{admin_email}}\", \"password\": \"{{admin_password}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has user object', () => pm.expect(pm.response.json()).to.have.property('data'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{new_user_email}}\", \"password\": \"{{new_user_password}}\", \"firstName\": \"Test\", \"lastName\": \"User\", \"role\": \"DOCTOR\"}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "if (data && data.token) pm.environment.set('jwt_token', data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/auth/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refreshToken\": \"{{refresh_token}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.environment.unset('jwt_token');",
+                  "pm.environment.unset('refresh_token');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/auth/logout"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has user data', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('email');",
+                  "  pm.expect(data).to.have.property('role');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/auth/forgot-password",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{admin_email}}\"}"
             }
           }
         }
@@ -44,16 +186,207 @@
       "item": [
         {
           "name": "List Patients",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns paginated list', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('data');",
+                  "  pm.expect(body).to.have.property('meta');",
+                  "  if (body.data.length > 0) pm.environment.set('patient_id', body.data[0]._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/v1/patients"
+            "url": {
+              "raw": "{{base_url}}/api/v1/patients?page=1&limit=20",
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Patient created', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('_id');",
+                  "  pm.environment.set('patient_id', data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/patients",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"dateOfBirth\": \"1990-05-15\",\n  \"sex\": \"F\",\n  \"contactNumber\": \"+1234567890\",\n  \"address\": \"123 Main St, City, Country\"\n}"
+            }
           }
         },
         {
           "name": "Get Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has patient fields', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('firstName');",
+                  "  pm.expect(data).to.have.property('lastName');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/v1/patients/{{patient_id}}"
+          }
+        },
+        {
+          "name": "Update Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/patients/{{patient_id}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"contactNumber\": \"+9876543210\"}"
+            }
+          }
+        },
+        {
+          "name": "Search Patients",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/patients/search?q=Jane",
+              "query": [{ "key": "q", "value": "Jane" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Encounters",
+      "item": [
+        {
+          "name": "List Encounters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns list', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('data');",
+                  "  if (body.data.length > 0) pm.environment.set('encounter_id', body.data[0]._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/encounters"
+          }
+        },
+        {
+          "name": "Create Encounter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Encounter created', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('_id');",
+                  "  pm.environment.set('encounter_id', data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/encounters",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patient_id}}\",\n  \"type\": \"outpatient\",\n  \"chiefComplaint\": \"Routine checkup\",\n  \"visitDate\": \"{{$isoTimestamp}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Encounter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/encounters/{{encounter_id}}"
+          }
+        },
+        {
+          "name": "Update Encounter (SOAP Notes)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/encounters/{{encounter_id}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjective\": \"Patient reports mild headache\",\n  \"objective\": \"BP 120/80, HR 72\",\n  \"assessment\": \"Tension headache\",\n  \"plan\": \"Rest, hydration, OTC analgesic\"\n}"
+            }
           }
         }
       ]
@@ -62,39 +395,279 @@
       "name": "Payments",
       "item": [
         {
+          "name": "Get Balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/payments/balance"
+          }
+        },
+        {
+          "name": "Get Fee Estimate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 502', () => {",
+                  "  pm.expect([200, 502]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Has fee tiers', () => {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('slow');",
+                  "    pm.expect(data).to.have.property('standard');",
+                  "    pm.expect(data).to.have.property('fast');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/payments/fee-estimate"
+          }
+        },
+        {
           "name": "Create Payment Intent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Payment intent created', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('intentId');",
+                  "  pm.expect(data).to.have.property('memo');",
+                  "  pm.environment.set('payment_intent_id', data.intentId);",
+                  "  pm.environment.set('payment_memo', data.memo);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/v1/payments/intent",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\"amount\": 100, \"currency\": \"XLM\", \"feeStrategy\": \"standard\"}"
+              "raw": "{\n  \"amount\": \"10.0000000\",\n  \"destination\": \"{{stellar_destination}}\",\n  \"currency\": \"XLM\",\n  \"patientId\": \"{{patient_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns paginated list', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('data');",
+                  "  pm.expect(body).to.have.property('meta');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments?page=1&limit=20",
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirm Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/payments/{{payment_intent_id}}/confirm",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"txHash\": \"{{payment_tx_hash}}\"}"
+            }
+          }
+        },
+        {
+          "name": "Payment Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has analytics fields', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('totalRevenue');",
+                  "  pm.expect(data).to.have.property('transactionCount');",
+                  "  pm.expect(data).to.have.property('successRate');",
+                  "  pm.expect(data).to.have.property('feeStrategyBreakdown');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/analytics?groupBy=month",
+              "query": [{ "key": "groupBy", "value": "month" }]
             }
           }
         }
       ]
     },
     {
-      "name": "Portal - Health Log",
+      "name": "Clinic Settings",
       "item": [
         {
-          "name": "Log Health Metric",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/v1/portal/health-log",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"metricType\": \"weight\", \"value\": 72.5, \"unit\": \"kg\"}"
+          "name": "Get Settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has settings fields', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('timezone');",
+                  "  pm.expect(data).to.have.property('currency');",
+                  "  pm.expect(data).to.have.property('feeOptimization');",
+                  "});"
+                ]
+              }
             }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/settings"
           }
         },
         {
-          "name": "Get My Health Log",
+          "name": "Update Fee Optimization Settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/settings",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feeOptimization\": {\n    \"enabled\": true,\n    \"defaultStrategy\": \"auto\",\n    \"highValueThresholdXlm\": 1000\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "item": [
+        {
+          "name": "List Appointments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/v1/portal/health-log"
+            "url": "{{base_url}}/api/v1/appointments"
+          }
+        },
+        {
+          "name": "Create Appointment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Appointment created', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('_id');",
+                  "  pm.environment.set('appointment_id', data._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/appointments",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patient_id}}\",\n  \"scheduledAt\": \"{{$isoTimestamp}}\",\n  \"type\": \"checkup\",\n  \"durationMinutes\": 30\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "API Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is ok', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.be.oneOf(['ok', 'degraded']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/health"
           }
         }
       ]
