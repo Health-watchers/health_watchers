@@ -116,3 +116,5 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
+pacts/*.json
+pacts/*.json
