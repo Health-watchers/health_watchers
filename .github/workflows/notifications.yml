@@ -112,7 +112,7 @@ jobs:
 
     steps:
       - name: Create deployment status
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const workflow = context.payload.workflow_run;
