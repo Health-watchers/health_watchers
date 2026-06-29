@@ -16,148 +16,89 @@ declare global {
   }
 }
 
-/**
- * Extract API key from Authorization header
- * Supports: Authorization: Bearer hw_xxxxx
- */
 const extractApiKey = (authHeader: string | undefined): string | null => {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const key = authHeader.substring(7);
   return key.startsWith('hw_') ? key : null;
 };
 
-/**
- * Log API key usage for audit trail
- */
-const logApiKeyUsage = async (
+const logUsage = async (
   apiKeyId: string,
-  userId: string,
   clinicId: string,
-  method: string,
   endpoint: string,
-  statusCode: number,
-  scopes: string[],
-  scopeGranted: boolean,
-  req: Request,
-  errorMessage?: string
-) => {
+  req: Request
+): Promise<void> => {
   try {
-    await ApiKeyUsageModel.create({
-      apiKeyId,
-      userId,
-      clinicId,
-      method,
-      endpoint,
-      statusCode,
-      scopes,
-      scopeGranted,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-      errorMessage,
-    });
-  } catch (err) {
-    console.error('Failed to log API key usage:', err);
+    const today = new Date().toISOString().slice(0, 10);
+    await ApiKeyUsageModel.findOneAndUpdate(
+      { apiKeyId, date: today },
+      {
+        $inc: { requestCount: 1 },
+        $set: { lastEndpoint: endpoint, clinicId },
+      },
+      { upsert: true }
+    );
+  } catch {
+    // Non-fatal — never block the request
   }
 };
 
 /**
- * Middleware to authenticate and validate API key scopes
- * Must be used before route handlers
+ * Middleware to authenticate an API key from Authorization: Bearer hw_xxx
+ * Fixes: queries by keyHash (not key)
  */
 export const authenticateApiKey = async (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const rawKey = extractApiKey(authHeader);
-
-  if (!rawKey) {
-    return next(); // Not an API key request, let other auth middleware handle it
-  }
+  const rawKey = extractApiKey(req.headers.authorization);
+  if (!rawKey) return next();
 
   try {
-    const hashedKey = hashApiKey(rawKey);
-    const apiKey = await ApiKeyModel.findOne(
-      { key: hashedKey, isActive: true },
-      { key: 0 } // Exclude the hashed key from response
-    ).lean();
+    const keyHash = hashApiKey(rawKey);
+    // Fixed: query by keyHash, not 'key'
+    const apiKey = await ApiKeyModel.findOne({ keyHash, isActive: true }).lean();
 
     if (!apiKey) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid API key' });
     }
 
-    // Check if key has expired
     if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
-      await logApiKeyUsage(
-        String(apiKey._id),
-        String(apiKey.userId),
-        String(apiKey.clinicId),
-        req.method,
-        req.path,
-        401,
-        apiKey.scopes,
-        false,
-        req,
-        'API key expired'
-      );
       return res.status(401).json({ error: 'Unauthorized', message: 'API key has expired' });
     }
 
-    // Attach API key info to request
     req.apiKey = {
       id: String(apiKey._id),
-      userId: String(apiKey.userId),
+      userId: String(apiKey.createdBy),
       clinicId: String(apiKey.clinicId),
       scopes: apiKey.scopes,
     };
 
-    // Update last used timestamp
-    ApiKeyModel.updateOne({ _id: apiKey._id }, { lastUsedAt: new Date() }).catch((err) =>
-      console.error('Failed to update lastUsedAt:', err)
-    );
+    // Fire-and-forget side effects
+    ApiKeyModel.updateOne({ _id: apiKey._id }, { lastUsedAt: new Date() }).catch(() => {});
+    logUsage(String(apiKey._id), String(apiKey.clinicId), req.path, req);
 
-    next();
-  } catch (err: unknown) {
-    console.error('API key authentication error:', err);
+    return next();
+  } catch {
     return res.status(500).json({ error: 'InternalServerError', message: 'Authentication failed' });
   }
 };
 
 /**
- * Middleware to validate API key scopes against the requested endpoint
- * Must be used after authenticateApiKey
+ * Middleware to validate API key scopes against the requested endpoint.
+ * Must be used after authenticateApiKey.
  */
-export const validateApiKeyScopes = async (req: Request, res: Response, next: NextFunction) => {
-  if (!req.apiKey) {
-    return next(); // Not an API key request
-  }
+export const validateApiKeyScopes = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.apiKey) return next();
 
-  const { scopes, id: apiKeyId, userId, clinicId } = req.apiKey;
-  const endpoint = req.path;
-  const method = req.method;
-
-  // Check if any scope grants access to this endpoint
-  const hasAccess = scopes.some((scope: any) => scopeGrantsAccess(scope, endpoint, method));
+  const { scopes } = req.apiKey;
+  const hasAccess = scopes.some((scope: any) =>
+    scopeGrantsAccess(scope, req.path, req.method)
+  );
 
   if (!hasAccess) {
-    await logApiKeyUsage(
-      apiKeyId,
-      userId,
-      clinicId,
-      method,
-      endpoint,
-      403,
-      scopes,
-      false,
-      req,
-      'Insufficient scopes'
-    );
     return res.status(403).json({
       error: 'Forbidden',
       message: 'API key does not have permission to access this endpoint',
-      requiredScopes: scopes,
     });
   }
 
-  // Log successful scope validation
-  await logApiKeyUsage(apiKeyId, userId, clinicId, method, endpoint, 200, scopes, true, req);
-
-  next();
+  return next();
 };

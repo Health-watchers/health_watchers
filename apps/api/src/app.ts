@@ -328,6 +328,7 @@ app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
 app.use('/api/v1/compliance', complianceRoutes);
 app.use('/api/v1/admin/breach-incidents', breachIncidentRoutes);
+app.use('/api/v1/api-keys', apiKeyRoutes);
 
 // ── CSP violation reporting (public, no auth, no CSRF) ───────────────────────
 app.use('/api/v1/csp-report', cspReportRoutes);
