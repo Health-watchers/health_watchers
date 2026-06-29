@@ -10,7 +10,7 @@ interface ToastItem {
   id: string;
   message: string;
   variant: ToastVariant;
-import { useEffect } from 'react';
+}
 
 interface ToastProps {
   message: string;
@@ -50,7 +50,6 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
       )}
     </div>
   );
-
 }
 
 // ─── Singleton Event Bus ──────────────────────────────────────────────────────
@@ -151,10 +150,4 @@ export function Toaster() {
       ))}
     </div>
   );
-}
-
-// ─── Legacy compat ────────────────────────────────────────────────────────────
-
-export function Toast({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>;
 }
