@@ -315,3 +315,7 @@ Import the collection and environment from [`docs/postman/`](./docs/postman/) to
 2. Set `admin_email` and `admin_password` in the environment
 3. Run **Auth → Login** — `jwt_token` is set automatically
 4. All subsequent requests use the token via collection-level bearer auth
+
+**Public workspace:** [Run in Postman](https://www.postman.com/health-watchers/workspace/health-watchers-api) *(publish via CI by setting `POSTMAN_API_KEY` and `POSTMAN_COLLECTION_UID` secrets)*
+
+The collection is validated on every PR and synced to the public workspace on every merge to `main` (see `.github/workflows/ci.yml` — `postman-sync` job).
