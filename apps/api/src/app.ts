@@ -98,6 +98,10 @@ import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
+import {
+  healthLogRouter,
+  patientHealthLogRouter,
+} from './modules/health-log/health-log.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
@@ -317,6 +321,8 @@ app.use('/api/v1/referrals', referralRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
+app.use('/api/v1/portal', healthLogRouter);
+app.use('/api/v1/patients', patientHealthLogRouter);
 app.use('/api/v1/reports', reportGenerationLimiter, reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
@@ -376,7 +382,9 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
-  initializeBackupMetrics().catch((err) => logger.warn({ err }, 'Failed to load initial backup metrics'));
+  initializeBackupMetrics().catch((err) =>
+    logger.warn({ err }, 'Failed to load initial backup metrics')
+  );
   startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus

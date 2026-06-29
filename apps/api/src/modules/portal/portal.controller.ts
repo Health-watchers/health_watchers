@@ -796,6 +796,10 @@ router.get(
 import { portalMfaRoutes } from './portal-mfa.routes';
 router.use(portalMfaRoutes);
 
+// ── Health Log Routes (patient self-reporting) ────────────────────────────────
+import { healthLogRouter } from '../health-log/health-log.controller';
+router.use(healthLogRouter);
+
 // ── HIPAA Right of Access data-export routes ───────────────────────────────────
 import { exportRequestRoutes } from '../export/export-request.controller';
 router.use(exportRequestRoutes);

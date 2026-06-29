@@ -40,12 +40,15 @@ const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientR
 });
 const RiskTab = dynamic(() => import('@/components/patients/RiskTab'), { ssr: false });
 const PatientDocumentsTab = dynamic(
-  () => import('@/components/patients/PatientDocumentsTab').then((m) => ({ default: m.PatientDocumentsTab })),
-  { ssr: false },
+  () =>
+    import('@/components/patients/PatientDocumentsTab').then((m) => ({
+      default: m.PatientDocumentsTab,
+    })),
+  { ssr: false }
 );
 const CarePlanTab = dynamic(
   () => import('@/components/patients/CarePlanTab').then((m) => ({ default: m.CarePlanTab })),
-  { ssr: false },
+  { ssr: false }
 );
 
 interface EncounterResponse {
@@ -465,6 +468,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="referrals">Referrals</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="care-plans">Care Plans</TabsTrigger>
+          <TabsTrigger value="health-log">Health Log</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -787,6 +791,11 @@ export default function PatientDetailClient({
         <TabsContent value="care-plans">
           <CarePlanTab patientId={patientId} />
         </TabsContent>
+
+        {/* Health Log tab */}
+        <TabsContent value="health-log">
+          <HealthLogTab patientId={patientId} />
+        </TabsContent>
       </Tabs>
 
       {/* New Payment slide-over */}
@@ -934,7 +943,16 @@ interface InsuranceRecord {
   isPrimary: boolean;
 }
 
-const COVERAGE_TYPES = ['HMO', 'PPO', 'EPO', 'POS', 'HDHP', 'Medicare', 'Medicaid', 'other'] as const;
+const COVERAGE_TYPES = [
+  'HMO',
+  'PPO',
+  'EPO',
+  'POS',
+  'HDHP',
+  'Medicare',
+  'Medicaid',
+  'other',
+] as const;
 
 const EMPTY_INSURANCE = {
   provider: '',
@@ -1014,7 +1032,8 @@ function InsuranceTab({ patientId, canEdit }: { patientId: string; canEdit: bool
     refresh();
   }
 
-  if (isLoading) return <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />;
+  if (isLoading)
+    return <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />;
 
   return (
     <section aria-label="Patient insurance management">
@@ -1026,7 +1045,7 @@ function InsuranceTab({ patientId, canEdit }: { patientId: string; canEdit: bool
               className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
             >
               <h3 className="font-medium text-neutral-900">Add Insurance</h3>
-              {error && <p className="text-sm text-danger-600">{error}</p>}
+              {error && <p className="text-danger-600 text-sm">{error}</p>}
               <div className="grid grid-cols-2 gap-3">
                 <input
                   required
@@ -1166,6 +1185,73 @@ function InsuranceTab({ patientId, canEdit }: { patientId: string; canEdit: bool
           ))}
         </ol>
       )}
+    </section>
+  );
+}
+
+// ── Health Log Tab (inline component) ────────────────────────────────────────
+function HealthLogTab({ patientId }: { patientId: string }) {
+  const { data, isLoading, error } = useQuery<
+    {
+      metricType: string;
+      value: number;
+      unit: string;
+      loggedAt: string;
+      notes?: string;
+      flagged: boolean;
+    }[]
+  >({
+    queryKey: ['health-log', patientId],
+    queryFn: async () => {
+      const res = await fetch(`${API_V1}/patients/${patientId}/health-log`);
+      if (!res.ok) throw new Error('Failed to load health log');
+      return (await res.json()).data ?? [];
+    },
+  });
+
+  if (isLoading) return <div className="h-24 animate-pulse rounded bg-neutral-100" />;
+  if (error) return <ErrorMessage message="Failed to load health log" />;
+  if (!data?.length) return <EmptyState title="No health metrics logged yet" icon="📊" />;
+
+  return (
+    <section aria-label="Patient health log">
+      <p className="mb-3 text-sm text-neutral-500">{data.length} entries</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-neutral-100 text-xs font-medium tracking-wide text-neutral-500 uppercase">
+              <th className="pr-4 pb-2">Date</th>
+              <th className="pr-4 pb-2">Metric</th>
+              <th className="pr-4 pb-2">Value</th>
+              <th className="pr-4 pb-2">Notes</th>
+              <th className="pb-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((l, i) => (
+              <tr key={i} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <td className="py-2 pr-4 text-neutral-500">
+                  {new Date(l.loggedAt).toLocaleString()}
+                </td>
+                <td className="py-2 pr-4 text-neutral-700 capitalize">
+                  {l.metricType.replace('_', ' ')}
+                </td>
+                <td className="py-2 pr-4 font-medium text-neutral-900">
+                  {l.value} {l.unit}
+                </td>
+                <td className="py-2 pr-4 text-neutral-500">{l.notes ?? '—'}</td>
+                <td className="py-2">
+                  {l.flagged ? (
+                    <Badge variant="danger">⚠ Abnormal</Badge>
+                  ) : (
+                    <Badge variant="success">Normal</Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
