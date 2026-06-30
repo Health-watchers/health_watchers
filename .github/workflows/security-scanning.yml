@@ -202,7 +202,7 @@ jobs:
 
       - name: Create remediation issue if vulnerabilities found
         if: failure()
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdae # v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const issue = await github.rest.issues.create({
