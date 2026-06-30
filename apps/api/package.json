@@ -13,6 +13,7 @@
     "test:coverage": "jest --coverage --passWithNoTests",
     "test:watch": "jest --watch",
     "test:contract": "jest --config=jest.contract.config.ts --passWithNoTests",
+    "test:mutation": "stryker run",
     "migrate:up": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo up",
     "migrate:down": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo down",
     "migrate:status": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo status",
@@ -64,6 +65,9 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/jest-runner": "^8.7.1",
+    "@stryker-mutator/typescript-checker": "^8.7.1",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",

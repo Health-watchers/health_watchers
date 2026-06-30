@@ -4,6 +4,7 @@ import {
   signRefreshToken,
   signTempToken,
   verifyAccessToken,
+  verifyAccessTokenAsync,
   verifyRefreshToken,
   verifyTempToken,
   TokenPayload,
@@ -261,5 +262,76 @@ describe('Token Service', () => {
       const result = verifyAccessToken(tokenWithoutClaims);
       expect(result).toBeNull();
     });
+  });
+});
+
+// ── verifyAccessTokenAsync ────────────────────────────────────────────────────
+// These tests strengthen mutation coverage for the async path which checks
+// the denylist and the per-user invalidation timestamp.
+
+import { isDenylisted, isInvalidatedForUser } from '@api/services/token-denylist.service';
+
+describe('verifyAccessTokenAsync', () => {
+  const mockPayload: TokenPayload = {
+    userId: 'user-async',
+    role: 'NURSE',
+    clinicId: 'clinic-async',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (isDenylisted as jest.Mock).mockResolvedValue(false);
+    (isInvalidatedForUser as jest.Mock).mockResolvedValue(false);
+  });
+
+  it('returns the payload for a valid, non-denylisted token', async () => {
+    const token = signAccessToken(mockPayload);
+    const result = await verifyAccessTokenAsync(token);
+    expect(result).toMatchObject(mockPayload);
+    expect(result?.jti).toBeDefined();
+  });
+
+  it('returns null when the token signature is invalid', async () => {
+    const token = signAccessToken(mockPayload);
+    const tampered = token.slice(0, -8) + 'XXXXXXXX';
+    const result = await verifyAccessTokenAsync(tampered);
+    expect(result).toBeNull();
+    // denylist must NOT be consulted for a token that fails signature check
+    expect(isDenylisted).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the jti is in the denylist', async () => {
+    (isDenylisted as jest.Mock).mockResolvedValue(true);
+    const token = signAccessToken(mockPayload);
+    const result = await verifyAccessTokenAsync(token);
+    expect(result).toBeNull();
+    expect(isDenylisted).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when the token was issued before the user invalidation timestamp', async () => {
+    (isInvalidatedForUser as jest.Mock).mockResolvedValue(true);
+    const token = signAccessToken(mockPayload);
+    const result = await verifyAccessTokenAsync(token);
+    expect(result).toBeNull();
+    expect(isInvalidatedForUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks denylist before checking per-user invalidation', async () => {
+    // When token is denylisted, isInvalidatedForUser should NOT be called
+    (isDenylisted as jest.Mock).mockResolvedValue(true);
+    const token = signAccessToken(mockPayload);
+    await verifyAccessTokenAsync(token);
+    expect(isDenylisted).toHaveBeenCalledTimes(1);
+    expect(isInvalidatedForUser).not.toHaveBeenCalled();
+  });
+
+  it('returns payload when both denylist checks pass', async () => {
+    (isDenylisted as jest.Mock).mockResolvedValue(false);
+    (isInvalidatedForUser as jest.Mock).mockResolvedValue(false);
+    const token = signAccessToken(mockPayload);
+    const result = await verifyAccessTokenAsync(token);
+    expect(result).not.toBeNull();
+    expect(isDenylisted).toHaveBeenCalledTimes(1);
+    expect(isInvalidatedForUser).toHaveBeenCalledTimes(1);
   });
 });
