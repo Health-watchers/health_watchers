@@ -54,7 +54,7 @@ jobs:
           npx wait-on http://localhost:3000 http://localhost:3001 --timeout 60000
 
       - name: Run accessibility tests
-        run: npm run test:a11y
+        run: npm run test:a11y --workspace=web
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: accessibility-results.xml
 
@@ -64,14 +64,15 @@ jobs:
         with:
           name: accessibility-test-results
           path: |
-            accessibility-results.xml
+            apps/web/accessibility-results.xml
+            apps/web/playwright-a11y-report/
             test-results/
 
       - name: Publish test results
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3537eb1537e6f3ef671cead07cc4 # v2.18.0
         with:
-          files: accessibility-results.xml
+          files: apps/web/accessibility-results.xml
           check_name: Accessibility Test Results
 
       - name: Fail if violations found
