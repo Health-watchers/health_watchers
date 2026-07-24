@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 import { PeerReviewModel } from './peer-review.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { UserModel } from '../auth/models/user.model';
@@ -12,13 +13,12 @@ const router = Router();
 router.post('/', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request, res: Response) => {
  const { encounterId, reviewerId, isAnonymous = false } = req.body;
   const clinicId = req.user!.clinicId;
-  const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 
   if (!encounterId || !reviewerId) {
     return res.status(400).json({ error: 'BadRequest', message: 'encounterId and reviewerId are required' });
   }
 
-  if (!OBJECT_ID_REGEX.test(encounterId) || !OBJECT_ID_REGEX.test(reviewerId)) {
+  if (!isValidObjectId(encounterId) || !isValidObjectId(reviewerId)) {
     return res.status(400).json({ error: 'ValidationError', message: 'Invalid encounterId or reviewerId' });
   }
 

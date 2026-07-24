@@ -11,6 +11,7 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 import { checkSubscriptionLimit } from '@api/middlewares/subscription.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
@@ -42,11 +43,8 @@ import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+// ObjectId validation is provided by @api/middlewares/common.middleware (issue #929)
 
-function validateObjectId(id: string): boolean {
-  return OBJECT_ID_REGEX.test(id);
-}
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -684,7 +682,7 @@ router.get(
 router.get(
   '/:id/lab-results',
   asyncHandler(async (req: Request, res: Response) => {
-    if (!validateObjectId(req.params.id)) {
+    if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
     }
     const patient = await PatientModel.findOne({
@@ -1550,7 +1548,7 @@ router.get(
 
     // Fetch last 2 risk history entries to compute factor trends
     const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
-    if (!validateObjectId(req.params.id)) {
+    if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
     }
     const history = await RiskScoreHistoryModel.find({
