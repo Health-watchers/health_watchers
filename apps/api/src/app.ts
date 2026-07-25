@@ -132,8 +132,12 @@ import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
-import { backupHealthRoutes } from './modules/health/backup-health.controller';
 import { cspReportRoutes } from './modules/security/csp-report.controller';
+import { communicationsRouter } from './modules/communications/communications.controller';
+import {
+  startFollowUpReminderJob,
+  stopFollowUpReminderJob,
+} from './modules/encounters/follow-up-reminder-job';
 
 const app = express();
 const server = createServer(app);
@@ -301,6 +305,7 @@ app.use('/api/v1/patients/search', patientSearchLimiter);
 app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/patients', patientPhotoRoutes);
+app.use('/api/v1/patients', communicationsRouter);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
@@ -386,6 +391,7 @@ async function startServer() {
     logger.warn({ err }, 'Failed to load initial backup metrics')
   );
   startMfaGracePeriodJob();
+  startFollowUpReminderJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -405,6 +411,7 @@ async function startServer() {
       stopClaimableExpiryNotificationJob,
       stopXLMRateJob,
       stopMfaGracePeriodJob,
+      stopFollowUpReminderJob,
     ],
   });
 }

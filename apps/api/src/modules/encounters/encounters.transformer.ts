@@ -18,6 +18,13 @@ export interface EncounterResponse {
   followUpDate?: string;
   aiSummary?: string;
   isActive?: boolean;
+  // Outcome tracking fields
+  outcome?: string;
+  outcomeNotes?: string;
+  followUpRequired?: boolean;
+  followUpCompleted?: boolean;
+  followUpEncounterId?: string;
+  patientAdherence?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +57,12 @@ export function toEncounterResponse(doc: Document & Record<string, any>): Encoun
       doc.followUpDate instanceof Date ? doc.followUpDate.toISOString() : doc.followUpDate,
     aiSummary: doc.aiSummary,
     isActive: doc.isActive !== undefined ? doc.isActive : true,
+    outcome: doc.outcome,
+    outcomeNotes: doc.outcomeNotes,
+    followUpRequired: doc.followUpRequired,
+    followUpCompleted: doc.followUpCompleted,
+    followUpEncounterId: doc.followUpEncounterId ? String(doc.followUpEncounterId) : undefined,
+    patientAdherence: doc.patientAdherence,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   };

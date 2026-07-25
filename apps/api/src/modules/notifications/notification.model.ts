@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPES = [
   'waitlist_available',
   'claimable_expiring',
   'subscription_warning',
+  'follow_up_reminder',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

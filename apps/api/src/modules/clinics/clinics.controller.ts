@@ -186,10 +186,11 @@ router.get('/:id/users', authenticate, async (req: Request, res: Response) => {
       UserModel.countDocuments({ clinicId: req.params.id }),
     ]);
 
+    const totalPages = Math.ceil(total / limit);
     return res.json({
       status: 'success',
       data: users,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'InternalError', message: err.message });

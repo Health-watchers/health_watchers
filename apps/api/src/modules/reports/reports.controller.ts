@@ -365,4 +365,52 @@ Provide concise, actionable recommendations:`;
   }
 });
 
+// GET /reports/outcomes — outcome analytics
+router.get('/outcomes', async (req: Request, res: Response, next) => {
+  try {
+    const clinicId = req.user!.clinicId;
+    const { from, to } = req.query as { from?: string; to?: string };
+
+    const dateFilter: Record<string, unknown> = { clinicId };
+    if (from || to) {
+      const range: Record<string, Date> = {};
+      if (from) range.$gte = new Date(from);
+      if (to) range.$lte = new Date(to);
+      dateFilter.createdAt = range;
+    }
+
+    const [outcomeDistribution, followUpStats, avgResolution] = await Promise.all([
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: { $exists: true, $ne: null } } },
+        { $group: { _id: '$outcome', count: { $sum: 1 } } },
+        { $project: { outcome: '$_id', count: 1, _id: 0 } },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, followUpRequired: true } },
+        { $group: { _id: null, total: { $sum: 1 }, completed: { $sum: { $cond: ['$followUpCompleted', 1, 0] } } } },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: 'resolved', followUpDate: { $exists: true } } },
+        { $group: { _id: null, avgDays: { $avg: { $divide: [{ $subtract: ['$followUpDate', '$createdAt'] }, 86400000] } } } },
+      ]),
+    ]);
+
+    const followUpRow = followUpStats[0];
+    const followUpComplianceRate =
+      followUpRow && followUpRow.total > 0
+        ? Math.round((followUpRow.completed / followUpRow.total) * 100)
+        : null;
+
+    const avgDaysToResolution =
+      avgResolution[0]?.avgDays != null ? Math.round(avgResolution[0].avgDays * 10) / 10 : null;
+
+    return res.json({
+      status: 'success',
+      data: { outcomeDistribution, followUpComplianceRate, avgDaysToResolution },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export const reportRoutes = router;

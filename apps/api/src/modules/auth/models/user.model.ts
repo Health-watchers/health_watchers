@@ -29,6 +29,7 @@ export interface UserPreferences {
     balance_critical: boolean;
     large_transaction: boolean;
     unrecognized_transaction: boolean;
+    follow_up_reminder: boolean;
   };
 }
 
@@ -145,6 +146,7 @@ const userSchema = new Schema(
         balance_critical: { type: Boolean, default: true },
         large_transaction: { type: Boolean, default: true },
         unrecognized_transaction: { type: Boolean, default: true },
+        follow_up_reminder: { type: Boolean, default: true },
       },
     },
     stellarPublicKey: { type: String, sparse: true, index: true },
