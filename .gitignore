@@ -59,6 +59,18 @@ coverage/
 .jest_cache/
 jest-results.json
 test-results/
+# Jest snapshot files
+**/__snapshots__/
+# Playwright test artifacts
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+# Stryker mutation testing output
+.stryker-tmp/
+reports/
+# Pact contract test artifacts
+pacts/*.json
 
 # =============================================================================
 # TypeScript
@@ -116,6 +128,3 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-pacts/*.json
-apps/api/reports/
-.stryker-tmp/
