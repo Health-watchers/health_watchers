@@ -33,6 +33,21 @@ export async function getStats(req: Request, res: Response) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const role = req.user?.role;
+    const userId = req.user?.userId;
+
+    // Build follow-up filter based on role
+    const followUpFilter: Record<string, unknown> = {
+      clinicId,
+      followUpRequired: true,
+      followUpCompleted: false,
+      followUpDate: { $lte: now },
+    };
+    if (role === 'DOCTOR' && userId) {
+      followUpFilter.attendingDoctorId = userId;
+    }
 
     const [
       todayPatients,
@@ -42,6 +57,8 @@ export async function getStats(req: Request, res: Response) {
       recentPatients,
       todayEncountersList,
       pendingPaymentsList,
+      followUpsDue,
+      followUpsDueCount,
     ] = await Promise.all([
       PatientModel.countDocuments({ clinicId, createdAt: { $gte: today } }),
       EncounterModel.countDocuments({ clinicId, createdAt: { $gte: today } }),
@@ -50,6 +67,8 @@ export async function getStats(req: Request, res: Response) {
       PatientModel.find({ clinicId }).sort({ createdAt: -1 }).limit(5).lean(),
       EncounterModel.find({ clinicId, createdAt: { $gte: today } }).sort({ createdAt: -1 }).limit(5).lean(),
       PaymentRecordModel.find({ clinicId, status: 'pending' }).sort({ createdAt: -1 }).limit(5).lean(),
+      EncounterModel.find(followUpFilter).sort({ followUpDate: 1 }).limit(5).lean(),
+      EncounterModel.countDocuments(followUpFilter),
     ]);
 
     const body = {
@@ -59,6 +78,8 @@ export async function getStats(req: Request, res: Response) {
         recentPatients,
         todayEncounters: todayEncountersList,
         pendingPayments: pendingPaymentsList,
+        followUpsDue,
+        followUpsDueCount,
       },
     };
 

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
+import { paginate } from '../../utils/paginate';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { PaymentDisputeModel } from './models/payment-dispute.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
@@ -330,16 +331,11 @@ router.get(
     if (patientId) filter.patientId = patientId;
     if (status) filter.status = status;
 
-    const skip = (page - 1) * limit;
-    const [payments, total] = await Promise.all([
-      PaymentRecordModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      PaymentRecordModel.countDocuments(filter),
-    ]);
-
+    const result = await paginate(PaymentRecordModel, filter, page, limit, { createdAt: -1 });
     return res.json({
       status: 'success',
-      data: payments.map(toPaymentResponse),
-      meta: { total, page, limit },
+      data: result.data.map(toPaymentResponse),
+      pagination: result.meta,
     });
   })
 );

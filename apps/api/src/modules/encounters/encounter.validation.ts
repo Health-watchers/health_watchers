@@ -140,3 +140,38 @@ export type CreateEncounterDto = z.infer<typeof createEncounterSchema>;
 export type UpdateEncounterDto = z.infer<typeof updateEncounterSchema>;
 export type PatchEncounterDto = z.infer<typeof patchEncounterSchema>;
 export type ListEncountersQuery = z.infer<typeof listEncountersQuerySchema>;
+
+export const recordOutcomeSchema = z
+  .object({
+    outcome: z
+      .enum(['resolved', 'improved', 'unchanged', 'deteriorated', 'referred', 'deceased'])
+      .optional(),
+    outcomeNotes: z.string().max(2000).optional(),
+    followUpRequired: z.boolean().optional(),
+    followUpDate: z.string().datetime({ offset: true }).optional(),
+    followUpCompleted: z.boolean().optional(),
+    followUpEncounterId: objectId.optional(),
+    patientAdherence: z.enum(['full', 'partial', 'none', 'unknown']).optional(),
+  })
+  .refine((data) => !data.followUpRequired || !!data.followUpDate, {
+    message: 'followUpDate is required when followUpRequired is true',
+    path: ['followUpDate'],
+  });
+
+export const followUpQueueQuerySchema = z.object({
+  doctorId: objectId.optional(),
+  patientId: objectId.optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD')
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD')
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export type RecordOutcomeDto = z.infer<typeof recordOutcomeSchema>;
+export type FollowUpQueueQuery = z.infer<typeof followUpQueueQuerySchema>;

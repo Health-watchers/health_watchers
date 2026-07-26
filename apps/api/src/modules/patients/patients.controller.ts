@@ -11,6 +11,7 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 import { checkSubscriptionLimit } from '@api/middlewares/subscription.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
@@ -42,11 +43,8 @@ import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+// ObjectId validation is provided by @api/middlewares/common.middleware (issue #929)
 
-function validateObjectId(id: string): boolean {
-  return OBJECT_ID_REGEX.test(id);
-}
 router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -88,13 +86,8 @@ router.get(
   '/',
   validateRequest({ query: patientQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, any>);
-    if (!pagination) {
-      return res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
-    }
-    const { page, limit } = pagination;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const filter: Record<string, any> = { isActive: true };
     if (req.query.clinicId) filter.clinicId = req.query.clinicId;
 
@@ -102,23 +95,18 @@ router.get(
     return res.json({
       status: 'success',
       data: result.data.map(toPatientResponse),
-      meta: result.meta,
+      pagination: result.meta,
     });
   })
 );
 
-// GET /patients/search?q=&sex=M&minAge=18&maxAge=65&active=true&registeredAfter=2024-01-01&page=1&limit=20
+// GET /patients/search
 router.get(
   '/search',
   validateRequest({ query: patientSearchQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, any>);
-    if (!pagination) {
-      return res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
-    }
-    const { page, limit } = pagination;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
 
     // Sanitize: trim and cap at 100 chars (schema enforces max, this is belt-and-suspenders)
     const q = String(req.query.q || '')
@@ -440,13 +428,8 @@ router.post(
 router.get(
   '/:id/payments',
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, unknown>);
-    if (!pagination) {
-      return res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
-    }
-    const { page, limit } = pagination;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
 
     const patient = await PatientModel.findOne({
       _id: req.params.id,
@@ -473,13 +456,8 @@ router.get(
 router.get(
   '/:id/encounters',
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, unknown>);
-    if (!pagination) {
-      return res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
-    }
-    const { page, limit } = pagination;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
 
     const patient = await PatientModel.findOne({
       _id: req.params.id,
@@ -684,7 +662,7 @@ router.get(
 router.get(
   '/:id/lab-results',
   asyncHandler(async (req: Request, res: Response) => {
-    if (!validateObjectId(req.params.id)) {
+    if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
     }
     const patient = await PatientModel.findOne({
@@ -694,15 +672,20 @@ router.get(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const { sort = 'orderedAt', order = 'desc' } = req.query as Record<string, string>;
     const sortField = ['orderedAt', 'testName'].includes(sort) ? sort : 'orderedAt';
-    const sortOrder = order === 'asc' ? 1 : -1;
+    const sortOrder: 1 | -1 = order === 'asc' ? 1 : -1;
 
-    const docs = await LabResultModel.find({
-      patientId: req.params.id,
-      clinicId: req.user!.clinicId,
-    }).sort({ [sortField]: sortOrder });
-    return res.json({ status: 'success', data: docs });
+    const result = await paginate(
+      LabResultModel,
+      { patientId: req.params.id, clinicId: req.user!.clinicId },
+      page,
+      limit,
+      { [sortField]: sortOrder }
+    );
+    return res.json({ status: 'success', data: result.data, pagination: result.meta });
   })
 );
 
@@ -1550,7 +1533,7 @@ router.get(
 
     // Fetch last 2 risk history entries to compute factor trends
     const { RiskScoreHistoryModel } = await import('./models/risk-score-history.model');
-    if (!validateObjectId(req.params.id)) {
+    if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
     }
     const history = await RiskScoreHistoryModel.find({

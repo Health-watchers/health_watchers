@@ -59,6 +59,35 @@ coverage/
 .jest_cache/
 jest-results.json
 test-results/
+# Jest snapshot files
+**/__snapshots__/
+# Playwright test artifacts
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+# Stryker mutation testing output
+.stryker-tmp/
+reports/
+# Pact contract test artifacts
+pacts/*.json
+
+# Jest snapshots (auto-generated, should not be committed unless intentional)
+**/__snapshots__/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+.playwright/
+
+# Stryker mutation testing
+.stryker-tmp/
+reports/
+stryker-report/
+
+# k6 performance test results
+k6-results/
+performance/results/
 
 # =============================================================================
 # TypeScript
@@ -119,3 +148,45 @@ docker-volumes/
 pacts/*.json
 apps/api/reports/
 .stryker-tmp/
+
+# =============================================================================
+# Security Scan Reports (generated artifacts, not source)
+# =============================================================================
+# Gitleaks
+gitleaks-report.json
+.gitleaks/
+
+# Snyk
+snyk.sarif
+snyk-report.json
+
+# Trivy
+trivy-*.sarif
+trivy-*.json
+
+# npm audit
+audit.json
+audit-report.json
+
+# License checker
+licenses.csv
+
+# Generic security report outputs
+security-reports/
+scan-results/
+
+# =============================================================================
+# Generated / compiled artifacts that shouldn't be tracked
+# =============================================================================
+# Compiled JS output from packages/types (source of truth is packages/types/src/index.ts).
+# These root-level files were stale compiled artifacts — removed in issue #928.
+packages/types/index.js
+packages/types/index.js.map
+packages/types/index.d.ts
+packages/types/index.d.ts.map
+# The root index.ts in packages/types was a stale compiled copy — removed in issue #928.
+# The canonical source is packages/types/src/index.ts.
+packages/types/index.ts
+
+# Temporary debug scripts at repo root
+verify-jwt-implementation.js

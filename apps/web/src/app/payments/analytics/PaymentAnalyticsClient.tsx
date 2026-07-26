@@ -2,26 +2,38 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { PageWrapper, PageHeader } from '@/components/ui';
 import { queryKeys } from '@/lib/queryKeys';
 import { fetchWithAuth } from '@/lib/auth';
+
+const PaymentVolumeChart = dynamic(
+  () => import('@/components/charts/PaymentAnalyticsCharts').then((mod) => mod.PaymentVolumeChart),
+  { ssr: false }
+);
+
+const TransactionCountChart = dynamic(
+  () =>
+    import('@/components/charts/PaymentAnalyticsCharts').then((mod) => mod.TransactionCountChart),
+  { ssr: false }
+);
+
+const AssetDistributionChart = dynamic(
+  () =>
+    import('@/components/charts/PaymentAnalyticsCharts').then((mod) => mod.AssetDistributionChart),
+  { ssr: false }
+);
+
+const TransactionStatusChart = dynamic(
+  () =>
+    import('@/components/charts/PaymentAnalyticsCharts').then((mod) => mod.TransactionStatusChart),
+  { ssr: false }
+);
+
+const FeeStrategyChart = dynamic(
+  () => import('@/components/charts/PaymentAnalyticsCharts').then((mod) => mod.FeeStrategyChart),
+  { ssr: false }
+);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -110,34 +122,6 @@ export default function PaymentAnalyticsClient() {
     queryKey: queryKeys.payments.analytics({ from, to, groupBy, clinicId }),
     queryFn: () => fetchAnalytics(from, to, groupBy, clinicId || undefined),
   });
-
-  // Prepare chart data
-  const volumeData = (data?.revenueByPeriod ?? []).map((p) => ({
-    period: p.period,
-    XLM: parseFloat(p.xlm),
-    USDC: parseFloat(p.usdc),
-    count: p.count,
-  }));
-
-  const successRateData = (data?.revenueByPeriod ?? []).map((p, i, arr) => {
-    // We don't have per-period success rate from the API, so we show count trend
-    return { period: p.period, transactions: p.count };
-  });
-
-  const pieData = data
-    ? [
-        { name: 'XLM', value: data.currencyDistribution.xlm.count },
-        { name: 'USDC', value: data.currencyDistribution.usdc.count },
-      ]
-    : [];
-
-  const statusData = data
-    ? [
-        { name: 'Confirmed', value: data.transactionCount.confirmed, fill: '#10b981' },
-        { name: 'Pending', value: data.transactionCount.pending, fill: '#f59e0b' },
-        { name: 'Failed', value: data.transactionCount.failed, fill: '#ef4444' },
-      ]
-    : [];
 
   return (
     <PageWrapper className="py-8">
@@ -233,156 +217,21 @@ export default function PaymentAnalyticsClient() {
           </div>
 
           {/* Payment volume over time */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <SectionTitle>Payment Volume Over Time</SectionTitle>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={volumeData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="xlmGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.xlm} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={COLORS.xlm} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="usdcGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.usdc} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={COLORS.usdc} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="XLM"
-                  stroke={COLORS.xlm}
-                  fill="url(#xlmGrad)"
-                  strokeWidth={2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="USDC"
-                  stroke={COLORS.usdc}
-                  fill="url(#usdcGrad)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <PaymentVolumeChart data={data.revenueByPeriod} />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Transaction count trend */}
-            <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <SectionTitle>Transaction Count Trend</SectionTitle>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart
-                  data={successRateData}
-                  margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="transactions"
-                    stroke={COLORS.xlm}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <TransactionCountChart data={data.revenueByPeriod} />
 
             {/* Asset distribution */}
-            <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <SectionTitle>Asset Distribution</SectionTitle>
-              <div className="flex items-center gap-6">
-                <ResponsiveContainer width="50%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      <Cell fill={COLORS.xlm} />
-                      <Cell fill={COLORS.usdc} />
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ background: COLORS.xlm }} />
-                    <span className="text-neutral-600">XLM</span>
-                    <span className="ml-auto font-medium">
-                      {data.currencyDistribution.xlm.count} txns
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ background: COLORS.usdc }} />
-                    <span className="text-neutral-600">USDC</span>
-                    <span className="ml-auto font-medium">
-                      {data.currencyDistribution.usdc.count} txns
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AssetDistributionChart currencyDistribution={data.currencyDistribution} />
           </div>
 
           {/* Transaction status breakdown */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <SectionTitle>Transaction Status Breakdown</SectionTitle>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={statusData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {statusData.map((entry, i) => (
-                    <Cell key={i} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <TransactionStatusChart transactionCount={data.transactionCount} />
 
           {/* Fee strategy breakdown */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <SectionTitle>Fee Strategy Breakdown</SectionTitle>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
-                data={[
-                  { name: 'Slow', value: data.feeStrategyBreakdown?.slow ?? 0, fill: '#10b981' },
-                  {
-                    name: 'Standard',
-                    value: data.feeStrategyBreakdown?.standard ?? 0,
-                    fill: '#6366f1',
-                  },
-                  { name: 'Fast', value: data.feeStrategyBreakdown?.fast ?? 0, fill: '#f59e0b' },
-                ]}
-                margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {[{ fill: '#10b981' }, { fill: '#6366f1' }, { fill: '#f59e0b' }].map(
-                    (entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    )
-                  )}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <FeeStrategyChart feeStrategyBreakdown={data.feeStrategyBreakdown} />
         </div>
       )}
     </PageWrapper>

@@ -93,6 +93,13 @@ export interface Encounter {
   coSignedAt?: Date;
   coSignatureNotes?: string;
   closedAt?: Date;
+  // Outcome tracking fields
+  outcome?: 'resolved' | 'improved' | 'unchanged' | 'deteriorated' | 'referred' | 'deceased';
+  outcomeNotes?: string;
+  followUpRequired?: boolean;
+  followUpCompleted?: boolean;
+  followUpEncounterId?: Schema.Types.ObjectId;
+  patientAdherence?: 'full' | 'partial' | 'none' | 'unknown';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -233,6 +240,16 @@ const encounterSchema = new Schema<Encounter>(
     isActive: { type: Boolean, default: true, index: true },
     billing: { type: billingInfoSchema },
     attachments: { type: [attachmentSchema], default: [] },
+    // Outcome tracking fields
+    outcome: {
+      type: String,
+      enum: ['resolved', 'improved', 'unchanged', 'deteriorated', 'referred', 'deceased'],
+    },
+    outcomeNotes: { type: String, maxlength: 2000 },
+    followUpRequired: { type: Boolean, default: false },
+    followUpCompleted: { type: Boolean, default: false },
+    followUpEncounterId: { type: Schema.Types.ObjectId, ref: 'Encounter' },
+    patientAdherence: { type: String, enum: ['full', 'partial', 'none', 'unknown'] },
   },
   { timestamps: true, versionKey: false }
 );
@@ -249,6 +266,8 @@ encounterSchema.index({ clinicId: 1, status: 1, createdAt: -1 }); // Status-firs
 encounterSchema.index({ clinicId: 1, attendingDoctorId: 1, createdAt: -1 }); // Doctor-scoped queries
 // Targeted text index on searchable fields (replaces wildcard $** index)
 encounterSchema.index({ chiefComplaint: 'text', notes: 'text' }, { name: 'encounter_text_search' });
+// Compound index for follow-up queue queries
+encounterSchema.index({ clinicId: 1, followUpRequired: 1, followUpDate: 1, followUpCompleted: 1 });
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
