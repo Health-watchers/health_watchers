@@ -2,15 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
 import {
@@ -28,6 +20,11 @@ import {
   ErrorMessage,
   StellarAddressDisplay,
 } from '@/components/ui';
+
+const BalanceTrendChart = dynamic(
+  () => import('@/components/charts/BalanceTrendChart').then((mod) => mod.BalanceTrendChart),
+  { ssr: false }
+);
 
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const IS_TESTNET = NETWORK === 'testnet';
@@ -277,39 +274,7 @@ function ConfirmPaymentModal({
   );
 }
 
-function BalanceTrendChart({ snapshots }: { snapshots: BalanceSnapshot[] }) {
-  if (!snapshots || snapshots.length === 0) {
-    return (
-      <p className="py-4 text-center text-sm text-neutral-500">
-        No balance history yet. Data will appear after the first monitoring cycle.
-      </p>
-    );
-  }
-
-  const chartData = snapshots.map((s) => ({
-    date: new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    xlm: parseFloat(s.xlmBalance),
-  }));
-
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} width={50} />
-        <Tooltip formatter={(v: number) => [`${v.toFixed(2)} XLM`, 'Balance']} />
-        <Line
-          type="monotone"
-          dataKey="xlm"
-          stroke="#2563eb"
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4 }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
+// BalanceTrendChart is now dynamically imported from @/components/charts/BalanceTrendChart
 
 function AlertThresholdSettings({
   settings,

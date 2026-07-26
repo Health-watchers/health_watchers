@@ -1,17 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
 import { portalFetch, portalGet } from '@/lib/portalApi';
+import dynamic from 'next/dynamic';
+
+const HealthMetricTrendChart = dynamic(
+  () => import('@/components/charts/HealthMetricTrendChart').then((mod) => mod.HealthMetricTrendChart),
+  { ssr: false }
+);
 
 type MetricType = 'weight' | 'blood_pressure' | 'blood_glucose' | 'exercise_minutes' | 'heart_rate';
 
@@ -33,14 +29,6 @@ const METRIC_OPTIONS: { value: MetricType; label: string; unit: string }[] = [
   { value: 'heart_rate', label: 'Heart Rate', unit: 'bpm' },
 ];
 
-const METRIC_COLORS: Record<MetricType, string> = {
-  weight: '#3b82f6',
-  blood_pressure: '#ef4444',
-  blood_glucose: '#f59e0b',
-  exercise_minutes: '#10b981',
-  heart_rate: '#8b5cf6',
-};
-
 export default function HealthLogPage() {
   const [logs, setLogs] = useState<HealthLog[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('weight');
@@ -49,7 +37,6 @@ export default function HealthLogPage() {
   const [alert, setAlert] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
   const [form, setForm] = useState({ value: '', notes: '' });
 
   const fetchLogs = useCallback(async (metric: MetricType) => {
@@ -195,52 +182,13 @@ export default function HealthLogPage() {
         </h2>
         {loading ? (
           <p className="text-sm text-gray-400">Loading…</p>
-        ) : chartData.length === 0 ? (
-          <p className="text-sm text-gray-400">No data yet. Log your first reading above.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value: number) => [
-                  `${value} ${currentOption.unit}`,
-                  currentOption.label,
-                ]}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="value"
-                name={currentOption.label}
-                stroke={METRIC_COLORS[selectedMetric]}
-                strokeWidth={2}
-                dot={(props: any) => {
-                  const { cx, cy, payload } = props;
-                  return payload.flagged ? (
-                    <circle
-                      key={`dot-${cx}-${cy}`}
-                      cx={cx}
-                      cy={cy}
-                      r={5}
-                      fill="#ef4444"
-                      stroke="#fff"
-                      strokeWidth={1.5}
-                    />
-                  ) : (
-                    <circle
-                      key={`dot-${cx}-${cy}`}
-                      cx={cx}
-                      cy={cy}
-                      r={3}
-                      fill={METRIC_COLORS[selectedMetric]}
-                    />
-                  );
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <HealthMetricTrendChart
+            chartData={chartData}
+            selectedMetric={selectedMetric}
+            currentLabel={currentOption.label}
+            currentUnit={currentOption.unit}
+          />
         )}
       </section>
 
