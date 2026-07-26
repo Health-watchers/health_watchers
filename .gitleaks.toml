@@ -1,0 +1,106 @@
+# .gitleaks.toml — Gitleaks configuration for Health Watchers
+# https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+
+title = "Health Watchers Gitleaks Config"
+
+[extend]
+# Inherit all default rules from the upstream gitleaks config
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Allowlists — paths and patterns that are safe to ignore
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "Global allow-list for test fixtures, example files, and generated artifacts"
+
+# Paths that should never be scanned (binaries, lock files, generated code)
+paths = [
+  # Lock files and generated dependency trees
+  '''package-lock\.json$''',
+  '''yarn\.lock$''',
+  '''pnpm-lock\.yaml$''',
+
+  # Test fixtures and factory files — contain intentionally fake secrets
+  '''__tests__/''',
+  '''__fixtures__/''',
+  '''__mocks__/''',
+  '''\.test\.(ts|js)$''',
+  '''\.spec\.(ts|js)$''',
+  '''factories/''',
+  '''seeds?/''',
+
+  # Example / template files
+  '''\.env\.example$''',
+  '''\.env\.example\.save$''',
+
+  # Documentation and changelogs
+  '''CHANGELOG\.md$''',
+  '''README\.md$''',
+  '''docs/''',
+  '''\.md$''',
+
+  # Build / compiled output (should also be in .gitignore)
+  '''dist/''',
+  '''build/''',
+  '''\.next/''',
+
+  # Kubernetes placeholder secrets (base64-encoded dummy values)
+  '''k8s/secrets\.yaml$''',
+]
+
+# Regex patterns that are safe to ignore globally
+regexes = [
+  # Placeholder / example values
+  '''(your|my|test|example|placeholder|dummy|fake|sample|changeme|replace[-_]?me)[-_]?(secret|key|token|password|api[-_]?key)''',
+  # Already-redacted patterns in docs
+  '''\*{4,}''',
+  '''<REDACTED>''',
+  '''<YOUR_[A-Z_]+>''',
+]
+
+# ---------------------------------------------------------------------------
+# Custom rules — project-specific patterns
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "health-watchers-jwt-secret"
+description = "Hardcoded JWT secret"
+regex = '''JWT_[A-Z_]*SECRET\s*=\s*['"]?[a-zA-Z0-9+/=_-]{16,}['"]?'''
+tags = ["secret", "jwt"]
+
+  [rules.allowlist]
+  regexes = [
+    # Skip lines that reference environment variables or are example values
+    '''\$\{''',
+    '''process\.env''',
+    '''example|placeholder|changeme|your[-_]secret''',
+  ]
+
+[[rules]]
+id = "health-watchers-mongo-uri-with-creds"
+description = "MongoDB connection string containing credentials"
+regex = '''mongodb(\+srv)?://[^:]+:[^@]+@'''
+tags = ["secret", "database"]
+
+  [rules.allowlist]
+  paths = ['''\.env\.example$''']
+  regexes = [
+    '''localhost''',
+    '''127\.0\.0\.1''',
+    '''user:password@''',
+    '''username:password@''',
+  ]
+
+[[rules]]
+id = "health-watchers-stellar-secret-key"
+description = "Stellar secret key (S…)"
+# Stellar secret keys start with S and are 56 base32 chars
+regex = '''(?i)(stellar[_-]?secret|STELLAR_SECRET_KEY)\s*[=:]\s*['"]?S[A-Z2-7]{55}['"]?'''
+tags = ["secret", "stellar", "blockchain"]
+
+[[rules]]
+id = "health-watchers-gemini-api-key"
+description = "Google Gemini / Generative AI API key"
+regex = '''(?i)(gemini|generative)[_-]?api[_-]?key\s*[=:]\s*['"]?AIza[0-9A-Za-z\-_]{35}['"]?'''
+tags = ["secret", "api-key", "google"]

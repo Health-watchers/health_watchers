@@ -1,9 +1,9 @@
 import { ReimbursementModel } from '../models/reimbursement.model';
 import logger from '../../../utils/logger';
 import crypto from 'crypto';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 
 const CLAIM_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 
 export async function processReimbursementWebhook(payload: {
   claimId: string;
@@ -16,7 +16,7 @@ export async function processReimbursementWebhook(payload: {
   if (!CLAIM_ID_REGEX.test(payload.claimId)) {
     throw new Error('Invalid claimId format');
   }
-  if (!OBJECT_ID_REGEX.test(payload.clinicId)) {
+  if (!isValidObjectId(payload.clinicId)) {
     throw new Error('Invalid clinicId format');
   }
   try {

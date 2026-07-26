@@ -4,6 +4,7 @@ import {
   UpdateRecurringPaymentInput,
 } from './recurring-payment.validation';
 import { sendMail } from '@api/utils/mailer';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 
 function getNextPaymentDate(startDate: Date, frequency: string): Date {
   const next = new Date(startDate);
@@ -41,12 +42,10 @@ export async function createRecurringPayment(clinicId: string, input: CreateRecu
   });
 }
 
-const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
-
 export async function getRecurringPayments(clinicId: string, patientId?: string) {
   const query: Record<string, unknown> = { clinicId };
   if (patientId) {
-    if (!OBJECT_ID_REGEX.test(patientId)) {
+    if (!isValidObjectId(patientId)) {
       throw new Error('Invalid patientId');
     }
     query.patientId = patientId;
