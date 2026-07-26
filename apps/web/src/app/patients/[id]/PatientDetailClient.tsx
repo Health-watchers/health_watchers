@@ -50,6 +50,13 @@ const CarePlanTab = dynamic(
   () => import('@/components/patients/CarePlanTab').then((m) => ({ default: m.CarePlanTab })),
   { ssr: false }
 );
+const CommunicationTimeline = dynamic(
+  () =>
+    import('@/components/patients/communications/CommunicationTimeline').then((m) => ({
+      default: m.CommunicationTimeline,
+    })),
+  { ssr: false }
+);
 
 interface EncounterResponse {
   id: string;
@@ -469,6 +476,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="care-plans">Care Plans</TabsTrigger>
           <TabsTrigger value="health-log">Health Log</TabsTrigger>
+          <TabsTrigger value="communications">Communications</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -795,6 +803,11 @@ export default function PatientDetailClient({
         {/* Health Log tab */}
         <TabsContent value="health-log">
           <HealthLogTab patientId={patientId} />
+        </TabsContent>
+
+        {/* Communications tab */}
+        <TabsContent value="communications">
+          <CommunicationTimeline patientId={patientId} />
         </TabsContent>
       </Tabs>
 

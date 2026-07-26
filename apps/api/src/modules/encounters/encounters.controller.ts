@@ -13,7 +13,12 @@ import {
   patientIdParamSchema,
   listEncountersQuerySchema,
   ListEncountersQuery,
+  recordOutcomeSchema,
+  RecordOutcomeDto,
+  followUpQueueQuerySchema,
+  FollowUpQueueQuery,
 } from './encounter.validation';
+import { paginate } from '../../utils/paginate';
 import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
 import { PatientModel } from '../patients/models/patient.model';
@@ -409,6 +414,45 @@ router.post(
   })
 );
 
+// GET /encounters/follow-ups-due — must be before /:id to avoid param capture
+router.get(
+  '/follow-ups-due',
+  requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
+  validateRequest({ query: followUpQueueQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const q = req.query as unknown as FollowUpQueueQuery;
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const filter: Record<string, unknown> = {
+      clinicId,
+      followUpRequired: true,
+      followUpCompleted: false,
+      followUpDate: { $lte: today },
+    };
+    if (q.doctorId) filter.attendingDoctorId = q.doctorId;
+    if (q.patientId) filter.patientId = q.patientId;
+    if (q.from || q.to) {
+      const dateRange: Record<string, Date> = {};
+      if (q.from) dateRange.$gte = new Date(q.from);
+      if (q.to) dateRange.$lte = new Date(q.to + 'T23:59:59.999Z');
+      filter.followUpDate = dateRange;
+    }
+    const result = await paginate(
+      EncounterModel,
+      filter as any,
+      q.page,
+      q.limit,
+      { followUpDate: 1 }
+    );
+    return res.status(200).json({
+      status: 'success',
+      data: result.data.map((d) => toEncounterResponse(d as any)),
+      meta: result.meta,
+    });
+  })
+);
+
 // GET /encounters/:id
 router.get(
   '/:id',
@@ -421,6 +465,32 @@ router.get(
     });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  })
+);
+
+// PUT /encounters/:id/outcome — record clinical outcome
+router.put(
+  '/:id/outcome',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  validateRequest({ body: recordOutcomeSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const encounter = await EncounterModel.findOne({ _id: req.params.id, clinicId });
+    if (!encounter) return res.status(404).json({ status: 'error', message: 'Encounter not found' });
+    if (encounter.status === 'cancelled') {
+      return res.status(409).json({ status: 'error', message: 'Cannot record outcome for a cancelled encounter' });
+    }
+    const body = req.body as RecordOutcomeDto;
+    if (body.followUpEncounterId) {
+      const linked = await EncounterModel.findOne({ _id: body.followUpEncounterId, clinicId });
+      if (!linked) return res.status(400).json({ status: 'error', message: 'followUpEncounterId does not belong to this clinic' });
+    }
+    const updated = await EncounterModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId },
+      { $set: body },
+      { new: true }
+    );
+    return res.status(200).json({ status: 'success', data: toEncounterResponse(updated!) });
   })
 );
 

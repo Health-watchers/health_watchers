@@ -42,7 +42,9 @@ export type AuditAction =
   | 'API_KEY_CREATE'
   | 'API_KEY_ROTATE'
   | 'API_KEY_REVOKE'
-  | 'API_KEY_UPDATE';
+  | 'API_KEY_UPDATE'
+  | 'COMMUNICATION_LOG_CREATED'
+  | 'COMMUNICATION_LOG_VIEWED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -104,6 +106,12 @@ const auditLogSchema = new Schema<AuditLog>(
         'MUTATION_CREATE',
         'MUTATION_UPDATE',
         'MUTATION_DELETE',
+        'API_KEY_CREATE',
+        'API_KEY_ROTATE',
+        'API_KEY_REVOKE',
+        'API_KEY_UPDATE',
+        'COMMUNICATION_LOG_CREATED',
+        'COMMUNICATION_LOG_VIEWED',
       ],
       index: true,
     },

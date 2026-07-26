@@ -275,6 +275,7 @@ async function startServer() {
     logger.warn({ err }, 'Failed to load initial backup metrics')
   );
   startMfaGracePeriodJob();
+  startFollowUpReminderJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -294,6 +295,7 @@ async function startServer() {
       stopClaimableExpiryNotificationJob,
       stopXLMRateJob,
       stopMfaGracePeriodJob,
+      stopFollowUpReminderJob,
     ],
   });
 }

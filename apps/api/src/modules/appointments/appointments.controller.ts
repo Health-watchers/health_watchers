@@ -252,7 +252,7 @@ appointmentRoutes.get(
       return res.json({
         status: 'success',
         data,
-        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)), totalPages: Math.ceil(total / Number(limit)), hasNext: Number(page) < Math.ceil(total / Number(limit)), hasPrev: Number(page) > 1 },
       });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
