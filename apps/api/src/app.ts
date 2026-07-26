@@ -128,6 +128,7 @@ import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
 import exportRouter from './modules/export/export.routes';
+import batchExportRouter from './modules/export/batch-export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
@@ -345,6 +346,7 @@ app.use('/federation', federationRouter);
 
 // ── Export routes (HIPAA Right of Access + FHIR) ──────────────────────────────
 app.use('/api/v1', exportRouter);
+app.use('/api/v1/exports', bulkExportLimiter, batchExportRouter);
 
 setupSwagger(app);
 

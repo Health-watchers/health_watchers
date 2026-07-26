@@ -1,11 +1,14 @@
 import { Router, Request, Response } from 'express';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
+import { PassThrough } from 'stream';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { auditLog } from '@api/modules/audit/audit.service';
+import { StreamingCsvGenerator } from '@api/utils/streaming-csv';
+import logger from '@api/utils/logger';
 
 const STELLAR_EXPLORER: Record<string, string> = {
   testnet: 'https://stellar.expert/explorer/testnet/tx',
@@ -149,8 +152,9 @@ router.get(
     const clinicId = req.user!.clinicId;
 
     const filter = buildQuery(clinicId, q);
-    const records = await PaymentRecordModel.find(filter).sort({ createdAt: -1 }).lean();
-    const rows = records.map(toRow);
+
+    // Count total records for progress tracking
+    const totalCount = await PaymentRecordModel.countDocuments(filter);
 
     // Audit log
     await auditLog(
@@ -165,11 +169,62 @@ router.get(
           to: q.to,
           status: q.status,
           currency: q.currency,
-          recordCount: rows.length,
+          recordCount: totalCount,
         },
       },
       req
     );
+
+    // For large datasets (>1000 records), use streaming
+    if (totalCount > 1000 && q.format === 'csv') {
+      const cursor = PaymentRecordModel.find(filter).sort({ createdAt: -1 }).lean().cursor();
+
+      const csvGenerator = new StreamingCsvGenerator({
+        headers: HEADERS.map((h) => h.key),
+      });
+      const transform = csvGenerator.createTransformStream();
+      const passThrough = new PassThrough();
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${buildFilename(q, 'csv')}"`);
+      res.setHeader('Transfer-Encoding', 'chunked');
+
+      transform.pipe(passThrough);
+      passThrough.pipe(res);
+
+      let processed = 0;
+      const batchSize = 500;
+      let batch: any[] = [];
+
+      for await (const doc of cursor) {
+        batch.push(toRow(doc));
+
+        if (batch.length >= batchSize) {
+          transform.write(batch);
+          processed += batch.length;
+          batch = [];
+
+          // Log progress every 1000 records
+          if (processed % 1000 === 0) {
+            logger.info({ processed, total: totalCount }, 'Payment export progress');
+          }
+        }
+      }
+
+      if (batch.length > 0) {
+        transform.write(batch);
+        processed += batch.length;
+      }
+
+      transform.end();
+
+      logger.info({ processed, total: totalCount }, 'Payment export completed');
+      return;
+    }
+
+    // For small datasets or XLSX format, use traditional approach
+    const records = await PaymentRecordModel.find(filter).sort({ createdAt: -1 }).lean();
+    const rows = records.map(toRow);
 
     if (q.format === 'xlsx') {
       const buffer = await buildXlsx(rows);
