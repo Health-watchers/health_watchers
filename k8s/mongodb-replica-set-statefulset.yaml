@@ -1,0 +1,300 @@
+# ============================================================
+# MongoDB Replica Set StatefulSet for Kubernetes
+#
+# Production-grade MongoDB replica set deployment on Kubernetes
+# with persistent storage and automatic failover
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-replica-init-config
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+data:
+  replica-set-init.js: |
+    // MongoDB Replica Set initialization - see mongodb-replica-set-init.js
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-headless
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-primary
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+spec:
+  selector:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+    mongodb-node: '0'
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+spec:
+  serviceName: mongodb-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb
+        app.kubernetes.io/component: database
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '9216'
+        prometheus.io/path: '/metrics'
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - mongodb
+              topologyKey: kubernetes.io/hostname
+      serviceAccountName: mongodb
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      initContainers:
+        - name: prepare-data-dir
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 999:999 /data/db
+              chmod 700 /data/db
+          volumeMounts:
+            - name: datadir
+              mountPath: /data/db
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          command:
+            - mongod
+            - --replSet=rs0
+            - --bind_ip_all
+            - --auth
+            - --keyFile=/etc/mongodb/keyfile
+            - --wiredTigerCacheSizeGB=1
+            - --wiredTigerCheckpointDelaySecs=60
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: datadir
+              mountPath: /data/db
+            - name: keyfile
+              mountPath: /etc/mongodb
+        - name: mongodb-exporter
+          image: percona/mongodb_exporter:latest
+          ports:
+            - containerPort: 9216
+              name: metrics
+          env:
+            - name: MONGODB_URI
+              value: 'mongodb://$(MONGO_INITDB_ROOT_USERNAME):$(MONGO_INITDB_ROOT_PASSWORD)@localhost:27017/admin'
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: keyfile
+          secret:
+            secretName: mongodb-keyfile
+            defaultMode: 0400
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+      spec:
+        accessModes: ['ReadWriteOnce']
+        storageClassName: fast-ssd
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-credentials
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+type: Opaque
+data:
+  username: cm9vdA== # base64 encoded "root"
+  password: Y2hhbmdlbWU= # base64 encoded "changeme" - change in production!
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-keyfile
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+type: Opaque
+stringData:
+  keyfile: |
+    # MongoDB replica set key file for authentication
+    # Generate with: openssl rand -base64 756 > keyfile
+    # Change permissions: chmod 600 keyfile
+    # This is a placeholder - use a real key in production!
+    placeholder_key_change_in_production
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-replica-set-init
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+spec:
+  template:
+    spec:
+      serviceAccountName: default
+      restartPolicy: Never
+      containers:
+        - name: replica-init
+          image: mongo:7.0
+          command:
+            - mongosh
+            - mongodb-primary:27017
+            - -u
+            - root
+            - -p
+            - changeme
+            - --authenticationDatabase
+            - admin
+            - /scripts/replica-set-init.js
+          volumeMounts:
+            - name: init-script
+              mountPath: /scripts
+      volumes:
+        - name: init-script
+          configMap:
+            name: mongodb-replica-init-config
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mongodb
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: mongodb
+    app.kubernetes.io/component: database
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb
+      app.kubernetes.io/component: database
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

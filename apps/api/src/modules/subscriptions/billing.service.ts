@@ -7,7 +7,8 @@ import logger from '@api/utils/logger';
 const GRACE_PERIOD_DAYS = 7;
 
 export async function generateBillingInvoice(clinicId: string | Types.ObjectId) {
-  const subscription = await SubscriptionModel.findOne({ clinicId });
+  const safeClinicId = new Types.ObjectId(String(clinicId));
+  const subscription = await SubscriptionModel.findOne({ clinicId: safeClinicId });
   if (!subscription || subscription.tier === 'free') return null;
 
   const clinic = await ClinicModel.findById(clinicId);
@@ -37,7 +38,8 @@ export async function generateBillingInvoice(clinicId: string | Types.ObjectId) 
 }
 
 export async function handlePaymentSuccess(clinicId: string | Types.ObjectId, paymentIntentId: string) {
-  const subscription = await SubscriptionModel.findOne({ clinicId });
+  const safeClinicId = new Types.ObjectId(String(clinicId));
+  const subscription = await SubscriptionModel.findOne({ clinicId: safeClinicId });
   if (!subscription) return;
 
   const now = new Date();
@@ -72,7 +74,8 @@ export async function suspendOverdueAccounts() {
 }
 
 export async function renewSubscriptionPeriod(clinicId: string | Types.ObjectId) {
-  const subscription = await SubscriptionModel.findOne({ clinicId });
+  const safeClinicId = new Types.ObjectId(String(clinicId));
+  const subscription = await SubscriptionModel.findOne({ clinicId: safeClinicId });
   if (!subscription) return;
 
   const now = new Date();

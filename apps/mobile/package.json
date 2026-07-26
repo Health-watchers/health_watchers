@@ -1,0 +1,51 @@
+{
+  "name": "health-watchers-mobile",
+  "version": "1.0.0",
+  "description": "Health Watchers patient portal mobile app built with React Native and Expo",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build:android": "eas build --platform android",
+    "build:ios": "eas build --platform ios",
+    "build": "eas build",
+    "submit": "eas submit",
+    "test": "jest",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@health-watchers/types": "*",
+    "@react-navigation/bottom-tabs": "^6.5.0",
+    "@react-navigation/native": "^6.1.0",
+    "@react-navigation/native-stack": "^6.9.0",
+    "expo": "^50.0.0",
+    "expo-local-authentication": "^14.0.0",
+    "expo-notifications": "^0.27.0",
+    "expo-secure-store": "^13.0.0",
+    "react": "^18.2.0",
+    "react-native": "^0.73.0",
+    "react-native-gesture-handler": "^2.14.0",
+    "react-native-reanimated": "^3.6.0",
+    "react-native-safe-area-context": "^4.7.0",
+    "react-native-screens": "^3.27.0",
+    "react-query": "^3.39.0",
+    "zustand": "^4.4.0",
+    "axios": "^1.6.0",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/react": "^18.2.0",
+    "@types/react-native": "^0.72.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

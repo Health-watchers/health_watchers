@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
+import {
+  ErrorMessage,
+  Toast,
+  SlideOver,
+  PageWrapper,
+  PageHeader,
+  SectionErrorBoundary,
+} from '@/components/ui';
 import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
 import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
 import { Button } from '@/components/ui/Button';
@@ -70,16 +77,25 @@ export default function PaymentsClient() {
   }, [polledPayments]);
 
   const handleCreate = async (data: PaymentIntentData) => {
+    const body: any = {
+      patientId: data.patientId,
+      amount: data.amount,
+      assetCode: data.asset,
+      memo: data.memo,
+      feeStrategy: data.feeStrategy,
+    };
+    if (data.sourceAssetCode) {
+      body.sourceAssetCode = data.sourceAssetCode;
+      body.sourceAssetIssuer = data.sourceAssetIssuer;
+    }
+    if (data.destinationAmount) body.destinationAmount = data.destinationAmount;
+    if (data.maxSourceAmount) body.maxSourceAmount = data.maxSourceAmount;
+    if (data.path) body.path = data.path;
+
     const res = await fetchWithAuth(`${API}/payments/intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        patientId: data.patientId,
-        amount: data.amount,
-        assetCode: data.asset,
-        memo: data.memo,
-        feeStrategy: data.feeStrategy,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -114,12 +130,17 @@ export default function PaymentsClient() {
         <PageHeader title="Payments" />
         <div className="flex items-center gap-3">
           {polling && (
-            <span className="flex items-center gap-1.5 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
-              <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" aria-hidden="true" />
+            <span className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs text-yellow-700">
+              <span
+                className="h-2 w-2 animate-pulse rounded-full bg-yellow-400"
+                aria-hidden="true"
+              />
               Polling for updates…
             </span>
           )}
-          <Button variant="outline" onClick={() => window.location.href = '/invoices'}>Invoices</Button>
+          <Button variant="outline" onClick={() => (window.location.href = '/invoices')}>
+            Invoices
+          </Button>
           <PaymentExportButton onError={(msg) => setToast({ message: msg, type: 'error' })} />
           <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
         </div>
@@ -142,14 +163,14 @@ export default function PaymentsClient() {
       {error && (
         <ErrorMessage
           message={getPaymentsErrorMessage(error)}
-          onRetry={() =>
-            queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })
-          }
+          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })}
         />
       )}
 
       {!isLoading && !error && (
-        <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        <SectionErrorBoundary name="payment panel">
+          <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        </SectionErrorBoundary>
       )}
 
       <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Intent">

@@ -15,30 +15,32 @@ export const stellarConfig = {
   platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
   // Server-side signing key — never exposed to clients
   stellarSecretKey: process.env.STELLAR_SECRET_KEY || '',
-  horizonUrl: process.env.STELLAR_NETWORK === 'mainnet' 
-    ? 'https://horizon.stellar.org' 
-    : 'https://horizon-testnet.stellar.org',
+  // API base URL for posting payment confirmations back to the API
+  apiUrl: process.env.API_URL || 'http://localhost:3000',
+  // Shared secret used to authenticate internal callbacks to the API
+  sharedSecret: process.env.STELLAR_SERVICE_SECRET || '',
+  horizonUrl:
+    process.env.STELLAR_NETWORK === 'mainnet'
+      ? 'https://horizon.stellar.org'
+      : 'https://horizon-testnet.stellar.org',
   // Multiple Horizon endpoints for failover
   horizonUrls: getHorizonUrls(),
 };
 
 function getHorizonUrls(): string[] {
   const isMainnet = process.env.STELLAR_NETWORK === 'mainnet';
-  const customUrls = process.env.STELLAR_HORIZON_URLS?.split(',').map(u => u.trim()).filter(Boolean) || [];
-  
+  const customUrls =
+    process.env.STELLAR_HORIZON_URLS?.split(',')
+      .map((u) => u.trim())
+      .filter(Boolean) || [];
+
   if (customUrls.length > 0) {
     return customUrls;
   }
 
   if (isMainnet) {
-    return [
-      'https://horizon.stellar.org',
-      'https://horizon.stellar.lobstr.co',
-    ];
+    return ['https://horizon.stellar.org', 'https://horizon.stellar.lobstr.co'];
   }
 
-  return [
-    'https://horizon-testnet.stellar.org',
-    'https://horizon.stellar.lobstr.co/testnet',
-  ];
+  return ['https://horizon-testnet.stellar.org', 'https://horizon.stellar.lobstr.co/testnet'];
 }

@@ -18,4 +18,37 @@ export class WalletPage {
   async fundWithFriendbot() {
     await this.friendbotButton.click();
   }
+
+  async createPaymentIntent(amount: string, patientId: string, encounterId: string) {
+    await this.page.getByRole('button', { name: /create.*payment|new payment/i }).click();
+    await this.page.getByLabel(/amount/i).fill(amount);
+    await this.page.getByLabel(/patient/i).selectOption(patientId);
+    await this.page.getByLabel(/encounter/i).selectOption(encounterId);
+    await this.page.getByRole('button', { name: /submit|create/i }).click();
+  }
+
+  async confirmPayment(transactionHash: string) {
+    await this.page
+      .getByRole('button', { name: /confirm/i })
+      .first()
+      .click();
+    await this.page.getByLabel(/transaction.*hash|tx.*hash/i).fill(transactionHash);
+    await this.page.getByRole('button', { name: /verify|confirm/i }).click();
+  }
+
+  async downloadReceipt() {
+    const downloadPromise = this.page.waitForEvent('download');
+    await this.page.getByRole('button', { name: /download.*receipt|receipt/i }).click();
+    return downloadPromise;
+  }
+
+  async fileDispute(reason: string) {
+    await this.page.getByRole('button', { name: /dispute|file.*dispute/i }).click();
+    await this.page.getByLabel(/reason/i).fill(reason);
+    await this.page.getByRole('button', { name: /submit|file/i }).click();
+  }
+
+  async getPaymentStatus() {
+    return this.page.getByTestId('payment-status').textContent();
+  }
 }

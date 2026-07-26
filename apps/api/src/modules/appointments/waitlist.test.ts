@@ -197,10 +197,10 @@ describe('notifyNextOnWaitlist', () => {
     expect(mockWaitlistFindOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'waiting' }),
       expect.objectContaining({ status: 'notified' }),
-      expect.objectContaining({ sort: { priorityOrder: -1, addedAt: 1 } }),
+      expect.objectContaining({ sort: { priorityOrder: -1, addedAt: 1 } })
     );
     expect(createNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'waitlist_available' }),
+      expect.objectContaining({ type: 'waitlist_available' })
     );
     expect(enqueue).toHaveBeenCalled();
   });
@@ -241,7 +241,12 @@ describe('notifyNextOnWaitlist', () => {
   });
 
   it('sends in-app notification with correct type', async () => {
-    const notifiedEntry = { ...baseEntry, status: 'notified', notifiedAt: new Date(), expiresAt: new Date() };
+    const notifiedEntry = {
+      ...baseEntry,
+      status: 'notified',
+      notifiedAt: new Date(),
+      expiresAt: new Date(),
+    };
     mockWaitlistFindOneAndUpdate.mockResolvedValue(notifiedEntry);
 
     await notifyNextOnWaitlist({
@@ -254,12 +259,17 @@ describe('notifyNextOnWaitlist', () => {
       expect.objectContaining({
         type: 'waitlist_available',
         title: 'Appointment Slot Available',
-      }),
+      })
     );
   });
 
   it('sends email notification when user has email', async () => {
-    const notifiedEntry = { ...baseEntry, status: 'notified', notifiedAt: new Date(), expiresAt: new Date() };
+    const notifiedEntry = {
+      ...baseEntry,
+      status: 'notified',
+      notifiedAt: new Date(),
+      expiresAt: new Date(),
+    };
     mockWaitlistFindOneAndUpdate.mockResolvedValue(notifiedEntry);
     mockUserFindOneLean.mockResolvedValue({ ...mockUser, email: 'patient@test.com' });
 
@@ -273,12 +283,17 @@ describe('notifyNextOnWaitlist', () => {
       'patient@test.com',
       expect.stringContaining('Appointment Slot Available'),
       expect.any(String),
-      expect.any(String),
+      expect.any(String)
     );
   });
 
   it('skips email when user has no email', async () => {
-    const notifiedEntry = { ...baseEntry, status: 'notified', notifiedAt: new Date(), expiresAt: new Date() };
+    const notifiedEntry = {
+      ...baseEntry,
+      status: 'notified',
+      notifiedAt: new Date(),
+      expiresAt: new Date(),
+    };
     mockWaitlistFindOneAndUpdate.mockResolvedValue(notifiedEntry);
     mockUserFindOneLean.mockResolvedValue({ ...mockUser, email: undefined });
 
@@ -292,7 +307,12 @@ describe('notifyNextOnWaitlist', () => {
   });
 
   it('skips notification when no user account found for patient', async () => {
-    const notifiedEntry = { ...baseEntry, status: 'notified', notifiedAt: new Date(), expiresAt: new Date() };
+    const notifiedEntry = {
+      ...baseEntry,
+      status: 'notified',
+      notifiedAt: new Date(),
+      expiresAt: new Date(),
+    };
     mockWaitlistFindOneAndUpdate.mockResolvedValue(notifiedEntry);
     mockUserFindOneLean.mockResolvedValue(null);
 
@@ -309,7 +329,11 @@ describe('notifyNextOnWaitlist', () => {
   it('sorts by priorityOrder descending (urgent first), then addedAt ascending (FIFO)', async () => {
     mockWaitlistFindOneAndUpdate.mockResolvedValue(null);
 
-    await notifyNextOnWaitlist({ clinicId: CLINIC_ID, doctorId: DOCTOR_ID, scheduledAt: new Date() });
+    await notifyNextOnWaitlist({
+      clinicId: CLINIC_ID,
+      doctorId: DOCTOR_ID,
+      scheduledAt: new Date(),
+    });
 
     const sortArg = mockWaitlistFindOneAndUpdate.mock.calls[0][2].sort;
     expect(sortArg).toEqual({ priorityOrder: -1, addedAt: 1 });
@@ -337,7 +361,7 @@ describe('expireWaitlistEntries', () => {
     expect(count).toBe(1);
     expect(mockWaitlistUpdateMany).toHaveBeenCalledWith(
       { _id: { $in: [ENTRY_ID] } },
-      { status: 'expired' },
+      { status: 'expired' }
     );
   });
 
@@ -398,7 +422,7 @@ describe('expireWaitlistEntries', () => {
     expect(count).toBe(2);
     expect(mockWaitlistUpdateMany).toHaveBeenCalledWith(
       { _id: { $in: ['id1', 'id2'] } },
-      { status: 'expired' },
+      { status: 'expired' }
     );
   });
 });
@@ -427,9 +451,6 @@ describe('Booking a waitlist slot', () => {
 
     await expireWaitlistEntries();
 
-    expect(mockWaitlistUpdateMany).toHaveBeenCalledWith(
-      expect.any(Object),
-      { status: 'expired' },
-    );
+    expect(mockWaitlistUpdateMany).toHaveBeenCalledWith(expect.any(Object), { status: 'expired' });
   });
 });

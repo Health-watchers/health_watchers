@@ -24,9 +24,6 @@ export function usePayments(refetchInterval?: number | false) {
       if (!res.ok) {
         throw new Error(`Request failed (${res.status})`);
       }
-
-      const res = await fetch(`${API_V1}/payments`);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const data = await res.json();
       return data.data ?? data ?? [];
     },

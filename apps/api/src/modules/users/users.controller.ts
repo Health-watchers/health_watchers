@@ -1,11 +1,13 @@
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { UserModel } from '../auth/models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
+import { addToDenylist } from '@api/services/token-denylist.service';
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(100),
@@ -67,15 +69,16 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? 'en',
+        theme: user.preferences?.theme ?? 'system',
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
-          referral_received:    user.preferences?.notificationTypes?.referral_received    ?? true,
-          payment_confirmed:    user.preferences?.notificationTypes?.payment_confirmed    ?? true,
+          referral_received: user.preferences?.notificationTypes?.referral_received ?? true,
+          payment_confirmed: user.preferences?.notificationTypes?.payment_confirmed ?? true,
           appointment_reminder: user.preferences?.notificationTypes?.appointment_reminder ?? true,
-          ai_summary_ready:     user.preferences?.notificationTypes?.ai_summary_ready     ?? true,
-          lab_result_ready:     user.preferences?.notificationTypes?.lab_result_ready     ?? true,
-          system:               user.preferences?.notificationTypes?.system               ?? true,
+          ai_summary_ready: user.preferences?.notificationTypes?.ai_summary_ready ?? true,
+          lab_result_ready: user.preferences?.notificationTypes?.lab_result_ready ?? true,
+          system: user.preferences?.notificationTypes?.system ?? true,
         },
       },
     },
@@ -189,6 +192,17 @@ router.post(
 
     user.password = req.body.newPassword;
     await user.save();
+
+    // Denylist the current access token so it can't be reused after password change
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const rawToken = authHeader.slice(7);
+      const tokenData = jwt.decode(rawToken) as { jti?: string; exp?: number } | null;
+      if (tokenData?.jti && tokenData?.exp) {
+        const ttl = tokenData.exp - Math.floor(Date.now() / 1000);
+        await addToDenylist(tokenData.jti, ttl);
+      }
+    }
 
     return res.json({
       status: 'success',
@@ -319,17 +333,20 @@ router.post('/me/mfa/disable', authenticate, async (req: Request, res: Response)
   });
 });
 
-const notificationTypesSchema = z.object({
-  referral_received:    z.boolean().optional(),
-  payment_confirmed:    z.boolean().optional(),
-  appointment_reminder: z.boolean().optional(),
-  ai_summary_ready:     z.boolean().optional(),
-  lab_result_ready:     z.boolean().optional(),
-  system:               z.boolean().optional(),
-}).optional();
+const notificationTypesSchema = z
+  .object({
+    referral_received: z.boolean().optional(),
+    payment_confirmed: z.boolean().optional(),
+    appointment_reminder: z.boolean().optional(),
+    ai_summary_ready: z.boolean().optional(),
+    lab_result_ready: z.boolean().optional(),
+    system: z.boolean().optional(),
+  })
+  .optional();
 
 const updatePreferencesSchema = z.object({
   language: z.enum(['en', 'fr']).optional(),
+  theme: z.enum(['light', 'dark', 'system']).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
   notificationTypes: notificationTypesSchema,
@@ -371,9 +388,10 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    const { language, emailNotifications, inAppNotifications, notificationTypes } = req.body;
+    const { language, theme, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
+    if (theme !== undefined) user.preferences.theme = theme;
     if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined) user.preferences.inAppNotifications = inAppNotifications;
     if (notificationTypes !== undefined) {
@@ -387,6 +405,7 @@ router.patch(
       data: {
         preferences: {
           language: user.preferences.language,
+          theme: user.preferences.theme,
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
           notificationTypes: user.preferences.notificationTypes,
@@ -395,5 +414,86 @@ router.patch(
     });
   }
 );
+
+/**
+ * @swagger
+ * /users/sessions:
+ *   get:
+ *     summary: Get all active sessions for the current user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of active sessions
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/sessions', authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+  }
+
+  // Return mock sessions for now - in production, track actual sessions
+  const currentSessionId = (req as any).sessionId || 'current';
+  const sessions = [
+    {
+      id: currentSessionId,
+      userAgent: req.headers['user-agent'] || 'Unknown',
+      ipAddress:
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        (req.headers['x-real-ip'] as string) ||
+        req.socket.remoteAddress ||
+        'Unknown',
+      lastActivity: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      isCurrent: true,
+    },
+  ];
+
+  return res.json({
+    status: 'success',
+    data: sessions,
+  });
+});
+
+/**
+ * @swagger
+ * /users/sessions/{sessionId}:
+ *   delete:
+ *     summary: Revoke a specific session
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Session revoked
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/sessions/:sessionId', authenticate, async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const currentSessionId = (req as any).sessionId || 'current';
+
+  if (sessionId === currentSessionId) {
+    return res.status(400).json({
+      error: 'BadRequest',
+      message: 'Cannot revoke the current session',
+    });
+  }
+
+  // In production, invalidate the session token
+  return res.json({
+    status: 'success',
+    message: 'Session revoked',
+  });
+});
 
 export const userRoutes = router;

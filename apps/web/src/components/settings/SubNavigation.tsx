@@ -1,6 +1,6 @@
 'use client';
 
-type Section = 'profile' | 'security' | 'preferences' | 'subscription';
+type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions' | 'api-keys';
 
 interface SubNavigationProps {
   active: Section;
@@ -11,7 +11,9 @@ const items: { id: Section; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'security', label: 'Security' },
   { id: 'preferences', label: 'Preferences' },
+  { id: 'sessions', label: 'Sessions' },
   { id: 'subscription', label: 'Subscription' },
+  { id: 'api-keys', label: 'API Keys' },
 ];
 
 export function SubNavigation({ active, onChange }: SubNavigationProps) {

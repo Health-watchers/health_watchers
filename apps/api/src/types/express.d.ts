@@ -15,7 +15,9 @@ declare global {
         role: AppRole;
         clinicId: string;
         patientId?: string;
+        isSuperAdmin?: boolean;
       };
+      tokenJti?: string;
     }
   }
 }

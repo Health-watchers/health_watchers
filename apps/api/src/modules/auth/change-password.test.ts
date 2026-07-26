@@ -134,9 +134,7 @@ describe('POST /api/v1/users/me/password', () => {
 
   describe('Authentication required', () => {
     it('returns 401 when no Authorization header is provided', async () => {
-      const res = await request(app)
-        .post('/api/v1/users/me/password')
-        .send(VALID_BODY);
+      const res = await request(app).post('/api/v1/users/me/password').send(VALID_BODY);
 
       expect(res.status).toBe(401);
       expect(res.body.error).toBe('Unauthorized');

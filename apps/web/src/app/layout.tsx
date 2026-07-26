@@ -4,8 +4,12 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { ThemeProvider } from 'next-themes';
 import { QueryProvider } from '@/lib/QueryProvider';
+import { AuthProvider } from '@/context/AuthContext';
 
 import { Toaster } from '@/components/ui';
+import { ThemeSync } from '@/components/ThemeSync';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { PWAInit } from '@/components/PWAInit';
 import './globals.css';
 
 const inter = Inter({
@@ -84,11 +88,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={inter.variable}>
-      <body className="min-h-screen bg-neutral-50 font-sans antialiased">
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <Toaster />
-        </NextIntlClientProvider>
+    <html lang={locale} className={inter.variable} suppressHydrationWarning>
+      <body className="min-h-screen bg-neutral-50 font-sans antialiased dark:bg-neutral-900">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <QueryProvider>
+              <AuthProvider>
+                <ThemeSync />
+                <PWAInit />
+                <OfflineIndicator />
+                {children}
+                <Toaster />
+              </AuthProvider>
+            </QueryProvider>
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

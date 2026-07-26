@@ -1,0 +1,51 @@
+groups:
+  - name: payment_expiration_job
+    interval: 1m
+    rules:
+      # Fires when the job has not completed a successful run in more than
+      # 2× its scheduled interval (2 × 5 min = 10 min).
+      - alert: PaymentExpirationJobStalled
+        expr: >
+          (time() - payment_expiration_job_last_success_timestamp_seconds) > 600
+        for: 1m
+        labels:
+          severity: critical
+          team: payments
+        annotations:
+          summary: 'Payment expiration job has not run successfully in >10 minutes'
+          description: >
+            The payment expiration job last succeeded
+            {{ $value | humanizeDuration }} ago (threshold: 10 min).
+            Payments may be stuck in pending status, causing accounting
+            discrepancies and blocking new payments for the same encounter.
+          runbook_url: 'https://wiki.internal/runbooks/payment-expiration-job'
+
+      # Fires immediately when 2 or more consecutive failures are recorded.
+      - alert: PaymentExpirationJobConsecutiveFailures
+        expr: payment_expiration_job_consecutive_failures >= 2
+        for: 0m
+        labels:
+          severity: warning
+          team: payments
+        annotations:
+          summary: >
+            Payment expiration job has failed {{ $value | humanize }} consecutive times
+          description: >
+            The payment expiration job has encountered {{ $value }} consecutive
+            failures. Check MongoDB connectivity and application logs for
+            structured error details (job=payment-expiration-job).
+          runbook_url: 'https://wiki.internal/runbooks/payment-expiration-job'
+
+      # Informational alert tracking cumulative error rate.
+      - alert: PaymentExpirationJobErrorRateHigh
+        expr: >
+          rate(payment_expiration_job_errors_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: payments
+        annotations:
+          summary: 'Payment expiration job error rate is non-zero over the last 15 minutes'
+          description: >
+            Errors have been observed in the payment expiration job over the
+            last 15 minutes. Review logs for transient vs. permanent failures.

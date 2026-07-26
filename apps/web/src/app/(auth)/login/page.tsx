@@ -50,7 +50,9 @@ export default function LoginPage() {
 
       router.push(returnTo);
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setServerError(
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      );
     }
   };
 

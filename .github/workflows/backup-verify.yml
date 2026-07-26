@@ -1,0 +1,229 @@
+name: Backup Verification
+
+on:
+  schedule:
+    # Run weekly verification every Sunday at 03:00 UTC (1 hour after daily backup)
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      notify_on_success:
+        description: 'Send notification on success'
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  verify-backup:
+    name: Verify MongoDB Backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install MongoDB tools
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-database-tools
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+
+      - name: Run backup verification
+        id: verify
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          VERIFY_DIR: /tmp/backup-verify
+        run: |
+          bash scripts/verify-backup.sh
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: backup-verification-log
+          path: /tmp/backup-verify/verify_*.log
+          retention-days: 30
+
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: backup-verification-metrics
+          path: /tmp/backup_verify_metrics.txt
+          retention-days: 30
+
+      - name: Notify Slack on success
+        if: success() && (github.event.inputs.notify_on_success == 'true' || github.event_name == 'schedule')
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "✅ Backup Verification Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*✅ Backup Verification Successful*\n\nThe MongoDB backup has been successfully verified and restored.\n\n*Timestamp:* ${{ steps.verify.outputs.timestamp }}\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "🚨 Backup Verification Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🚨 Backup Verification Failed*\n\nThe MongoDB backup verification has failed. This indicates the backup may be corrupted or incomplete.\n\n*Action Required:* Investigate immediately.\n\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Send email notification on failure
+        if: failure()
+        uses: dawidd6/action-send-mail@2cea4e409f3ece7a30c7f5bcde63535ae6d70ca0 # v3.12.0
+        with:
+          server_address: ${{ secrets.EMAIL_HOST }}
+          server_port: ${{ secrets.EMAIL_PORT }}
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
+          subject: '🚨 Backup Verification Failed - Immediate Action Required'
+          to: ${{ secrets.ALERT_EMAIL }}
+          from: 'Health Watchers Alerts <${{ secrets.EMAIL_FROM }}>'
+          body: |
+            Backup Verification Failed
+
+            The MongoDB backup verification has failed. This indicates the backup may be corrupted or incomplete.
+
+            Details:
+            - Timestamp: ${{ steps.verify.outputs.timestamp }}
+            - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Repository: ${{ github.repository }}
+            - Branch: ${{ github.ref }}
+
+            Action Required:
+            1. Review the verification log in the workflow artifacts
+            2. Investigate the backup integrity
+            3. Consider running a manual backup if needed
+            4. Notify the DevOps team
+
+            This is a critical alert. Please respond immediately.
+        continue-on-error: true
+
+      - name: Create GitHub issue on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Backup Verification Failed on ${new Date().toISOString().split('T')[0]}`,
+              body: `The scheduled MongoDB backup verification failed.\n\n**Action Required:** Investigate immediately.\n\n**Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n**Details:**\n- This indicates the backup may be corrupted or incomplete\n- Review the verification log in the workflow artifacts\n- Consider running a manual backup if needed`,
+              labels: ['backup', 'incident', 'critical'],
+            });
+
+  # Job to check if verification hasn't run in 8 days
+  check-verification-staleness:
+    name: Check Backup Verification Staleness
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check last verification timestamp
+        id: check
+        run: |
+          # Get the timestamp of the last successful backup verification workflow
+          LAST_RUN=$(gh run list \
+            --workflow=backup-verify.yml \
+            --status=success \
+            --limit=1 \
+            --json=createdAt \
+            --jq='.[0].createdAt' 2>/dev/null || echo "")
+
+          if [[ -z "$LAST_RUN" ]]; then
+            echo "status=never_run" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LAST_RUN_EPOCH=$(date -d "$LAST_RUN" +%s)
+          NOW_EPOCH=$(date +%s)
+          DAYS_SINCE=$(( (NOW_EPOCH - LAST_RUN_EPOCH) / 86400 ))
+
+          echo "days_since=$DAYS_SINCE" >> "$GITHUB_OUTPUT"
+
+          if [[ $DAYS_SINCE -gt 8 ]]; then
+            echo "status=stale" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fresh" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Alert if verification is stale
+        if: steps.check.outputs.status == 'stale' || steps.check.outputs.status == 'never_run'
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "⚠️ Backup Verification Stale",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*⚠️ Backup Verification Stale*\n\nThe backup verification has not run successfully in more than 8 days.\n\n*Status:* ${{ steps.check.outputs.status }}\n*Days Since Last Run:* ${{ steps.check.outputs.days_since }}\n\n*Action Required:* Investigate why verification is not running.\n\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Create GitHub issue if verification is stale
+        if: steps.check.outputs.status == 'stale' || steps.check.outputs.status == 'never_run'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Backup Verification Stale - No Successful Run in 8+ Days`,
+              body: `The backup verification workflow has not run successfully in more than 8 days.\n\n**Status:** ${{ steps.check.outputs.status }}\n**Days Since Last Run:** ${{ steps.check.outputs.days_since }}\n\n**Action Required:**\n1. Check the backup verification workflow status\n2. Review recent workflow runs for failures\n3. Investigate and fix any issues\n4. Ensure the weekly schedule is working correctly\n\n**Workflow:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/backup-verify.yml`,
+              labels: ['backup', 'alert', 'monitoring'],
+            });

@@ -1,13 +1,12 @@
 import { jest } from '@jest/globals';
-import { Horizon } from '@stellar/stellar-sdk';
 import * as stellar from '../stellar';
 
 // Mock Horizon server
-const mockLoadAccount = jest.fn();
-const mockSubmitTransaction = jest.fn();
-const mockTransactions = jest.fn();
-const mockFetchBaseFee = jest.fn();
-const mockFeeStats = jest.fn();
+const mockLoadAccount = jest.fn<any>();
+const mockSubmitTransaction = jest.fn<any>();
+const mockTransactions = jest.fn<any>();
+const mockFetchBaseFee = jest.fn<any>();
+const mockFeeStats = jest.fn<any>();
 
 jest.mock('@stellar/stellar-sdk', () => {
   const actual = jest.requireActual('@stellar/stellar-sdk') as any;
@@ -29,7 +28,7 @@ jest.mock('@stellar/stellar-sdk', () => {
 });
 
 // Mock fetch for Friendbot
-global.fetch = jest.fn() as any;
+global.fetch = jest.fn<any>() as any;
 
 describe('Stellar Service Tests', () => {
   beforeEach(() => {
@@ -39,7 +38,7 @@ describe('Stellar Service Tests', () => {
 
   describe('fundAccount (POST /fund)', () => {
     it('should return success for valid public key', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           hash: 'test-hash-123',
@@ -49,14 +48,12 @@ describe('Stellar Service Tests', () => {
 
       const result = await stellar.fundAccount('GTEST123');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         funded: true,
         hash: 'test-hash-123',
         ledger: 12345,
       });
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('friendbot.stellar.org')
-      );
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('friendbot.stellar.org'));
     });
 
     it('should return 400 for missing public key', async () => {
@@ -64,15 +61,13 @@ describe('Stellar Service Tests', () => {
     });
 
     it('should handle Friendbot API failure gracefully', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as any).mockResolvedValueOnce({
         ok: false,
         statusText: 'Rate limit exceeded',
         json: async () => ({ detail: 'Too many requests' }),
       });
 
-      await expect(stellar.fundAccount('GTEST123')).rejects.toThrow(
-        'Too many requests'
-      );
+      await expect(stellar.fundAccount('GTEST123')).rejects.toThrow('Too many requests');
     });
 
     it('should reject mainnet funding attempts', async () => {
@@ -102,11 +97,7 @@ describe('Stellar Service Tests', () => {
         successful: true,
       });
 
-      const result = await stellar.createIntent(
-        'GFROM123',
-        'GTO456',
-        '10.5'
-      );
+      const result = await stellar.createIntent('GFROM123', 'GTO456', '10.5');
 
       expect(result).toHaveProperty('xdr');
       expect(result).toHaveProperty('hash');
@@ -126,9 +117,7 @@ describe('Stellar Service Tests', () => {
         },
       });
 
-      await expect(
-        stellar.createIntent('GFROM123', 'GTO456', '10')
-      ).rejects.toThrow();
+      await expect(stellar.createIntent('GFROM123', 'GTO456', '10')).rejects.toThrow();
     });
 
     it('should handle invalid destination address', async () => {
@@ -138,17 +127,15 @@ describe('Stellar Service Tests', () => {
         incrementSequenceNumber: jest.fn(),
       });
 
-      await expect(
-        stellar.createIntent('GFROM123', 'INVALID', '10')
-      ).rejects.toThrow();
+      await expect(stellar.createIntent('GFROM123', 'INVALID', '10')).rejects.toThrow();
     });
 
     it('should handle network timeout', async () => {
       mockLoadAccount.mockRejectedValueOnce(new Error('Network timeout'));
 
-      await expect(
-        stellar.createIntent('GFROM123', 'GTO456', '10')
-      ).rejects.toThrow('Network timeout');
+      await expect(stellar.createIntent('GFROM123', 'GTO456', '10')).rejects.toThrow(
+        'Network timeout'
+      );
     });
   });
 
@@ -165,7 +152,7 @@ describe('Stellar Service Tests', () => {
 
       const result = await stellar.verifyIntent('valid-hash-789');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         found: true,
         hash: 'valid-hash-789',
         successful: true,

@@ -20,9 +20,44 @@ const securityHeaders = [
 
 const nextConfig = {
   transpilePackages: ['@health-watchers/types'],
-  experimental: { missingSuspenseWithCSRBailout: false },
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
+    optimizePackageImports: ['recharts', '@tanstack/react-query', 'lucide-react'],
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization?.splitChunks,
+          cacheGroups: {
+            ...config.optimization?.splitChunks?.cacheGroups,
+            recharts: {
+              test: /[\\/]node_modules[\\/]recharts/,
+              name: 'recharts',
+              chunks: 'all',
+              priority: 10,
+            },
+            sentry: {
+              test: /[\\/]node_modules[\\/]@sentry/,
+              name: 'sentry',
+              chunks: 'all',
+              priority: 10,
+            },
+            socketio: {
+              test: /[\\/]node_modules[\\/]socket.io-client/,
+              name: 'socketio',
+              chunks: 'all',
+              priority: 10,
+            },
+          },
+        },
+      };
+    }
+    return config;
   },
 };
 

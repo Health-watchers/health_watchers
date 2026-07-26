@@ -22,5 +22,8 @@ const refreshTokenSchema = new Schema<RefreshToken>(
 // TTL index — MongoDB auto-removes expired documents
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const RefreshTokenModel =
-  models.RefreshToken || model<RefreshToken>('RefreshToken', refreshTokenSchema);
+export const RefreshTokenModel = (models.RefreshToken ||
+  model<RefreshToken>(
+    'RefreshToken',
+    refreshTokenSchema
+  )) as import('mongoose').Model<RefreshToken>;

@@ -1,0 +1,106 @@
+# ============================================================
+# ELK Stack: Elasticsearch, Logstash, Kibana
+#
+# Centralized log aggregation and analysis platform
+# ============================================================
+
+version: '3.8'
+
+services:
+  # Elasticsearch - Log Storage and Indexing
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.0.0
+    container_name: health-watchers-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - xpack.security.authc.api_key.enabled=true
+      - ELASTICSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - TZ=UTC
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./logging/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - '9200:9200'
+    networks:
+      - health-watchers-logging
+    healthcheck:
+      test: curl -s http://localhost:9200 >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Logstash - Log Processing and Transformation
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.0.0
+    container_name: health-watchers-logstash
+    restart: always
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./logging/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logging/logstash/patterns:/usr/share/logstash/patterns:ro
+      - ./logging/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    ports:
+      - '5000:5000/udp'
+      - '5000:5000/tcp'
+      - '9600:9600'
+    environment:
+      LS_JAVA_OPTS: '-Xmx256m -Xms256m'
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+    networks:
+      - health-watchers-logging
+    healthcheck:
+      test: curl -s http://localhost:9600 >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Kibana - Visualization and Log Analysis
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.0.0
+    container_name: health-watchers-kibana
+    restart: always
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      KIBANA_DEFAULTAPPID: discover
+      KIBANA_AUTOCOMPLETETIMEOUT: 1000
+      KIBANA_AUTOCOMPLETETERM_BUCKET_SIZE: 10
+      TZ: UTC
+    volumes:
+      - ./logging/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - kibana_data:/usr/share/kibana/data
+    ports:
+      - '5601:5601'
+    networks:
+      - health-watchers-logging
+    healthcheck:
+      test: curl -s http://localhost:5601/api/status >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  elasticsearch_data:
+    driver: local
+  kibana_data:
+    driver: local
+
+networks:
+  health-watchers-logging:
+    driver: bridge

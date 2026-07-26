@@ -60,4 +60,5 @@ const surveySchema = new Schema<ISurvey>(
 surveySchema.index({ status: 1, expiresAt: 1 });
 surveySchema.index({ clinicId: 1, doctorId: 1, completedAt: 1 });
 
-export const SurveyModel = models.Survey || model<ISurvey>('Survey', surveySchema);
+export const SurveyModel = (models.Survey ||
+  model<ISurvey>('Survey', surveySchema)) as import('mongoose').Model<ISurvey>;

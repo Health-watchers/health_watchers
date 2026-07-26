@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUnreadCount, useNotifications, useMarkRead, useMarkAllRead, type Notification } from '@/hooks/useNotifications';
+import { useUnreadCount, useNotifications, useMarkRead, useMarkAllRead, usePendingCosignatures, type Notification } from '@/hooks/useNotifications';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -56,6 +56,8 @@ export default function NotificationBell() {
   const { data } = useNotifications(1, 10);
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
+  const { data: cosignData } = usePendingCosignatures();
+  const cosignCount: number = (cosignData as any)?.count ?? 0;
 
   const notifications = data?.data ?? [];
 
@@ -81,7 +83,7 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={`Notifications${count > 0 ? `, ${count} unread` : ''}`}
+        aria-label={`Notifications${count > 0 ? `, ${count} unread` : ''}${cosignCount > 0 ? `, ${cosignCount} pending co-signatures` : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
         className="relative p-2 rounded-md text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -97,6 +99,15 @@ export default function NotificationBell() {
             aria-hidden="true"
           >
             {count > 99 ? '99+' : count}
+          </span>
+        )}
+        {cosignCount > 0 && (
+          <span
+            className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none px-0.5"
+            title={`${cosignCount} pending co-signature${cosignCount !== 1 ? 's' : ''}`}
+            aria-label={`${cosignCount} pending co-signatures`}
+          >
+            {cosignCount > 9 ? '9+' : cosignCount}
           </span>
         )}
       </button>

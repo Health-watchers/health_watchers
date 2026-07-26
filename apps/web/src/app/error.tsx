@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui';
 
 interface ErrorProps {
@@ -10,8 +11,9 @@ interface ErrorProps {
 
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
-    // Optionally log the error to an error reporting service
-    console.error('Error:', error);
+    // Report the error to Sentry so it's captured even when an App Router
+    // route segment crashes.
+    Sentry.captureException(error);
   }, [error]);
 
   const requestId = error.digest || 'UNKNOWN';

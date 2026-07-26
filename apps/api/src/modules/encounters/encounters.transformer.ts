@@ -18,22 +18,31 @@ export interface EncounterResponse {
   followUpDate?: string;
   aiSummary?: string;
   isActive?: boolean;
+  // Outcome tracking fields
+  outcome?: string;
+  outcomeNotes?: string;
+  followUpRequired?: boolean;
+  followUpCompleted?: boolean;
+  followUpEncounterId?: string;
+  patientAdherence?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export function toEncounterResponse(doc: Document & Record<string, any>): EncounterResponse {
   const patient = doc.patientId;
-  const patientId = patient && typeof patient === 'object' && '_id' in patient
-    ? String(patient._id)
-    : String(patient);
+  const patientId =
+    patient && typeof patient === 'object' && '_id' in patient
+      ? String(patient._id)
+      : String(patient);
 
   return {
     id: String(doc._id),
     patientId,
-    patient: patient && typeof patient === 'object' && 'firstName' in patient
-      ? { firstName: patient.firstName, lastName: patient.lastName, systemId: patient.systemId }
-      : undefined,
+    patient:
+      patient && typeof patient === 'object' && 'firstName' in patient
+        ? { firstName: patient.firstName, lastName: patient.lastName, systemId: patient.systemId }
+        : undefined,
     clinicId: String(doc.clinicId),
     attendingDoctorId: String(doc.attendingDoctorId),
     chiefComplaint: doc.chiefComplaint,
@@ -48,6 +57,12 @@ export function toEncounterResponse(doc: Document & Record<string, any>): Encoun
       doc.followUpDate instanceof Date ? doc.followUpDate.toISOString() : doc.followUpDate,
     aiSummary: doc.aiSummary,
     isActive: doc.isActive !== undefined ? doc.isActive : true,
+    outcome: doc.outcome,
+    outcomeNotes: doc.outcomeNotes,
+    followUpRequired: doc.followUpRequired,
+    followUpCompleted: doc.followUpCompleted,
+    followUpEncounterId: doc.followUpEncounterId ? String(doc.followUpEncounterId) : undefined,
+    patientAdherence: doc.patientAdherence,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
   };

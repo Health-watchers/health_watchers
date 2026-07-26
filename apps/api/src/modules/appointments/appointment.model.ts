@@ -7,19 +7,24 @@ export interface IAppointment extends Document {
   scheduledAt: Date;
   duration: number; // minutes (default 30)
   type: 'consultation' | 'follow-up' | 'procedure' | 'emergency';
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show';
+  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
   chiefComplaint?: string;
   notes?: string;
   encounterId?: mongoose.Types.ObjectId;
   cancelledBy?: mongoose.Types.ObjectId;
   cancelledAt?: Date;
   cancellationReason?: string;
+  checkedInAt?: Date;
   isTelemedicine?: boolean;
   videoRoomId?: string;
+  videoRoomUrl?: string;
   videoProvider?: 'daily.co' | 'jitsi' | 'twilio_video';
+  recordingConsent?: boolean;
   videoStartedAt?: Date;
   videoEndedAt?: Date;
   videoDuration?: number; // minutes
+  reminderSent24h?: boolean;
+  reminderSent1h?: boolean;
 }
 
 const AppointmentSchema = new Schema<IAppointment>(
@@ -36,7 +41,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     },
     status: {
       type: String,
-      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show'],
+      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show', 'patient_arrived'],
       default: 'scheduled',
     },
     chiefComplaint: { type: String },
@@ -45,16 +50,21 @@ const AppointmentSchema = new Schema<IAppointment>(
     cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
+    checkedInAt: { type: Date },
     isTelemedicine: { type: Boolean, default: false },
     videoRoomId: { type: String },
+    videoRoomUrl: { type: String },
     videoProvider: {
       type: String,
       enum: ['daily.co', 'jitsi', 'twilio_video'],
       default: 'daily.co',
     },
+    recordingConsent: { type: Boolean, default: false },
     videoStartedAt: { type: Date },
     videoEndedAt: { type: Date },
     videoDuration: { type: Number }, // minutes
+    reminderSent24h: { type: Boolean, default: false },
+    reminderSent1h: { type: Boolean, default: false },
   },
   { timestamps: true, versionKey: false }
 );
@@ -64,5 +74,8 @@ AppointmentSchema.index({ doctorId: 1, scheduledAt: 1 });
 AppointmentSchema.index({ clinicId: 1, scheduledAt: 1 });
 AppointmentSchema.index({ patientId: 1, scheduledAt: -1 });
 
-export const AppointmentModel =
-  mongoose.models.Appointment || mongoose.model<IAppointment>('Appointment', AppointmentSchema);
+export const AppointmentModel = (mongoose.models.Appointment ||
+  mongoose.model<IAppointment>(
+    'Appointment',
+    AppointmentSchema
+  )) as import('mongoose').Model<IAppointment>;

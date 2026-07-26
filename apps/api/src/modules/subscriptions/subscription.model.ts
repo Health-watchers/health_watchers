@@ -17,7 +17,13 @@ export interface ISubscription {
 
 const subscriptionSchema = new Schema<ISubscription>(
   {
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, unique: true, index: true },
+    clinicId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Clinic',
+      required: true,
+      unique: true,
+      index: true,
+    },
     tier: { type: String, enum: ['free', 'basic', 'premium'], required: true },
     status: {
       type: String,
@@ -36,4 +42,8 @@ const subscriptionSchema = new Schema<ISubscription>(
   { timestamps: true, versionKey: false }
 );
 
-export const SubscriptionModel = models.Subscription || model<ISubscription>('Subscription', subscriptionSchema);
+export const SubscriptionModel = (models.Subscription ||
+  model<ISubscription>(
+    'Subscription',
+    subscriptionSchema
+  )) as import('mongoose').Model<ISubscription>;

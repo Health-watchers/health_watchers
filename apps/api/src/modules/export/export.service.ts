@@ -7,6 +7,7 @@ import { PaymentRecordModel } from '@api/modules/payments/models/payment-record.
 import { UserModel } from '@api/modules/auth/models/user.model';
 import { Types } from 'mongoose';
 import logger from '@api/utils/logger';
+import { anonymizeBatch } from '@health-watchers/anonymize';
 
 // ─── Sanitization ──────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ function sanitizeAll(docs: Record<string, any>[]): Record<string, any>[] {
 
 // ─── Patient export helpers ────────────────────────────────────────────────
 
-export async function buildPatientRecord(patientId: string) {
+export async function buildPatientRecord(patientId: string): Promise<any> {
   if (!Types.ObjectId.isValid(patientId)) return null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,7 +34,10 @@ export async function buildPatientRecord(patientId: string) {
 
   const [encounters, payments] = await Promise.all([
     EncounterModel.find({ patientId: new Types.ObjectId(patientId) }).lean(),
-    PaymentRecordModel.find({ clinicId: patient.clinicId }).lean(),
+    PaymentRecordModel.find({
+      clinicId: patient.clinicId,
+      patientId: new Types.ObjectId(patientId),
+    }).lean(),
   ]);
 
   return { patient, encounters, payments };
@@ -109,7 +113,7 @@ export function sendPatientPdf(
   if (encounters.length === 0) {
     doc.fontSize(10).text('No encounters on record.');
   } else {
-    encounters.forEach((enc, i) => {
+    encounters.forEach((enc: any, i: number) => {
       doc
         .fontSize(11)
         .font('Helvetica-Bold')
@@ -128,7 +132,7 @@ export function sendPatientPdf(
   if (payments.length === 0) {
     doc.fontSize(10).text('No payment records on file.');
   } else {
-    payments.forEach((pay, i) => {
+    payments.forEach((pay: any, i: number) => {
       doc
         .fontSize(11)
         .font('Helvetica-Bold')
@@ -151,7 +155,7 @@ export function sendPatientPdf(
 
 // ─── Clinic export helper ──────────────────────────────────────────────────
 
-export async function buildClinicRecord(clinicId: string) {
+export async function buildClinicRecord(clinicId: string): Promise<any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patients = (await PatientModel.find({ clinicId }).lean()) as any[];
   const patientIds = patients.map((p: any) => p._id);
@@ -243,4 +247,23 @@ function buildPatientCsv(patients: any[]): string {
       .join(',')
   );
   return [header, ...rows].join('\n');
+}
+
+/** Export anonymized patient data for research (aggregated statistics only) */
+export async function sendResearchExport(res: Response) {
+  const patients = (await PatientModel.find().lean()) as any[];
+
+  const anonymized = anonymizeBatch(patients, {
+    level: 'aggregation',
+    purpose: 'research',
+  });
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="research-export.json"');
+  res.json({
+    status: 'success',
+    exportedAt: new Date().toISOString(),
+    anonymizationLevel: 'aggregation',
+    data: anonymized,
+  });
 }

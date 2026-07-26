@@ -338,7 +338,7 @@ export default function PhotoUpload({
               />
 
               <div className="flex w-full items-center gap-2">
-                <label htmlFor="zoom-slider" className="text-sm text-gray-600 shrink-0">
+                <label htmlFor="zoom-slider" className="shrink-0 text-sm text-gray-600">
                   Zoom
                 </label>
                 <input
@@ -360,7 +360,7 @@ export default function PhotoUpload({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-3 justify-end w-full">
+          <div className="flex w-full justify-end gap-3">
             <Button
               variant="secondary"
               onClick={() => {

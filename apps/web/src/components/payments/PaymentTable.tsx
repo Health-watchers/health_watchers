@@ -3,9 +3,13 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
+import { PaymentReceipt } from '@/components/payments/PaymentReceipt';
 import { ConfirmPaymentModal } from '@/components/payments/ConfirmPaymentModal';
+import { API_URL } from '@/lib/api';
+import { fetchWithAuth } from '@/lib/auth';
 
 export interface Payment {
   id: string;
@@ -28,14 +32,6 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'failed', label: 'Failed' },
 ];
-
-function statusBadgeVariant(status: string) {
-  if (status === 'confirmed' || status === 'completed') return 'success';
-  if (status === 'pending') return 'warning';
-  if (status === 'failed') return 'danger';
-  return 'default';
-}
-}
 
 /** Animated dot indicator for real-time status feedback */
 function StatusIndicator({ status }: { status: string }) {
@@ -66,6 +62,8 @@ function StatusIndicator({ status }: { status: string }) {
   return <Badge variant="default">{status}</Badge>;
 }
 
+const DISPUTES_URL = `${API_URL}/api/v1/payments/disputes`;
+
 interface Props {
   payments: Payment[];
   network?: string;
@@ -78,6 +76,13 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<string | null>(null);
+  const [timelineTarget, setTimelineTarget] = useState<Payment | null>(null);
+  const [disputeTarget, setDisputeTarget] = useState<Payment | null>(null);
+  const [disputeReason, setDisputeReason] = useState<'duplicate_payment' | 'service_not_rendered' | 'incorrect_amount' | 'other'>('service_not_rendered');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeMessage, setDisputeMessage] = useState<string | null>(null);
 
   const filtered = payments.filter((p) => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -85,6 +90,70 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
     if (dateTo && p.createdAt && p.createdAt > dateTo + 'T23:59:59') return false;
     return true;
   });
+
+  const buildTimeline = (payment: Payment) => {
+    const timeline = [] as Array<{ label: string; detail: string; date?: string; link?: string }>;
+    if (payment.createdAt) {
+      timeline.push({ label: 'Created', detail: 'Payment intent recorded', date: payment.createdAt });
+    }
+    if (payment.txHash) {
+      timeline.push({
+        label: 'Transaction submitted',
+        detail: `Stellar transaction ${payment.txHash.slice(0, 12)}…`,
+        link: `https://stellar.expert/explorer/${network}/tx/${payment.txHash}`,
+      });
+    }
+    if (payment.status === 'pending') {
+      timeline.push({ label: 'Awaiting confirmation', detail: 'Transaction is pending on the network' });
+    }
+    if (payment.status === 'confirmed' || payment.status === 'completed') {
+      timeline.push({
+        label: 'Confirmed',
+        detail: 'Payment is confirmed and settled',
+        date: payment.confirmedAt ?? payment.createdAt,
+      });
+    }
+    if (payment.status === 'failed') {
+      timeline.push({ label: 'Failed', detail: 'Payment failed. Review details or file a dispute.' });
+    }
+    return timeline;
+  };
+
+  const canOpenReceipt = (payment: Payment) => Boolean(payment.intentId || payment.txHash);
+
+  const openDispute = (payment: Payment) => {
+    setDisputeTarget(payment);
+    setDisputeReason('service_not_rendered');
+    setDisputeDescription('');
+    setDisputeMessage(null);
+  };
+
+  const submitDispute = async () => {
+    if (!disputeTarget) return;
+    setDisputeSubmitting(true);
+    setDisputeMessage(null);
+    try {
+      const res = await fetchWithAuth(DISPUTES_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentIntentId: disputeTarget.intentId ?? disputeTarget.id,
+          patientId: disputeTarget.patientId,
+          reason: disputeReason,
+          description: disputeDescription,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Failed to file dispute (${res.status})`);
+      }
+      setDisputeMessage('Dispute filed successfully.');
+    } catch (error) {
+      setDisputeMessage(error instanceof Error ? error.message : 'Unable to file dispute');
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -208,8 +277,24 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                     {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {/* Confirm only visible on pending rows */}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setTimelineTarget(p)}>
+                        Timeline
+                      </Button>
+                      {canOpenReceipt(p) && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setReceiptTarget(p.intentId ?? p.id)}
+                        >
+                          Receipt
+                        </Button>
+                      )}
+                      {p.status !== 'pending' && (
+                        <Button size="sm" variant="secondary" onClick={() => openDispute(p)}>
+                          File dispute
+                        </Button>
+                      )}
                       {p.status === 'pending' && (
                         <Button size="sm" variant="primary" onClick={() => setConfirmTarget(p.id)}>
                           Confirm
@@ -249,6 +334,94 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
       </div>
 
       {/* Confirm modal */}
+      {receiptTarget && (
+        <Modal open={Boolean(receiptTarget)} onClose={() => setReceiptTarget(null)} title="Payment Receipt">
+          <PaymentReceipt intentId={receiptTarget} onClose={() => setReceiptTarget(null)} />
+        </Modal>
+      )}
+
+      {timelineTarget && (
+        <Modal
+          open={Boolean(timelineTarget)}
+          onClose={() => setTimelineTarget(null)}
+          title="Payment status timeline"
+        >
+          <div className="space-y-4">
+            {buildTimeline(timelineTarget).map((item) => (
+              <div key={item.label} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <p className="text-sm font-semibold text-neutral-800">{item.label}</p>
+                <p className="text-sm text-neutral-600">{item.detail}</p>
+                {item.date && <p className="text-xs text-neutral-500">{new Date(item.date).toLocaleString()}</p>}
+                {item.link && (
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-600 hover:underline text-xs"
+                  >
+                    View transaction
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {disputeTarget && (
+        <Modal
+          open={Boolean(disputeTarget)}
+          onClose={() => setDisputeTarget(null)}
+          title="File a dispute"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">
+              File a dispute for payment <span className="font-mono">{disputeTarget.id.slice(0, 14)}…</span>.
+            </p>
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-neutral-700">Reason</label>
+              <select
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value as any)}
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+              >
+                <option value="duplicate_payment">Duplicate payment</option>
+                <option value="service_not_rendered">Service not rendered</option>
+                <option value="incorrect_amount">Incorrect amount</option>
+                <option value="other">Other</option>
+              </select>
+              <label className="block text-sm font-medium text-neutral-700">Description</label>
+              <textarea
+                value={disputeDescription}
+                onChange={(e) => setDisputeDescription(e.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-neutral-200 px-3 py-2 text-sm"
+                placeholder="Explain why this payment should be disputed"
+              />
+            </div>
+            {disputeMessage && (
+              <p className={`text-sm ${disputeMessage.includes('Failed') ? 'text-danger-600' : 'text-success-600'}`}>
+                {disputeMessage}
+              </p>
+            )}
+            <div className="flex gap-3 pt-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setDisputeTarget(null)} disabled={disputeSubmitting}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={submitDispute}
+                disabled={disputeSubmitting || !disputeDescription.trim()}
+                loading={disputeSubmitting}
+              >
+                Submit dispute
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {confirmTarget && (
         <ConfirmPaymentModal
           open={Boolean(confirmTarget)}

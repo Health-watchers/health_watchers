@@ -1,7 +1,8 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import logger from '@api/utils/logger';
-import { WebhookDeliveryModel } from './webhook.model';
+import { validateWebhookUrl } from '@api/utils/url-validator';
+import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
 
 export function generateWebhookSecret(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -20,7 +21,22 @@ export function verifyWebhookSignature(
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 
-export async function deliverWebhook(
+export async function enqueueWebhookDelivery(
+  webhookId: string,
+  event: string,
+  url: string,
+  secret: string,
+  payload: Record<string, any>
+): Promise<void> {
+  // Enqueue delivery as background job (non-blocking)
+  setImmediate(() => {
+    deliverWebhookWithRetry(webhookId, event, url, secret, payload).catch((error) => {
+      logger.error({ webhookId, event, url, error }, 'Unhandled error in webhook delivery');
+    });
+  });
+}
+
+async function deliverWebhookWithRetry(
   webhookId: string,
   event: string,
   url: string,
@@ -51,6 +67,15 @@ export async function deliverWebhook(
   const maxAttempts = 3;
   const backoffMs = [1000, 5000, 30000]; // 1s, 5s, 30s
 
+  const { valid, reason } = validateWebhookUrl(url);
+  if (!valid) {
+    delivery.status = 'failed';
+    delivery.error = `Blocked URL: ${reason}`;
+    await delivery.save();
+    logger.error({ webhookId, event, url, reason }, 'Webhook delivery blocked: invalid URL');
+    return;
+  }
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       await axios.post(url, payload, {
@@ -74,6 +99,8 @@ export async function deliverWebhook(
       delivery.error = error instanceof Error ? error.message : 'Unknown error';
 
       if (attempt < maxAttempts - 1) {
+        // Apply backoff delay before retry
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
         delivery.nextRetryAt = new Date(Date.now() + backoffMs[attempt]);
         delivery.status = 'pending';
       } else {
@@ -94,5 +121,27 @@ export async function deliverWebhook(
         );
       }
     }
+  }
+}
+
+// Legacy export for backward compatibility
+export const deliverWebhook = enqueueWebhookDelivery;
+
+/**
+ * Dispatch an event to all active webhooks registered for a clinic.
+ * Each delivery is enqueued non-blocking with automatic retries.
+ */
+export async function dispatchWebhookEvent(
+  clinicId: string,
+  event: string,
+  data: Record<string, any>
+): Promise<void> {
+  const webhooks = await WebhookModel.find({ clinicId, events: event, isActive: true });
+  for (const wh of webhooks) {
+    enqueueWebhookDelivery(String(wh._id), event, wh.url, wh.secret, { event, data }).catch(
+      (err) => {
+        logger.error({ webhookId: String(wh._id), event, err }, 'Failed to enqueue webhook event');
+      }
+    );
   }
 }

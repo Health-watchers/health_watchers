@@ -9,14 +9,14 @@
 version: 1
 
 alerts:
-  - name: "High Error Rate (>1%)"
+  - name: 'High Error Rate (>1%)'
     environment: production
     dataset: errors
-    query: ""
-    aggregate: "percentage(sessions_crashed, sessions)"
-    timeWindow: 5          # minutes
+    query: ''
+    aggregate: 'percentage(sessions_crashed, sessions)'
+    timeWindow: 5 # minutes
     thresholdType: above
-    alertThreshold: 1      # 1%
+    alertThreshold: 1 # 1%
     resolveThreshold: 0.5
     triggers:
       - label: critical
@@ -27,14 +27,14 @@ alerts:
           - type: slack
             targetType: specific_members
 
-  - name: "Slow p95 Response Time (>2s)"
+  - name: 'Slow p95 Response Time (>2s)'
     environment: production
     dataset: transactions
-    query: "transaction.op:http.server"
-    aggregate: "p95(transaction.duration)"
+    query: 'transaction.op:http.server'
+    aggregate: 'p95(transaction.duration)'
     timeWindow: 5
     thresholdType: above
-    alertThreshold: 2000   # milliseconds
+    alertThreshold: 2000 # milliseconds
     resolveThreshold: 1500
     triggers:
       - label: critical
@@ -43,7 +43,7 @@ alerts:
           - type: email
             targetType: team
 
-  - name: "API Uptime Monitor — /health"
+  - name: 'API Uptime Monitor — /health'
     type: crons
     monitorSlug: health-watchers-api-uptime
     # Alert fires within 5 minutes of a missed check-in (checkinMargin: 5 set in code)

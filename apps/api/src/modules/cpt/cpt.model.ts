@@ -11,11 +11,11 @@ const cptSchema = new Schema<CPT>(
   {
     code: { type: String, required: true, unique: true, index: true },
     description: { type: String, required: true },
-    category: { 
-      type: String, 
+    category: {
+      type: String,
       enum: ['office-visit', 'preventive-care', 'procedure', 'lab', 'imaging', 'other'],
       required: true,
-      index: true
+      index: true,
     },
     defaultFee: { type: String, required: true },
   },
@@ -24,4 +24,5 @@ const cptSchema = new Schema<CPT>(
 
 cptSchema.index({ description: 'text', code: 'text' });
 
-export const CPTModel = models.CPT || model<CPT>('CPT', cptSchema);
+export const CPTModel = (models.CPT ||
+  model<CPT>('CPT', cptSchema)) as import('mongoose').Model<CPT>;

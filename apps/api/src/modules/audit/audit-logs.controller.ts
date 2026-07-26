@@ -12,7 +12,7 @@ router.use(requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'));
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const pagination = parsePagination(req.query as Record<string, any>);
+    const pagination = parsePagination(req.query as Record<string, string>);
     if (!pagination) {
       return res
         .status(400)
@@ -35,7 +35,12 @@ router.get(
       AuditLogModel.countDocuments(filter),
     ]);
 
-    return res.json({ status: 'success', data: logs, meta: { total, page, limit } });
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data: logs,
+      pagination: { total, page, limit, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+    });
   })
 );
 

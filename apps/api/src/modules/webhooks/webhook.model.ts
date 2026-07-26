@@ -56,6 +56,10 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
 
 webhookDeliverySchema.index({ status: 1, nextRetryAt: 1 });
 
-export const WebhookModel = models.Webhook || model<IWebhook>('Webhook', webhookSchema);
-export const WebhookDeliveryModel =
-  models.WebhookDelivery || model<IWebhookDelivery>('WebhookDelivery', webhookDeliverySchema);
+export const WebhookModel = (models.Webhook ||
+  model<IWebhook>('Webhook', webhookSchema)) as import('mongoose').Model<IWebhook>;
+export const WebhookDeliveryModel = (models.WebhookDelivery ||
+  model<IWebhookDelivery>(
+    'WebhookDelivery',
+    webhookDeliverySchema
+  )) as import('mongoose').Model<IWebhookDelivery>;

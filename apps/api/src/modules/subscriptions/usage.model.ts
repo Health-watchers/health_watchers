@@ -8,6 +8,7 @@ export interface IUsageRecord {
   encounterCount: number;
   aiRequestCount: number;
   doctorCount: number;
+  userCount: number;
 }
 
 const usageSchema = new Schema<IUsageRecord>(
@@ -19,10 +20,12 @@ const usageSchema = new Schema<IUsageRecord>(
     encounterCount: { type: Number, default: 0 },
     aiRequestCount: { type: Number, default: 0 },
     doctorCount: { type: Number, default: 0 },
+    userCount: { type: Number, default: 0 },
   },
   { timestamps: true, versionKey: false }
 );
 
 usageSchema.index({ clinicId: 1, periodStart: -1 });
 
-export const UsageModel = models.UsageRecord || model<IUsageRecord>('UsageRecord', usageSchema);
+export const UsageModel = (models.UsageRecord ||
+  model<IUsageRecord>('UsageRecord', usageSchema)) as import('mongoose').Model<IUsageRecord>;

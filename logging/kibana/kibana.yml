@@ -1,0 +1,32 @@
+# ============================================================
+# Kibana Configuration
+# ============================================================
+
+# Server settings
+server.name: health-watchers-kibana
+server.host: '0.0.0.0'
+server.port: 5601
+server.basePath: ''
+server.rewriteBasePath: false
+
+# Elasticsearch connection
+elasticsearch.hosts: ['http://elasticsearch:9200']
+elasticsearch.username: elastic
+elasticsearch.password: changeme
+
+# Kibana user settings
+kibana.defaultAppId: 'discover'
+kibana.autocomplete.valueSuggestionTimeout: 1000
+
+# Logging
+logging.verbose: true
+logging.dest: stdout
+logging.timezone: UTC
+
+# Advanced settings
+xpack.discoverEnhancements.enabled: true
+xpack.monitoring.ui.enabled: true
+xpack.alerting.enabled: true
+
+# Saved objects
+saved_objects.maxImportPayloadBytes: 26214400

@@ -1,0 +1,82 @@
+name: Accessibility Testing
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  accessibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
+    services:
+      mongodb:
+        image: mongo:6
+        options: >-
+          --health-cmd mongosh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build applications
+        run: npm run build
+
+      - name: Start API server
+        run: npm run start --workspace=api &
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_test
+          NODE_ENV: test
+
+      - name: Start web server
+        run: npm run start --workspace=web &
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+
+      - name: Wait for servers
+        run: |
+          npx wait-on http://localhost:3000 http://localhost:3001 --timeout 60000
+
+      - name: Run accessibility tests
+        run: npm run test:a11y
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: accessibility-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: accessibility-test-results
+          path: |
+            accessibility-results.xml
+            test-results/
+
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@567cc7f8dcea3537eb1537e6f3ef671cead07cc4 # v2.18.0
+        with:
+          files: accessibility-results.xml
+          check_name: Accessibility Test Results
+
+      - name: Fail if violations found
+        if: failure()
+        run: |
+          echo "❌ Accessibility violations detected!"
+          echo "Please fix all WCAG 2.1 AA violations before merging."
+          exit 1

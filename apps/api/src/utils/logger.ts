@@ -8,10 +8,17 @@ const logger = pino({
   redact: {
     paths: [
       'req.headers.authorization',
+      'req.headers.cookie',
       'body.password',
+      'body.currentPassword',
+      'body.newPassword',
       'body.token',
       'body.refreshToken',
       'body.tempToken',
+      'body.secretKey',
+      'body.privateKey',
+      'body.cardNumber',
+      'body.cvv',
     ],
     censor: '[REDACTED]',
   },

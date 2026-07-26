@@ -6,7 +6,12 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import logger from '@api/utils/logger';
 import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
 import { generateWebhookSecret, verifyWebhookSignature, deliverWebhook } from './webhook.service';
-import { registerWebhookSchema, inboundWebhookSchema } from './webhook.validation';
+import {
+  registerWebhookSchema,
+  updateWebhookSchema,
+  inboundWebhookSchema,
+} from './webhook.validation';
+import { confirmPayment } from '../payments/services/payment-confirmation.service';
 
 const router = Router();
 
@@ -36,34 +41,16 @@ router.post(
       return res.json({ status: 'ignored' });
     }
 
-    payment.status = 'confirmed';
-    payment.txHash = txHash;
-    await payment.save();
-
-    logger.info(
-      { intentId: payment.intentId, txHash, amount },
-      'stellar-webhook: payment confirmed'
-    );
-
-    // Trigger outbound webhooks for registered listeners
-    const webhooks = await WebhookModel.find({
-      clinicId: payment.clinicId,
-      events: 'payment.confirmed',
-      isActive: true,
+    const result = await confirmPayment({
+      intentId: payment.intentId,
+      txHash,
+      allowAlreadyConfirmed: true,
     });
 
-    for (const webhook of webhooks) {
-      await deliverWebhook(String(webhook._id), 'payment.confirmed', webhook.url, webhook.secret, {
-        event: 'payment.confirmed',
-        data: {
-          intentId: payment.intentId,
-          amount: payment.amount,
-          destination: payment.destination,
-          txHash,
-          confirmedAt: new Date(),
-        },
-      });
-    }
+    logger.info(
+      { intentId: payment.intentId, txHash, amount, result: result.status },
+      'stellar-webhook: payment processed'
+    );
 
     return res.json({ status: 'success', data: { intentId: payment.intentId, txHash } });
   })
@@ -105,11 +92,8 @@ router.post(
       });
     }
 
-    // Find and update payment record
-    const payment = await PaymentRecordModel.findOne({
-      memo,
-      status: 'pending',
-    });
+    // Find matching payment record
+    const payment = await PaymentRecordModel.findOne({ memo, status: 'pending' });
 
     if (!payment) {
       return res.status(404).json({
@@ -119,14 +103,15 @@ router.post(
     }
 
     if (status === 'confirmed') {
-      payment.status = 'confirmed';
-      payment.txHash = transactionHash;
-      payment.confirmedAt = new Date();
+      await confirmPayment({
+        intentId: payment.intentId,
+        txHash: transactionHash,
+        allowAlreadyConfirmed: true,
+      });
     } else if (status === 'failed') {
       payment.status = 'failed';
+      await payment.save();
     }
-
-    await payment.save();
 
     logger.info(
       { intentId: payment.intentId, transactionHash, status },
@@ -190,6 +175,78 @@ router.get(
         isActive: w.isActive,
         createdAt: w.createdAt,
       })),
+    });
+  })
+);
+
+// GET /webhooks/:id (get single webhook)
+router.get(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        createdAt: webhook.createdAt,
+        updatedAt: webhook.updatedAt,
+      },
+    });
+  })
+);
+
+// PATCH /webhooks/:id (update webhook url, events, or active state)
+router.patch(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  validateRequest({ body: updateWebhookSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { url, events, isActive } = req.body;
+
+    const update: Record<string, unknown> = {};
+    if (url !== undefined) update.url = url;
+    if (events !== undefined) update.events = events;
+    if (isActive !== undefined) update.isActive = isActive;
+
+    const webhook = await WebhookModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
+      update,
+      { new: true }
+    ).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        updatedAt: webhook.updatedAt,
+      },
     });
   })
 );

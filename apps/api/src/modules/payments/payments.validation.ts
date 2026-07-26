@@ -14,13 +14,20 @@ export const createPaymentIntentSchema = z.object({
   // Path payment fields
   sourceAssetCode: z.string().optional(),
   sourceAssetIssuer: z.string().optional(),
-  destinationAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
-  maxSourceAmount: z.string().regex(/^\d+(\.\d{1,7})?$/).optional(),
+  destinationAmount: z
+    .string()
+    .regex(/^\d+(\.\d{1,7})?$/)
+    .optional(),
+  maxSourceAmount: z
+    .string()
+    .regex(/^\d+(\.\d{1,7})?$/)
+    .optional(),
   path: z.array(z.string()).optional(),
   /** Fee speed tier — defaults to 'standard' */
   feeStrategy: z.enum(['slow', 'standard', 'fast']).optional().default('standard'),
   /** If true, platform wraps the inner tx in a fee bump and pays the fee */
   sponsorFee: z.boolean().optional().default(false),
+  idempotencyKey: z.string().min(1).max(256).optional(),
 });
 
 export const confirmPaymentSchema = z.object({

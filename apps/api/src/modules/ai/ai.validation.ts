@@ -8,7 +8,11 @@ export const differentialDiagnosisRequestSchema = z.object({
   vitalSigns: z
     .object({
       heartRate: z.number().int().positive().max(250).optional(),
-      bloodPressure: z.string().trim().regex(bloodPressurePattern, 'bloodPressure must be e.g. 120/80').optional(),
+      bloodPressure: z
+        .string()
+        .trim()
+        .regex(bloodPressurePattern, 'bloodPressure must be e.g. 120/80')
+        .optional(),
       oxygenSaturation: z.number().min(0).max(100).optional(),
       temperature: z.number().min(30).max(45).optional(),
     })
@@ -29,8 +33,31 @@ export const dosageCalculatorRequestSchema = z.object({
   patientAge: z.number().int().min(0).max(130),
   patientSex: z.enum(['M', 'F']),
   indication: z.string().trim().min(2).max(500),
-  renalFunction: z.enum(['normal', 'mild_impairment', 'moderate_impairment', 'severe_impairment']).optional(),
+  renalFunction: z
+    .enum(['normal', 'mild_impairment', 'moderate_impairment', 'severe_impairment'])
+    .optional(),
   hepaticFunction: z.enum(['normal', 'impaired']).optional(),
 });
 
 export type DosageCalculatorRequestDto = z.infer<typeof dosageCalculatorRequestSchema>;
+
+export const drugInteractionRequestSchema = z.object({
+  medications: z.array(z.string().trim().min(1).max(200)).min(2).max(20),
+});
+
+export type DrugInteractionRequestDto = z.infer<typeof drugInteractionRequestSchema>;
+
+export const triageAssessmentSchema = z.object({
+  patientId: z.string(),
+  chiefComplaint: z.string().min(1).max(500),
+  symptoms: z.array(z.string()).min(1),
+  vitalSigns: z.object({
+    heartRate: z.number().optional(),
+    bloodPressure: z.string().optional(),
+    temperature: z.number().optional(),
+    oxygenSaturation: z.number().optional(),
+  }),
+  patientAge: z.number().min(0).max(150),
+  patientSex: z.enum(['M', 'F']),
+  onsetTime: z.string(),
+});

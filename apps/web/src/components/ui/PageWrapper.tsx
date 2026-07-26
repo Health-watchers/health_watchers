@@ -25,8 +25,8 @@ export function PageHeader({
   return (
     <div className={['flex items-start justify-between gap-4', className ?? ''].join(' ')}>
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>}
+        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100 sm:text-3xl">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
       </div>
       {actions && <div className="shrink-0">{actions}</div>}
     </div>

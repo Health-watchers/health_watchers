@@ -55,7 +55,9 @@ describe('GET /federation', () => {
   });
 
   it('returns 404 when clinic not found', async () => {
-    mockFindOne.mockReturnValue({ select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }) });
+    mockFindOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+    });
     const res = await request(app).get('/federation?q=unknown-clinic*healthwatchers.com&type=name');
     expect(res.status).toBe(404);
   });
@@ -70,9 +72,7 @@ describe('GET /federation', () => {
       select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(mockClinic) }),
     });
 
-    const res = await request(app).get(
-      '/federation?q=lagos-general*healthwatchers.com&type=name'
-    );
+    const res = await request(app).get('/federation?q=lagos-general*healthwatchers.com&type=name');
 
     expect(res.status).toBe(200);
     expect(res.body.stellar_address).toBe('lagos-general*healthwatchers.com');

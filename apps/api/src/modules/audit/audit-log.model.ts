@@ -31,4 +31,5 @@ const auditLogSchema = new Schema<AuditLog>(
   }
 );
 
-export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);
+export const AuditLogModel = (models.AuditLog ||
+  model<AuditLog>('AuditLog', auditLogSchema)) as import('mongoose').Model<AuditLog>;

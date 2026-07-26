@@ -1,0 +1,35 @@
+# ============================================================
+# Elasticsearch Configuration
+# ============================================================
+
+cluster.name: health-watchers-cluster
+node.name: health-watchers-node-1
+
+# Network settings
+network.host: 0.0.0.0
+http.port: 9200
+
+# Data and log paths
+path.data: /usr/share/elasticsearch/data
+path.logs: /usr/share/elasticsearch/logs
+
+# Index management
+action.auto_create_index: '+health-watchers-*,-*'
+indices.memory.index_buffer_size: 30%
+
+# Performance tuning
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+# Logging
+logger.level: info
+logger.org.elasticsearch: warn
+logger.deprecation: warn
+
+# Shutdown gracefully
+node.max_local_storage_nodes: 1
+
+# Xpack settings (if enabled)
+xpack.license.self_generated.type: basic
+xpack.watcher.enabled: true
+xpack.monitoring.enabled: true

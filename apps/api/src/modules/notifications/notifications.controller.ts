@@ -9,7 +9,7 @@ const router = Router();
 router.use(authenticate);
 
 const pageQuerySchema = z.object({
-  page:  z.coerce.number().int().min(1).default(1),
+  page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
@@ -32,18 +32,26 @@ router.get(
     return res.json({
       status: 'success',
       data: notifications,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      pagination: {
+        page, limit, total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
     });
-  }),
+  })
 );
 
 // GET /notifications/unread-count
 router.get(
   '/unread-count',
   asyncHandler(async (req: Request, res: Response) => {
-    const count = await NotificationModel.countDocuments({ userId: req.user!.userId, isRead: false });
+    const count = await NotificationModel.countDocuments({
+      userId: req.user!.userId,
+      isRead: false,
+    });
     return res.json({ status: 'success', data: { count } });
-  }),
+  })
 );
 
 // PUT /notifications/read-all — mark all as read
@@ -52,10 +60,10 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     await NotificationModel.updateMany(
       { userId: req.user!.userId, isRead: false },
-      { $set: { isRead: true, readAt: new Date() } },
+      { $set: { isRead: true, readAt: new Date() } }
     );
     return res.json({ status: 'success', message: 'All notifications marked as read' });
-  }),
+  })
 );
 
 // PUT /notifications/:id/read — mark single as read
@@ -66,11 +74,12 @@ router.put(
     const notification = await NotificationModel.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.userId },
       { $set: { isRead: true, readAt: new Date() } },
-      { new: true },
+      { new: true }
     );
-    if (!notification) return res.status(404).json({ error: 'NotFound', message: 'Notification not found' });
+    if (!notification)
+      return res.status(404).json({ error: 'NotFound', message: 'Notification not found' });
     return res.json({ status: 'success', data: notification });
-  }),
+  })
 );
 
 // DELETE /notifications/:id
@@ -82,9 +91,10 @@ router.delete(
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!notification) return res.status(404).json({ error: 'NotFound', message: 'Notification not found' });
+    if (!notification)
+      return res.status(404).json({ error: 'NotFound', message: 'Notification not found' });
     return res.json({ status: 'success', message: 'Notification deleted' });
-  }),
+  })
 );
 
 export const notificationRoutes = router;

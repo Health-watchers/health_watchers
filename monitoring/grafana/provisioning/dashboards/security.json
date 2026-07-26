@@ -1,0 +1,276 @@
+{
+  "title": "Security",
+  "uid": "hw-security",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["security", "auth", "health-watchers"],
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "interval",
+        "type": "interval",
+        "label": "Interval",
+        "options": [
+          { "text": "1m", "value": "1m" },
+          { "text": "5m", "value": "5m" },
+          { "text": "10m", "value": "10m" }
+        ],
+        "current": { "text": "5m", "value": "5m" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Auth Failures (401) Rate",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"401\"}[5m]))",
+          "legendFormat": "401/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 2,
+      "title": "Forbidden (403) Rate",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"403\"}[5m]))",
+          "legendFormat": "403/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 3,
+      "title": "Rate Limit Violations (429) Rate",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"429\"}[5m]))",
+          "legendFormat": "429/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 4,
+      "title": "Keypair Decryption Failures",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "increase(mongodb_keypair_decryption_failures_total{job=\"health-watchers-api\"}[1h])",
+          "legendFormat": "Failures (1h)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "title": "Auth Failures Over Time (401 / 403)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"401\"}[$interval])) by (path)",
+          "legendFormat": "401 {{ path }}"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"403\"}[$interval])) by (path)",
+          "legendFormat": "403 {{ path }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Rate Limit Violations Over Time (429)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"429\"}[$interval])) by (path)",
+          "legendFormat": "429 {{ path }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Auth Endpoint Traffic (login / refresh / logout)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",path=~\".*/auth/.*\"}[$interval])) by (path, status)",
+          "legendFormat": "{{ path }} [{{ status }}]"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Subscription Limit Violations by Tier",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(subscription_limit_violations_total[$interval])) by (tier, resource)",
+          "legendFormat": "{{ tier }} / {{ resource }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Keypair Decryption Failures Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "increase(mongodb_keypair_decryption_failures_total{job=\"health-watchers-api\"}[$interval])",
+          "legendFormat": "Decryption Failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "5xx Error Rate by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(10, sum(rate(http_requests_total{job=\"health-watchers-api\",status=~\"5..\"}[$interval])) by (path))",
+          "legendFormat": "{{ path }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Audit Log Volume (requests logged/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 7 },
+      "description": "Derived from total HTTP request rate — every request is audit-logged by requestAuditMiddleware.",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\"}[$interval]))",
+          "legendFormat": "Audit Entries/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Security Event Summary (1h)",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=\"health-watchers-api\",status=\"401\"}[1h]))",
+          "legendFormat": "Auth Failures (401)",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(http_requests_total{job=\"health-watchers-api\",status=\"403\"}[1h]))",
+          "legendFormat": "Forbidden (403)",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(http_requests_total{job=\"health-watchers-api\",status=\"429\"}[1h]))",
+          "legendFormat": "Rate Limited (429)",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(mongodb_keypair_decryption_failures_total{job=\"health-watchers-api\"}[1h]))",
+          "legendFormat": "Decryption Failures",
+          "instant": true
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        { "id": "merge", "options": {} }
+      ]
+    }
+  ]
+}

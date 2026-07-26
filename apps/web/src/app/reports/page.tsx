@@ -53,7 +53,12 @@ async function fetchPaymentReport(from: string, to: string) {
   return (await res.json()).data;
 }
 
-function SimpleBarChart({ data, labelKey, valueKey, title }: {
+function SimpleBarChart({
+  data,
+  labelKey,
+  valueKey,
+  title,
+}: {
   data: Record<string, any>[];
   labelKey: string;
   valueKey: string;
@@ -88,14 +93,27 @@ export default function ReportsPage() {
   const [customTo, setCustomTo] = useState('');
   const [useCustom, setUseCustom] = useState(false);
 
-  const { from, to } = useCustom && customFrom && customTo
-    ? { from: customFrom, to: customTo }
-    : getPeriodDates(period);
+  const { from, to } =
+    useCustom && customFrom && customTo
+      ? { from: customFrom, to: customTo }
+      : getPeriodDates(period);
 
-  const overviewQ = useQuery({ queryKey: ['reports-overview', from, to], queryFn: () => fetchOverview(from, to) });
-  const patientQ = useQuery({ queryKey: ['reports-patients', from, to], queryFn: () => fetchPatientReport(from, to) });
-  const encounterQ = useQuery({ queryKey: ['reports-encounters', from, to], queryFn: () => fetchEncounterReport(from, to) });
-  const paymentQ = useQuery({ queryKey: ['reports-payments', from, to], queryFn: () => fetchPaymentReport(from, to) });
+  const overviewQ = useQuery({
+    queryKey: ['reports-overview', from, to],
+    queryFn: () => fetchOverview(from, to),
+  });
+  const patientQ = useQuery({
+    queryKey: ['reports-patients', from, to],
+    queryFn: () => fetchPatientReport(from, to),
+  });
+  const encounterQ = useQuery({
+    queryKey: ['reports-encounters', from, to],
+    queryFn: () => fetchEncounterReport(from, to),
+  });
+  const paymentQ = useQuery({
+    queryKey: ['reports-payments', from, to],
+    queryFn: () => fetchPaymentReport(from, to),
+  });
 
   const overview = overviewQ.data;
 
@@ -113,7 +131,10 @@ export default function ReportsPage() {
             {(['this_month', 'last_month', 'last_3_months'] as Period[]).map((p) => (
               <button
                 key={p}
-                onClick={() => { setPeriod(p); setUseCustom(false); }}
+                onClick={() => {
+                  setPeriod(p);
+                  setUseCustom(false);
+                }}
                 className={[
                   'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   !useCustom && period === p
@@ -122,14 +143,21 @@ export default function ReportsPage() {
                 ].join(' ')}
                 aria-pressed={!useCustom && period === p}
               >
-                {p === 'this_month' ? 'This Month' : p === 'last_month' ? 'Last Month' : 'Last 3 Months'}
+                {p === 'this_month'
+                  ? 'This Month'
+                  : p === 'last_month'
+                    ? 'Last Month'
+                    : 'Last 3 Months'}
               </button>
             ))}
             <div className="flex items-center gap-1">
               <input
                 type="date"
                 value={customFrom}
-                onChange={(e) => { setCustomFrom(e.target.value); setUseCustom(true); }}
+                onChange={(e) => {
+                  setCustomFrom(e.target.value);
+                  setUseCustom(true);
+                }}
                 className="rounded border border-neutral-300 px-2 py-1 text-xs"
                 aria-label="Custom start date"
               />
@@ -137,7 +165,10 @@ export default function ReportsPage() {
               <input
                 type="date"
                 value={customTo}
-                onChange={(e) => { setCustomTo(e.target.value); setUseCustom(true); }}
+                onChange={(e) => {
+                  setCustomTo(e.target.value);
+                  setUseCustom(true);
+                }}
                 className="rounded border border-neutral-300 px-2 py-1 text-xs"
                 aria-label="Custom end date"
               />
@@ -148,19 +179,46 @@ export default function ReportsPage() {
 
       {/* KPI Overview */}
       {overviewQ.isError ? (
-        <div role="alert" className="rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700"
+        >
           Could not load report data. You may not have permission to view reports.
         </div>
       ) : (
         <section aria-label="Key performance indicators">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard title="New Patients" value={overview?.patients?.new ?? '—'} icon="🧑‍⚕️" color="blue" label="New patients in period" />
-            <StatCard title="Total Encounters" value={overview?.encounters?.total ?? '—'} icon="📋" color="green" label="Total encounters in period" />
-            <StatCard title="Confirmed Payments" value={overview?.payments?.confirmed ?? '—'} icon="💳" color="indigo" label="Confirmed payments in period" />
-            <StatCard title="AI Summaries" value={overview?.aiSummaries?.generated ?? '—'} icon="🤖" color="yellow" label="AI summaries generated" />
+            <StatCard
+              title="New Patients"
+              value={overview?.patients?.new ?? '—'}
+              icon="🧑‍⚕️"
+              color="blue"
+              label="New patients in period"
+            />
+            <StatCard
+              title="Total Encounters"
+              value={overview?.encounters?.total ?? '—'}
+              icon="📋"
+              color="green"
+              label="Total encounters in period"
+            />
+            <StatCard
+              title="Confirmed Payments"
+              value={overview?.payments?.confirmed ?? '—'}
+              icon="💳"
+              color="indigo"
+              label="Confirmed payments in period"
+            />
+            <StatCard
+              title="AI Summaries"
+              value={overview?.aiSummaries?.generated ?? '—'}
+              icon="🤖"
+              color="yellow"
+              label="AI summaries generated"
+            />
           </div>
           {overview && (
-            <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4 text-sm text-neutral-600">
+            <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-neutral-600 lg:grid-cols-4">
               <div className="rounded-lg border border-neutral-200 bg-white p-3">
                 <p className="font-medium">Active Patients</p>
                 <p className="text-2xl font-bold text-neutral-900">{overview.patients.active}</p>
@@ -189,12 +247,17 @@ export default function ReportsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Patient Growth */}
-        <section aria-label="Patient growth chart" className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section
+          aria-label="Patient growth chart"
+          className="rounded-lg border border-neutral-200 bg-white p-5"
+        >
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">Patient Registrations by Month</h2>
+            <h2 className="text-sm font-semibold text-neutral-900">
+              Patient Registrations by Month
+            </h2>
             <button
               onClick={() => handleExport('patients')}
-              className="text-xs text-primary-600 hover:underline focus:outline-none focus:underline"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export patients CSV"
             >
               Export CSV
@@ -213,12 +276,15 @@ export default function ReportsPage() {
         </section>
 
         {/* Encounter Volume */}
-        <section aria-label="Encounter volume chart" className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section
+          aria-label="Encounter volume chart"
+          className="rounded-lg border border-neutral-200 bg-white p-5"
+        >
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-neutral-900">Top Chief Complaints</h2>
             <button
               onClick={() => handleExport('encounters')}
-              className="text-xs text-primary-600 hover:underline focus:outline-none focus:underline"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export encounters CSV"
             >
               Export CSV
@@ -237,12 +303,15 @@ export default function ReportsPage() {
         </section>
 
         {/* Payment Trends */}
-        <section aria-label="Payment trends chart" className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section
+          aria-label="Payment trends chart"
+          className="rounded-lg border border-neutral-200 bg-white p-5"
+        >
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-neutral-900">Payment Volume by Month</h2>
             <button
               onClick={() => handleExport('payments')}
-              className="text-xs text-primary-600 hover:underline focus:outline-none focus:underline"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export payments CSV"
             >
               Export CSV
@@ -261,14 +330,20 @@ export default function ReportsPage() {
         </section>
 
         {/* Revenue by Asset */}
-        <section aria-label="Revenue by asset" className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section
+          aria-label="Revenue by asset"
+          className="rounded-lg border border-neutral-200 bg-white p-5"
+        >
           <h2 className="mb-4 text-sm font-semibold text-neutral-900">Revenue by Currency</h2>
           {paymentQ.isLoading ? (
             <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />
           ) : (
             <div className="space-y-3">
               {(paymentQ.data?.byAsset ?? []).map((a: any) => (
-                <div key={a.asset} className="flex items-center justify-between rounded-lg bg-neutral-50 px-4 py-3">
+                <div
+                  key={a.asset}
+                  className="flex items-center justify-between rounded-lg bg-neutral-50 px-4 py-3"
+                >
                   <span className="font-medium">{a.asset}</span>
                   <div className="text-right">
                     <p className="font-bold">{a.total}</p>

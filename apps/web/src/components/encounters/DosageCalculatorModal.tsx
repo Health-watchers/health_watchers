@@ -149,9 +149,7 @@ export default function DosageCalculatorModal({
               />
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-neutral-700">
-                  Sex *
-                </label>
+                <label className="mb-1 block text-sm font-medium text-neutral-700">Sex *</label>
                 <select
                   value={sex}
                   onChange={(e) => setSex(e.target.value as 'M' | 'F')}
@@ -263,10 +261,7 @@ export default function DosageCalculatorModal({
 
             {/* Contraindications — red */}
             {result.contraindications.length > 0 && (
-              <div
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 p-4"
-              >
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
                 <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-red-800">
                   <span aria-hidden="true">⛔</span> Contraindications
                 </h3>
@@ -297,14 +292,17 @@ export default function DosageCalculatorModal({
             )}
 
             {/* Disclaimer */}
-            <p className="text-[11px] italic text-neutral-400">{result.disclaimer}</p>
+            <p className="text-[11px] text-neutral-400 italic">{result.disclaimer}</p>
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-2 border-t border-neutral-100 pt-3">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => { setResult(null); setConfirmed(false); }}
+                onClick={() => {
+                  setResult(null);
+                  setConfirmed(false);
+                }}
               >
                 ← Recalculate
               </Button>

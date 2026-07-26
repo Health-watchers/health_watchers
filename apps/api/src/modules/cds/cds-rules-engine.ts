@@ -47,10 +47,7 @@ class CDSRulesEngine {
       }
 
       const elapsed = Date.now() - startTime;
-      logger.info(
-        { trigger, alertCount: alerts.length, elapsed },
-        'CDS rules evaluated'
-      );
+      logger.info({ trigger, alertCount: alerts.length, elapsed }, 'CDS rules evaluated');
 
       return alerts;
     } catch (error) {
@@ -62,7 +59,10 @@ class CDSRulesEngine {
   /**
    * Evaluate rule conditions against context
    */
-  private evaluateConditions(conditions: Record<string, unknown>, context: RuleEvaluationContext): boolean {
+  private evaluateConditions(
+    conditions: Record<string, unknown>,
+    context: RuleEvaluationContext
+  ): boolean {
     // Vital sign rules
     if (conditions.type === 'vital_sign') {
       return this.evaluateVitalSignRule(conditions, context.vitalSigns);
@@ -89,7 +89,10 @@ class CDSRulesEngine {
   /**
    * Evaluate vital sign conditions
    */
-  private evaluateVitalSignRule(conditions: Record<string, unknown>, vitalSigns?: VitalSigns): boolean {
+  private evaluateVitalSignRule(
+    conditions: Record<string, unknown>,
+    vitalSigns?: VitalSigns
+  ): boolean {
     if (!vitalSigns) return false;
 
     const { bloodPressure, heartRate, temperature, oxygenSaturation } = conditions as any;
@@ -103,7 +106,8 @@ class CDSRulesEngine {
 
     // Heart rate checks
     if (heartRate) {
-      if (heartRate.critical && (vitalSigns.heartRate! > 150 || vitalSigns.heartRate! < 40)) return true;
+      if (heartRate.critical && (vitalSigns.heartRate! > 150 || vitalSigns.heartRate! < 40))
+        return true;
     }
 
     // Temperature checks
@@ -175,9 +179,7 @@ class CDSRulesEngine {
     // Check if prescribed drug matches any known allergies
     const drugName = prescription.drugName.toLowerCase();
     return allergies.some(
-      allergy =>
-        allergy.allergen.toLowerCase() === drugName &&
-        allergy.severity !== 'mild'
+      (allergy) => allergy.allergen.toLowerCase() === drugName && allergy.severity !== 'mild'
     );
   }
 
@@ -200,8 +202,8 @@ class CDSRulesEngine {
         patientAge: age,
         patientSex: patient.sex,
         allergies: patient.allergies
-          .filter(a => a.isActive)
-          .map(a => ({
+          .filter((a) => a.isActive)
+          .map((a) => ({
             allergen: a.allergen,
             severity: a.severity,
           })),

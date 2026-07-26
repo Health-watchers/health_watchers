@@ -2,10 +2,19 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PatientSchema, type PatientInput } from '@health-watchers/types';
+import { z } from 'zod';
 import { Input, Select, Button } from '@/components/ui';
 
-export type CreatePatientData = PatientInput;
+const schema = z.object({
+  firstName: z.string().min(1, 'Required'),
+  lastName: z.string().min(1, 'Required'),
+  dateOfBirth: z.string().min(1, 'Required'),
+  sex: z.enum(['M', 'F', 'O']),
+  contactNumber: z.string().min(1, 'Required'),
+  address: z.string().min(1, 'Required'),
+});
+
+export type CreatePatientData = z.infer<typeof schema>;
 
 interface Props {
   onSubmit: (data: CreatePatientData) => Promise<void>;
@@ -19,7 +28,7 @@ export function CreatePatientForm({ onSubmit, onCancel }: Props) {
     formState: { errors, isSubmitting },
     setError,
   } = useForm<CreatePatientData>({
-    resolver: zodResolver(PatientSchema),
+    resolver: zodResolver(schema),
     defaultValues: { sex: 'M' },
   });
 

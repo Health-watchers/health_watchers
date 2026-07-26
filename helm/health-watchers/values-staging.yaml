@@ -15,24 +15,24 @@ api:
     minReplicas: 1
     maxReplicas: 3
   env:
-    NODE_ENV: "staging"
-    LOG_LEVEL: "debug"
-    OTEL_SAMPLING_RATE: "1.0"
+    NODE_ENV: 'staging'
+    LOG_LEVEL: 'debug'
+    OTEL_SAMPLING_RATE: '1.0'
 
 web:
   replicaCount: 1
   env:
-    NODE_ENV: "staging"
-    NEXT_PUBLIC_API_URL: "https://staging.healthwatchers.example.com/api"
-    NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+    NODE_ENV: 'staging'
+    NEXT_PUBLIC_API_URL: 'https://staging.healthwatchers.example.com/api'
+    NEXT_PUBLIC_STELLAR_NETWORK: 'testnet'
 
 stellarService:
   replicaCount: 1
   env:
-    NODE_ENV: "staging"
-    STELLAR_NETWORK: "testnet"
-    MAINNET_CONFIRMED: "false"
-    STELLAR_DRY_RUN: "true"
+    NODE_ENV: 'staging'
+    STELLAR_NETWORK: 'testnet'
+    MAINNET_CONFIRMED: 'false'
+    STELLAR_DRY_RUN: 'true'
 
 ingress:
   host: staging.healthwatchers.example.com

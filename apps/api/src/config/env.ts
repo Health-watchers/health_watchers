@@ -4,6 +4,7 @@
  * Prints a table of missing/invalid vars and exits with code 1 on failure.
  */
 import { z } from 'zod';
+import { redactConnectionString } from '../utils/redact';
 
 const envSchema = z.object({
   MONGO_URI: z
@@ -27,6 +28,10 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
+
+  SENTRY_DSN: z.string().url().optional(),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -58,9 +63,19 @@ if (!result.success) {
 
 export const env = result.data;
 
+// Warn when REDIS_URL is absent in production — in-memory rate limiting is
+// per-pod and allows brute-force bypass in multi-replica deployments.
+if (process.env.NODE_ENV === 'production' && !env.REDIS_URL) {
+  console.warn(
+    '⚠️  WARNING: REDIS_URL is not set in production. ' +
+      'Rate limiting will be in-memory and NOT shared across instances. ' +
+      'This allows attackers to bypass brute-force protection by distributing requests across pods.'
+  );
+}
+
 // Log non-secret config values at startup
 console.log('✅ Config validated:');
 console.log(`   API_PORT:        ${env.API_PORT}`);
-console.log(`   MONGO_URI:       ${env.MONGO_URI}`);
+console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
 console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
 console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);

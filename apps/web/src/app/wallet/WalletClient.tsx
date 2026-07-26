@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import dynamic from 'next/dynamic';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
 import {
@@ -20,6 +20,11 @@ import {
   ErrorMessage,
   StellarAddressDisplay,
 } from '@/components/ui';
+
+const BalanceTrendChart = dynamic(
+  () => import('@/components/charts/BalanceTrendChart').then((mod) => mod.BalanceTrendChart),
+  { ssr: false }
+);
 
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const IS_TESTNET = NETWORK === 'testnet';
@@ -50,10 +55,15 @@ function FederationAddressCard({ address }: { address: string }) {
         <Badge variant="default">Stellar</Badge>
       </CardHeader>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <canvas ref={canvasRef} aria-label={`QR code for ${address}`} className="rounded border border-neutral-100" />
+        <canvas
+          ref={canvasRef}
+          aria-label={`QR code for ${address}`}
+          className="rounded border border-neutral-100"
+        />
         <div className="flex flex-col gap-2">
           <p className="text-sm text-neutral-500">
-            Patients can send payments using this human-readable address instead of the full public key.
+            Patients can send payments using this human-readable address instead of the full public
+            key.
           </p>
           <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 font-mono text-sm font-medium text-neutral-800">
             {address}
@@ -137,12 +147,14 @@ function useBalanceAlerts() {
       const res = await fetch(`${API}/api/v1/settings`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load settings');
       const body = await res.json();
-      return body.data?.balanceAlerts ?? {
-        lowBalanceWarningXlm: 100,
-        criticalBalanceXlm: 10,
-        largeTransactionXlm: 1000,
-        alertsEnabled: true,
-      };
+      return (
+        body.data?.balanceAlerts ?? {
+          lowBalanceWarningXlm: 100,
+          criticalBalanceXlm: 10,
+          largeTransactionXlm: 1000,
+          alertsEnabled: true,
+        }
+      );
     },
   });
 }
@@ -262,39 +274,7 @@ function ConfirmPaymentModal({
   );
 }
 
-function BalanceTrendChart({ snapshots }: { snapshots: BalanceSnapshot[] }) {
-  if (!snapshots || snapshots.length === 0) {
-    return (
-      <p className="py-4 text-center text-sm text-neutral-500">
-        No balance history yet. Data will appear after the first monitoring cycle.
-      </p>
-    );
-  }
-
-  const chartData = snapshots.map((s) => ({
-    date: new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    xlm: parseFloat(s.xlmBalance),
-  }));
-
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} width={50} />
-        <Tooltip formatter={(v: number) => [`${v.toFixed(2)} XLM`, 'Balance']} />
-        <Line
-          type="monotone"
-          dataKey="xlm"
-          stroke="#2563eb"
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4 }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
+// BalanceTrendChart is now dynamically imported from @/components/charts/BalanceTrendChart
 
 function AlertThresholdSettings({
   settings,
@@ -325,7 +305,7 @@ function AlertThresholdSettings({
           type="checkbox"
           checked={form.alertsEnabled}
           onChange={(e) => handleChange('alertsEnabled', e.target.checked)}
-          className="h-4 w-4 rounded border-neutral-300 text-primary-600"
+          className="text-primary-600 h-4 w-4 rounded border-neutral-300"
         />
         <label htmlFor="alertsEnabled" className="text-sm font-medium text-neutral-700">
           Enable balance alerts
@@ -366,7 +346,11 @@ function AlertThresholdSettings({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" loading={saving} disabled={!form.alertsEnabled && !settings.alertsEnabled}>
+        <Button
+          type="submit"
+          loading={saving}
+          disabled={!form.alertsEnabled && !settings.alertsEnabled}
+        >
           Save Alert Settings
         </Button>
       </div>
@@ -583,9 +567,7 @@ export default function WalletClient() {
           </Card>
 
           {/* Federation Address */}
-          {wallet.federationAddress && (
-            <FederationAddressCard address={wallet.federationAddress} />
-          )}
+          {wallet.federationAddress && <FederationAddressCard address={wallet.federationAddress} />}
 
           {/* Send Payment Form */}
           {showSendForm && !pendingPayment && (

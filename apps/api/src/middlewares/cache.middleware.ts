@@ -28,6 +28,6 @@ export function cacheResponse(ttl: number, keyFn?: (req: Request) => string): Re
       return originalJson(body);
     };
 
-    next();
+    return next();
   };
 }

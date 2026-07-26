@@ -17,12 +17,12 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       ].join(' ')}
     >
       {icon && (
-        <span className="text-neutral-300" aria-hidden="true">
+        <span className="text-neutral-300 dark:text-neutral-600" aria-hidden="true">
           {icon}
         </span>
       )}
-      <p className="text-base font-semibold text-neutral-700">{title}</p>
-      {description && <p className="max-w-xs text-sm text-neutral-500">{description}</p>}
+      <p className="text-base font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>
+      {description && <p className="max-w-xs text-sm text-neutral-500 dark:text-neutral-400">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

@@ -15,7 +15,7 @@ export default function PortalLoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/portal/auth/login', {
+      const res = await fetch('/api/v1/portal/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, dateOfBirth }),
@@ -23,12 +23,23 @@ export default function PortalLoginPage() {
       const json = await res.json();
       if (!res.ok) {
         setError(json?.message ?? 'Invalid credentials. Please try again.');
+        setLoading(false);
         return;
       }
+
+      // Check if MFA is required
+      if (json.data.mfaRequired) {
+        localStorage.setItem('portalMfaTempToken', json.data.tempToken);
+        router.push(`/portal/mfa?method=${json.data.mfaMethod}`);
+        return;
+      }
+
+      // No MFA, set tokens and redirect
+      localStorage.setItem('portalAccessToken', json.data.accessToken);
+      localStorage.setItem('portalRefreshToken', json.data.refreshToken);
       router.push('/portal/dashboard');
     } catch {
       setError('Something went wrong. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -59,7 +70,7 @@ export default function PortalLoginPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
               placeholder="you@example.com"
             />
           </div>
@@ -74,7 +85,7 @@ export default function PortalLoginPage() {
               required
               value={dateOfBirth}
               onChange={(e) => setDateOfBirth(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
