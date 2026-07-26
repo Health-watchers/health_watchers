@@ -4,6 +4,34 @@
 
 Health Watchers provides a comprehensive REST API for managing healthcare data, payments, and patient records. The API follows RESTful conventions and uses JSON for all request/response payloads.
 
+## Route Organization
+
+All V1 routes are consolidated under `/api/v1` and organized into logical domain groups. See `apps/api/src/routes/v1/index.ts` for the authoritative route registry.
+
+| Group | Base Path | Purpose |
+|-------|-----------|---------|
+| **Auth** | `/api/v1/auth`, `/api/v1/users` | Authentication, user management |
+| **Clinical** | `/api/v1/patients`, `/api/v1/encounters`, `/api/v1/appointments`, `/api/v1/lab-results`, `/api/v1/immunizations`, `/api/v1/care-plans`, `/api/v1/referrals`, `/api/v1/consent`, `/api/v1/schedules`, `/api/v1/cds`, `/api/v1/pre-auth`, `/api/v1/peer-reviews`, `/api/v1/icd10`, `/api/v1/reports`, `/api/v1/ai`, `/api/v1/dashboard`, `/api/v1/portal` | Patient care and clinical workflows |
+| **Payments** | `/api/v1/payments`, `/api/v1/invoices`, `/api/v1/subscriptions` | Billing and Stellar blockchain payments |
+| **Export** | `/api/v1/patients/:id/export`, `/api/v1/patients/:id/fhir`, `/api/v1/clinics/:id/export`, `/api/v1/research/export` | HIPAA Right-of-Access and FHIR exports |
+| **Admin** | `/api/v1/clinics`, `/api/v1/settings`, `/api/v1/onboarding`, `/api/v1/api-keys`, `/api/v1/webhooks`, `/api/v1/audit`, `/api/v1/audit-logs`, `/api/v1/documents`, `/api/v1/notifications`, `/api/v1/compliance`, `/api/v1/admin/breach-incidents` | Clinic administration and compliance |
+| **Security** | `/api/v1/csp-report` | CSP violation reporting (public, no auth) |
+| **Federation** | `/.well-known/stellar.toml`, `/federation` | Stellar protocol endpoints (mounted at root) |
+| **V2** | `/api/v2/appointments` | Next-generation API endpoints (non-deprecated) |
+
+### API Versioning
+
+Two API versions are active:
+
+- **V1** (`/api/v1`) — Production, stable. All responses include a `Deprecation: true` header to encourage migration to V2.
+- **V2** (`/api/v2`) — Current, expanding. Routes are added here as they are refactored.
+
+Use the `Accept-Version` header to negotiate a version, or rely on path prefixes.
+
+```
+GET /api/versions  →  lists all supported versions and their deprecation status
+```
+
 ## Accessing API Documentation
 
 ### Interactive Swagger UI
