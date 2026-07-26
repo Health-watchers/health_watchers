@@ -7,10 +7,10 @@ import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const compression = require('compression') as ((...args: any[]) => any) & {
-  filter: (...args: any[]) => boolean;
-};
+import {
+  createCompressionMiddleware,
+  compressionMetricsEndpoint,
+} from './middlewares/compression.middleware';
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import { connectDB, getPoolMetrics } from './config/db';
@@ -113,22 +113,7 @@ app.use(
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   })
 );
-app.use(
-  compression({
-    level: 6,
-    threshold: 1024, // only compress responses > 1KB
-    filter: (req: any, res: any) => {
-      // Skip already-compressed content types (images, PDFs, etc.)
-      const contentType = res.getHeader('Content-Type') as string | undefined;
-      if (contentType) {
-        if (/^image\//i.test(contentType)) return false;
-        if (contentType === 'application/pdf') return false;
-        if (contentType === 'application/zip') return false;
-      }
-      return compression.filter(req, res);
-    },
-  })
-);
+app.use(createCompressionMiddleware());
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
@@ -207,6 +192,9 @@ app.use('/health', backupHealthRoutes);
 // Must be registered before API routes so all requests are measured
 app.use(metricsMiddleware);
 app.use('/metrics', metricsRouter);
+
+// ── Compression metrics ──────────────────────────────────────────────────────
+app.get('/metrics/compression', compressionMetricsEndpoint);
 
 // ── API versions endpoint ─────────────────────────────────────────────────────
 app.get('/api/versions', (_req, res) => {
