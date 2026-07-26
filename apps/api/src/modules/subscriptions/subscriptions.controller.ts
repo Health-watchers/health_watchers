@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { SubscriptionModel } from './subscription.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 import { TIER_LIMITS, TIER_PRICES, SubscriptionTier } from './subscription.tiers';
 import { generateBillingInvoice, handlePaymentSuccess, suspendOverdueAccounts } from './billing.service';
 import { getUsage } from './usage.service';
@@ -73,12 +74,11 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
 // POST /subscriptions — create subscription for a clinic (SUPER_ADMIN or ADMIN)
 router.post('/', authenticate, requireRoles('SUPER_ADMIN', 'ADMIN'), async (req: Request, res: Response) => {
   const { clinicId, tier = 'free', stellarPaymentAddress } = req.body;
-  const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 
   const targetClinicId = clinicId ?? req.user!.clinicId;
   if (!targetClinicId) return res.status(400).json({ error: 'clinicId is required' });
 
-  if (!OBJECT_ID_REGEX.test(String(targetClinicId))) {
+  if (!isValidObjectId(String(targetClinicId))) {
     return res.status(400).json({ error: 'ValidationError', message: 'Invalid clinicId' });
   }
 
