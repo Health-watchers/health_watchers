@@ -163,8 +163,15 @@ self.addEventListener('sync', (event) => {
 
 async function syncPendingForms() {
   try {
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'SYNC_START' });
+      });
+    });
+
     const db = await openIndexedDB();
     const pendingForms = await getAllPendingForms(db);
+    let syncedCount = 0;
 
     for (const form of pendingForms) {
       try {
@@ -176,7 +183,7 @@ async function syncPendingForms() {
 
         if (response.ok) {
           await deletePendingForm(db, form.id);
-          // Notify client of successful sync
+          syncedCount++;
           self.clients.matchAll().then((clients) => {
             clients.forEach((client) => {
               client.postMessage({
@@ -190,8 +197,23 @@ async function syncPendingForms() {
         console.error('Failed to sync form:', err);
       }
     }
+
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'SYNC_END',
+          syncedCount,
+          totalForms: pendingForms.length,
+        });
+      });
+    });
   } catch (err) {
     console.error('Background sync error:', err);
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'SYNC_END', error: true });
+      });
+    });
   }
 }
 
