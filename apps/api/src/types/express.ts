@@ -17,6 +17,13 @@ export interface AuthenticatedUser {
   isSuperAdmin?: boolean;
 }
 
+export interface LazyLoadQuery {
+  lazyLoad?: boolean;
+  fields?: string | string[];
+  excludeFields?: string | string[];
+  populate?: string | string[];
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -30,6 +37,7 @@ declare global {
         clinicId: string;
         scopes: string[];
       };
+      lazyLoadQuery?: LazyLoadQuery;
     }
   }
 }
