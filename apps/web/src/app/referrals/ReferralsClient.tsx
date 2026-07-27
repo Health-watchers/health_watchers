@@ -113,29 +113,36 @@ function buildTimeline(referral: Referral): StatusEvent[] {
 function StatusTimeline({ referral }: { referral: Referral }) {
   const events = buildTimeline(referral);
   return (
-    <div className="mt-3 flex items-center gap-0">
+    <div className="mt-4 space-y-3">
       {events.map((event, idx) => (
-        <div key={event.status} className="flex items-center">
+        <div key={event.status} className="flex gap-4">
           <div className="flex flex-col items-center">
             <div
               className={[
-                'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold',
+                'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold',
                 event.status === 'declined'
-                  ? 'bg-danger-100 text-danger-600'
+                  ? 'bg-red-100 text-red-600'
                   : STATUS_VARIANT[event.status] === 'success'
-                    ? 'bg-success-50 text-success-700'
+                    ? 'bg-green-100 text-green-700'
                     : STATUS_VARIANT[event.status] === 'warning'
-                      ? 'bg-warning-50 text-warning-700'
-                      : 'bg-neutral-200 text-neutral-500',
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-gray-200 text-gray-600',
               ].join(' ')}
             >
-              {idx + 1}
+              ✓
             </div>
-            <span className="mt-0.5 text-[10px] text-neutral-500 whitespace-nowrap">{event.label}</span>
+            {idx < events.length - 1 && (
+              <div className="my-2 h-8 w-0.5 bg-gray-200" />
+            )}
           </div>
-          {idx < events.length - 1 && (
-            <div className="mb-3 h-px w-8 bg-neutral-200" />
-          )}
+          <div className="flex-1 py-2">
+            <p className="font-medium text-gray-900">{event.label}</p>
+            {event.date && (
+              <p className="text-xs text-gray-500">
+                {new Date(event.date).toLocaleString()}
+              </p>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -153,49 +160,66 @@ function ReferralCard({
   onAccept?: (id: string) => void;
   onDecline?: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const patient = referral.patientId;
   const clinic = direction === 'incoming' ? referral.fromClinicId : referral.toClinicId;
 
   return (
-    <li className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-neutral-900">
-            {patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown patient'}
-            {patient?.systemId && (
-              <span className="ml-2 font-mono text-xs text-neutral-400">{patient.systemId}</span>
+    <li className="rounded-lg border border-gray-200 bg-white shadow-sm">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-4 text-left hover:bg-gray-50"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-gray-900">
+              {patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown patient'}
+              {patient?.systemId && (
+                <span className="ml-2 font-mono text-xs text-gray-400">{patient.systemId}</span>
+              )}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              {direction === 'incoming' ? 'From' : 'To'}: {clinic?.name ?? '—'}
+            </p>
+            <p className="mt-1 text-sm text-gray-700">{referral.reason}</p>
+            {referral.declinedReason && (
+              <p className="mt-0.5 text-xs text-red-600">Declined: {referral.declinedReason}</p>
             )}
-          </p>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            {direction === 'incoming' ? 'From' : 'To'}: {clinic?.name ?? '—'}
-          </p>
-          <p className="mt-1 text-sm text-neutral-700">{referral.reason}</p>
+            <p className="mt-1 text-xs text-gray-500">
+              {new Date(referral.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <Badge variant={URGENCY_VARIANT[referral.urgency]}>{referral.urgency}</Badge>
+            <Badge variant={STATUS_VARIANT[referral.status]}>{referral.status}</Badge>
+          </div>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-gray-200 px-4 pb-4">
           {referral.notes && (
-            <p className="mt-0.5 text-xs italic text-neutral-400">{referral.notes}</p>
+            <div className="mt-4">
+              <p className="text-xs font-medium text-gray-600">Notes</p>
+              <p className="mt-1 text-sm text-gray-700">{referral.notes}</p>
+            </div>
           )}
-          {referral.declinedReason && (
-            <p className="mt-0.5 text-xs text-danger-500">Declined: {referral.declinedReason}</p>
+
+          <div className="mt-4">
+            <p className="text-xs font-medium text-gray-600 mb-3">Status Timeline</p>
+            <StatusTimeline referral={referral} />
+          </div>
+
+          {direction === 'incoming' && referral.status === 'pending' && (
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" onClick={() => onAccept?.(referral._id)}>
+                Accept
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => onDecline?.(referral._id)}>
+                Decline
+              </Button>
+            </div>
           )}
-          <p className="mt-1 text-xs text-neutral-400">
-            {new Date(referral.createdAt).toLocaleDateString()}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <Badge variant={URGENCY_VARIANT[referral.urgency]}>{referral.urgency}</Badge>
-          <Badge variant={STATUS_VARIANT[referral.status]}>{referral.status}</Badge>
-        </div>
-      </div>
-
-      <StatusTimeline referral={referral} />
-
-      {direction === 'incoming' && referral.status === 'pending' && (
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" variant="primary" onClick={() => onAccept?.(referral._id)}>
-            Accept
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onDecline?.(referral._id)}>
-            Decline
-          </Button>
         </div>
       )}
     </li>
@@ -305,6 +329,8 @@ export default function ReferralsClient() {
   const [tab, setTab] = useState<'incoming' | 'outgoing' | 'history'>('incoming');
   const [showNewReferral, setShowNewReferral] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'declined'>('all');
+  const [urgencyFilter, setUrgencyFilter] = useState<'all' | Urgency>('all');
 
   const { data: incoming = [], isLoading: incomingLoading, error: incomingError } = useQuery<Referral[]>({
     queryKey: ['referrals', 'incoming'],
@@ -441,18 +467,57 @@ export default function ReferralsClient() {
             <div className="space-y-3">
               {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />)}
             </div>
-          ) : history.length === 0 ? (
-            <EmptyState title="No referral history" icon="📋" />
           ) : (
-            <ol className="space-y-3">
-              {history.map((r) => (
-                <ReferralCard
-                  key={r._id}
-                  referral={r}
-                  direction={r.toClinicId ? 'outgoing' : 'incoming'}
-                />
-              ))}
-            </ol>
+            <>
+              <div className="mb-4 flex flex-wrap gap-3">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Status</label>
+                  <select
+                    value={historyFilter}
+                    onChange={(e) => setHistoryFilter(e.target.value as any)}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">All</option>
+                    <option value="completed">Completed</option>
+                    <option value="declined">Declined</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Urgency</label>
+                  <select
+                    value={urgencyFilter}
+                    onChange={(e) => setUrgencyFilter(e.target.value as any)}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">All</option>
+                    <option value="routine">Routine</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+              </div>
+
+              {history.length === 0 ? (
+                <EmptyState title="No referral history" icon="📋" />
+              ) : (
+                <ol className="space-y-3">
+                  {history
+                    .filter((r) =>
+                      historyFilter === 'all' || r.status === historyFilter
+                    )
+                    .filter((r) =>
+                      urgencyFilter === 'all' || r.urgency === urgencyFilter
+                    )
+                    .map((r) => (
+                      <ReferralCard
+                        key={r._id}
+                        referral={r}
+                        direction={r.toClinicId ? 'outgoing' : 'incoming'}
+                      />
+                    ))}
+                </ol>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
