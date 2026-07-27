@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { PageWrapper, PageHeader, CardSkeleton, Badge } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTable } from '@/components/dashboard/RecentTable';
+import { AppointmentWidget } from '@/components/dashboard/AppointmentWidget';
+import { QuickActionsWidget } from '@/components/dashboard/QuickActionsWidget';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -167,61 +169,6 @@ function PopulationWidget({ data }: { data: DashboardData['patientPopulation'] }
   );
 }
 
-function UpcomingAppointmentsWidget({
-  appointments,
-}: {
-  appointments: DashboardData['upcomingAppointments'];
-}) {
-  return (
-    <section
-      aria-label="Upcoming appointments"
-      className="rounded-xl border border-neutral-200 bg-white shadow-sm"
-    >
-      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-        <h2 className="text-sm font-semibold text-neutral-700">Upcoming Appointments (7 days)</h2>
-        <Link href="/appointments" className="text-xs text-indigo-600 hover:underline">
-          View all
-        </Link>
-      </div>
-      {appointments.length === 0 ? (
-        <p className="py-8 text-center text-sm text-neutral-400">No upcoming appointments</p>
-      ) : (
-        <ul className="divide-y divide-neutral-100" role="list">
-          {appointments.map((apt) => {
-            const patient = apt.patientId;
-            const name = patient
-              ? `${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim()
-              : 'Unknown patient';
-            const time = new Date(apt.scheduledAt);
-            return (
-              <li key={apt._id} className="flex items-center gap-3 px-5 py-3 text-sm">
-                <div className="min-w-[90px] text-xs text-neutral-500">
-                  <div className="font-medium text-neutral-800">
-                    {time.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </div>
-                  <div>{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                </div>
-                <div className="flex-1 truncate">
-                  <p className="truncate font-medium text-neutral-800">{name}</p>
-                  <p className="truncate text-xs text-neutral-500 capitalize">
-                    {apt.type}
-                    {apt.chiefComplaint ? ` — ${apt.chiefComplaint}` : ''}
-                    {apt.isTelemedicine ? ' 🎥' : ''}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[apt.status] ?? 'bg-neutral-100 text-neutral-600'}`}
-                >
-                  {apt.status}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -362,8 +309,11 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Quick Actions */}
+      <QuickActionsWidget />
+
       {/* Upcoming Appointments */}
-      {data && <UpcomingAppointmentsWidget appointments={data.upcomingAppointments} />}
+      {data && <AppointmentWidget appointments={data.upcomingAppointments} />}
 
       {/* High-Risk Patients */}
       {highRiskPatients.length > 0 && (
