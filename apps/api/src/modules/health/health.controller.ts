@@ -5,6 +5,7 @@ import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
+import { getErrorMetrics } from '../../middlewares/error.middleware';
 import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 import { currentTraceId } from '../../utils/tracer';
 import { getRequestId } from '../../utils/request-id';
@@ -101,10 +102,10 @@ router.get('/ready', async (req: Request, res: Response) => {
       network: stellarHealth.network,
     };
   } catch (err) {
-    checks.stellarHorizon = { 
-      status: 'degraded', 
+    checks.stellarHorizon = {
+      status: 'degraded',
       message: err instanceof Error ? err.message : 'Connection failed',
-      latency: Date.now() - stellarStart 
+      latency: Date.now() - stellarStart,
     };
   }
 
@@ -159,6 +160,17 @@ router.get('/jobs', (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /health/errors - In-process error monitoring summary
+ */
+router.get('/errors', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    errors: getErrorMetrics(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * GET /health - Quick summary of all health sub-systems
  */
 router.get('/', (_req: Request, res: Response) => {
@@ -172,6 +184,7 @@ router.get('/', (_req: Request, res: Response) => {
       '/health/ready',
       '/health/startup',
       '/health/jobs',
+      '/health/errors',
       '/health/backup',
       '/health/tracing',
       '/health/trace-context',
@@ -205,7 +218,10 @@ router.get('/tracing', (_req: Request, res: Response) => {
  */
 router.get('/trace-context', (req: Request, res: Response) => {
   const requestId =
-    getRequestId() ?? ((req as any).id as string | undefined) ?? (req.headers['x-request-id'] as string) ?? null;
+    getRequestId() ??
+    ((req as any).id as string | undefined) ??
+    (req.headers['x-request-id'] as string) ??
+    null;
   const traceId = currentTraceId() ?? null;
 
   res.status(200).json({
