@@ -71,13 +71,30 @@ const ACTION_LABEL: Record<AlertAction, string> = {
 function ConfidenceBar({ score }: { score: number }) {
   const pct = Math.round(score * 100);
   const color =
-    pct >= 80 ? 'bg-success-500' : pct >= 50 ? 'bg-warning-500' : 'bg-danger-400';
+    pct >= 80 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+  const textColor =
+    pct >= 80 ? 'text-green-700' : pct >= 60 ? 'text-yellow-700' : 'text-red-700';
+  const bgColor =
+    pct >= 80 ? 'bg-green-50' : pct >= 60 ? 'bg-yellow-50' : 'bg-red-50';
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 w-24 overflow-hidden rounded-full bg-neutral-200">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div className={`rounded-lg ${bgColor} p-3`}>
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <p className="text-xs font-medium text-gray-600 mb-1">Confidence Score</p>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <span className={`ml-3 text-lg font-bold ${textColor}`}>{pct}%</span>
       </div>
-      <span className="text-xs font-medium text-neutral-600">{pct}%</span>
+      <p className="mt-2 text-xs text-gray-600">
+        {pct >= 80
+          ? 'High confidence in this recommendation'
+          : pct >= 60
+            ? 'Moderate confidence in this recommendation'
+            : 'Low confidence - review carefully'}
+      </p>
     </div>
   );
 }
@@ -92,131 +109,166 @@ function RecommendationCard({
   const [expanded, setExpanded] = useState(false);
   const style = SEVERITY_STYLES[rec.severity];
 
+  const handleCardInteraction = () => {
+    setExpanded(!expanded);
+    if ('analytics' in window) {
+      (window as any).analytics?.trackEvent?.('cds_recommendation_viewed', {
+        recommendationId: rec._id,
+        severity: rec.severity,
+        category: rec.category,
+      });
+    }
+  };
+
+  const handleAcknowledgeClick = () => {
+    onAcknowledge(rec._id);
+    if ('analytics' in window) {
+      (window as any).analytics?.trackEvent?.('cds_recommendation_acknowledged', {
+        recommendationId: rec._id,
+      });
+    }
+  };
+
   return (
     <Card
       padding="none"
-      className={`border ${style.border} ${style.bg} transition-shadow hover:shadow-md`}
+      className={`border-l-4 ${style.border} ${style.bg} transition-all hover:shadow-lg`}
     >
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-4 px-5 pt-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={style.badge}>{rec.severity}</Badge>
-          <span className="rounded-sm bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
-            {CATEGORY_LABEL[rec.category]}
-          </span>
-          <span className="rounded-sm bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
-            {ACTION_LABEL[rec.action]}
-          </span>
-          {rec.acknowledged && (
-            <span className="rounded-sm bg-success-50 px-2 py-0.5 text-xs text-success-700">
-              Acknowledged
+      {/* Header section */}
+      <button
+        onClick={handleCardInteraction}
+        className="w-full p-5 text-left hover:bg-opacity-75"
+        aria-expanded={expanded}
+      >
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            <Badge variant={style.badge}>{rec.severity.toUpperCase()}</Badge>
+            <span className="rounded-full bg-white bg-opacity-60 px-3 py-1 text-xs font-medium text-gray-700">
+              {CATEGORY_LABEL[rec.category]}
+            </span>
+            <span className="rounded-full bg-white bg-opacity-60 px-3 py-1 text-xs font-medium text-gray-700">
+              {ACTION_LABEL[rec.action]}
+            </span>
+            {rec.acknowledged && (
+              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                ✓ Acknowledged
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-gray-600">
+              {new Date(rec.createdAt).toLocaleDateString()}
+            </span>
+            <svg
+              className={`h-5 w-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Recommendation content */}
+        <div className="mb-3">
+          <p className="font-bold text-gray-900 text-lg">{rec.ruleName}</p>
+          <p className="mt-2 text-gray-800">{rec.message}</p>
+        </div>
+
+        {/* Confidence and patient info */}
+        <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-gray-600">
+          {rec.patientId && (
+            <span>
+              Patient: <span className="font-semibold">{rec.patientId.firstName} {rec.patientId.lastName}</span>
+              <span className="ml-1 font-mono text-gray-500">({rec.patientId.systemId})</span>
             </span>
           )}
         </div>
-        <span className="shrink-0 text-xs text-neutral-400">
-          {new Date(rec.createdAt).toLocaleDateString()}
-        </span>
-      </div>
+      </button>
 
-      {/* Rule name + message */}
-      <div className="px-5 pt-3">
-        <p className="text-sm font-semibold text-neutral-800">{rec.ruleName}</p>
-        <p className="mt-1 text-sm text-neutral-700">{rec.message}</p>
-      </div>
-
-      {/* Confidence score */}
-      <div className="flex items-center gap-3 px-5 pt-3">
-        <span className="text-xs text-neutral-500">Confidence:</span>
-        <ConfidenceBar score={rec.confidenceScore} />
-      </div>
-
-      {/* Patient link if present */}
-      {rec.patientId && (
-        <div className="px-5 pt-2">
-          <span className="text-xs text-neutral-500">
-            Patient: {rec.patientId.firstName} {rec.patientId.lastName}
-            <span className="ml-1 font-mono text-neutral-400">({rec.patientId.systemId})</span>
-          </span>
-        </div>
-      )}
-
-      {/* Collapsible details toggle */}
-      <div className="px-5 pt-3">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
-          aria-expanded={expanded}
-        >
-          <svg
-            className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-          {expanded ? 'Hide details' : 'Show details'}
-        </button>
-      </div>
-
-      {/* Collapsible section */}
+      {/* Expanded details */}
       {expanded && (
-        <div className="space-y-4 px-5 py-4">
+        <div className="border-t border-current border-opacity-20 px-5 py-4 space-y-4">
+          {/* Confidence Score - prominent display */}
+          <ConfidenceBar score={rec.confidenceScore} />
+
+          {/* Clinical Rationale */}
           {rec.rationale && (
-            <div>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Clinical Rationale
-              </h4>
-              <p className="text-sm text-neutral-700">{rec.rationale}</p>
+            <div className="bg-white bg-opacity-40 rounded-lg p-4">
+              <h4 className="mb-2 text-sm font-semibold text-gray-900">Clinical Rationale</h4>
+              <p className="text-sm text-gray-800 leading-relaxed">{rec.rationale}</p>
             </div>
           )}
 
+          {/* Evidence References */}
           {rec.evidenceReferences && rec.evidenceReferences.length > 0 && (
             <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Evidence References
+              <h4 className="mb-3 text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <span>📚</span> Evidence References
               </h4>
-              <ul className="space-y-2">
+              <div className="space-y-2">
                 {rec.evidenceReferences.map((ref, idx) => (
-                  <li key={idx} className="rounded-md border border-neutral-200 bg-white p-3">
-                    <p className="text-sm font-medium text-neutral-800">{ref.title}</p>
-                    <p className="text-xs text-neutral-500">
-                      {ref.source}
-                      {ref.year ? `, ${ref.year}` : ''}
+                  <div
+                    key={idx}
+                    className="rounded-lg bg-white bg-opacity-60 border border-current border-opacity-20 p-4"
+                  >
+                    <p className="font-medium text-gray-900">{ref.title}</p>
+                    <p className="mt-1 text-xs text-gray-600">
+                      <span className="font-semibold">{ref.source}</span>
+                      {ref.year && <span className="ml-2">• {ref.year}</span>}
                     </p>
                     {ref.url && (
                       <a
                         href={ref.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-0.5 inline-block text-xs text-primary-600 hover:underline"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if ('analytics' in window) {
+                            (window as any).analytics?.trackEvent?.('evidence_reference_clicked', {
+                              recommendationId: rec._id,
+                              referenceUrl: ref.url,
+                            });
+                          }
+                        }}
                       >
-                        View source
+                        View Source →
                       </a>
                     )}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
 
+          {/* Acknowledgment info */}
           {rec.acknowledged && rec.acknowledgedAt && (
-            <p className="text-xs text-neutral-400">
-              Acknowledged {new Date(rec.acknowledgedAt).toLocaleString()}
-              {rec.acknowledgedBy ? ` by ${rec.acknowledgedBy}` : ''}
-            </p>
+            <div className="bg-green-100 bg-opacity-30 rounded-lg p-3">
+              <p className="text-xs text-green-800">
+                <span className="font-semibold">✓ Acknowledged</span> on{' '}
+                {new Date(rec.acknowledgedAt).toLocaleString()}
+                {rec.acknowledgedBy && ` by ${rec.acknowledgedBy}`}
+              </p>
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Actions */}
-      {!rec.acknowledged && (
-        <div className="border-t border-neutral-200 px-5 py-3">
-          <Button size="sm" variant="secondary" onClick={() => onAcknowledge(rec._id)}>
-            Acknowledge
-          </Button>
+          {/* Action button */}
+          {!rec.acknowledged && (
+            <div className="flex gap-2 pt-2">
+              <Button
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAcknowledgeClick();
+                }}
+              >
+                Acknowledge Recommendation
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Card>
@@ -235,6 +287,8 @@ const SEVERITY_ORDER: AlertSeverity[] = ['critical', 'warning', 'info'];
 export default function CDSRecommendationsClient() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'unacknowledged'>('unacknowledged');
+  const [severityFilter, setSeverityFilter] = useState<'all' | AlertSeverity>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | RuleCategory>('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const { data: recommendations = [], isLoading, error } = useQuery<CDSRecommendation[]>({
@@ -258,49 +312,114 @@ export default function CDSRecommendationsClient() {
 
   const filtered = recommendations
     .filter((r) => (filter === 'unacknowledged' ? !r.acknowledged : true))
+    .filter((r) => (severityFilter === 'all' ? true : r.severity === severityFilter))
+    .filter((r) => (categoryFilter === 'all' ? true : r.category === categoryFilter))
     .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity));
 
   const unacknowledgedCount = recommendations.filter((r) => !r.acknowledged).length;
+  const criticalCount = recommendations.filter((r) => r.severity === 'critical').length;
+  const warningCount = recommendations.filter((r) => r.severity === 'warning').length;
+
+  const categories = Array.from(new Set(recommendations.map((r) => r.category)));
+  const severities = Array.from(new Set(recommendations.map((r) => r.severity))) as AlertSeverity[];
 
   return (
     <PageWrapper className="py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Clinical Decision Support</h1>
-          <p className="mt-1 text-sm text-neutral-500">AI-generated recommendations and alerts</p>
+      <div className="mb-8">
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Clinical Decision Support</h1>
+            <p className="mt-2 text-gray-600">AI-generated recommendations and clinical alerts</p>
+          </div>
         </div>
-        {unacknowledgedCount > 0 && (
-          <Badge variant="danger">{unacknowledgedCount} unacknowledged</Badge>
-        )}
+
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="rounded-lg bg-white p-4 shadow-sm border-l-4 border-red-500">
+            <p className="text-sm text-gray-600">Critical Alerts</p>
+            <p className="text-3xl font-bold text-red-600 mt-1">{criticalCount}</p>
+          </div>
+          <div className="rounded-lg bg-white p-4 shadow-sm border-l-4 border-yellow-500">
+            <p className="text-sm text-gray-600">Warning Alerts</p>
+            <p className="text-3xl font-bold text-yellow-600 mt-1">{warningCount}</p>
+          </div>
+          <div className="rounded-lg bg-white p-4 shadow-sm border-l-4 border-blue-500">
+            <p className="text-sm text-gray-600">Total Recommendations</p>
+            <p className="text-3xl font-bold text-blue-600 mt-1">{recommendations.length}</p>
+          </div>
+          <div className="rounded-lg bg-white p-4 shadow-sm border-l-4 border-green-500">
+            <p className="text-sm text-gray-600">Acknowledged</p>
+            <p className="text-3xl font-bold text-green-600 mt-1">
+              {recommendations.filter((r) => r.acknowledged).length}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Filter bar */}
       <Card padding="none" className="mb-6">
-        <CardContent className="flex gap-2 p-3">
-          {(['unacknowledged', 'all'] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFilter(f)}
-              className={[
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                filter === f
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200',
-              ].join(' ')}
-            >
-              {f === 'all' ? 'All' : 'Unacknowledged'}
-            </button>
-          ))}
+        <CardContent className="p-4 space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {(['unacknowledged', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFilter(f)}
+                className={[
+                  'rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                  filter === f
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                ].join(' ')}
+              >
+                {f === 'all' ? '📋 All' : '⚠️ Unacknowledged'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Severity</label>
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value as any)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="all">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+
+            {categories.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value as any)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {CATEGORY_LABEL[cat]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
+      {/* Recommendations list */}
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 animate-pulse rounded-lg bg-neutral-100" />
+            <div key={i} className="h-48 animate-pulse rounded-lg bg-gray-100" />
           ))}
         </div>
       ) : error ? (
