@@ -6,16 +6,26 @@ const path = require('path');
 const { withSentryConfig } = require('@sentry/nextjs');
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
+const isProduction = process.env.NODE_ENV === 'production';
 
+const cdnImageSources = cdnUrl ? `${cdnUrl} ` : '';
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
-    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none';`,
+    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnUrl}; style-src 'self' 'unsafe-inline' ${cdnUrl}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnUrl}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none';`,
   },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=(), payment=()' },
+  // CDN caching headers
+  {
+    key: 'Cache-Control',
+    value: isProduction
+      ? 'public, max-age=31536000, immutable' // 1 year for immutable assets
+      : 'public, max-age=0, must-revalidate',
+  },
 ];
 
 const nextConfig = {
@@ -24,8 +34,50 @@ const nextConfig = {
     missingSuspenseWithCSRBailout: false,
     optimizePackageImports: ['recharts', '@tanstack/react-query', 'lucide-react'],
   },
+  // CDN Configuration
+  basePath: '',
+  assetPrefix: cdnUrl || undefined,
+  // Image optimization for CDN
+  images: {
+    remotePatterns: cdnUrl
+      ? [
+          {
+            protocol: cdnUrl.split('://')[0],
+            hostname: new URL(cdnUrl).hostname,
+            pathname: '/**',
+          },
+        ]
+      : [],
+    unoptimized: false,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 31536000, // 1 year for optimized images
+  },
+  // Enable compression
+  compress: true,
+  // Powering down optimizations in production
+  swcMinify: true,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
+  },
+  async redirects() {
+    return [
+      // Redirect old static asset paths to CDN if configured
+      ...(cdnUrl
+        ? [
+            {
+              source: '/fonts/:path*',
+              destination: `${cdnUrl}/fonts/:path*`,
+              permanent: true,
+            },
+            {
+              source: '/images/:path*',
+              destination: `${cdnUrl}/images/:path*`,
+              permanent: true,
+            },
+          ]
+        : []),
+    ];
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
