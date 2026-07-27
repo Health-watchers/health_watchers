@@ -39,20 +39,47 @@ function riskVariant(level?: RiskLevel) {
   return 'default';
 }
 
-const DEFAULT_FILTERS: PatientFilters = {
+const DEFAULT_FILTERS: PatientFilters & { city?: string; ageMin?: string; ageMax?: string; medicalHistory?: string } = {
   q: '',
   status: '',
   sex: '',
   dobFrom: '',
   dobTo: '',
   condition: '',
+  city: '',
+  ageMin: '',
+  ageMax: '',
+  medicalHistory: '',
 };
+
+function calculateAgeFromDOB(dobString: string): number {
+  const dob = new Date(dobString);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return Math.max(0, age);
+}
+
+function calculateDOBFromAge(age: number, isMax = false): string {
+  const today = new Date();
+  const year = today.getFullYear() - age;
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  if (isMax) {
+    return `${year - 1}-12-31`;
+  }
+  return `${year}-01-01`;
+}
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<PatientFilters>(DEFAULT_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState<PatientFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<typeof DEFAULT_FILTERS>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<typeof DEFAULT_FILTERS>(DEFAULT_FILTERS);
   const [inputValue, setInputValue] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout>();
 
   const { data: patients = [], isLoading, error } = usePatients({
@@ -67,7 +94,14 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   };
 
   const applyFilters = () => {
-    setAppliedFilters(filters);
+    const newAppliedFilters = { ...filters };
+    if (filters.ageMin) {
+      newAppliedFilters.dobTo = calculateDOBFromAge(parseInt(filters.ageMin));
+    }
+    if (filters.ageMax) {
+      newAppliedFilters.dobFrom = calculateDOBFromAge(parseInt(filters.ageMax), true);
+    }
+    setAppliedFilters(newAppliedFilters);
   };
 
   const resetFilters = () => {
@@ -77,7 +111,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
     setAppliedFilters(DEFAULT_FILTERS);
   };
 
-  const activeFilterCount = Object.values(appliedFilters).filter(Boolean).length + (searchQuery ? 1 : 0);
+  const activeFilterCount = Object.values(filters).filter(Boolean).length + (inputValue ? 1 : 0);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -93,9 +127,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         </Link>
       </div>
 
-      <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          <div className="xl:col-span-2">
+      <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 shadow-sm">
+        <div className="p-5">
+          <div className="mb-4">
             <label htmlFor="patient-search" className="sr-only">
               {labels.search}
             </label>
@@ -105,103 +139,180 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 type="search"
                 value={inputValue}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder={`${labels.search} / medical condition`}
+                placeholder={`${labels.search} by name, ID, or medical condition`}
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700 placeholder-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 aria-label={labels.search}
               />
             </div>
           </div>
 
-          <div>
-            <label htmlFor="filter-status" className="block text-xs font-semibold text-gray-500 uppercase">
-              Status
-            </label>
-            <select
-              id="filter-status"
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
-            >
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="discharged">Discharged</option>
-            </select>
-          </div>
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+            aria-expanded={showAdvancedFilters}
+          >
+            <span aria-hidden="true">{showAdvancedFilters ? '▼' : '▶'}</span>
+            Advanced Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+          </button>
 
-          <div>
-            <label htmlFor="filter-sex" className="block text-xs font-semibold text-gray-500 uppercase">
-              Sex
-            </label>
-            <select
-              id="filter-sex"
-              value={filters.sex}
-              onChange={(e) => setFilters((prev) => ({ ...prev, sex: e.target.value }))}
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
-            >
-              <option value="">All</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+          {showAdvancedFilters && (
+            <div className="space-y-4 border-t border-gray-200 pt-4">
+              <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label htmlFor="filter-status" className="block text-xs font-semibold text-gray-500 uppercase">
+                    Status
+                  </label>
+                  <select
+                    id="filter-status"
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                  >
+                    <option value="">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="discharged">Discharged</option>
+                  </select>
+                </div>
 
-          <div>
-            <label htmlFor="filter-condition" className="block text-xs font-semibold text-gray-500 uppercase">
-              Medical condition
-            </label>
-            <input
-              id="filter-condition"
-              type="text"
-              value={filters.condition}
-              onChange={(e) => setFilters((prev) => ({ ...prev, condition: e.target.value }))}
-              placeholder="e.g. hypertension"
-              className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
-            />
-          </div>
+                <div>
+                  <label htmlFor="filter-sex" className="block text-xs font-semibold text-gray-500 uppercase">
+                    Gender
+                  </label>
+                  <select
+                    id="filter-sex"
+                    value={filters.sex}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, sex: e.target.value }))}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                  >
+                    <option value="">All</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
-            <div>
-              <label htmlFor="filter-dob-from" className="block text-xs font-semibold text-gray-500 uppercase">
-                DOB from
-              </label>
-              <input
-                id="filter-dob-from"
-                type="date"
-                value={filters.dobFrom}
-                onChange={(e) => setFilters((prev) => ({ ...prev, dobFrom: e.target.value }))}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
-              />
+                <div>
+                  <label htmlFor="filter-city" className="block text-xs font-semibold text-gray-500 uppercase">
+                    City/Location
+                  </label>
+                  <input
+                    id="filter-city"
+                    type="text"
+                    value={filters.city}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, city: e.target.value }))}
+                    placeholder="e.g. New York"
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="filter-condition" className="block text-xs font-semibold text-gray-500 uppercase">
+                    Medical Condition
+                  </label>
+                  <input
+                    id="filter-condition"
+                    type="text"
+                    value={filters.condition}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, condition: e.target.value }))}
+                    placeholder="e.g. hypertension"
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="filter-medical-history" className="block text-xs font-semibold text-gray-500 uppercase">
+                    Medical History
+                  </label>
+                  <input
+                    id="filter-medical-history"
+                    type="text"
+                    value={filters.medicalHistory}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, medicalHistory: e.target.value }))}
+                    placeholder="e.g. diabetes, asthma"
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
+                  <div>
+                    <label htmlFor="filter-age-min" className="block text-xs font-semibold text-gray-500 uppercase">
+                      Age Min
+                    </label>
+                    <input
+                      id="filter-age-min"
+                      type="number"
+                      min="0"
+                      max="150"
+                      value={filters.ageMin}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, ageMin: e.target.value }))}
+                      placeholder="Min age"
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="filter-age-max" className="block text-xs font-semibold text-gray-500 uppercase">
+                      Age Max
+                    </label>
+                    <input
+                      id="filter-age-max"
+                      type="number"
+                      min="0"
+                      max="150"
+                      value={filters.ageMax}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, ageMax: e.target.value }))}
+                      placeholder="Max age"
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
+                  <div>
+                    <label htmlFor="filter-dob-from" className="block text-xs font-semibold text-gray-500 uppercase">
+                      Birth Date From
+                    </label>
+                    <input
+                      id="filter-dob-from"
+                      type="date"
+                      value={filters.dobFrom}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, dobFrom: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="filter-dob-to" className="block text-xs font-semibold text-gray-500 uppercase">
+                      Birth Date To
+                    </label>
+                    <input
+                      id="filter-dob-to"
+                      type="date"
+                      value={filters.dobTo}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, dobTo: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button variant="primary" onClick={applyFilters} className="rounded-md px-4 py-2 text-sm">
+                  Apply filters
+                </Button>
+                <Button variant="outline" onClick={resetFilters} className="rounded-md px-4 py-2 text-sm">
+                  Clear all filters
+                </Button>
+              </div>
             </div>
-            <div>
-              <label htmlFor="filter-dob-to" className="block text-xs font-semibold text-gray-500 uppercase">
-                DOB to
-              </label>
-              <input
-                id="filter-dob-to"
-                type="date"
-                value={filters.dobTo}
-                onChange={(e) => setFilters((prev) => ({ ...prev, dobTo: e.target.value }))}
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" onClick={applyFilters} className="rounded-md px-4 py-2 text-sm">
-              Apply filters
-            </Button>
-            <Button variant="outline" onClick={resetFilters} className="rounded-md px-4 py-2 text-sm">
-              Clear filters
-            </Button>
-            {activeFilterCount > 0 && (
-              <span className="text-sm text-gray-600">
-                {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
+        <div className="border-t border-gray-200 bg-white px-5 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {activeFilterCount > 0 && (
+            <span className="text-sm text-gray-600">
+              {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}
+            </span>
+          )}
           <p className="text-sm text-gray-500">
             Showing {patients.length} patient{patients.length !== 1 ? 's' : ''}
           </p>

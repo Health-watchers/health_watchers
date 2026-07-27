@@ -11,6 +11,8 @@ export interface PatientFilters {
   dobFrom?: string;
   dobTo?: string;
   condition?: string;
+  city?: string;
+  medicalHistory?: string;
 }
 
 export function usePatients(filters: PatientFilters = {}) {
@@ -24,6 +26,8 @@ export function usePatients(filters: PatientFilters = {}) {
       if (filters.dobFrom) params.set('dobFrom', filters.dobFrom);
       if (filters.dobTo) params.set('dobTo', filters.dobTo);
       if (filters.condition) params.set('condition', filters.condition);
+      if (filters.city) params.set('city', filters.city);
+      if (filters.medicalHistory) params.set('medicalHistory', filters.medicalHistory);
 
       const url = params.toString()
         ? `${API_V1}/patients/search?${params.toString()}`
