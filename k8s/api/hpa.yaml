@@ -1,11 +1,12 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: api
+  name: api-hpa
   namespace: health-watchers
   labels:
     app.kubernetes.io/name: health-watchers
     app.kubernetes.io/component: api
+    version: v1
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -14,28 +15,47 @@ spec:
   minReplicas: 2
   maxReplicas: 10
   metrics:
+    # CPU-based scaling - primary metric
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 70  # Scale up at 70% CPU utilization
+    # Memory-based scaling - secondary metric
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 80
+          averageUtilization: 80  # Scale up at 80% memory utilization
+  # Advanced scaling behavior configuration
   behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
+    # Scale UP aggressively when demand increases
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Quick response to load increases
       policies:
+        # Double the number of pods (percentage-based scaling)
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        # But don't add more than 4 pods at once
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+      # Use the most aggressive policy
+      selectPolicy: Max
+    # Scale DOWN conservatively to avoid service disruption
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+        # Remove up to 50% of pods
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        # But remove at most 1 pod at a time
         - type: Pods
           value: 1
           periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Pods
-          value: 2
-          periodSeconds: 60
+      # Use the most conservative policy
+      selectPolicy: Min
