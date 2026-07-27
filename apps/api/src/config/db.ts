@@ -4,19 +4,28 @@ import logger from '../utils/logger';
 
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 1_000;
-const MAX_POOL = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);
+const MAX_POOL = parsePositiveInt(process.env.MONGODB_POOL_SIZE, 10);
+const MIN_POOL = Math.min(parsePositiveInt(process.env.MONGODB_MIN_POOL_SIZE, 2), MAX_POOL);
 const POOL_WARN_THRESHOLD = 0.8;
 
 const POOL_OPTIONS = {
   maxPoolSize: MAX_POOL,
-  minPoolSize: 2,
-  maxConnecting: 2,
-  serverSelectionTimeoutMS: 5_000,
-  socketTimeoutMS: 45_000,
-  connectTimeoutMS: 10_000,
-  heartbeatFrequencyMS: 10_000,
-  waitQueueTimeoutMS: 5_000,
+  minPoolSize: MIN_POOL,
+  maxConnecting: parsePositiveInt(process.env.MONGODB_MAX_CONNECTING, 2),
+  serverSelectionTimeoutMS: parsePositiveInt(
+    process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+    5_000
+  ),
+  socketTimeoutMS: parsePositiveInt(process.env.MONGODB_SOCKET_TIMEOUT_MS, 45_000),
+  connectTimeoutMS: parsePositiveInt(process.env.MONGODB_CONNECT_TIMEOUT_MS, 10_000),
+  heartbeatFrequencyMS: parsePositiveInt(process.env.MONGODB_HEARTBEAT_FREQUENCY_MS, 10_000),
+  waitQueueTimeoutMS: parsePositiveInt(process.env.MONGODB_WAIT_QUEUE_TIMEOUT_MS, 5_000),
 };
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 // ── Connection event listeners ────────────────────────────────────────────────
 mongoose.connection.on('connected', () =>
@@ -77,6 +86,7 @@ export interface PoolMetrics {
   availableConnections: number;
   waitQueueSize: number;
   maxPoolSize: number;
+  minPoolSize: number;
   utilization: number;
 }
 
@@ -93,6 +103,7 @@ export function getPoolMetrics(): PoolMetrics {
     availableConnections,
     waitQueueSize,
     maxPoolSize: MAX_POOL,
+    minPoolSize: MIN_POOL,
     utilization,
   };
 }

@@ -14,6 +14,18 @@ interface MongoServerError extends Error {
   keyValue?: Record<string, unknown>;
 }
 
+export interface ErrorMetrics {
+  total: number;
+  bySeverity: Record<ErrorSeverity, number>;
+  byCategory: Record<string, number>;
+}
+
+const errorMetrics: ErrorMetrics = {
+  total: 0,
+  bySeverity: { low: 0, medium: 0, high: 0, critical: 0 },
+  byCategory: {},
+};
+
 function requestContext(req: Request) {
   return {
     requestId: req.requestId,
@@ -24,12 +36,7 @@ function requestContext(req: Request) {
   };
 }
 
-function logBySeverity(
-  severity: ErrorSeverity,
-  meta: object,
-  err: unknown,
-  message: string
-): void {
+function logBySeverity(severity: ErrorSeverity, meta: object, err: unknown, message: string): void {
   switch (severity) {
     case 'critical':
     case 'high':
@@ -43,11 +50,26 @@ function logBySeverity(
   }
 }
 
+function trackError(severity: ErrorSeverity, category: string): void {
+  errorMetrics.total += 1;
+  errorMetrics.bySeverity[severity] += 1;
+  errorMetrics.byCategory[category] = (errorMetrics.byCategory[category] ?? 0) + 1;
+}
+
+export function getErrorMetrics(): ErrorMetrics {
+  return {
+    total: errorMetrics.total,
+    bySeverity: { ...errorMetrics.bySeverity },
+    byCategory: { ...errorMetrics.byCategory },
+  };
+}
+
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   const ctx = requestContext(req);
 
   // AppError — structured application errors with severity and category
   if (err instanceof AppError) {
+    trackError(err.severity, err.category);
     logBySeverity(
       err.severity,
       { ...ctx, category: err.category, ...(err.context ?? {}) },
@@ -66,6 +88,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // Zod validation errors → 400
   if (err instanceof ZodError) {
+    trackError('low', 'validation');
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
     res.status(400).json({
       error: 'ValidationError',
@@ -79,6 +102,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // Mongoose validation error → 400
   if (err instanceof MongooseError.ValidationError) {
+    trackError('low', 'validation');
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
     logger.info({ ...ctx, details }, 'Mongoose validation error');
     res.status(400).json({
@@ -93,6 +117,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // Mongoose bad ObjectId → 400
   if (err instanceof MongooseError.CastError) {
+    trackError('low', 'validation');
     logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
     res.status(400).json({
       error: 'BadRequest',
@@ -106,6 +131,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // MongoDB duplicate key → 409
   const mongoErr = err as MongoServerError;
   if (mongoErr?.code === 11000) {
+    trackError('low', 'conflict');
     const field = mongoErr.keyValue ? Object.keys(mongoErr.keyValue)[0] : 'field';
     logger.warn({ ...ctx, field }, 'Duplicate key conflict');
     res.status(409).json({
@@ -120,6 +146,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
+    trackError('low', 'authentication');
     logger.info({ ...ctx }, 'JWT token expired');
     res.status(401).json({
       error: 'TokenExpired',
@@ -132,6 +159,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
+    trackError('low', 'authentication');
     logger.info({ ...ctx }, 'Invalid JWT token');
     res.status(401).json({
       error: 'InvalidToken',
@@ -142,6 +170,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return;
   }
 
+  trackError('high', 'internal');
   if (isDev) {
     logger.error({ err }, 'Unhandled error');
   }

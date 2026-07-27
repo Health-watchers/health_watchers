@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validateRequest } from '../validate.middleware';
 
 jest.mock('../../utils/logger', () => ({
+  __esModule: true,
   default: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 

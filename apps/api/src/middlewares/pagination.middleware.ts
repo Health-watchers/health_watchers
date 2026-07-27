@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Types } from 'mongoose';
+import { decodeCursor } from '../utils/paginate';
 
 export interface ParsedPagination {
   page: number;
@@ -26,14 +26,18 @@ export function paginationMiddleware(
     // Parse page
     const rawPage = parseInt(query.page ?? '1', 10);
     if (isNaN(rawPage) || rawPage < 1) {
-      res.status(400).json({ error: 'ValidationError', message: 'page must be a positive integer' });
+      res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'page must be a positive integer' });
       return;
     }
 
     // Parse limit
     const rawLimit = parseInt(query.limit ?? '20', 10);
     if (isNaN(rawLimit) || rawLimit < 1 || rawLimit > 100) {
-      res.status(400).json({ error: 'ValidationError', message: 'limit must be between 1 and 100' });
+      res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must be between 1 and 100' });
       return;
     }
 
@@ -41,17 +45,17 @@ export function paginationMiddleware(
     const sortRaw = query.sort ?? defaultSort;
     const sortMatch = /^([a-zA-Z_]+)_(asc|desc)$/.exec(sortRaw);
     if (!sortMatch) {
-      res.status(400).json({ error: 'ValidationError', message: 'sort must be field_asc or field_desc' });
+      res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'sort must be field_asc or field_desc' });
       return;
     }
     const [, sortField, sortDir] = sortMatch;
     if (allowedSortFields.length > 0 && !allowedSortFields.includes(sortField)) {
-      res
-        .status(400)
-        .json({
-          error: 'ValidationError',
-          message: `sort field '${sortField}' not allowed. Allowed: ${allowedSortFields.join(', ')}`,
-        });
+      res.status(400).json({
+        error: 'ValidationError',
+        message: `sort field '${sortField}' not allowed. Allowed: ${allowedSortFields.join(', ')}`,
+      });
       return;
     }
     const sort: Record<string, 1 | -1> = { [sortField]: sortDir === 'asc' ? 1 : -1 };
@@ -59,20 +63,21 @@ export function paginationMiddleware(
     // Parse cursor (optional)
     let cursor: string | undefined;
     if (allowCursor && query.cursor) {
-      try {
-        const decoded = Buffer.from(query.cursor, 'base64').toString();
-        if (!Types.ObjectId.isValid(decoded)) {
-          res.status(400).json({ error: 'ValidationError', message: 'Invalid cursor value' });
-          return;
-        }
-        cursor = decoded;
-      } catch {
-        res.status(400).json({ error: 'ValidationError', message: 'Invalid cursor encoding' });
+      const decoded = decodeCursor(query.cursor);
+      if (!decoded) {
+        res.status(400).json({ error: 'ValidationError', message: 'Invalid cursor value' });
         return;
       }
+      cursor = decoded;
     }
 
-    res.locals.pagination = { page: rawPage, limit: rawLimit, sort, sortRaw, cursor } as ParsedPagination;
+    (res.locals as Record<string, unknown>).pagination = {
+      page: rawPage,
+      limit: rawLimit,
+      sort,
+      sortRaw,
+      cursor,
+    } as ParsedPagination;
     next();
   };
 }
