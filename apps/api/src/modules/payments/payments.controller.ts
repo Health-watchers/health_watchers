@@ -18,18 +18,15 @@ import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
-import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
-import { emitToClinic } from '@api/realtime/socket';
 import {
   paymentsInitiatedTotal,
-  paymentsConfirmedTotal,
   feeStrategySelectedTotal,
 } from '@api/services/metrics.service';
-import { getCurrentXLMRate } from './services/xlm-rate.service';
 import { feeOptimizer } from './services/fee-optimizer.service';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
+import { confirmPayment } from './services/payment-confirmation.service';
 
 const router = Router();
 router.use(authenticate);
@@ -875,81 +872,14 @@ router.patch(
       }
     }
 
-    // Capture the exchange rate at the time of payment so receipts show an
-    // accurate USD equivalent even if the rate changes later. USDC is pegged ~1:1.
-    let exchangeRate = payment.exchangeRate;
-    if (!exchangeRate) {
-      if (payment.assetCode === 'USDC') {
-        exchangeRate = '1';
-      } else {
-        const current = await getCurrentXLMRate();
-        exchangeRate = current.rateUSD.toString();
-      }
-    }
-    const usdEquivalent = (parseFloat(payment.amount) * parseFloat(exchangeRate)).toFixed(2);
-
-    const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
-      payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
-      { new: true }
-    );
-
-    logger.info({ intentId, txHash }, 'Payment confirmed');
-    paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
-
-    // Record fee amount metric
-    if (updatedPayment) {
-      const { feeAmountPaidXlm } = await import('@api/services/metrics.service');
-      // Base fee is ~0.00001 XLM per strategy tier
-      const feeByStrategy: Record<string, number> = {
-        slow: 0.00001,
-        standard: 0.0001,
-        fast: 0.001,
-      };
-      const feePaid = feeByStrategy[updatedPayment.feeStrategy ?? 'standard'] ?? 0.0001;
-      feeAmountPaidXlm.observe(
-        {
-          strategy: updatedPayment.feeStrategy ?? 'standard',
-          clinicId: String(updatedPayment.clinicId),
-        },
-        feePaid
-      );
+    const confirmation = await confirmPayment({ intentId, txHash });
+    if (!confirmation.payment) {
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
     }
 
-    // Auto-update linked invoice if any (non-blocking)
-    try {
-      const { InvoiceModel } = await import('../invoices/invoice.model');
-      await InvoiceModel.findOneAndUpdate(
-        { paymentIntentId: intentId, status: { $ne: 'paid' } },
-        { status: 'paid', paidAt: new Date(), paidTxHash: txHash }
-      );
-    } catch {
-      /* non-critical */
-    }
-
-    // Send confirmation email to clinic (non-blocking)
-    try {
-      const { ClinicModel } = await import('../clinics/clinic.model');
-      const clinic = await ClinicModel.findById(updatedPayment!.clinicId).lean();
-      if (clinic?.email) {
-        sendPaymentConfirmationEmail(
-          clinic.email,
-          updatedPayment!.amount,
-          updatedPayment!.assetCode,
-          txHash
-        );
-      }
-    } catch {
-      /* non-critical */
-    }
-
-    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
-      paymentId: String(updatedPayment!._id),
-      txHash,
-      amount: updatedPayment!.amount,
-      assetCode: updatedPayment!.assetCode,
-    });
-    return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
+    return res.json({ status: 'success', data: toPaymentResponse(confirmation.payment) });
   })
 );
 
