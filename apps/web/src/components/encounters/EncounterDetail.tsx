@@ -7,6 +7,8 @@ import { Toast } from '@/components/ui';
 import AiSummaryCard from './AiSummaryCard';
 import { SoapNotesView } from './SoapNotesView';
 import { SoapNotesEditor } from './SoapNotesEditor';
+import { VersionHistory } from './VersionHistory';
+import { CosignatureWorkflow } from './CosignatureWorkflow';
 import type { EncounterRecord } from './EncounterTable';
 import { usePreAuths } from '@/lib/queries/usePreAuth';
 import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
@@ -129,8 +131,16 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700 uppercase">
-            {encounter.cosignatureStatus ?? 'Co-signature pending'}
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase ${
+              encounter.cosignatureStatus === 'approved'
+                ? 'bg-green-50 text-green-700'
+                : encounter.cosignatureStatus === 'rejected'
+                  ? 'bg-red-50 text-red-700'
+                  : 'bg-yellow-50 text-yellow-700'
+            }`}
+          >
+            {encounter.cosignatureStatus ?? 'Pending'}
           </span>
           <button
             onClick={() => setIsEditing((prev) => !prev)}
@@ -234,45 +244,82 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">Version history</h3>
-            {encounter.versionHistory?.length ? (
-              <ol className="mt-3 space-y-3">
-                {encounter.versionHistory.map((version) => (
-                  <li key={version.id} className="rounded-md border border-gray-200 bg-white p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-gray-900">{version.author}</p>
-                      <p className="text-xs text-gray-500">{formatDate(version.updatedAt)}</p>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600">{version.summary}</p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-3 text-sm text-gray-500">No version updates yet.</p>
-            )}
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">Version history</h3>
+            <VersionHistory
+              encounterId={encounter.id}
+              versions={encounter.versionHistory ?? []}
+              onVersionRestore={async (versionId) => {
+                await fetchWithAuth(
+                  `${API_V1}/encounters/${encodeURIComponent(encounter.id)}/versions/${encodeURIComponent(versionId)}/restore`,
+                  { method: 'POST' }
+                );
+              }}
+            />
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">Associated documents</h3>
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">Associated documents</h3>
             {encounter.documents?.length ? (
-              <ul className="mt-3 space-y-2">
+              <ul className="space-y-2">
                 {encounter.documents.map((doc) => (
-                  <li key={doc.id} className="rounded-md border border-gray-200 bg-white p-3">
-                    <a
-                      href={doc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-blue-600 hover:underline"
-                    >
-                      {doc.title}
-                    </a>
-                    <p className="text-xs text-gray-500">{doc.type}</p>
+                  <li key={doc.id} className="rounded-md border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-blue-600 hover:underline block"
+                        >
+                          {doc.title}
+                        </a>
+                        <p className="text-xs text-gray-500 mt-1">{doc.type}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 whitespace-nowrap"
+                      >
+                        Download
+                      </a>
+                    </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-gray-500">No documents linked yet.</p>
+              <p className="text-sm text-gray-500">No documents linked yet.</p>
             )}
+          </article>
+
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              Cosignature Workflow
+            </h3>
+            <CosignatureWorkflow
+              encounterId={encounter.id}
+              cosigners={
+                encounter.cosignatureStatus
+                  ? [
+                      {
+                        id: 'attending',
+                        name: encounter.doctor,
+                        title: 'Attending Physician',
+                        status: encounter.cosignatureStatus === 'approved' ? 'approved' : 'pending',
+                      },
+                    ]
+                  : []
+              }
+              onCosignRequested={() => {
+                setToast({ message: 'Cosign request sent', type: 'success' });
+              }}
+              onStatusChange={(status) => {
+                setToast({
+                  message: `Encounter ${status}`,
+                  type: status === 'approved' ? 'success' : 'error',
+                });
+              }}
+            />
           </article>
 
           {encounterPreAuths.length > 0 && (
