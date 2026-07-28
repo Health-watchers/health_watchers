@@ -40,6 +40,7 @@ import {
 import { paymentStateMachine, PaymentState, PaymentStateContext } from './payment-state-machine.js';
 import { mainnetSafetyManager } from './mainnet-safety.js';
 import { exchangeRateManager } from './exchange-rates.js';
+import { batchProcessor } from './batch-processor.js';
 import { Keypair, Asset } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -1325,12 +1326,348 @@ app.get('/escrow/:balanceId', async (req, res) => {
   }
 });
 
+// ============================================================
+// Issue #997 — Currency Exchange Integration
+// ============================================================
+
+// ✅ PUBLIC: GET /exchange-rates/pairs — List supported currency pairs
+app.get('/exchange-rates/pairs', (_req, res) => {
+  try {
+    const supported = ['XLM', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF'];
+    const pairs = supported.flatMap((from) =>
+      supported.filter((to) => to !== from).map((to) => `${from}/${to}`)
+    );
+    return res.json({ success: true, pairs, count: pairs.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /exchange-rates/cached — List all currently cached rates
+app.get('/exchange-rates/cached', (_req, res) => {
+  try {
+    const rates = exchangeRateManager.getCachedRates();
+    return res.json({ success: true, rates, count: rates.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /exchange-rates/multi — Fetch rates for multiple target currencies at once
+app.post('/exchange-rates/multi', async (req, res) => {
+  try {
+    const { from = 'XLM', currencies } = req.body;
+    if (!Array.isArray(currencies) || !currencies.length) {
+      return res.status(400).json({ error: 'currencies must be a non-empty array' });
+    }
+    const rates = await exchangeRateManager.getMultipleRates(from, currencies);
+    recordSuccess();
+    return res.json({ success: true, from, rates });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /exchange-rates/refresh/:from/:to — Refresh a specific pair
+app.post('/exchange-rates/refresh/:from/:to', requireSecret, async (req, res) => {
+  try {
+    const { from, to } = req.params;
+    const rate = await exchangeRateManager.refreshRate(from, to);
+    recordSuccess();
+    return res.json({ success: true, ...rate });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: DELETE /exchange-rates/cache — Clear the exchange rate cache
+app.delete('/exchange-rates/cache', requireSecret, (_req, res) => {
+  try {
+    exchangeRateManager.clearCache();
+    return res.json({ success: true, message: 'Exchange rate cache cleared' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /exchange-rates/periodic-refresh/start — Start periodic refresh
+app.post('/exchange-rates/periodic-refresh/start', requireSecret, (req, res) => {
+  try {
+    const { intervalMs } = req.body;
+    exchangeRateManager.startPeriodicRefresh(intervalMs);
+    return res.json({ success: true, message: 'Periodic refresh started', intervalMs: intervalMs ?? 300000 });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /exchange-rates/periodic-refresh/stop — Stop periodic refresh
+app.post('/exchange-rates/periodic-refresh/stop', requireSecret, (_req, res) => {
+  try {
+    exchangeRateManager.stopPeriodicRefresh();
+    return res.json({ success: true, message: 'Periodic refresh stopped' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Issue #996 — Mainnet Safety Checks
+// ============================================================
+
+// ✅ PUBLIC: GET /safety/network — Detect network and return consistency check
+app.get('/safety/network', (_req, res) => {
+  try {
+    const consistency = mainnetSafetyManager.detectNetworkConsistency();
+    return res.json({
+      success: consistency.passed,
+      network: mainnetSafetyManager.getNetwork(),
+      isMainnet: mainnetSafetyManager.isMainnet(),
+      ...consistency,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: POST /safety/validate-amount — Check if an amount passes safety limits
+app.post('/safety/validate-amount', (req, res) => {
+  try {
+    const { amount, maxAmountXlm, warningThresholdXlm } = req.body;
+    if (typeof amount !== 'number') {
+      return res.status(400).json({ error: 'amount must be a number' });
+    }
+    const result = mainnetSafetyManager.validateAmount(amount, { maxAmountXlm, warningThresholdXlm });
+    return res.json({ success: result.passed, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /safety/confirm — Register explicit confirmation for a mainnet payment
+app.post('/safety/confirm', requireSecret, (req, res) => {
+  try {
+    const { paymentId, confirmedBy, reason } = req.body;
+    if (!paymentId || !confirmedBy) {
+      return res.status(400).json({ error: 'paymentId and confirmedBy are required' });
+    }
+    mainnetSafetyManager.recordConfirmation(paymentId, confirmedBy, reason);
+    return res.json({ success: true, paymentId, confirmedBy, message: 'Confirmation recorded' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /safety/confirm/:paymentId — Check confirmation status
+app.get('/safety/confirm/:paymentId', requireSecret, (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const state = mainnetSafetyManager.getConfirmationState(paymentId);
+    return res.json({
+      success: true,
+      paymentId,
+      confirmed: state?.confirmed ?? false,
+      ...state,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Issue #995 — Payment State Machine
+// ============================================================
+
+// ✅ PUBLIC: GET /payment-state-machine/states — Return all valid states and transitions
+app.get('/payment-state-machine/states', (_req, res) => {
+  return res.json({
+    success: true,
+    states: Object.values(PaymentState),
+    transitions: [
+      { from: 'PENDING', to: 'SUBMITTED', description: 'Payment submitted to Stellar' },
+      { from: 'SUBMITTED', to: 'CONFIRMED', description: 'Transaction confirmed in ledger' },
+      { from: 'SUBMITTED', to: 'FAILED', description: 'Transaction rejected or timed out' },
+      { from: 'PENDING', to: 'FAILED', description: 'Payment cancelled before submission' },
+      { from: 'FAILED', to: 'ROLLED_BACK', description: 'Failed payment rolled back' },
+      { from: 'SUBMITTED', to: 'ROLLED_BACK', description: 'Submitted payment rolled back' },
+    ],
+    terminalStates: ['CONFIRMED', 'FAILED', 'ROLLED_BACK'],
+  });
+});
+
+// ✅ PROTECTED: POST /payment-state-machine/create — Create a new payment in PENDING state
+app.post('/payment-state-machine/create', requireSecret, (req, res) => {
+  try {
+    const { paymentId, amount, fromPublicKey, toPublicKey, metadata } = req.body;
+    if (!paymentId || !amount || !fromPublicKey || !toPublicKey) {
+      return res.status(400).json({ error: 'paymentId, amount, fromPublicKey, and toPublicKey are required' });
+    }
+    const context = paymentStateMachine.createPayment({ paymentId, amount, fromPublicKey, toPublicKey, metadata });
+    return res.json({ success: true, payment: context });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /payment-state-machine/transition — Transition a payment to a new state
+app.post('/payment-state-machine/transition', requireSecret, async (req, res) => {
+  try {
+    const { context, newState, transactionHash, error: errorMsg, metadata } = req.body;
+    if (!context || !newState) {
+      return res.status(400).json({ error: 'context and newState are required' });
+    }
+    if (!Object.values(PaymentState).includes(newState as PaymentState)) {
+      return res.status(400).json({ error: `Invalid state: ${newState}` });
+    }
+    const patch: any = {};
+    if (transactionHash) patch.transactionHash = transactionHash;
+    if (errorMsg) patch.error = errorMsg;
+    if (metadata) patch.metadata = metadata;
+    const updated = await paymentStateMachine.transition(context as PaymentStateContext, newState as PaymentState, patch);
+    return res.json({ success: true, payment: updated });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /payment-state-machine/rollback — Roll back a payment
+app.post('/payment-state-machine/rollback', requireSecret, async (req, res) => {
+  try {
+    const { context, reason } = req.body;
+    if (!context || !reason) {
+      return res.status(400).json({ error: 'context and reason are required' });
+    }
+    const rolled = await paymentStateMachine.rollback(context as PaymentStateContext, reason);
+    return res.json({ success: true, payment: rolled });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /payment-state-machine/history/:paymentId — Get state history
+app.get('/payment-state-machine/history/:paymentId', requireSecret, (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const history = paymentStateMachine.getStateHistory(paymentId);
+    return res.json({ success: true, paymentId, history, count: history.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Issue #994 — Batch Payment Processing (queue + monitoring)
+// ============================================================
+
+// ✅ PROTECTED: POST /batch/enqueue — Enqueue a batch job for async processing
+app.post('/batch/enqueue', requireSecret, async (req, res) => {
+  try {
+    const { fromPublicKey, payments } = req.body;
+    if (!fromPublicKey || !Array.isArray(payments) || !payments.length) {
+      return res.status(400).json({ error: 'fromPublicKey and payments[] are required' });
+    }
+    const result = await batchProcessor.enqueue(fromPublicKey, payments);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /batch/flush — Flush the queue immediately
+app.post('/batch/flush', requireSecret, async (req, res) => {
+  try {
+    const { batchSize } = req.body;
+    await batchProcessor.flush(batchSize);
+    recordSuccess();
+    return res.json({ success: true, message: 'Batch queue flushed' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /batch/stats — Batch processor monitoring statistics
+app.get('/batch/stats', (_req, res) => {
+  try {
+    const stats = batchProcessor.getStats();
+    return res.json({ success: true, ...stats });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /batch/queue — Get current queue snapshot
+app.get('/batch/queue', requireSecret, (_req, res) => {
+  try {
+    const queue = batchProcessor.getQueueSnapshot();
+    return res.json({ success: true, queue, depth: queue.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /batch/jobs — Get recent completed batch jobs
+app.get('/batch/jobs', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '50', 10);
+    const jobs = batchProcessor.getCompletedJobs(Math.min(limit, 200));
+    return res.json({ success: true, jobs, count: jobs.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /batch/jobs/:jobId — Get a specific batch job by ID
+app.get('/batch/jobs/:jobId', requireSecret, (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = batchProcessor.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: `Batch job not found: ${jobId}` });
+    }
+    return res.json({ success: true, job });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /batch/auto-flush/start — Start the auto-flush background scheduler
+app.post('/batch/auto-flush/start', requireSecret, (req, res) => {
+  try {
+    const { intervalMs, batchSize } = req.body;
+    batchProcessor.startAutoFlush(intervalMs, batchSize);
+    return res.json({ success: true, message: 'Auto-flush started', intervalMs: intervalMs ?? 10000, batchSize: batchSize ?? 50 });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /batch/auto-flush/stop — Stop the auto-flush background scheduler
+app.post('/batch/auto-flush/stop', requireSecret, (_req, res) => {
+  try {
+    batchProcessor.stopAutoFlush();
+    return res.json({ success: true, message: 'Auto-flush stopped' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 const closePaymentStream = startPaymentStream((payment) => {
   logger.info({ memo: payment.memo, txHash: payment.txHash }, 'Stellar payment confirmed');
 });
 
 // Automatically notify the API whenever a matching payment is detected
 registerPaymentConfirmationListener(notifyApiOfPayment);
+
+// Start periodic exchange rate refresh (every 5 minutes)
+exchangeRateManager.startPeriodicRefresh();
+
+// Start batch processor auto-flush (every 10 seconds, up to 50 jobs per flush)
+batchProcessor.startAutoFlush();
 
 const server: Server = app.listen(PORT, () => {
   logger.info(
@@ -1347,6 +1684,11 @@ const server: Server = app.listen(PORT, () => {
 // Graceful shutdown handler
 const shutdown = async (signal: string) => {
   logger.info(`${signal} received, starting graceful shutdown`);
+
+  // Stop background services
+  exchangeRateManager.stopPeriodicRefresh();
+  batchProcessor.stopAutoFlush();
+  batchProcessor.pause();
 
   // Stop accepting new connections
   closePaymentStream();
