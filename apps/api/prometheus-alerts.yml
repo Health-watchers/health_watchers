@@ -12,13 +12,13 @@ groups:
           severity: critical
           team: payments
         annotations:
-          summary: "Payment expiration job has not run successfully in >10 minutes"
+          summary: 'Payment expiration job has not run successfully in >10 minutes'
           description: >
             The payment expiration job last succeeded
             {{ $value | humanizeDuration }} ago (threshold: 10 min).
             Payments may be stuck in pending status, causing accounting
             discrepancies and blocking new payments for the same encounter.
-          runbook_url: "https://wiki.internal/runbooks/payment-expiration-job"
+          runbook_url: 'https://wiki.internal/runbooks/payment-expiration-job'
 
       # Fires immediately when 2 or more consecutive failures are recorded.
       - alert: PaymentExpirationJobConsecutiveFailures
@@ -34,7 +34,7 @@ groups:
             The payment expiration job has encountered {{ $value }} consecutive
             failures. Check MongoDB connectivity and application logs for
             structured error details (job=payment-expiration-job).
-          runbook_url: "https://wiki.internal/runbooks/payment-expiration-job"
+          runbook_url: 'https://wiki.internal/runbooks/payment-expiration-job'
 
       # Informational alert tracking cumulative error rate.
       - alert: PaymentExpirationJobErrorRateHigh
@@ -45,7 +45,7 @@ groups:
           severity: warning
           team: payments
         annotations:
-          summary: "Payment expiration job error rate is non-zero over the last 15 minutes"
+          summary: 'Payment expiration job error rate is non-zero over the last 15 minutes'
           description: >
             Errors have been observed in the payment expiration job over the
             last 15 minutes. Review logs for transient vs. permanent failures.

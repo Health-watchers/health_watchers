@@ -134,3 +134,45 @@ export function useServiceWorkerMessage(callback: (data: any) => void) {
     }
   }, [callback]);
 }
+
+// Hook for getting pending forms count and sync status
+export function usePendingSync() {
+  const [pendingCount, setPendingCount] = React.useState(0);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const isOnline = useOnlineStatus();
+
+  React.useEffect(() => {
+    const updatePendingCount = async () => {
+      const pending = await OfflineSync.getPendingForms();
+      setPendingCount(pending.length);
+    };
+
+    updatePendingCount();
+    const interval = setInterval(updatePendingCount, 1000);
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'FORM_SYNCED') {
+        updatePendingCount();
+      }
+      if (event.data?.type === 'SYNC_START') {
+        setIsSyncing(true);
+      }
+      if (event.data?.type === 'SYNC_END') {
+        setIsSyncing(false);
+        updatePendingCount();
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+      return () => {
+        clearInterval(interval);
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      };
+    }
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return { pendingCount, isSyncing, isOnline };
+}

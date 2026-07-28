@@ -1,0 +1,33 @@
+{
+  "$schema": "https://stryker-mutator.io/schemas/stryker-core.schema.json",
+  "testRunner": "jest",
+  "jest": {
+    "configFile": "jest.mutation.config.cjs",
+    "enableFindRelatedTests": true
+  },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "mutate": [
+    "src/modules/auth/token.service.ts",
+    "src/modules/auth/jwt-claim-validator.ts",
+    "src/services/token-denylist.service.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 50
+  },
+  "reporters": ["html", "clear-text", "json", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/mutation.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  },
+  "coverageAnalysis": "perTest",
+  "timeoutMS": 60000,
+  "timeoutFactor": 1.5,
+  "concurrency": 2,
+  "ignoreStatic": true,
+  "disableBail": false
+}

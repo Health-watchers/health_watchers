@@ -83,7 +83,7 @@ export default function ClinicSwitcher() {
       </svg>
       <select
         id="clinic-switcher"
-        className="focus:ring-primary-500 max-w-[12rem] rounded-md border border-neutral-200 bg-neutral-0 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none disabled:opacity-50"
+        className="focus:ring-primary-500 bg-neutral-0 max-w-[12rem] rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none disabled:opacity-50"
         value={user?.clinicId ?? ''}
         disabled={switching}
         onChange={(e) => handleSwitch(e.target.value)}

@@ -12,6 +12,8 @@ interface AuditLogParams {
   clinicId?: string | Types.ObjectId;
   outcome?: 'SUCCESS' | 'FAILURE';
   metadata?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 /**
@@ -48,3 +50,5 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
     logger.error({ err: error }, 'Failed to create audit log');
   }
 }
+
+export const AuditService = { log: auditLog };

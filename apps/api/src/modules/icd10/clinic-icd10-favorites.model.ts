@@ -24,7 +24,13 @@ const favoriteSchema = new Schema<IICD10Favorite>(
 
 const clinicICD10FavoritesSchema = new Schema<IClinicICD10Favorites>(
   {
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, unique: true, index: true },
+    clinicId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Clinic',
+      required: true,
+      unique: true,
+      index: true,
+    },
     codes: { type: [favoriteSchema], default: [] },
   },
   { timestamps: true, versionKey: false }

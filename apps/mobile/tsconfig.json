@@ -10,12 +10,19 @@
     "allowJs": true,
     "strict": true,
     "esModuleInterop": true,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

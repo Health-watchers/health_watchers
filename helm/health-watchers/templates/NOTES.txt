@@ -1,0 +1,56 @@
+🏥 Health Watchers has been deployed!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Release:   {{ .Release.Name }}
+Namespace: {{ .Values.global.namespace }}
+Chart:     {{ .Chart.Name }}-{{ .Chart.Version }}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ Check deployment status:
+  kubectl get pods -n {{ .Values.global.namespace }}
+  kubectl get deployments -n {{ .Values.global.namespace }}
+
+▶ Check service endpoints:
+  kubectl get svc -n {{ .Values.global.namespace }}
+  kubectl get ingress -n {{ .Values.global.namespace }}
+
+{{- if .Values.ingress.enabled }}
+▶ Application URL:
+  https://{{ .Values.ingress.host }}
+{{- end }}
+
+▶ View logs:
+  kubectl logs -f deployment/api -n {{ .Values.global.namespace }}
+  kubectl logs -f deployment/web -n {{ .Values.global.namespace }}
+  kubectl logs -f deployment/stellar-service -n {{ .Values.global.namespace }}
+
+▶ Helm management:
+  # Get current values
+  helm get values {{ .Release.Name }} -n {{ .Values.global.namespace }}
+
+  # Upgrade with a new image tag
+  helm upgrade {{ .Release.Name }} ./helm/health-watchers \
+    -f helm/health-watchers/values.yaml \
+    -f helm/health-watchers/values-production.yaml \
+    --set api.image.tag=<NEW_TAG> \
+    --set web.image.tag=<NEW_TAG> \
+    --set stellarService.image.tag=<NEW_TAG>
+
+  # Rollback to previous release
+  helm rollback {{ .Release.Name }} -n {{ .Values.global.namespace }}
+
+  # View release history
+  helm history {{ .Release.Name }} -n {{ .Values.global.namespace }}
+
+⚠️  IMPORTANT: Secrets
+  Ensure the following secrets are set (never commit real values):
+    - secrets.mongoUri
+    - secrets.jwtAccessTokenSecret
+    - secrets.jwtRefreshTokenSecret
+    - secrets.stellarSecretKey
+    - secrets.fieldEncryptionKey
+
+  Use --set or a sealed-secrets solution. For production, enable:
+    secrets.useExternalSecrets: true
+
+📖 Full documentation: https://github.com/Health-watchers/health_watchers/blob/main/helm/health-watchers/README.md

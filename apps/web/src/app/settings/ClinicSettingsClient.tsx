@@ -225,9 +225,7 @@ export default function ClinicSettingsClient() {
               style={inputStyle}
               type="tel"
               value={merged.branding.phone ?? ''}
-              onChange={(e) =>
-                update({ branding: { ...merged.branding, phone: e.target.value } })
-              }
+              onChange={(e) => update({ branding: { ...merged.branding, phone: e.target.value } })}
             />
           </label>
           <label style={labelStyle}>
@@ -236,9 +234,7 @@ export default function ClinicSettingsClient() {
               style={inputStyle}
               type="text"
               value={merged.branding.taxId ?? ''}
-              onChange={(e) =>
-                update({ branding: { ...merged.branding, taxId: e.target.value } })
-              }
+              onChange={(e) => update({ branding: { ...merged.branding, taxId: e.target.value } })}
             />
           </label>
           <label style={labelStyle}>

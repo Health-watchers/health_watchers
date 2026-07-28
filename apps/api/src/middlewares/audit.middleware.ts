@@ -26,7 +26,7 @@ export function auditMiddleware(action: AuditAction, resourceType?: string) {
             clinicId: req.user?.clinicId,
             outcome: 'SUCCESS',
           },
-          req,
+          req
         ).catch((error) => {
           logger.error({ err: error }, 'Audit logging failed');
         });

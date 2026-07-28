@@ -31,15 +31,17 @@ export class SocketService {
     // Authentication middleware for Socket.IO
     this.io.use(async (socket, next) => {
       try {
-        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
-        
+        const token =
+          socket.handshake.auth.token ||
+          socket.handshake.headers.authorization?.replace('Bearer ', '');
+
         if (!token) {
           return next(new Error('Authentication token required'));
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
         const user = await UserModel.findById(decoded.userId).select('-password');
-        
+
         if (!user) {
           return next(new Error('User not found'));
         }
@@ -47,7 +49,7 @@ export class SocketService {
         socket.data.user = user;
         socket.join(`clinic:${user.clinicId}`);
         socket.join(`user:${user._id}`);
-        
+
         logger.info(`Socket connected: ${socket.id} for user ${user._id}`);
         next();
       } catch (error) {
@@ -86,7 +88,7 @@ export class SocketService {
       timestamp: new Date().toISOString(),
       ...data,
     });
-    
+
     logger.info(`Emitted ${event} for appointment ${appointmentId}`);
   }
 

@@ -33,7 +33,7 @@ describe('icd10Code', () => {
 });
 
 describe('monetaryAmount', () => {
-  it('accepts 100.00', () => expect(() => monetaryAmount.parse(100.00)).not.toThrow());
+  it('accepts 100.00', () => expect(() => monetaryAmount.parse(100.0)).not.toThrow());
   it('accepts 0.01', () => expect(() => monetaryAmount.parse(0.01)).not.toThrow());
   it('rejects 0', () => expect(() => monetaryAmount.parse(0)).toThrow());
   it('rejects negative amount', () => expect(() => monetaryAmount.parse(-5)).toThrow());
@@ -41,7 +41,7 @@ describe('monetaryAmount', () => {
 });
 
 describe('CreatePaymentIntentSchema — strict mode', () => {
-  const valid = { patientId: '507f1f77bcf86cd799439011', amount: 150.00, currency: 'USDC' };
+  const valid = { patientId: '507f1f77bcf86cd799439011', amount: 150.0, currency: 'USDC' };
   it('accepts valid payment intent', () => {
     expect(() => CreatePaymentIntentSchema.parse(valid)).not.toThrow();
   });

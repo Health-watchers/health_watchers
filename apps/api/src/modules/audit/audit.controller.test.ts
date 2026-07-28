@@ -74,10 +74,14 @@ describe('GET /audit-logs', () => {
     // Override auth middleware for this test
     const restrictedApp = express();
     restrictedApp.use(express.json());
-    restrictedApp.use('/audit-logs', (req: any, _res: any, next: any) => {
-      req.user = { role: 'CLINIC_ADMIN' };
-      next();
-    }, auditRoutes);
+    restrictedApp.use(
+      '/audit-logs',
+      (req: any, _res: any, next: any) => {
+        req.user = { role: 'CLINIC_ADMIN' };
+        next();
+      },
+      auditRoutes
+    );
 
     const res = await request(restrictedApp).get('/audit-logs');
     expect(res.status).toBe(403);

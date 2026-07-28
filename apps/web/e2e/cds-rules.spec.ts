@@ -33,10 +33,14 @@ test.describe('CDS Rules Management', () => {
     // Set conditions JSON
     const conditionsTextarea = page.locator('textarea:nth-of-type(2)');
     await conditionsTextarea.fill(
-      JSON.stringify({
-        type: 'vital_sign',
-        bloodPressure: { critical: true },
-      }, null, 2)
+      JSON.stringify(
+        {
+          type: 'vital_sign',
+          bloodPressure: { critical: true },
+        },
+        null,
+        2
+      )
     );
 
     // Set action

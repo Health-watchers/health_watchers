@@ -18,4 +18,5 @@ const xlmRateSchema = new Schema<XLMRate>(
   { timestamps: true, versionKey: false }
 );
 
-export const XLMRateModel = models.XLMRate || model<XLMRate>('XLMRate', xlmRateSchema);
+export const XLMRateModel = (models.XLMRate ||
+  model<XLMRate>('XLMRate', xlmRateSchema)) as import('mongoose').Model<XLMRate>;

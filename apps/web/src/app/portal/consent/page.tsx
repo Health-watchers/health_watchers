@@ -63,7 +63,7 @@ export default function PortalConsentPage() {
                 role="switch"
                 aria-checked={c.granted}
                 onClick={() => toggle(c.id)}
-                className={`relative mt-0.5 h-6 w-11 flex-shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${c.granted ? 'bg-blue-600' : 'bg-gray-300'}`}
+                className={`relative mt-0.5 h-6 w-11 flex-shrink-0 rounded-full transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none ${c.granted ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
                 <span
                   className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${c.granted ? 'translate-x-5' : 'translate-x-0'}`}

@@ -122,7 +122,9 @@ describe('HIPAA Safe Harbor — all 18 identifiers', () => {
 
   // 14. URLs in clinical notes
   it('does not leak URLs that contain PII (email pattern catches them)', () => {
-    const r = deId({ clinicalNotes: 'See portal at https://portal.example.com/patient/john.doe@example.com' });
+    const r = deId({
+      clinicalNotes: 'See portal at https://portal.example.com/patient/john.doe@example.com',
+    });
     expect(r.clinicalNotes).not.toContain('john.doe@example.com');
   });
 
@@ -176,10 +178,7 @@ describe('Level: de-identification', () => {
   });
 
   it('handles missing optional fields gracefully', () => {
-    const r = anonymize(
-      { firstName: 'Jane', lastName: 'Smith' },
-      DE_ID
-    );
+    const r = anonymize({ firstName: 'Jane', lastName: 'Smith' }, DE_ID);
     expect(r.address).toBeUndefined();
     expect(r.dateOfBirth).toBeUndefined();
     expect(r.clinicalNotes).toBeUndefined();
@@ -224,10 +223,7 @@ describe('Level: pseudonymization', () => {
   });
 
   it('falls back to systemId hash when name is absent', () => {
-    const r = anonymize(
-      { systemId: 'PAT-99', clinicalNotes: 'notes' },
-      PSEUDO
-    );
+    const r = anonymize({ systemId: 'PAT-99', clinicalNotes: 'notes' }, PSEUDO);
     expect(r.firstName).toBe('Patient');
     expect(r.lastName).toMatch(/^[a-f0-9]{8}$/);
   });
@@ -317,9 +313,7 @@ describe('Level: aggregation (anonymizeBatch)', () => {
   });
 
   it('throws for unsupported level on single record', () => {
-    expect(() =>
-      anonymize(BASE_PATIENT, { level: 'aggregation' as AnonymizationLevel })
-    ).toThrow();
+    expect(() => anonymize(BASE_PATIENT, { level: 'aggregation' as AnonymizationLevel })).toThrow();
   });
 });
 
@@ -396,10 +390,7 @@ describe('Clinical notes — PII stripping', () => {
   });
 
   it('strips name from pseudonymized notes too', () => {
-    const r = anonymize(
-      { ...BASE_PATIENT, clinicalNotes: 'John Doe has diabetes.' },
-      PSEUDO
-    );
+    const r = anonymize({ ...BASE_PATIENT, clinicalNotes: 'John Doe has diabetes.' }, PSEUDO);
     expect(r.clinicalNotes).not.toContain('John Doe');
   });
 });
@@ -485,8 +476,16 @@ describe('Purpose parameter', () => {
   });
 
   it('pseudonymization with purpose=ai is consistent', () => {
-    const a = anonymize(BASE_PATIENT, { level: 'pseudonymization', sessionId: 's1', purpose: 'ai' });
-    const b = anonymize(BASE_PATIENT, { level: 'pseudonymization', sessionId: 's1', purpose: 'ai' });
+    const a = anonymize(BASE_PATIENT, {
+      level: 'pseudonymization',
+      sessionId: 's1',
+      purpose: 'ai',
+    });
+    const b = anonymize(BASE_PATIENT, {
+      level: 'pseudonymization',
+      sessionId: 's1',
+      purpose: 'ai',
+    });
     expect(a.lastName).toBe(b.lastName);
   });
 
@@ -567,13 +566,10 @@ describe('Property-based tests — PII pattern matching', () => {
   // Email addresses
   it('always redacts valid email addresses in notes', () => {
     fc.assert(
-      fc.property(
-        fc.emailAddress(),
-        (email) => {
-          const r = deId({ clinicalNotes: `Email: ${email}` });
-          return !r.clinicalNotes!.includes(email);
-        }
-      )
+      fc.property(fc.emailAddress(), (email) => {
+        const r = deId({ clinicalNotes: `Email: ${email}` });
+        return !r.clinicalNotes!.includes(email);
+      })
     );
   });
 
@@ -599,8 +595,8 @@ describe('Property-based tests — PII pattern matching', () => {
   it('de-identification never leaks firstName or lastName', () => {
     fc.assert(
       fc.property(
-        fc.string({ minLength: 2, maxLength: 20 }).filter(s => /^[a-zA-Z]+$/.test(s)),
-        fc.string({ minLength: 2, maxLength: 20 }).filter(s => /^[a-zA-Z]+$/.test(s)),
+        fc.string({ minLength: 2, maxLength: 20 }).filter((s) => /^[a-zA-Z]+$/.test(s)),
+        fc.string({ minLength: 2, maxLength: 20 }).filter((s) => /^[a-zA-Z]+$/.test(s)),
         (first, last) => {
           const r = anonymize({ firstName: first, lastName: last }, DE_ID);
           return r.firstName === undefined && r.lastName === undefined;
@@ -612,58 +608,45 @@ describe('Property-based tests — PII pattern matching', () => {
   // Pseudonymization always produces 8-char hex lastName
   it('pseudonymization always produces 8-char hex lastName', () => {
     fc.assert(
-      fc.property(
-        fc.string({ minLength: 1 }),
-        fc.string({ minLength: 1 }),
-        (first, last) => {
-          const r = anonymize({ firstName: first, lastName: last }, PSEUDO);
-          return /^[a-f0-9]{8}$/.test(r.lastName as string);
-        }
-      )
+      fc.property(fc.string({ minLength: 1 }), fc.string({ minLength: 1 }), (first, last) => {
+        const r = anonymize({ firstName: first, lastName: last }, PSEUDO);
+        return /^[a-f0-9]{8}$/.test(r.lastName as string);
+      })
     );
   });
 
   // Age range always has correct format and 5-year bucket
   it('age range always matches NNN-NNN years format with 5-year bucket', () => {
     fc.assert(
-      fc.property(
-        fc.date({ min: new Date('1920-01-01'), max: new Date('2005-12-31') }),
-        (dob) => {
-          const r = anonymize({ dateOfBirth: dob.toISOString().split('T')[0] }, DE_ID);
-          if (!r.dateOfBirth) return true;
-          const m = r.dateOfBirth.match(/^(\d+)-(\d+) years$/);
-          if (!m) return false;
-          const low = parseInt(m[1]);
-          const high = parseInt(m[2]);
-          return high - low === 4 && low % 5 === 0;
-        }
-      )
+      fc.property(fc.date({ min: new Date('1920-01-01'), max: new Date('2005-12-31') }), (dob) => {
+        const r = anonymize({ dateOfBirth: dob.toISOString().split('T')[0] }, DE_ID);
+        if (!r.dateOfBirth) return true;
+        const m = r.dateOfBirth.match(/^(\d+)-(\d+) years$/);
+        if (!m) return false;
+        const low = parseInt(m[1]);
+        const high = parseInt(m[2]);
+        return high - low === 4 && low % 5 === 0;
+      })
     );
   });
 
   // systemId always redacted in de-identification
   it('systemId is always [REDACTED] in de-identification', () => {
     fc.assert(
-      fc.property(
-        fc.string({ minLength: 1 }),
-        (id) => {
-          const r = anonymize({ systemId: id }, DE_ID);
-          return r.systemId === '[REDACTED]';
-        }
-      )
+      fc.property(fc.string({ minLength: 1 }), (id) => {
+        const r = anonymize({ systemId: id }, DE_ID);
+        return r.systemId === '[REDACTED]';
+      })
     );
   });
 
   // Pseudonymization systemId always starts with ANON_
   it('pseudonymization systemId always starts with ANON_', () => {
     fc.assert(
-      fc.property(
-        fc.string({ minLength: 1 }),
-        (id) => {
-          const r = anonymize({ systemId: id }, PSEUDO);
-          return (r.systemId as string).startsWith('ANON_');
-        }
-      )
+      fc.property(fc.string({ minLength: 1 }), (id) => {
+        const r = anonymize({ systemId: id }, PSEUDO);
+        return (r.systemId as string).startsWith('ANON_');
+      })
     );
   });
 });
@@ -675,7 +658,7 @@ describe('Property-based tests — PII pattern matching', () => {
 describe('Performance — large clinical notes', () => {
   it('anonymizes 10,000-word clinical note in under 100ms', () => {
     const bigNote =
-      'Patient John Doe called 555-123-4567 on January 15, 2024. ' .repeat(500) +
+      'Patient John Doe called 555-123-4567 on January 15, 2024. '.repeat(500) +
       'Email: john.doe@example.com. SSN: 123-45-6789. Lives at 123 Main Street.';
 
     const start = Date.now();

@@ -26,10 +26,10 @@ const UnrecognizedTransactionSchema = new Schema<IUnrecognizedTransaction>(
     resolvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 export const UnrecognizedTransactionModel = mongoose.model<IUnrecognizedTransaction>(
   'UnrecognizedTransaction',
-  UnrecognizedTransactionSchema,
+  UnrecognizedTransactionSchema
 );

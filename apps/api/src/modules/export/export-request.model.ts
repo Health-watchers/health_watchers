@@ -49,8 +49,11 @@ const exportRequestSchema = new Schema<ExportRequest>(
     downloadCount: { type: Number, default: 0 },
     failureReason: { type: String },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
-export const ExportRequestModel =
-  models.ExportRequest || model<ExportRequest>('ExportRequest', exportRequestSchema);
+export const ExportRequestModel = (models.ExportRequest ||
+  model<ExportRequest>(
+    'ExportRequest',
+    exportRequestSchema
+  )) as import('mongoose').Model<ExportRequest>;

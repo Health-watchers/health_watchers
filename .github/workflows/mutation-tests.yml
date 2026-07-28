@@ -1,0 +1,72 @@
+name: Mutation Testing
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/src/modules/auth/**'
+      - 'apps/api/src/services/token-denylist.service.ts'
+      - 'apps/api/stryker.config.json'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/src/modules/auth/**'
+      - 'apps/api/src/services/token-denylist.service.ts'
+      - 'apps/api/stryker.config.json'
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  mutation-testing:
+    name: Stryker Mutation Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run mutation tests
+        run: npm run test:mutation --workspace=api
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          NODE_ENV: test
+          API_PORT: 3001
+        # Mutation testing is informational on PRs; only fail when the score
+        # drops below the "break" threshold defined in stryker.config.json.
+        continue-on-error: false
+
+      - name: Upload mutation report (HTML)
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: mutation-report
+          path: |
+            apps/api/reports/mutation/mutation.html
+            apps/api/reports/mutation/mutation.json
+          retention-days: 30
+
+      - name: Print mutation score summary
+        if: always()
+        run: |
+          if [ -f apps/api/reports/mutation/mutation.json ]; then
+            node -e "
+              const r = require('./apps/api/reports/mutation/mutation.json');
+              const m = r.mutationScore ?? r.metrics?.mutationScore ?? 'N/A';
+              console.log('Mutation score: ' + m + '%');
+              console.log('Killed:   ' + (r.killed ?? r.metrics?.killed ?? 'N/A'));
+              console.log('Survived: ' + (r.survived ?? r.metrics?.survived ?? 'N/A'));
+              console.log('Total:    ' + (r.totalMutants ?? r.metrics?.totalMutants ?? 'N/A'));
+            "
+          else
+            echo "No mutation report found."
+          fi

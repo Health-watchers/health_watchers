@@ -11,7 +11,7 @@ export async function expireWaitlistEntries(): Promise<number> {
 
   // Find notified entries whose 48h window has passed
   const expired = await WaitlistModel.find({
-    status:    'notified',
+    status: 'notified',
     expiresAt: { $lte: now },
   }).lean();
 
@@ -25,8 +25,8 @@ export async function expireWaitlistEntries(): Promise<number> {
     // Find a representative upcoming appointment for context (best-effort)
     const appt = await AppointmentModel.findOne({
       clinicId: entry.clinicId,
-      doctorId:  entry.doctorId,
-      status:    { $in: ['scheduled', 'confirmed'] },
+      doctorId: entry.doctorId,
+      status: { $in: ['scheduled', 'confirmed'] },
       scheduledAt: { $gte: now },
     })
       .sort({ scheduledAt: 1 })
@@ -34,8 +34,8 @@ export async function expireWaitlistEntries(): Promise<number> {
 
     if (appt) {
       await notifyNextOnWaitlist({
-        clinicId:    String(entry.clinicId),
-        doctorId:    String(entry.doctorId ?? appt.doctorId),
+        clinicId: String(entry.clinicId),
+        doctorId: String(entry.doctorId ?? appt.doctorId),
         scheduledAt: appt.scheduledAt,
       }).catch(() => {});
     }
@@ -47,7 +47,9 @@ export async function expireWaitlistEntries(): Promise<number> {
 
 export function startWaitlistExpiryJob(): void {
   if (jobInterval) return;
-  expireWaitlistEntries().catch((err) => logger.error({ err }, 'Waitlist expiry initial run failed'));
+  expireWaitlistEntries().catch((err) =>
+    logger.error({ err }, 'Waitlist expiry initial run failed')
+  );
   jobInterval = setInterval(() => {
     expireWaitlistEntries().catch((err) => logger.error({ err }, 'Waitlist expiry job failed'));
   }, CHECK_INTERVAL_MS);

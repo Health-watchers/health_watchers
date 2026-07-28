@@ -8,6 +8,8 @@ import { AuthProvider } from '@/context/AuthContext';
 
 import { Toaster } from '@/components/ui';
 import { ThemeSync } from '@/components/ThemeSync';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { PWAInit } from '@/components/PWAInit';
 import './globals.css';
 
 const inter = Inter({
@@ -93,6 +95,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <QueryProvider>
               <AuthProvider>
                 <ThemeSync />
+                <PWAInit />
+                <OfflineIndicator />
                 {children}
                 <Toaster />
               </AuthProvider>

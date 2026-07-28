@@ -17,7 +17,8 @@ process.env.MONGO_URI = 'mongodb://localhost:27017/test';
 process.env.JWT_ACCESS_TOKEN_SECRET = 'test-access-secret-32-chars-long!!';
 process.env.JWT_REFRESH_TOKEN_SECRET = 'test-refresh-secret-32-chars-long!';
 process.env.API_PORT = '3002';
-process.env.FIELD_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyz012345abcdefghijklmnopqrstuvwxyz012345';
+process.env.FIELD_ENCRYPTION_KEY =
+  'abcdefghijklmnopqrstuvwxyz012345abcdefghijklmnopqrstuvwxyz012345';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 jest.mock('@health-watchers/config', () => ({
@@ -63,20 +64,34 @@ jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
 }));
 
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
 
 // ── PatientModel mock ─────────────────────────────────────────────────────────
 const INSURANCE_ID = '507f1f77bcf86cd799439099';
-const PATIENT_ID   = '507f1f77bcf86cd799439033';
-const CLINIC_ID    = '507f1f77bcf86cd799439011';
+const PATIENT_ID = '507f1f77bcf86cd799439033';
+const CLINIC_ID = '507f1f77bcf86cd799439011';
 
 function makeInsurance(overrides: Record<string, unknown> = {}) {
   return {

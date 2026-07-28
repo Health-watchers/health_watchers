@@ -1,119 +1,177 @@
-import axios from 'axios';
+import crypto from 'crypto';
 import {
-  enqueueWebhookDelivery,
   generateWebhookSecret,
   generateWebhookSignature,
   verifyWebhookSignature,
+  enqueueWebhookDelivery,
+  dispatchWebhookEvent,
 } from '../webhook.service';
-import { WebhookDeliveryModel } from '../webhook.model';
-import { validateWebhookUrl } from '@api/utils/url-validator';
+import {
+  WebhookModel,
+  WebhookDeliveryModel,
+  WebhookEventLogModel,
+} from '../webhook.model';
 
-jest.mock('axios');
 jest.mock('../webhook.model', () => ({
-  WebhookDeliveryModel: { findOne: jest.fn(), create: jest.fn() },
+  WebhookModel: {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+  },
+  WebhookDeliveryModel: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    find: jest.fn(),
+  },
+  WebhookEventLogModel: {
+    create: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  },
 }));
-jest.mock('@api/utils/url-validator', () => ({ validateWebhookUrl: jest.fn() }));
 
-async function flush(cycles = 8) {
-  for (let i = 0; i < cycles; i++) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
-}
+jest.mock('@api/utils/logger', () => ({
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+}));
 
-describe('webhook crypto helpers', () => {
-  it('generateWebhookSecret returns a 64-char hex string', () => {
-    const secret = generateWebhookSecret();
-    expect(secret).toMatch(/^[a-f0-9]{64}$/);
+jest.mock('@api/utils/url-validator', () => ({
+  validateWebhookUrl: jest.fn(() => ({ valid: true })),
+}));
+
+describe('Webhook Service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('generateWebhookSecret returns unique values on each call', () => {
-    expect(generateWebhookSecret()).not.toBe(generateWebhookSecret());
-  });
-
-  it('generateWebhookSignature is deterministic for the same secret/payload', () => {
-    const sig1 = generateWebhookSignature('secret', '{"a":1}');
-    const sig2 = generateWebhookSignature('secret', '{"a":1}');
-    expect(sig1).toBe(sig2);
-  });
-
-  it('generateWebhookSignature differs for different secrets', () => {
-    const sig1 = generateWebhookSignature('secret-a', '{"a":1}');
-    const sig2 = generateWebhookSignature('secret-b', '{"a":1}');
-    expect(sig1).not.toBe(sig2);
-  });
-
-  it('verifyWebhookSignature returns true for a matching signature', () => {
-    const payload = '{"a":1}';
-    const sig = generateWebhookSignature('secret', payload);
-    expect(verifyWebhookSignature('secret', payload, sig)).toBe(true);
-  });
-
-  it('verifyWebhookSignature returns false for a wrong (same-length) signature', () => {
-    const payload = '{"a":1}';
-    const real = generateWebhookSignature('secret', payload);
-    const tampered = '0'.repeat(real.length);
-    expect(verifyWebhookSignature('secret', payload, tampered)).toBe(false);
-  });
-});
-
-describe('enqueueWebhookDelivery', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it('marks the delivery as failed without calling axios when the URL is blocked', async () => {
-    (validateWebhookUrl as jest.Mock).mockReturnValue({ valid: false, reason: 'blocked IP range' });
-    const delivery: any = { status: 'pending', save: jest.fn().mockResolvedValue(undefined) };
-    (WebhookDeliveryModel.findOne as jest.Mock).mockResolvedValue(delivery);
-
-    await enqueueWebhookDelivery('wh1', 'payment.confirmed', 'http://127.0.0.1', 'secret', { amount: 1 });
-    await flush();
-
-    expect(delivery.status).toBe('failed');
-    expect(delivery.error).toMatch(/blocked IP range/);
-    expect(delivery.save).toHaveBeenCalled();
-    expect(axios.post).not.toHaveBeenCalled();
-  });
-
-  it('creates a new pending delivery when none exists, then marks it delivered on success', async () => {
-    (validateWebhookUrl as jest.Mock).mockReturnValue({ valid: true });
-    (WebhookDeliveryModel.findOne as jest.Mock).mockResolvedValue(null);
-    const delivery: any = { status: 'pending', attempts: 0, save: jest.fn().mockResolvedValue(undefined) };
-    (WebhookDeliveryModel.create as jest.Mock).mockResolvedValue(delivery);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
-
-    await enqueueWebhookDelivery('wh1', 'payment.confirmed', 'https://example.com/hook', 'secret', {
-      amount: 1,
+  describe('generateWebhookSecret', () => {
+    it('should generate a 64-character hex string', () => {
+      const secret = generateWebhookSecret();
+      expect(secret).toHaveLength(64);
+      expect(/^[0-9a-f]+$/.test(secret)).toBe(true);
     });
-    await flush();
 
-    expect(WebhookDeliveryModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        webhookId: 'wh1',
-        event: 'payment.confirmed',
+    it('should generate unique secrets', () => {
+      const secret1 = generateWebhookSecret();
+      const secret2 = generateWebhookSecret();
+      expect(secret1).not.toEqual(secret2);
+    });
+  });
+
+  describe('generateWebhookSignature', () => {
+    it('should generate HMAC-SHA256 signature', () => {
+      const secret = 'test-secret';
+      const payload = '{"event":"test"}';
+      const signature = generateWebhookSignature(secret, payload);
+      const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+      expect(signature).toEqual(expected);
+    });
+  });
+
+  describe('verifyWebhookSignature', () => {
+    it('should verify a valid signature', () => {
+      const secret = 'test-secret';
+      const payload = '{"event":"test"}';
+      const signature = generateWebhookSignature(secret, payload);
+      expect(verifyWebhookSignature(secret, payload, signature)).toBe(true);
+    });
+
+    it('should reject an invalid signature', () => {
+      const secret = 'test-secret';
+      const payload = '{"event":"test"}';
+      const wrongSignature = 'wrong-signature';
+      expect(() => verifyWebhookSignature(secret, payload, wrongSignature)).toThrow();
+    });
+  });
+
+  describe('enqueueWebhookDelivery', () => {
+    it('should create a pending delivery', async () => {
+      const mockDelivery = {
+        _id: 'delivery-1',
+        webhookId: 'wh-1',
+        event: 'test.event',
+        url: 'https://example.com',
+        payload: {},
         status: 'pending',
         attempts: 0,
-      })
-    );
-    expect(axios.post).toHaveBeenCalledWith(
-      'https://example.com/hook',
-      { amount: 1 },
-      expect.objectContaining({
-        headers: expect.objectContaining({ 'X-Webhook-Signature': expect.any(String) }),
-      })
-    );
-    expect(delivery.status).toBe('delivered');
-    expect(delivery.attempts).toBe(1);
+        save: jest.fn(),
+      };
+
+      (WebhookDeliveryModel.create as jest.Mock).mockResolvedValue(mockDelivery);
+
+      const delivery = await enqueueWebhookDelivery(
+        'wh-1',
+        'test.event',
+        'https://example.com',
+        'secret',
+        { event: 'test.event', data: {} }
+      );
+
+      expect(WebhookDeliveryModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webhookId: 'wh-1',
+          event: 'test.event',
+          url: 'https://example.com',
+          status: 'pending',
+        })
+      );
+      expect(delivery).toBeDefined();
+    });
+
+    it('should create dead delivery for blocked URLs', async () => {
+      const { validateWebhookUrl } = require('@api/utils/url-validator');
+      validateWebhookUrl.mockReturnValue({ valid: false, reason: 'Blocked' });
+
+      const mockDelivery = {
+        _id: 'delivery-2',
+        status: 'dead',
+        error: 'Blocked URL: Blocked',
+      };
+
+      (WebhookDeliveryModel.create as jest.Mock).mockResolvedValue(mockDelivery);
+
+      const delivery = await enqueueWebhookDelivery(
+        'wh-1',
+        'test.event',
+        'http://internal.local',
+        'secret',
+        { event: 'test.event', data: {} }
+      );
+
+      expect(delivery.status).toEqual('dead');
+      expect(delivery.error).toEqual('Blocked URL: Blocked');
+    });
   });
 
-  it('reuses an existing pending delivery instead of creating a new one', async () => {
-    (validateWebhookUrl as jest.Mock).mockReturnValue({ valid: true });
-    const delivery: any = { status: 'pending', attempts: 0, save: jest.fn().mockResolvedValue(undefined) };
-    (WebhookDeliveryModel.findOne as jest.Mock).mockResolvedValue(delivery);
-    (axios.post as jest.Mock).mockResolvedValue({ status: 200 });
+  describe('dispatchWebhookEvent', () => {
+    it('should dispatch to matching active webhooks', async () => {
+      const mockWebhooks = [
+        { _id: 'wh-1', url: 'https://example.com', secret: 's1', events: ['test.event'] },
+      ];
 
-    await enqueueWebhookDelivery('wh1', 'payment.confirmed', 'https://example.com/hook', 'secret', {});
-    await flush();
+      (WebhookModel.find as jest.Mock).mockResolvedValue(mockWebhooks);
+      (WebhookDeliveryModel.create as jest.Mock).mockResolvedValue({
+        _id: 'd1',
+        status: 'pending',
+      });
+      (WebhookEventLogModel.create as jest.Mock).mockResolvedValue({});
 
-    expect(WebhookDeliveryModel.create).not.toHaveBeenCalled();
-    expect(delivery.status).toBe('delivered');
+      await dispatchWebhookEvent('clinic-1', 'test.event', { id: '123' });
+
+      expect(WebhookModel.find).toHaveBeenCalledWith({
+        clinicId: 'clinic-1',
+        events: 'test.event',
+        isActive: true,
+      });
+    });
+
+    it('should not dispatch when no webhooks match', async () => {
+      (WebhookModel.find as jest.Mock).mockResolvedValue([]);
+
+      await dispatchWebhookEvent('clinic-1', 'no.match', {});
+
+      expect(WebhookDeliveryModel.create).not.toHaveBeenCalled();
+    });
   });
 });

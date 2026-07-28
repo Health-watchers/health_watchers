@@ -5,29 +5,49 @@ import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { UserModel } from '../auth/models/user.model';
 import { cache } from '@api/services/cache.service';
 
-const STATS_TTL = 300; // 5 min
+const STATS_TTL = 300; // 5 minutes
+
+/** Canonical cache key used by dashboard + all invalidation callers. */
+export function dashboardCacheKey(clinicId: string) {
+  return `${clinicId}:dashboard:stats`;
+}
 
 /**
  * GET /api/v1/dashboard/stats
- * Returns KPI statistics + recent records scoped to the authenticated user's clinic.
+ * ?refresh=true forces a cache bypass and repopulates the cache.
  */
 export async function getStats(req: Request, res: Response) {
   try {
     const clinicId = req.user?.clinicId;
-
     if (!clinicId) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Clinic ID not found in user context',
-      });
+      return res.status(400).json({ error: 'Bad Request', message: 'Clinic ID not found in user context' });
     }
 
-    const cacheKey = `${clinicId}:GET:/dashboard/stats`;
-    const cached = await cache.get(cacheKey);
-    if (cached) return res.json(cached);
+    const forceRefresh = req.query.refresh === 'true';
+    const key = dashboardCacheKey(String(clinicId));
+
+    if (!forceRefresh) {
+      const cached = await cache.get(key);
+      if (cached) return res.json(cached);
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const role = req.user?.role;
+    const userId = req.user?.userId;
+
+    // Build follow-up filter based on role
+    const followUpFilter: Record<string, unknown> = {
+      clinicId,
+      followUpRequired: true,
+      followUpCompleted: false,
+      followUpDate: { $lte: now },
+    };
+    if (role === 'DOCTOR' && userId) {
+      followUpFilter.attendingDoctorId = userId;
+    }
 
     const [
       todayPatients,
@@ -37,20 +57,18 @@ export async function getStats(req: Request, res: Response) {
       recentPatients,
       todayEncountersList,
       pendingPaymentsList,
+      followUpsDue,
+      followUpsDueCount,
     ] = await Promise.all([
       PatientModel.countDocuments({ clinicId, createdAt: { $gte: today } }),
       EncounterModel.countDocuments({ clinicId, createdAt: { $gte: today } }),
       PaymentRecordModel.countDocuments({ clinicId, status: 'pending' }),
       UserModel.countDocuments({ clinicId, role: 'DOCTOR', isActive: true }),
       PatientModel.find({ clinicId }).sort({ createdAt: -1 }).limit(5).lean(),
-      EncounterModel.find({ clinicId, createdAt: { $gte: today } })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean(),
-      PaymentRecordModel.find({ clinicId, status: 'pending' })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean(),
+      EncounterModel.find({ clinicId, createdAt: { $gte: today } }).sort({ createdAt: -1 }).limit(5).lean(),
+      PaymentRecordModel.find({ clinicId, status: 'pending' }).sort({ createdAt: -1 }).limit(5).lean(),
+      EncounterModel.find(followUpFilter).sort({ followUpDate: 1 }).limit(5).lean(),
+      EncounterModel.countDocuments(followUpFilter),
     ]);
 
     const body = {
@@ -60,10 +78,12 @@ export async function getStats(req: Request, res: Response) {
         recentPatients,
         todayEncounters: todayEncountersList,
         pendingPayments: pendingPaymentsList,
+        followUpsDue,
+        followUpsDueCount,
       },
     };
 
-    await cache.set(cacheKey, body, STATS_TTL);
+    await cache.set(key, body, STATS_TTL);
     return res.json(body);
   } catch (error) {
     return res.status(500).json({

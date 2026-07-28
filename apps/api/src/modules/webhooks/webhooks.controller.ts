@@ -4,9 +4,15 @@ import { asyncHandler } from '@api/middlewares/async.handler';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import logger from '@api/utils/logger';
-import { WebhookModel, WebhookDeliveryModel } from './webhook.model';
-import { generateWebhookSecret, verifyWebhookSignature, deliverWebhook } from './webhook.service';
-import { registerWebhookSchema, inboundWebhookSchema } from './webhook.validation';
+import { WebhookModel, WebhookDeliveryModel, WebhookEventLogModel } from './webhook.model';
+import { generateWebhookSecret, verifyWebhookSignature, enqueueWebhookDelivery } from './webhook.service';
+import {
+  registerWebhookSchema,
+  updateWebhookSchema,
+  inboundWebhookSchema,
+} from './webhook.validation';
+import { confirmPayment } from '../payments/services/payment-confirmation.service';
+import { retryDelivery } from './retry-worker';
 
 const router = Router();
 
@@ -36,34 +42,16 @@ router.post(
       return res.json({ status: 'ignored' });
     }
 
-    payment.status = 'confirmed';
-    payment.txHash = txHash;
-    await payment.save();
-
-    logger.info(
-      { intentId: payment.intentId, txHash, amount },
-      'stellar-webhook: payment confirmed'
-    );
-
-    // Trigger outbound webhooks for registered listeners
-    const webhooks = await WebhookModel.find({
-      clinicId: payment.clinicId,
-      events: 'payment.confirmed',
-      isActive: true,
+    const result = await confirmPayment({
+      intentId: payment.intentId,
+      txHash,
+      allowAlreadyConfirmed: true,
     });
 
-    for (const webhook of webhooks) {
-      await deliverWebhook(String(webhook._id), 'payment.confirmed', webhook.url, webhook.secret, {
-        event: 'payment.confirmed',
-        data: {
-          intentId: payment.intentId,
-          amount: payment.amount,
-          destination: payment.destination,
-          txHash,
-          confirmedAt: new Date(),
-        },
-      });
-    }
+    logger.info(
+      { intentId: payment.intentId, txHash, amount, result: result.status },
+      'stellar-webhook: payment processed'
+    );
 
     return res.json({ status: 'success', data: { intentId: payment.intentId, txHash } });
   })
@@ -105,11 +93,8 @@ router.post(
       });
     }
 
-    // Find and update payment record
-    const payment = await PaymentRecordModel.findOne({
-      memo,
-      status: 'pending',
-    });
+    // Find matching payment record
+    const payment = await PaymentRecordModel.findOne({ memo, status: 'pending' });
 
     if (!payment) {
       return res.status(404).json({
@@ -119,14 +104,15 @@ router.post(
     }
 
     if (status === 'confirmed') {
-      payment.status = 'confirmed';
-      payment.txHash = transactionHash;
-      payment.confirmedAt = new Date();
+      await confirmPayment({
+        intentId: payment.intentId,
+        txHash: transactionHash,
+        allowAlreadyConfirmed: true,
+      });
     } else if (status === 'failed') {
       payment.status = 'failed';
+      await payment.save();
     }
-
-    await payment.save();
 
     logger.info(
       { intentId: payment.intentId, transactionHash, status },
@@ -147,7 +133,7 @@ router.post(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ body: registerWebhookSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { url, events } = req.body;
+    const { url, events, description, retryConfig } = req.body;
     const secret = generateWebhookSecret();
 
     const webhook = await WebhookModel.create({
@@ -155,6 +141,8 @@ router.post(
       url,
       events,
       secret,
+      description,
+      retryConfig,
       isActive: true,
     });
 
@@ -164,7 +152,9 @@ router.post(
         id: String(webhook._id),
         url: webhook.url,
         events: webhook.events,
-        secret, // Return secret only once
+        description: webhook.description,
+        retryConfig: webhook.retryConfig,
+        secret,
         createdAt: webhook.createdAt,
       },
     });
@@ -188,8 +178,102 @@ router.get(
         url: w.url,
         events: w.events,
         isActive: w.isActive,
+        description: w.description,
+        retryConfig: w.retryConfig,
         createdAt: w.createdAt,
       })),
+    });
+  })
+);
+
+// GET /webhooks/events (list available event types)
+router.get(
+  '/events',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { WEBHOOK_EVENTS } = await import('./webhook.validation');
+    return res.json({
+      status: 'success',
+      data: WEBHOOK_EVENTS,
+    });
+  })
+);
+
+// GET /webhooks/:id (get single webhook)
+router.get(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        description: webhook.description,
+        retryConfig: webhook.retryConfig,
+        createdAt: webhook.createdAt,
+        updatedAt: webhook.updatedAt,
+      },
+    });
+  })
+);
+
+// PATCH /webhooks/:id (update webhook url, events, or active state)
+router.patch(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  validateRequest({ body: updateWebhookSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { url, events, isActive, description, retryConfig } = req.body;
+
+    const update: Record<string, unknown> = {};
+    if (url !== undefined) update.url = url;
+    if (events !== undefined) update.events = events;
+    if (isActive !== undefined) update.isActive = isActive;
+    if (description !== undefined) update.description = description;
+    if (retryConfig !== undefined) update.retryConfig = retryConfig;
+
+    const webhook = await WebhookModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
+      update,
+      { new: true }
+    ).select('-secret');
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(webhook._id),
+        url: webhook.url,
+        events: webhook.events,
+        isActive: webhook.isActive,
+        description: webhook.description,
+        retryConfig: webhook.retryConfig,
+        updatedAt: webhook.updatedAt,
+      },
     });
   })
 );
@@ -212,8 +296,8 @@ router.delete(
       });
     }
 
-    // Clean up delivery logs
     await WebhookDeliveryModel.deleteMany({ webhookId: webhook._id });
+    await WebhookEventLogModel.deleteMany({ webhookId: webhook._id });
 
     return res.json({
       status: 'success',
@@ -254,9 +338,173 @@ router.get(
         status: d.status,
         attempts: d.attempts,
         lastAttemptAt: d.lastAttemptAt,
+        nextRetryAt: d.nextRetryAt,
+        responseStatus: d.responseStatus,
         error: d.error,
         createdAt: d.createdAt,
       })),
+    });
+  })
+);
+
+// POST /webhooks/:id/deliveries/:deliveryId/retry (manually retry a delivery)
+router.post(
+  '/:id/deliveries/:deliveryId/retry',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    const delivery = await WebhookDeliveryModel.findOne({
+      _id: req.params.deliveryId,
+      webhookId: webhook._id,
+    });
+
+    if (!delivery) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Delivery not found',
+      });
+    }
+
+    if (delivery.status === 'delivered') {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Delivery already succeeded',
+      });
+    }
+
+    delivery.status = 'pending';
+    delivery.attempts = 0;
+    delivery.nextRetryAt = new Date();
+    delivery.error = undefined;
+    await delivery.save();
+
+    const success = await retryDelivery(String(delivery._id), webhook);
+
+    return res.json({
+      status: 'success',
+      data: {
+        deliveryId: String(delivery._id),
+        result: success ? 'delivered' : 'pending_retry',
+      },
+    });
+  })
+);
+
+// GET /webhooks/:id/events (event log for a webhook)
+router.get(
+  '/:id/events',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+
+    if (!webhook) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: 'Webhook not found',
+      });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const skip = (page - 1) * limit;
+
+    const [events, total] = await Promise.all([
+      WebhookEventLogModel.find({ webhookId: webhook._id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      WebhookEventLogModel.countDocuments({ webhookId: webhook._id }),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: {
+        events: events.map((e) => ({
+          id: String(e._id),
+          event: e.event,
+          status: e.status,
+          deliveredAt: e.deliveredAt,
+          error: e.error,
+          createdAt: e.createdAt,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
+  })
+);
+
+// GET /webhooks/stats/overview (delivery statistics)
+router.get(
+  '/stats/overview',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+
+    const [totalWebhooks, activeWebhooks, deliveryStats] = await Promise.all([
+      WebhookModel.countDocuments({ clinicId }),
+      WebhookModel.countDocuments({ clinicId, isActive: true }),
+      WebhookDeliveryModel.aggregate([
+        {
+          $lookup: {
+            from: 'webhooks',
+            localField: 'webhookId',
+            foreignField: '_id',
+            as: 'webhook',
+          },
+        },
+        { $unwind: '$webhook' },
+        { $match: { 'webhook.clinicId': clinicId } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const stats = {
+      totalWebhooks,
+      activeWebhooks,
+      deliveries: {
+        delivered: 0,
+        pending: 0,
+        failed: 0,
+        dead: 0,
+      },
+    };
+
+    for (const stat of deliveryStats) {
+      if (stat._id in stats.deliveries) {
+        (stats.deliveries as Record<string, number>)[stat._id] = stat.count;
+      }
+    }
+
+    return res.json({
+      status: 'success',
+      data: stats,
     });
   })
 );

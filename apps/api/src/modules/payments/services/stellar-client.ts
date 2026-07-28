@@ -1,5 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '@health-watchers/config';
+import { getRequestId } from '@api/utils/request-id';
+import logger from '@api/utils/logger';
 
 /**
  * Stellar Service Client
@@ -39,6 +41,57 @@ class StellarClient {
         'Content-Type': 'application/json',
       },
     });
+
+    // Propagate the API request ID so stellar-service logs can be correlated
+    // with the originating API request, and log every Horizon-service call.
+    this.client.interceptors.request.use((req) => {
+      const requestId = getRequestId();
+      if (requestId) {
+        req.headers = req.headers ?? {};
+        req.headers['x-request-id'] = requestId;
+      }
+      (req as { metadata?: { start: number } }).metadata = { start: Date.now() };
+      logger.debug(
+        { requestId, method: req.method, url: req.url, service: 'stellar-service' },
+        'stellar-service request'
+      );
+      return req;
+    });
+
+    this.client.interceptors.response.use(
+      (res) => {
+        const start = (res.config as { metadata?: { start: number } }).metadata?.start;
+        logger.debug(
+          {
+            requestId: getRequestId(),
+            method: res.config.method,
+            url: res.config.url,
+            status: res.status,
+            durationMs: start ? Date.now() - start : undefined,
+            service: 'stellar-service',
+          },
+          'stellar-service response'
+        );
+        return res;
+      },
+      (error) => {
+        const cfg = (error.config ?? {}) as { metadata?: { start: number }; method?: string; url?: string };
+        const start = cfg.metadata?.start;
+        logger.error(
+          {
+            requestId: getRequestId(),
+            method: cfg.method,
+            url: cfg.url,
+            status: error.response?.status,
+            durationMs: start ? Date.now() - start : undefined,
+            error: { message: error.message, data: error.response?.data },
+            service: 'stellar-service',
+          },
+          'stellar-service request failed'
+        );
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**

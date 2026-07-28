@@ -48,7 +48,7 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
       }
     }
 
-    const resSize = parseInt(res.getHeader('content-length') as string ?? '0', 10) || 0;
+    const resSize = parseInt((res.getHeader('content-length') as string) ?? '0', 10) || 0;
     if (resSize > 0) {
       httpResponseSizeBytes.observe({ method, path }, resSize);
     }

@@ -35,9 +35,12 @@ export interface AnonymizedPatientData {
 // PII regex patterns for clinical notes
 const PII_PATTERNS: [RegExp, string][] = [
   [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],
-  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],
+  [/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[EMAIL]'],
   [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],
-  [/\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd)\b/gi, '[ADDRESS]'],
+  [
+    /\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd)\b/gi,
+    '[ADDRESS]',
+  ],
   [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DATE]'],
 ];
 
@@ -55,7 +58,7 @@ function getAgeRange(dateOfBirth: string): string {
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const monthDiff = today.getMonth() - dob.getMonth();
-  
+
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
     age--;
   }
@@ -68,7 +71,7 @@ function getAgeRange(dateOfBirth: string): string {
 // Extract city/region from address
 function extractCityRegion(address: string): string {
   // Simple extraction - takes last two parts (city, state)
-  const parts = address.split(',').map(p => p.trim());
+  const parts = address.split(',').map((p) => p.trim());
   if (parts.length >= 2) {
     return parts.slice(-2).join(', ');
   }
@@ -78,28 +81,32 @@ function extractCityRegion(address: string): string {
 // Strip PII from clinical notes
 function stripPIIFromText(text: string, patientName?: string): string {
   let sanitized = text;
-  
+
   // Replace patient name references
   if (patientName) {
     const namePattern = new RegExp(patientName, 'gi');
     sanitized = sanitized.replace(namePattern, 'the patient');
   }
-  
+
   // Apply PII patterns
   for (const [pattern, replacement] of PII_PATTERNS) {
     sanitized = sanitized.replace(pattern, replacement);
   }
-  
+
   // Replace absolute dates with relative time (simplified)
-  sanitized = sanitized.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/gi, '[TIME_AGO]');
-  
+  sanitized = sanitized.replace(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/gi,
+    '[TIME_AGO]'
+  );
+
   return sanitized;
 }
 
 // Level 1: De-identification - Remove direct identifiers
 function deIdentify(data: PatientData, _options: AnonymizationOptions): AnonymizedPatientData {
-  const patientName = data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : undefined;
-  
+  const patientName =
+    data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : undefined;
+
   return {
     ...data,
     firstName: undefined,
@@ -109,19 +116,23 @@ function deIdentify(data: PatientData, _options: AnonymizationOptions): Anonymiz
     address: data.address ? extractCityRegion(data.address) : undefined,
     dateOfBirth: data.dateOfBirth ? getAgeRange(data.dateOfBirth) : undefined,
     systemId: '[REDACTED]',
-    clinicalNotes: data.clinicalNotes ? stripPIIFromText(data.clinicalNotes, patientName) : undefined,
+    clinicalNotes: data.clinicalNotes
+      ? stripPIIFromText(data.clinicalNotes, patientName)
+      : undefined,
   };
 }
 
 // Level 2: Pseudonymization - Replace with consistent pseudonyms
 function pseudonymize(data: PatientData, options: AnonymizationOptions): AnonymizedPatientData {
   const sessionId = options.sessionId || '';
-  const nameHash = data.firstName && data.lastName 
-    ? generateHash(`${data.firstName}${data.lastName}`, sessionId)
-    : generateHash(data.systemId || '', sessionId);
-  
-  const patientName = data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : undefined;
-  
+  const nameHash =
+    data.firstName && data.lastName
+      ? generateHash(`${data.firstName}${data.lastName}`, sessionId)
+      : generateHash(data.systemId || '', sessionId);
+
+  const patientName =
+    data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : undefined;
+
   return {
     ...data,
     firstName: `Patient`,
@@ -131,7 +142,9 @@ function pseudonymize(data: PatientData, options: AnonymizationOptions): Anonymi
     address: data.address ? extractCityRegion(data.address) : undefined,
     dateOfBirth: data.dateOfBirth ? getAgeRange(data.dateOfBirth) : undefined,
     systemId: data.systemId ? `ANON_${generateHash(data.systemId, sessionId)}` : undefined,
-    clinicalNotes: data.clinicalNotes ? stripPIIFromText(data.clinicalNotes, patientName) : undefined,
+    clinicalNotes: data.clinicalNotes
+      ? stripPIIFromText(data.clinicalNotes, patientName)
+      : undefined,
   };
 }
 
@@ -146,21 +159,21 @@ export interface AggregatedData {
 function aggregate(dataSet: PatientData[]): AggregatedData {
   const ageRanges: Record<string, number> = {};
   const sexDistribution: Record<string, number> = {};
-  
+
   for (const data of dataSet) {
     // Age ranges
     if (data.dateOfBirth) {
       const range = getAgeRange(data.dateOfBirth);
       ageRanges[range] = (ageRanges[range] || 0) + 1;
     }
-    
+
     // Sex distribution
     if (data.sex) {
       const sex = String(data.sex);
       sexDistribution[sex] = (sexDistribution[sex] || 0) + 1;
     }
   }
-  
+
   return {
     totalRecords: dataSet.length,
     ageRanges,
@@ -169,10 +182,7 @@ function aggregate(dataSet: PatientData[]): AggregatedData {
 }
 
 // Main anonymization function
-export function anonymize(
-  data: PatientData,
-  options: AnonymizationOptions
-): AnonymizedPatientData {
+export function anonymize(data: PatientData, options: AnonymizationOptions): AnonymizedPatientData {
   switch (options.level) {
     case 'de-identification':
       return deIdentify(data, options);
@@ -191,8 +201,8 @@ export function anonymizeBatch(
   if (options.level === 'aggregation') {
     return aggregate(dataSet);
   }
-  
-  return dataSet.map(data => anonymize(data, options));
+
+  return dataSet.map((data) => anonymize(data, options));
 }
 
 // Audit log entry

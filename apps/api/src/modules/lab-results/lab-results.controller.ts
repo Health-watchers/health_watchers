@@ -1,13 +1,21 @@
 import { Router, Request, Response } from 'express';
 import { LabResultModel } from './lab-result.model';
+import { toLabResultResponse } from './lab-results.transformer';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { paginate, parsePagination } from '../../utils/paginate';
 import { detectCriticalValues } from './critical-value.service';
 import { createNotification } from '../notifications/notification.service';
 import { emitToUser } from '@api/realtime/socket';
 import { AuditLogModel } from '../audit/audit-log.model';
 import { sendEmail } from '@api/lib/email.service';
 import { UserModel } from '../auth/models/user.model';
+import {
+  orderLabResultSchema,
+  enterLabResultsSchema,
+  listLabResultsQuerySchema,
+  idParamSchema,
+} from './lab-results.validation';
 
 const router = Router();
 router.use(authenticate);
@@ -19,11 +27,9 @@ const RESULT_ENTRY_ROLES = requireRoles('DOCTOR', 'NURSE');
 router.post(
   '/',
   CLINICAL_ROLES,
+  validateRequest({ body: orderLabResultSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { patientId, encounterId, testName, testCode, notes } = req.body;
-    if (!patientId || !testName) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId and testName are required' });
-    }
     const doc = await LabResultModel.create({
       patientId,
       encounterId,
@@ -35,13 +41,14 @@ router.post(
       status: 'ordered',
       orderedAt: new Date(),
     });
-    return res.status(201).json({ status: 'success', data: doc });
+    return res.status(201).json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 
 // GET /api/v1/lab-results — List lab results (filter by patient, status, date)
 router.get(
   '/',
+  validateRequest({ query: listLabResultsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { patientId, status, from, to } = req.query as Record<string, string>;
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
@@ -52,8 +59,13 @@ router.get(
       if (from) (filter.orderedAt as any).$gte = new Date(from);
       if (to) (filter.orderedAt as any).$lte = new Date(to);
     }
-    const docs = await LabResultModel.find(filter).sort({ orderedAt: -1 });
-    return res.json({ status: 'success', data: docs });
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const result = await paginate(LabResultModel, filter, page, limit, { orderedAt: -1 });
+    return res.json({ status: 'success', data: result.data.map((d: any) => toLabResultResponse(d, req.user!.role)), meta: result.meta });
   }),
 );
 
@@ -69,17 +81,18 @@ router.get(
       .populate('patientId', 'firstName lastName')
       .populate('orderedBy', 'firstName lastName')
       .sort({ resultedAt: -1 });
-    return res.json({ status: 'success', data: docs });
+    return res.json({ status: 'success', data: docs.map((d) => toLabResultResponse(d, req.user!.role)) });
   }),
 );
 
 // GET /api/v1/lab-results/:id — Get lab result details
 router.get(
   '/:id',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await LabResultModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
-    return res.json({ status: 'success', data: doc });
+    return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 
@@ -87,11 +100,9 @@ router.get(
 router.put(
   '/:id/results',
   RESULT_ENTRY_ROLES,
+  validateRequest({ params: idParamSchema, body: enterLabResultsSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { results, notes, attachmentUrl } = req.body;
-    if (!results || !Array.isArray(results) || results.length === 0) {
-      return res.status(400).json({ error: 'ValidationError', message: 'results array is required' });
-    }
 
     // Detect critical values
     const { isCritical, criticalReason } = detectCriticalValues(results);
@@ -161,7 +172,7 @@ router.put(
 
     return res.json({
       status: 'success',
-      data: doc,
+      data: toLabResultResponse(doc, req.user!.role),
       ...(isCritical && { alert: { critical: true, reason: criticalReason } }),
     });
   }),
@@ -171,6 +182,7 @@ router.put(
 router.post(
   '/:id/acknowledge',
   CLINICAL_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await LabResultModel.findOneAndUpdate(
       { _id: req.params.id, clinicId: req.user!.clinicId, isCritical: true },
@@ -195,7 +207,7 @@ router.post(
       outcome: 'SUCCESS',
     });
 
-    return res.json({ status: 'success', data: doc });
+    return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 

@@ -26,12 +26,12 @@ export interface PreferencesSectionProps {
 }
 
 const NOTIFICATION_TYPE_LABELS: Record<keyof NotificationTypes, string> = {
-  referral_received:    'Referral Received',
-  payment_confirmed:    'Payment Confirmed',
+  referral_received: 'Referral Received',
+  payment_confirmed: 'Payment Confirmed',
   appointment_reminder: 'Appointment Reminders',
-  ai_summary_ready:     'AI Summary Ready',
-  lab_result_ready:     'Lab Results Ready',
-  system:               'System Notifications',
+  ai_summary_ready: 'AI Summary Ready',
+  lab_result_ready: 'Lab Results Ready',
+  system: 'System Notifications',
 };
 
 const DEFAULT_TYPES: NotificationTypes = {
@@ -149,7 +149,9 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Preferences</h2>
+        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+          Preferences
+        </h2>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           Manage your language, appearance, and notification settings.
         </p>
@@ -158,14 +160,17 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
       <div className="max-w-md space-y-6">
         {/* Language selector */}
         <div className="flex flex-col gap-1">
-          <label htmlFor="language-select" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+          <label
+            htmlFor="language-select"
+            className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+          >
             Language
           </label>
           <select
             id="language-select"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 focus:outline-none focus-visible:ring-2"
+            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
           >
             <option value="en">English</option>
             <option value="fr">French</option>
@@ -174,7 +179,9 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
 
         {/* Appearance / Theme */}
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Appearance</span>
+          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            Appearance
+          </span>
           <div className="flex gap-2" role="group" aria-label="Theme selection">
             {(['light', 'dark', 'system'] as const).map((option) => (
               <button
@@ -183,10 +190,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
                 onClick={() => handleThemeChange(option)}
                 aria-pressed={theme === option}
                 className={[
-                  'flex-1 rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                  'focus-visible:ring-primary-500 flex-1 rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2',
                   theme === option
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
-                    : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700',
+                    : 'border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
                 ].join(' ')}
               >
                 {option === 'light' && '☀️ '}
@@ -203,10 +210,15 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
 
         {/* Global notification toggles */}
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Notifications</h3>
+          <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            Notifications
+          </h3>
 
           <div className="flex items-center justify-between">
-            <label htmlFor="email-notifications" className="text-sm text-neutral-700 dark:text-neutral-300">
+            <label
+              htmlFor="email-notifications"
+              className="text-sm text-neutral-700 dark:text-neutral-300"
+            >
               Email Notifications
             </label>
             <input
@@ -221,7 +233,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <label htmlFor="inapp-notifications" className="text-sm text-neutral-700 dark:text-neutral-300">
+            <label
+              htmlFor="inapp-notifications"
+              className="text-sm text-neutral-700 dark:text-neutral-300"
+            >
               In-App Notifications
             </label>
             <input
@@ -238,14 +253,19 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
 
         {/* Per-type notification preferences */}
         {inAppNotifications && (
-          <div className="space-y-3 border-t border-neutral-200 dark:border-neutral-700 pt-4">
-            <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Notification Types</h3>
+          <div className="space-y-3 border-t border-neutral-200 pt-4 dark:border-neutral-700">
+            <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              Notification Types
+            </h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Choose which in-app notifications you receive.
             </p>
             {(Object.keys(NOTIFICATION_TYPE_LABELS) as (keyof NotificationTypes)[]).map((type) => (
               <div key={type} className="flex items-center justify-between">
-                <label htmlFor={`notif-type-${type}`} className="text-sm text-neutral-700 dark:text-neutral-300">
+                <label
+                  htmlFor={`notif-type-${type}`}
+                  className="text-sm text-neutral-700 dark:text-neutral-300"
+                >
                   {NOTIFICATION_TYPE_LABELS[type]}
                 </label>
                 <input
@@ -254,7 +274,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
                   role="switch"
                   checked={notifTypes[type]}
                   onChange={(e) => handleTypeToggle(type, e.target.checked)}
-                  className="h-4 w-4 cursor-pointer accent-primary-500"
+                  className="accent-primary-500 h-4 w-4 cursor-pointer"
                   aria-checked={notifTypes[type]}
                 />
               </div>
@@ -262,7 +282,9 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
           </div>
         )}
 
-        {successMessage && <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>}
+        {successMessage && (
+          <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+        )}
         {error && <p className="text-danger-500 text-sm">{error}</p>}
       </div>
     </div>

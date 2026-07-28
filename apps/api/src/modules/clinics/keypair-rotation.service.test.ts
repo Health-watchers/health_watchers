@@ -59,7 +59,9 @@ describe('rotateClinicKeypair', () => {
     mockKeypairFindByIdAndUpdate = jest.fn().mockResolvedValue({});
     mockKeypairFindByIdAndDelete = jest.fn().mockResolvedValue({});
     mockKeypairUpdateMany = jest.fn().mockResolvedValue({});
-    mockTransferBalance = jest.fn().mockResolvedValue({ transferred: true, amount: '10', hash: 'txhash' });
+    mockTransferBalance = jest
+      .fn()
+      .mockResolvedValue({ transferred: true, amount: '10', hash: 'txhash' });
     mockFundAccount = jest.fn().mockResolvedValue({ funded: true });
 
     deps = {
@@ -93,7 +95,7 @@ describe('rotateClinicKeypair', () => {
   it('creates new keypair as inactive initially', async () => {
     await rotateClinicKeypair(CLINIC_ID, deps);
     expect(mockKeypairCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ isActive: false, keyVersion: 2 }),
+      expect.objectContaining({ isActive: false, keyVersion: 2 })
     );
   });
 
@@ -104,17 +106,16 @@ describe('rotateClinicKeypair', () => {
 
   it('updates clinic stellarPublicKey to new key', async () => {
     await rotateClinicKeypair(CLINIC_ID, deps);
-    expect(mockClinicFindByIdAndUpdate).toHaveBeenCalledWith(
-      CLINIC_ID,
-      { stellarPublicKey: NEW_PUBLIC_KEY },
-    );
+    expect(mockClinicFindByIdAndUpdate).toHaveBeenCalledWith(CLINIC_ID, {
+      stellarPublicKey: NEW_PUBLIC_KEY,
+    });
   });
 
   it('deactivates old keypairs after activation', async () => {
     await rotateClinicKeypair(CLINIC_ID, deps);
     expect(mockKeypairUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ clinicId: CLINIC_ID, isActive: true }),
-      { isActive: false },
+      { isActive: false }
     );
   });
 
@@ -137,7 +138,11 @@ describe('rotateClinicKeypair', () => {
   });
 
   it('skips transferBalance when clinic has no existing stellarPublicKey', async () => {
-    mockFindById.mockResolvedValue({ _id: CLINIC_ID, name: 'Test Clinic', stellarPublicKey: undefined });
+    mockFindById.mockResolvedValue({
+      _id: CLINIC_ID,
+      name: 'Test Clinic',
+      stellarPublicKey: undefined,
+    });
     const result = await rotateClinicKeypair(CLINIC_ID, deps);
     expect(mockTransferBalance).not.toHaveBeenCalled();
     expect(result.publicKey).toBe(NEW_PUBLIC_KEY);

@@ -53,7 +53,7 @@ const communicationLogSchema = new Schema<ICommunicationLog>(
     timestamps: true,
     versionKey: false,
     collection: 'communication_logs',
-  },
+  }
 );
 
 // Indexes for efficient querying
@@ -61,5 +61,8 @@ communicationLogSchema.index({ patientId: 1, clinicId: 1, sentAt: -1 });
 communicationLogSchema.index({ clinicId: 1 });
 communicationLogSchema.index({ patientId: 1, channel: 1 });
 
-export const CommunicationLogModel =
-  models.CommunicationLog || model<ICommunicationLog>('CommunicationLog', communicationLogSchema);
+export const CommunicationLogModel = (models.CommunicationLog ||
+  model<ICommunicationLog>(
+    'CommunicationLog',
+    communicationLogSchema
+  )) as import('mongoose').Model<ICommunicationLog>;

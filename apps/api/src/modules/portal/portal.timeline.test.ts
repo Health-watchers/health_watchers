@@ -7,21 +7,46 @@ import { LabResultModel } from '../lab-results/lab-result.model';
 import { ImmunizationModel } from '../immunizations/immunization.model';
 import { AppointmentModel } from '../appointments/appointment.model';
 
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+
 jest.mock('../auth/totp.service');
 jest.mock('@api/lib/email.service');
 jest.mock('@api/utils/logger');
-
-function setupAuth(app: express.Application) {
-  app.use((req: any, _res, next) => {
+jest.mock('../ai/ai.service', () => ({
+  isAIServiceAvailable: jest.fn(() => false),
+  generatePatientFriendlySummary: jest.fn(),
+}));
+jest.mock('@api/middlewares/auth.middleware', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
     req.user = {
       userId: new Types.ObjectId().toString(),
       role: 'PATIENT',
-      clinicId: new Types.ObjectId().toString(),
-      patientId: new Types.ObjectId().toString(),
+      clinicId: testClinicId,
+      patientId: testPatientId,
     };
     next();
+  },
+  requireRoles: () => (_req: any, _res: any, next: any) => next(),
+}));
+jest.mock('./portal-mfa.routes', () => ({ portalMfaRoutes: require('express').Router() }));
+jest.mock('../export/export-request.controller', () => ({
+  exportRequestRoutes: require('express').Router(),
+}));
+
+// ── Shared IDs ────────────────────────────────────────────────────────────────
+
+const testPatientId = new Types.ObjectId().toString();
+const testClinicId = new Types.ObjectId().toString();
+
+function makeFind(results: unknown[]) {
+  return jest.fn().mockReturnValue({
+    sort: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(results),
+    }),
   });
 }
+
+// ── Setup ─────────────────────────────────────────────────────────────────────
 
 describe('Portal Timeline Routes', () => {
   let app: express.Application;
@@ -29,7 +54,6 @@ describe('Portal Timeline Routes', () => {
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    setupAuth(app);
     app.use('/api/v1/portal', portalRoutes);
   });
 
@@ -37,20 +61,14 @@ describe('Portal Timeline Routes', () => {
     jest.restoreAllMocks();
   });
 
+  // ── Empty state ────────────────────────────────────────────────────────────
+
   describe('GET /api/v1/portal/timeline', () => {
-    it('should return empty timeline when no events exist', async () => {
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(LabResultModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
+    it('returns empty timeline when no events exist', async () => {
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
 
       const res = await request(app).get('/api/v1/portal/timeline');
 
@@ -60,9 +78,11 @@ describe('Portal Timeline Routes', () => {
       expect(res.body.meta.total).toBe(0);
     });
 
-    it('should return all events in chronological order', async () => {
-      const clinicId = new Types.ObjectId();
-      const patientId = new Types.ObjectId();
+    // ── Chronological ordering ────────────────────────────────────────────────
+
+    it('returns all events sorted most-recent first', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
 
       const mockEncounter = {
         _id: new Types.ObjectId(),
@@ -71,6 +91,7 @@ describe('Portal Timeline Routes', () => {
         type: 'consultation',
         chiefComplaint: 'Headache',
         status: 'closed',
+        isActive: true,
         createdAt: new Date('2024-03-15'),
       };
 
@@ -80,7 +101,9 @@ describe('Portal Timeline Routes', () => {
         clinicId,
         testName: 'CBC',
         status: 'resulted',
-        results: [{ parameter: 'WBC', value: '7.2', unit: 'K/uL' }],
+        orderedAt: new Date('2024-03-10'),
+        resultedAt: new Date('2024-03-10'),
+        results: [{ parameter: 'WBC', value: '7.2', unit: 'K/uL', referenceRange: '4-11' }],
         createdAt: new Date('2024-03-10'),
       };
 
@@ -92,7 +115,8 @@ describe('Portal Timeline Routes', () => {
         vaccineCode: '88',
         administeredDate: new Date('2024-02-20'),
         doseNumber: 1,
-        manufacturer: 'Sanofi',
+        seriesComplete: false,
+        isActive: true,
         createdAt: new Date('2024-02-20'),
       };
 
@@ -103,22 +127,13 @@ describe('Portal Timeline Routes', () => {
         type: 'follow-up',
         status: 'completed',
         scheduledAt: new Date('2024-01-15'),
-        chiefComplaint: 'Follow-up check',
         createdAt: new Date('2024-01-10'),
       };
 
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockEncounter]) }),
-      } as any);
-      jest.spyOn(LabResultModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockLabResult]) }),
-      } as any);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockImmunization]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockAppointment]) }),
-      } as any);
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([mockEncounter]));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([mockLabResult]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([mockImmunization]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([mockAppointment]));
 
       const res = await request(app).get('/api/v1/portal/timeline');
 
@@ -132,117 +147,76 @@ describe('Portal Timeline Routes', () => {
       expect(res.body.meta.total).toBe(4);
     });
 
-    it('should filter by eventType', async () => {
-      const findMock = jest.fn().mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      });
-      jest.spyOn(EncounterModel, 'find').mockImplementation(findMock);
-      jest.spyOn(LabResultModel, 'find').mockImplementation(findMock);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockImplementation(findMock);
+    // ── eventType filter ──────────────────────────────────────────────────────
+
+    it('only queries the matching model when eventType=encounter', async () => {
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([]));
+      const labSpy = jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      const immSpy = jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      const apptSpy = jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
 
       await request(app).get('/api/v1/portal/timeline?eventType=encounter');
 
       expect(EncounterModel.find).toHaveBeenCalled();
-      expect(ImmunizationModel.find).not.toHaveBeenCalled();
-      expect(LabResultModel.find).not.toHaveBeenCalled();
-      expect(AppointmentModel.find).not.toHaveBeenCalled();
+      expect(labSpy).not.toHaveBeenCalled();
+      expect(immSpy).not.toHaveBeenCalled();
+      expect(apptSpy).not.toHaveBeenCalled();
     });
 
-    it('should filter by date range', async () => {
-      const clinicId = new Types.ObjectId();
-      const patientId = new Types.ObjectId();
+    it('only queries lab results when eventType=lab_result', async () => {
+      const encSpy = jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      const immSpy = jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      const apptSpy = jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
 
-      const mockEncounter = {
-        _id: new Types.ObjectId(),
-        patientId,
-        clinicId,
-        type: 'consultation',
-        chiefComplaint: 'Checkup',
-        status: 'closed',
-        createdAt: new Date('2024-03-15'),
-      };
+      await request(app).get('/api/v1/portal/timeline?eventType=lab_result');
 
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockEncounter]) }),
-      } as any);
-      jest.spyOn(LabResultModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-
-      const res = await request(app).get(
-        '/api/v1/portal/timeline?startDate=2024-03-01T00:00:00.000Z&endDate=2024-03-31T23:59:59.999Z',
-      );
-
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveLength(1);
-      expect(res.body.data[0].type).toBe('encounter');
+      expect(LabResultModel.find).toHaveBeenCalled();
+      expect(encSpy).not.toHaveBeenCalled();
+      expect(immSpy).not.toHaveBeenCalled();
+      expect(apptSpy).not.toHaveBeenCalled();
     });
 
-    it('should paginate results', async () => {
-      const clinicId = new Types.ObjectId();
-      const patientId = new Types.ObjectId();
+    it('only queries immunizations when eventType=immunization', async () => {
+      const encSpy = jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([]));
+      const labSpy = jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      const apptSpy = jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
 
-      const encounters = Array.from({ length: 5 }, (_, i) => ({
-        _id: new Types.ObjectId(),
-        patientId,
-        clinicId,
-        type: 'consultation' as const,
-        chiefComplaint: `Visit ${i + 1}`,
-        status: 'closed' as const,
-        createdAt: new Date(2024, 2, 15 - i),
-      }));
+      await request(app).get('/api/v1/portal/timeline?eventType=immunization');
 
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(encounters) }),
-      } as any);
-      jest.spyOn(LabResultModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-
-      const res = await request(app).get('/api/v1/portal/timeline?page=1&limit=2');
-
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveLength(2);
-      expect(res.body.meta.page).toBe(1);
-      expect(res.body.meta.limit).toBe(2);
-      expect(res.body.meta.total).toBe(5);
-      expect(res.body.meta.totalPages).toBe(3);
-      expect(res.body.meta.hasNextPage).toBe(true);
-      expect(res.body.meta.hasPrevPage).toBe(false);
+      expect(ImmunizationModel.find).toHaveBeenCalled();
+      expect(encSpy).not.toHaveBeenCalled();
+      expect(labSpy).not.toHaveBeenCalled();
+      expect(apptSpy).not.toHaveBeenCalled();
     });
 
-    it('should reject limit exceeding 100', async () => {
-      const res = await request(app).get('/api/v1/portal/timeline?limit=101');
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('ValidationError');
+    it('only queries appointments when eventType=appointment', async () => {
+      const encSpy = jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([]));
+      const labSpy = jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      const immSpy = jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
+
+      await request(app).get('/api/v1/portal/timeline?eventType=appointment');
+
+      expect(AppointmentModel.find).toHaveBeenCalled();
+      expect(encSpy).not.toHaveBeenCalled();
+      expect(labSpy).not.toHaveBeenCalled();
+      expect(immSpy).not.toHaveBeenCalled();
     });
 
-    it('should extract prescriptions from encounters', async () => {
-      const clinicId = new Types.ObjectId();
-      const patientId = new Types.ObjectId();
+    it('extracts prescriptions from encounters when eventType=prescription', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
 
-      const mockEncounter = {
+      const mockEncounterWithRx = {
         _id: new Types.ObjectId(),
         patientId,
         clinicId,
         type: 'consultation',
         chiefComplaint: 'Chest pain',
         status: 'closed',
+        isActive: true,
         createdAt: new Date('2024-03-15'),
         prescriptions: [
           {
@@ -257,28 +231,163 @@ describe('Portal Timeline Routes', () => {
         ],
       };
 
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([mockEncounter]) }),
-      } as any);
-      jest.spyOn(LabResultModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(ImmunizationModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-      jest.spyOn(AppointmentModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
-
-      // Mock second query for prescriptions
-      jest.spyOn(EncounterModel, 'find').mockReturnValue({
-        sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
-      } as any);
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([mockEncounterWithRx]));
+      const labSpy = jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      const immSpy = jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      const apptSpy = jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
 
       const res = await request(app).get('/api/v1/portal/timeline?eventType=prescription');
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toHaveLength(0);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].type).toBe('prescription');
+      expect(res.body.data[0].title).toContain('Atorvastatin');
+      expect(labSpy).not.toHaveBeenCalled();
+      expect(immSpy).not.toHaveBeenCalled();
+      expect(apptSpy).not.toHaveBeenCalled();
+    });
+
+    // ── Date range filtering ──────────────────────────────────────────────────
+
+    it('passes date range to model queries', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
+
+      const mockEncounter = {
+        _id: new Types.ObjectId(),
+        patientId,
+        clinicId,
+        type: 'consultation',
+        chiefComplaint: 'Checkup',
+        status: 'closed',
+        isActive: true,
+        createdAt: new Date('2024-03-15'),
+      };
+
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([mockEncounter]));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
+
+      const res = await request(app).get(
+        '/api/v1/portal/timeline?startDate=2024-03-01T00:00:00.000Z&endDate=2024-03-31T23:59:59.999Z'
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].type).toBe('encounter');
+    });
+
+    // ── Pagination ────────────────────────────────────────────────────────────
+
+    it('paginates results correctly', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
+
+      const encounters = Array.from({ length: 5 }, (_, i) => ({
+        _id: new Types.ObjectId(),
+        patientId,
+        clinicId,
+        type: 'consultation' as const,
+        chiefComplaint: `Visit ${i + 1}`,
+        status: 'closed',
+        isActive: true,
+        createdAt: new Date(2024, 2, 15 - i),
+      }));
+
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind(encounters));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
+
+      const res = await request(app).get('/api/v1/portal/timeline?page=1&limit=2');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.meta.page).toBe(1);
+      expect(res.body.meta.limit).toBe(2);
+      expect(res.body.meta.total).toBe(5);
+      expect(res.body.meta.totalPages).toBe(3);
+      expect(res.body.meta.hasNextPage).toBe(true);
+      expect(res.body.meta.hasPrevPage).toBe(false);
+    });
+
+    it('returns page 2 correctly', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
+
+      const encounters = Array.from({ length: 5 }, (_, i) => ({
+        _id: new Types.ObjectId(),
+        patientId,
+        clinicId,
+        type: 'consultation' as const,
+        chiefComplaint: `Visit ${i + 1}`,
+        status: 'closed',
+        isActive: true,
+        createdAt: new Date(2024, 2, 15 - i),
+      }));
+
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind(encounters));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
+
+      const res = await request(app).get('/api/v1/portal/timeline?page=2&limit=2');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.meta.page).toBe(2);
+      expect(res.body.meta.hasPrevPage).toBe(true);
+      expect(res.body.meta.hasNextPage).toBe(true);
+    });
+
+    // ── Validation ────────────────────────────────────────────────────────────
+
+    it('rejects limit exceeding 100', async () => {
+      const res = await request(app).get('/api/v1/portal/timeline?limit=101');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('ValidationError');
+    });
+
+    it('rejects an invalid eventType', async () => {
+      const res = await request(app).get('/api/v1/portal/timeline?eventType=unknown_type');
+      expect(res.status).toBe(400);
+    });
+
+    // ── Shape of returned events ──────────────────────────────────────────────
+
+    it('returns well-shaped encounter events', async () => {
+      const patientId = new Types.ObjectId(testPatientId);
+      const clinicId = new Types.ObjectId(testClinicId);
+
+      const enc = {
+        _id: new Types.ObjectId(),
+        patientId,
+        clinicId,
+        type: 'consultation',
+        chiefComplaint: 'Back pain',
+        status: 'closed',
+        isActive: true,
+        createdAt: new Date('2024-04-01'),
+      };
+
+      jest.spyOn(EncounterModel, 'find').mockImplementation(makeFind([enc]));
+      jest.spyOn(LabResultModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(ImmunizationModel, 'find').mockImplementation(makeFind([]));
+      jest.spyOn(AppointmentModel, 'find').mockImplementation(makeFind([]));
+
+      const res = await request(app).get('/api/v1/portal/timeline?eventType=encounter');
+
+      expect(res.status).toBe(200);
+      const event = res.body.data[0];
+      expect(event).toHaveProperty('id');
+      expect(event).toHaveProperty('type', 'encounter');
+      expect(event).toHaveProperty('date');
+      expect(event).toHaveProperty('title');
+      expect(event).toHaveProperty('description');
+      expect(event).toHaveProperty('details');
+      expect(event).toHaveProperty('clinicId');
+      expect(event).toHaveProperty('createdAt');
     });
   });
 });

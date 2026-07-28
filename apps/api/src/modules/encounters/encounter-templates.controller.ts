@@ -77,8 +77,7 @@ router.put(
       isActive: true,
       isLatest: true,
     });
-    if (!current)
-      return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
+    if (!current) return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
 
     // Mark the current version as no longer latest
     await EncounterTemplateModel.updateOne({ _id: current._id }, { isLatest: false });
@@ -156,8 +155,7 @@ router.post(
       isActive: true,
       $or: [{ clinicId: req.user!.clinicId }, { isGlobal: true }],
     });
-    if (!source)
-      return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
+    if (!source) return res.status(404).json({ error: 'NotFound', message: 'Template not found' });
 
     const { _id, createdAt, updatedAt, ...rest } = source.toObject();
     const clone = await EncounterTemplateModel.create({

@@ -38,7 +38,7 @@ router.post(
   validateRequest({ body: submitClaimSchema }),
   async (req: Request, res: Response) => {
     try {
-      const { submitInsuranceClaim } = await import('./insurance-claims.service');
+      const { submitInsuranceClaim } = await import('./services/insurance-claims.service');
 
       const result = await submitInsuranceClaim({
         clinicId: req.user!.clinicId,
@@ -53,23 +53,27 @@ router.post(
       });
 
       // Audit log
-      import('../../../modules/audit/audit.service').then(({ auditLog }) =>
-        auditLog(
-          {
-            action: 'INSURANCE_CLAIM_SUBMITTED',
-            userId: req.user!.userId,
-            clinicId: req.user!.clinicId,
-            resourceType: 'insurance_claim',
-            metadata: {
-              claimId: result.claimId,
-              claimAmount: req.body.claimAmount,
-              procedureCodeCount: req.body.procedureCodes.length,
-              diagnosisCodeCount: req.body.diagnosisCodes.length,
+      import('../audit/audit.service')
+        .then(({ auditLog }) =>
+          auditLog(
+            {
+              action: 'INSURANCE_CLAIM_SUBMITTED',
+              userId: req.user!.userId,
+              clinicId: req.user!.clinicId,
+              resourceType: 'insurance_claim',
+              metadata: {
+                claimId: result.claimId,
+                claimAmount: req.body.claimAmount,
+                procedureCodeCount: req.body.procedureCodes.length,
+                diagnosisCodeCount: req.body.diagnosisCodes.length,
+              },
             },
-          },
-          req
+            req
+          )
         )
-      ).catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
 
       return res.status(201).json({
         success: true,
@@ -92,7 +96,7 @@ router.post(
   validateRequest({ body: verifyClaimSchema }),
   async (req: Request, res: Response) => {
     try {
-      const { verifyInsuranceClaim } = await import('./insurance-claims.service');
+      const { verifyInsuranceClaim } = await import('./services/insurance-claims.service');
 
       const result = await verifyInsuranceClaim({
         claimId: req.body.claimId,
@@ -120,7 +124,7 @@ router.post(
 // GET /api/v1/payments/claims/history
 router.get('/history', async (req: Request, res: Response) => {
   try {
-    const { getClaimHistory } = await import('./insurance-claims.service');
+    const { getClaimHistory } = await import('./services/insurance-claims.service');
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
 
     const claims = await getClaimHistory(req.user!.clinicId, limit);
@@ -142,7 +146,7 @@ router.get('/history', async (req: Request, res: Response) => {
 // GET /api/v1/payments/claims/:claimId
 router.get('/:claimId', async (req: Request, res: Response) => {
   try {
-    const { InsuranceClaimModel } = await import('../models/insurance-claim.model');
+    const { InsuranceClaimModel } = await import('./models/insurance-claim.model');
 
     const claim = await InsuranceClaimModel.findOne({
       claimId: req.params.claimId,

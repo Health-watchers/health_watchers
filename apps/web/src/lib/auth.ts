@@ -66,7 +66,10 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
 }
 
 export class RateLimitError extends Error {
-  constructor(message: string, public readonly retryAfterSeconds?: number) {
+  constructor(
+    message: string,
+    public readonly retryAfterSeconds?: number
+  ) {
     super(message);
     this.name = 'RateLimitError';
   }

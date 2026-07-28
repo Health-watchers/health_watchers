@@ -110,7 +110,11 @@ describe('POST /auth/forgot-password', () => {
     expect(saveMock).toHaveBeenCalledTimes(1);
     expect(user.resetPasswordTokenHash).toBeDefined();
     expect(user.resetPasswordExpiresAt).toBeInstanceOf(Date);
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith('doctor@clinic.com', expect.any(String), undefined);
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+      'doctor@clinic.com',
+      expect.any(String),
+      undefined
+    );
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
   });
 

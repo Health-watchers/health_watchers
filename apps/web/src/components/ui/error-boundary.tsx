@@ -66,7 +66,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <p className="text-center text-sm text-neutral-600">
                 {this.state.error?.message || 'An unexpected error occurred.'}
               </p>
-              <div className="rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500 break-all">
+              <div className="rounded-md bg-neutral-50 p-3 font-mono text-xs break-all text-neutral-500">
                 Error ID: {this.state.errorId}
               </div>
               <div className="flex flex-col gap-2 pt-2">

@@ -31,7 +31,12 @@ const STATUS_VARIANT: Record<ReferralStatus, 'warning' | 'success' | 'danger' | 
 };
 
 export default function PatientReferralsTab({ patientId }: { patientId: string }) {
-  const { data = [], isLoading, error, refetch } = useQuery<PatientReferral[]>({
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<PatientReferral[]>({
     queryKey: ['patient-referrals', patientId],
     queryFn: async () => {
       // Fetch both directions and filter by patientId client-side
@@ -51,7 +56,9 @@ export default function PatientReferralsTab({ patientId }: { patientId: string }
   if (isLoading) {
     return (
       <div className="space-y-3">
-        {[1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />)}
+        {[1, 2].map((i) => (
+          <div key={i} className="h-20 animate-pulse rounded-lg bg-neutral-100" />
+        ))}
       </div>
     );
   }
@@ -66,10 +73,12 @@ export default function PatientReferralsTab({ patientId }: { patientId: string }
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-sm font-medium text-neutral-900">{r.reason}</p>
-              <p className="text-xs text-neutral-500 mt-0.5">
+              <p className="mt-0.5 text-xs text-neutral-500">
                 {r.fromClinicId?.name ?? '—'} → {r.toClinicId?.name ?? '—'}
               </p>
-              <p className="text-xs text-neutral-400 mt-0.5">{new Date(r.createdAt).toLocaleDateString()}</p>
+              <p className="mt-0.5 text-xs text-neutral-400">
+                {new Date(r.createdAt).toLocaleDateString()}
+              </p>
             </div>
             <div className="flex flex-col items-end gap-1">
               <Badge variant={URGENCY_VARIANT[r.urgency]}>{r.urgency}</Badge>

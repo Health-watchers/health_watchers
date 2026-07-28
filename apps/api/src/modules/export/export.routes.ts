@@ -28,57 +28,70 @@ const router = Router();
  *     security:
  *       - bearerAuth: []
  */
-router.get('/patients/:id/export', authenticate, bulkExportLimiter, async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const format = ((req.query.format as string) || '').toLowerCase();
+router.get(
+  '/patients/:id/export',
+  authenticate,
+  bulkExportLimiter,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const format = ((req.query.format as string) || '').toLowerCase();
 
-  if (!Types.ObjectId.isValid(id))
-    return res.status(400).json({ error: 'BadRequest', message: 'Invalid patient ID format' });
+    if (!Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: 'BadRequest', message: 'Invalid patient ID format' });
 
-  if (!['json', 'pdf'].includes(format))
-    return res.status(400).json({ error: 'BadRequest', message: 'format must be "json" or "pdf"' });
-
-  try {
-    const record = await buildPatientRecord(id);
-    if (!record) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-
-    const { role, clinicId, userId } = req.user!;
-    const patientClinicId = String((record.patient as any).clinicId);
-
-    const isSelf = role === 'READ_ONLY' && userId === id;
-    const isStaff =
-      (STAFF_ROLES as readonly string[]).includes(role) && patientClinicId === clinicId;
-    const isSuperAdmin = role === 'SUPER_ADMIN';
-
-    if (!isSelf && !isStaff && !isSuperAdmin)
+    if (!['json', 'pdf'].includes(format))
       return res
-        .status(403)
-        .json({ error: 'Forbidden', message: 'Access denied to this patient record' });
+        .status(400)
+        .json({ error: 'BadRequest', message: 'format must be "json" or "pdf"' });
 
-    // Check data_sharing consent for staff-initiated exports
-    if (isStaff && !isSuperAdmin) {
-      const { hasConsent } = await import('../consent/consent.controller');
-      const consentGranted = await hasConsent(id, clinicId, 'data_sharing');
-      if (!consentGranted) {
-        return res.status(403).json({
-          error: 'ConsentRequired',
-          message: 'Patient has not consented to data sharing. Please obtain consent first.',
-        });
+    try {
+      const record = await buildPatientRecord(id);
+      if (!record) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+      const { role, clinicId, userId } = req.user!;
+      const patientClinicId = String((record.patient as any).clinicId);
+
+      const isSelf = role === 'READ_ONLY' && userId === id;
+      const isStaff =
+        (STAFF_ROLES as readonly string[]).includes(role) && patientClinicId === clinicId;
+      const isSuperAdmin = role === 'SUPER_ADMIN';
+
+      if (!isSelf && !isStaff && !isSuperAdmin)
+        return res
+          .status(403)
+          .json({ error: 'Forbidden', message: 'Access denied to this patient record' });
+
+      // Check data_sharing consent for staff-initiated exports
+      if (isStaff && !isSuperAdmin) {
+        const { hasConsent } = await import('../consent/consent.controller');
+        const consentGranted = await hasConsent(id, clinicId, 'data_sharing');
+        if (!consentGranted) {
+          return res.status(403).json({
+            error: 'ConsentRequired',
+            message: 'Patient has not consented to data sharing. Please obtain consent first.',
+          });
+        }
       }
+
+      auditLog(
+        {
+          action: 'EXPORT_PATIENT_DATA',
+          resourceType: 'Patient',
+          resourceId: id,
+          userId,
+          clinicId,
+        },
+        req
+      ).catch((err) => logger.error({ err }, 'Audit log failed for patient export'));
+
+      if (format === 'json') return sendPatientJson(res, record);
+      return sendPatientPdf(res, record);
+    } catch (err: any) {
+      logger.error({ err }, 'Patient export error');
+      return res.status(500).json({ error: 'InternalError', message: 'Export failed' });
     }
-
-    auditLog(
-      { action: 'EXPORT_PATIENT_DATA', resourceType: 'Patient', resourceId: id, userId, clinicId },
-      req
-    ).catch((err) => logger.error({ err }, 'Audit log failed for patient export'));
-
-    if (format === 'json') return sendPatientJson(res, record);
-    return sendPatientPdf(res, record);
-  } catch (err: any) {
-    logger.error({ err }, 'Patient export error');
-    return res.status(500).json({ error: 'InternalError', message: 'Export failed' });
   }
-});
+);
 
 /**
  * @swagger
@@ -229,7 +242,13 @@ router.get(
       if (!record) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
       auditLog(
-        { action: 'EXPORT_PATIENT_DATA', resourceType: 'Patient', resourceId: id, userId: req.user!.userId, clinicId: req.user!.clinicId },
+        {
+          action: 'EXPORT_PATIENT_DATA',
+          resourceType: 'Patient',
+          resourceId: id,
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+        },
         req
       ).catch((err) => logger.error({ err }, 'Audit log failed for FHIR export'));
 

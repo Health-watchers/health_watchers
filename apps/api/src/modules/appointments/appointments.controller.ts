@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
+import { toAppointmentResponse } from './appointments.transformer';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
@@ -17,6 +18,7 @@ import { SocketService } from '../../services/socket.service';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
+import { isStaffAvailable } from '../schedules/schedules.service';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -31,21 +33,28 @@ async function hasConflict(
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-  const query: Record<string, unknown> = {
+  // Fetch only scheduled/confirmed appointments for this doctor
+  // that could potentially overlap — we avoid $expr to prevent
+  // user-controlled data from influencing query operators.
+  const filter: Record<string, unknown> = {
     doctorId: new Types.ObjectId(doctorId),
     status: { $in: ['scheduled', 'confirmed'] },
     scheduledAt: { $lt: proposedEnd },
-    $expr: {
-      $gt: [
-        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
-        scheduledAt.getTime(),
-      ],
-    },
   };
 
-  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
+  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  return (await AppointmentModel.countDocuments(query)) > 0;
+  const candidates = await AppointmentModel.find(filter)
+    .select('scheduledAt duration')
+    .lean();
+
+  // Check overlap in JS — no user-controlled operators in the query
+  return candidates.some((appt) => {
+    const apptEnd = new Date(
+      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+    );
+    return apptEnd > scheduledAt;
+  });
 }
 
 async function emitAppointmentStatusChange(
@@ -122,8 +131,8 @@ appointmentRoutes.post(
       await emitAppointmentStatusChange(
         req.params.id,
         'patient_arrived',
-        updated,
-        { checkedInAt: updated.checkedInAt }
+        updated!,
+        { checkedInAt: updated?.checkedInAt }
       );
 
       // Create notification for staff
@@ -141,7 +150,7 @@ appointmentRoutes.post(
 
       return res.json({ 
         status: 'success', 
-        data: updated,
+        data: toAppointmentResponse(updated, req.user!.role),
         message: 'Patient checked in successfully'
       });
     } catch (err: any) {
@@ -243,8 +252,8 @@ appointmentRoutes.get(
 
       return res.json({
         status: 'success',
-        data,
-        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+        data: data.map((d) => toAppointmentResponse(d, req.user!.role)),
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)), totalPages: Math.ceil(total / Number(limit)), hasNext: Number(page) < Math.ceil(total / Number(limit)), hasPrev: Number(page) > 1 },
       });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -266,7 +275,7 @@ appointmentRoutes.get(
       if (!appointment)
         return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
 
-      return res.json({ status: 'success', data: appointment });
+      return res.json({ status: 'success', data: toAppointmentResponse(appointment, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -283,11 +292,20 @@ appointmentRoutes.post(
       const { patientId, doctorId, scheduledAt, duration, type, chiefComplaint, notes } = req.body;
 
       const start = new Date(scheduledAt);
+      const dur = duration ?? 30;
 
-      if (await hasConflict(doctorId, start, duration ?? 30)) {
+      if (await hasConflict(doctorId, start, dur)) {
         return res.status(409).json({
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
+        });
+      }
+
+      const available = await isStaffAvailable(doctorId, clinicId, start, dur);
+      if (!available) {
+        return res.status(409).json({
+          error: 'DoctorUnavailable',
+          message: 'The doctor is not available at this time',
         });
       }
 
@@ -318,7 +336,7 @@ appointmentRoutes.post(
         },
       });
 
-      return res.status(201).json({ status: 'success', data: appointment });
+      return res.status(201).json({ status: 'success', data: toAppointmentResponse(appointment, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -347,6 +365,16 @@ appointmentRoutes.put(
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
         });
+      }
+
+      if (scheduledAt || duration) {
+        const available = await isStaffAvailable(newDoctorId, clinicId, newStart, newDuration);
+        if (!available) {
+          return res.status(409).json({
+            error: 'DoctorUnavailable',
+            message: 'The doctor is not available at this time',
+          });
+        }
       }
 
       const updated = await AppointmentModel.findByIdAndUpdate(
@@ -382,7 +410,7 @@ appointmentRoutes.put(
         });
       }
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -454,7 +482,7 @@ appointmentRoutes.delete(
         scheduledAt: appointment.scheduledAt,
       }).catch(() => {});
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -562,7 +590,7 @@ appointmentRoutes.post(
       emitToUser(String(appointment.doctorId), 'appointment:video_started', payload);
       emitToUser(String(appointment.patientId), 'appointment:video_started', payload);
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }

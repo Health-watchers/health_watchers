@@ -15,7 +15,14 @@ jest.mock('@health-watchers/config', () => ({
   },
 }));
 
-import { paginate, parsePagination, paginateCursor, parseCursorPagination } from './paginate';
+import {
+  decodeCursor,
+  encodeCursor,
+  paginate,
+  parsePagination,
+  paginateCursor,
+  parseCursorPagination,
+} from './paginate';
 import { Model, Types } from 'mongoose';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,7 +74,7 @@ describe('paginate()', () => {
     const model = mockModel(docs, 30);
     const result = await paginate(model, {}, 1, 2);
     expect(result.meta.hasNextPage).toBe(true);
-    expect(result.meta.nextCursor).toBe(lastId.toString());
+    expect(decodeCursor(result.meta.nextCursor as string)).toBe(lastId.toString());
   });
 
   it('totalPages rounds up', async () => {
@@ -131,13 +138,13 @@ describe('paginateCursor()', () => {
     const result = await paginateCursor(model, {}, 5);
     expect(result.meta.hasNextPage).toBe(true);
     expect(result.data).toHaveLength(5);
-    expect(result.meta.nextCursor).toBe(ids[4].toString());
+    expect(decodeCursor(result.meta.nextCursor as string)).toBe(ids[4].toString());
   });
 
   it('passes cursor as _id $lt filter for descending sort', async () => {
     const cursorId = makeId();
     const model = mockCursorModel([]);
-    await paginateCursor(model, {}, 10, cursorId.toString(), { _id: -1 });
+    await paginateCursor(model, {}, 10, encodeCursor(cursorId), { _id: -1 });
     const findCall = (model.find as jest.Mock).mock.calls[0][0];
     expect(findCall._id).toEqual({ $lt: cursorId });
   });
@@ -145,7 +152,7 @@ describe('paginateCursor()', () => {
   it('passes cursor as _id $gt filter for ascending sort', async () => {
     const cursorId = makeId();
     const model = mockCursorModel([]);
-    await paginateCursor(model, {}, 10, cursorId.toString(), { _id: 1 });
+    await paginateCursor(model, {}, 10, encodeCursor(cursorId), { _id: 1 });
     const findCall = (model.find as jest.Mock).mock.calls[0][0];
     expect(findCall._id).toEqual({ $gt: cursorId });
   });
@@ -159,9 +166,10 @@ describe('parseCursorPagination()', () => {
 
   it('parses limit and cursor from query', () => {
     const id = makeId().toString();
-    expect(parseCursorPagination({ limit: '50', cursor: id })).toEqual({
+    const cursor = encodeCursor(id);
+    expect(parseCursorPagination({ limit: '50', cursor })).toEqual({
       limit: 50,
-      cursor: id,
+      cursor,
     });
   });
 

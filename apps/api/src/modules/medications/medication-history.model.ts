@@ -20,32 +20,35 @@ export interface IMedicationHistory extends Document {
   interactionWarnings: string[];
 }
 
-const RefillRecordSchema = new Schema<IRefillRecord>({
-  refillDate:         { type: Date, required: true },
-  dispensedQuantity:  { type: Number, required: true },
-  pharmacyNotes:      { type: String },
-}, { _id: false });
+const RefillRecordSchema = new Schema<IRefillRecord>(
+  {
+    refillDate: { type: Date, required: true },
+    dispensedQuantity: { type: Number, required: true },
+    pharmacyNotes: { type: String },
+  },
+  { _id: false }
+);
 
 const MedicationHistorySchema = new Schema<IMedicationHistory>(
   {
-    patientId:           { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    encounterId:         { type: Schema.Types.ObjectId, ref: 'Encounter', required: true },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
+    encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter', required: true },
     prescribingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    medicationName:      { type: String, required: true },
-    dosage:              { type: String, required: true },
-    frequency:           { type: String, required: true },
-    startDate:           { type: Date, required: true },
-    endDate:             { type: Date },
-    active:              { type: Boolean, default: true, index: true },
-    refillHistory:       [RefillRecordSchema],
+    medicationName: { type: String, required: true },
+    dosage: { type: String, required: true },
+    frequency: { type: String, required: true },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date },
+    active: { type: Boolean, default: true, index: true },
+    refillHistory: [RefillRecordSchema],
     interactionWarnings: [{ type: String }],
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 MedicationHistorySchema.index({ patientId: 1, active: 1, startDate: -1 });
 
 export const MedicationHistoryModel = mongoose.model<IMedicationHistory>(
   'MedicationHistory',
-  MedicationHistorySchema,
+  MedicationHistorySchema
 );

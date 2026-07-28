@@ -10,17 +10,17 @@ services:
     container_name: health-watchers-jaeger
     restart: unless-stopped
     ports:
-      - "16686:16686"  # Jaeger UI — http://localhost:16686
-      - "4318:4318"    # OTLP HTTP receiver
+      - '16686:16686' # Jaeger UI — http://localhost:16686
+      - '4318:4318' # OTLP HTTP receiver
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+      COLLECTOR_OTLP_ENABLED: 'true'
 
   mongo:
     image: mongo:7
     container_name: health-watchers-mongo
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -37,10 +37,10 @@ services:
       mongo:
         condition: service_healthy
     ports:
-      - "8081:8081"
+      - '8081:8081'
     environment:
       ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
-      ME_CONFIG_BASICAUTH: "false"
+      ME_CONFIG_BASICAUTH: 'false'
 
 volumes:
   mongo_data:

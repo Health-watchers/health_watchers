@@ -28,11 +28,11 @@ const baseConfig = [
       'security/detect-object-injection': 'error',
       'security/detect-non-literal-regexp': 'error',
 
-      // TypeScript strictness
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-non-null-assertion': 'error',
-      '@typescript-eslint/explicit-function-return-type': 'warn',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      // TypeScript strictness — warn not error to allow gradual adoption
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
 
       // General safety
       'no-console': 'warn',

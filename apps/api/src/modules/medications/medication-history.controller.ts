@@ -12,12 +12,12 @@ export async function getMyMedications(req: Request, res: Response) {
 
   const filter: any = { patientId };
 
-  if (active !== undefined)  filter.active = active === 'true';
-  if (doctorId)              filter.prescribingDoctorId = doctorId;
+  if (active !== undefined) filter.active = active === 'true';
+  if (doctorId) filter.prescribingDoctorId = doctorId;
   if (startDate || endDate) {
     filter.startDate = {};
     if (startDate) filter.startDate.$gte = new Date(startDate as string);
-    if (endDate)   filter.startDate.$lte = new Date(endDate as string);
+    if (endDate) filter.startDate.$lte = new Date(endDate as string);
   }
 
   const medications = await MedicationHistoryModel.find(filter)

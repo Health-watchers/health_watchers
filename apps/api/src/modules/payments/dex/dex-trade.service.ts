@@ -15,7 +15,8 @@ export interface TradeValidation {
 
 export function validateTradeRequest(req: TradeRequest): TradeValidation {
   if (req.sellAmount <= 0) return { valid: false, reason: 'sellAmount must be greater than 0' };
-  if (req.expectedPrice <= 0) return { valid: false, reason: 'expectedPrice must be greater than 0' };
+  if (req.expectedPrice <= 0)
+    return { valid: false, reason: 'expectedPrice must be greater than 0' };
   if (req.maxSlippagePercent < 0 || req.maxSlippagePercent > 50)
     return { valid: false, reason: 'maxSlippagePercent must be between 0 and 50' };
   if (req.sellAsset === req.buyAsset)
@@ -28,7 +29,7 @@ export function validateTradeRequest(req: TradeRequest): TradeValidation {
 export function isWithinSlippage(
   currentMarketPrice: number,
   expectedPrice: number,
-  maxSlippagePercent: number,
+  maxSlippagePercent: number
 ): boolean {
   const floor = expectedPrice * (1 - maxSlippagePercent / 100);
   return currentMarketPrice >= floor;

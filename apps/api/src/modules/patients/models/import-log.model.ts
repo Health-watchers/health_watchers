@@ -20,17 +20,18 @@ export interface IImportLog {
 
 const importLogSchema = new Schema<IImportLog>(
   {
-    clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    importedBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    importDate:    { type: Date, default: () => new Date() },
-    totalRows:     { type: Number, required: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    importedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    importDate: { type: Date, default: () => new Date() },
+    totalRows: { type: Number, required: true },
     importedCount: { type: Number, required: true },
-    skippedCount:  { type: Number, required: true },
-    errorCount:    { type: Number, required: true },
-    fileName:      { type: String, required: true },
-    errors:        { type: [{ row: Number, field: String, error: String }], default: [] },
+    skippedCount: { type: Number, required: true },
+    errorCount: { type: Number, required: true },
+    fileName: { type: String, required: true },
+    errors: { type: [{ row: Number, field: String, error: String }], default: [] },
   },
   { timestamps: false, versionKey: false }
 );
 
-export const ImportLogModel = models.ImportLog || model<IImportLog>('ImportLog', importLogSchema);
+export const ImportLogModel = (models.ImportLog ||
+  model<IImportLog>('ImportLog', importLogSchema)) as import('mongoose').Model<IImportLog>;

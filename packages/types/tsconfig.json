@@ -11,7 +11,16 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "baseUrl": ".",
+    "paths": {
+      "zod": ["../../apps/api/node_modules/zod/index.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -13,7 +13,12 @@ import {
   patientIdParamSchema,
   listEncountersQuerySchema,
   ListEncountersQuery,
+  recordOutcomeSchema,
+  RecordOutcomeDto,
+  followUpQueueQuerySchema,
+  FollowUpQueueQuery,
 } from './encounter.validation';
+import { paginate } from '../../utils/paginate';
 import { Types } from 'mongoose';
 import { ICD10Model } from '../icd10/icd10.model';
 import { PatientModel } from '../patients/models/patient.model';
@@ -38,7 +43,11 @@ async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<s
 }
 
 async function sendEncounterSummaryEmail(encounter: any): Promise<void> {
-  const patientUser = await UserModel.findOne({ patientId: encounter.patientId, role: 'PATIENT', isActive: true }).lean();
+  const patientUser = await UserModel.findOne({
+    patientId: encounter.patientId,
+    role: 'PATIENT',
+    isActive: true,
+  }).lean();
   if (!patientUser?.email || (patientUser as any).preferences?.emailNotifications === false) return;
 
   let summary = encounter.patientFriendlySummary as string | undefined;
@@ -50,7 +59,10 @@ async function sendEncounterSummaryEmail(encounter: any): Promise<void> {
         diagnosis: encounter.diagnosis,
         prescriptions: encounter.prescriptions,
       });
-      await EncounterModel.updateOne({ _id: encounter._id }, { $set: { patientFriendlySummary: summary } });
+      await EncounterModel.updateOne(
+        { _id: encounter._id },
+        { $set: { patientFriendlySummary: summary } }
+      );
     } catch {
       // Fall back to chief complaint only
     }
@@ -163,7 +175,7 @@ router.get(
 
     // Boolean filters
     if (hasAiSummary === true) {
-      matchStage.aiSummary = { $exists: true, $ne: null, $ne: '' };
+      matchStage.aiSummary = { $exists: true, $ne: '' };
     }
     if (hasPrescriptions === true) {
       matchStage['prescriptions.0'] = { $exists: true };
@@ -186,7 +198,7 @@ router.get(
     const skip = (page - 1) * limit;
 
     // ── Aggregation pipeline with patient name lookup ─────────────────────────
-    const pipeline: object[] = [
+    const pipeline: import('mongoose').PipelineStage[] = [
       { $match: matchStage },
       ...(q ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
       {
@@ -198,8 +210,8 @@ router.get(
           pipeline: [{ $project: { firstName: 1, lastName: 1, systemId: 1 } }],
         },
       },
-      { $unwind: { path: '$patientInfo', preserveNullAndEmpty: true } },
-      { $sort: sortStage },
+      { $unwind: { path: '$patientInfo', preserveNullAndEmptyArrays: true } },
+      { $sort: sortStage as import('mongoose').PipelineStage.Sort['$sort'] },
       {
         $facet: {
           data: [{ $skip: skip }, { $limit: limit }],
@@ -256,7 +268,7 @@ router.post(
           req.body.vitalSigns = template.defaultVitalSigns;
         }
         if (!req.body.diagnosis?.length && template.suggestedDiagnoses?.length) {
-          req.body.diagnosis = template.suggestedDiagnoses.map((d, i) => ({
+          req.body.diagnosis = template.suggestedDiagnoses.map((d: any, i: number) => ({
             ...d,
             isPrimary: i === 0,
           }));
@@ -333,24 +345,40 @@ router.post(
     // Age-based clinical alerts (Issue #396)
     const ageAlerts: string[] = [];
     if (req.body.patientId) {
-      const agePatient = await PatientModel.findById(req.body.patientId).select('dateOfBirth').lean();
+      const agePatient = await PatientModel.findById(req.body.patientId)
+        .select('dateOfBirth')
+        .lean();
       if (agePatient?.dateOfBirth) {
         const dob = new Date(agePatient.dateOfBirth);
         const today = new Date();
         let age = today.getFullYear() - dob.getFullYear();
         const m = today.getMonth() - dob.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-        const ageMonths = (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
-        if (age < 12) ageAlerts.push(`PEDIATRIC_WEIGHT_DOSING: Patient is ${ageMonths} months old — use weight-based dosing calculations.`);
-        if (age >= 65) ageAlerts.push(`ELDERLY_POLYPHARMACY: Patient is ${age} years old — review for polypharmacy risk and renal dosing adjustments.`);
-        if (age >= 18 && age < 65 && req.body.prescriptions?.length) ageAlerts.push(`STANDARD_ADULT_DOSING: Verify standard adult dosing for patient age ${age}.`);
+        const ageMonths =
+          (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
+        if (age < 12)
+          ageAlerts.push(
+            `PEDIATRIC_WEIGHT_DOSING: Patient is ${ageMonths} months old — use weight-based dosing calculations.`
+          );
+        if (age >= 65)
+          ageAlerts.push(
+            `ELDERLY_POLYPHARMACY: Patient is ${age} years old — review for polypharmacy risk and renal dosing adjustments.`
+          );
+        if (age >= 18 && age < 65 && req.body.prescriptions?.length)
+          ageAlerts.push(
+            `STANDARD_ADULT_DOSING: Verify standard adult dosing for patient age ${age}.`
+          );
       }
     }
     const doc = await EncounterModel.create(req.body);
-    
-    emitToClinic(req.user!.clinicId, 'encounter:created', { encounterId: String(doc._id), patientId: String(doc.patientId) });
+
+    emitToClinic(req.user!.clinicId, 'encounter:created', {
+      encounterId: String(doc._id),
+      patientId: String(doc.patientId),
+    });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
+    cache.del(dashboardCacheKey(String(req.user!.clinicId)));
 
     // Track ICD-10 codes used on this encounter so they surface in the clinic's
     // "recently used" list. Best-effort — never blocks encounter creation.
@@ -366,10 +394,13 @@ router.post(
     }
 
     // Evaluate CDS rules for encounter creation
-    const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);
+    const patientContext = await cdsRulesEngine.getPatientContext(
+      req.body.patientId as any,
+      req.user!.clinicId as any
+    );
     const cdsAlerts = await cdsRulesEngine.evaluateRules('encounter_create', {
-      patientId: req.body.patientId,
-      clinicId: req.user!.clinicId,
+      patientId: req.body.patientId as any,
+      clinicId: req.user!.clinicId as any,
       vitalSigns: req.body.vitalSigns,
       ...patientContext,
     });
@@ -379,6 +410,45 @@ router.post(
       data: toEncounterResponse(doc),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
       ageAlerts: ageAlerts.length > 0 ? ageAlerts : undefined,
+    });
+  })
+);
+
+// GET /encounters/follow-ups-due — must be before /:id to avoid param capture
+router.get(
+  '/follow-ups-due',
+  requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
+  validateRequest({ query: followUpQueueQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const q = req.query as unknown as FollowUpQueueQuery;
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const filter: Record<string, unknown> = {
+      clinicId,
+      followUpRequired: true,
+      followUpCompleted: false,
+      followUpDate: { $lte: today },
+    };
+    if (q.doctorId) filter.attendingDoctorId = q.doctorId;
+    if (q.patientId) filter.patientId = q.patientId;
+    if (q.from || q.to) {
+      const dateRange: Record<string, Date> = {};
+      if (q.from) dateRange.$gte = new Date(q.from);
+      if (q.to) dateRange.$lte = new Date(q.to + 'T23:59:59.999Z');
+      filter.followUpDate = dateRange;
+    }
+    const result = await paginate(
+      EncounterModel,
+      filter as any,
+      q.page,
+      q.limit,
+      { followUpDate: 1 }
+    );
+    return res.status(200).json({
+      status: 'success',
+      data: result.data.map((d) => toEncounterResponse(d as any)),
+      meta: result.meta,
     });
   })
 );
@@ -395,6 +465,32 @@ router.get(
     });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  })
+);
+
+// PUT /encounters/:id/outcome — record clinical outcome
+router.put(
+  '/:id/outcome',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  validateRequest({ body: recordOutcomeSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const encounter = await EncounterModel.findOne({ _id: req.params.id, clinicId });
+    if (!encounter) return res.status(404).json({ status: 'error', message: 'Encounter not found' });
+    if (encounter.status === 'cancelled') {
+      return res.status(409).json({ status: 'error', message: 'Cannot record outcome for a cancelled encounter' });
+    }
+    const body = req.body as RecordOutcomeDto;
+    if (body.followUpEncounterId) {
+      const linked = await EncounterModel.findOne({ _id: body.followUpEncounterId, clinicId });
+      if (!linked) return res.status(400).json({ status: 'error', message: 'followUpEncounterId does not belong to this clinic' });
+    }
+    const updated = await EncounterModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId },
+      { $set: body },
+      { new: true }
+    );
+    return res.status(200).json({ status: 'success', data: toEncounterResponse(updated!) });
   })
 );
 
@@ -463,7 +559,7 @@ router.patch(
 
     emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
     // Trigger survey if encounter is being closed
-    if (updateData.status === 'closed' && encounter.status !== 'closed') {
+    if (updateData.status === 'closed' && (encounter.status as string) !== 'closed') {
       await triggerSurveyAfterEncounter(req.params.id, doc!);
       // Send patient-friendly summary email notification
       sendEncounterSummaryEmail(doc!).catch(() => undefined);
@@ -537,7 +633,10 @@ router.post(
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
-    const rx = req.body as { drugName: string; allergyOverride?: { allergyId: string; reason: string } };
+    const rx = req.body as {
+      drugName: string;
+      allergyOverride?: { allergyId: string; reason: string };
+    };
 
     // ── Allergy cross-reference check ─────────────────────────────────────────
     const allergyWarnings: Array<{ allergen: string; severity: string; reaction: string }> = [];
@@ -610,16 +709,19 @@ router.post(
     };
 
     // Evaluate CDS rules for prescription addition
-    const patientContext = await cdsRulesEngine.getPatientContext(encounter.patientId, req.user!.clinicId);
+    const patientContext = await cdsRulesEngine.getPatientContext(
+      encounter.patientId as any,
+      req.user!.clinicId as any
+    );
     const cdsAlerts = await cdsRulesEngine.evaluateRules('prescription_add', {
-      patientId: encounter.patientId,
-      clinicId: req.user!.clinicId,
+      patientId: encounter.patientId as any,
+      clinicId: req.user!.clinicId as any,
       prescription,
       ...patientContext,
     });
 
     // Block if critical alert
-    const criticalAlert = cdsAlerts.find(a => a.severity === 'critical' && a.action === 'block');
+    const criticalAlert = cdsAlerts.find((a) => a.severity === 'critical' && a.action === 'block');
     if (criticalAlert) {
       return res.status(409).json({
         error: 'CDSBlockingAlert',
@@ -707,5 +809,13 @@ router.delete(
 // Mount attachment routes
 import { attachmentRoutes } from './attachments.controller';
 router.use('/:encounterId/attachments', attachmentRoutes);
+
+// ── Co-signature routes ───────────────────────────────────────────────────────
+import { CoSignatureController } from './cosignature.controller';
+
+router.get('/pending-cosignatures', asyncHandler(CoSignatureController.getPendingQueue));
+router.post('/:id/request-cosign', asyncHandler(CoSignatureController.requestCoSignature));
+router.post('/:id/cosign', asyncHandler(CoSignatureController.approveCoSignature));
+router.post('/:id/reject-cosign', asyncHandler(CoSignatureController.rejectCoSignature));
 
 export const encounterRoutes = router;

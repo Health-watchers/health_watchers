@@ -12,3 +12,6 @@ export const forgotPasswordLimiter = passThrough;
 export const aiLimiter = passThrough;
 export const paymentLimiter = passThrough;
 export const generalLimiter = passThrough;
+export const bulkExportLimiter = passThrough;
+export const patientSearchLimiter = passThrough;
+export const reportGenerationLimiter = passThrough;

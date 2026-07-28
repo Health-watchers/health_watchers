@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { authenticate } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validate.middleware';
 import {
@@ -10,11 +10,7 @@ import {
   getApiKeyUsage,
   getAvailableScopes,
 } from './api-key.controller';
-import {
-  createApiKeySchema,
-  updateApiKeySchema,
-  listApiKeysSchema,
-} from './api-key.validation';
+import { createApiKeySchema, updateApiKeySchema, listApiKeysSchema } from './api-key.validation';
 
 const router = Router();
 
@@ -25,21 +21,33 @@ router.use(authenticate);
 router.get('/scopes', getAvailableScopes);
 
 // Create a new API key
-router.post('/', validateRequest(createApiKeySchema), createApiKey);
+router.post(
+  '/',
+  validateRequest({ body: createApiKeySchema.shape.body }),
+  createApiKey as RequestHandler
+);
 
 // List API keys
-router.get('/', validateRequest(listApiKeysSchema), listApiKeys);
+router.get(
+  '/',
+  validateRequest({ query: listApiKeysSchema.shape.query }),
+  listApiKeys as RequestHandler
+);
 
 // Get a specific API key
-router.get('/:id', getApiKey);
+router.get('/:id', getApiKey as RequestHandler);
 
 // Update an API key
-router.patch('/:id', validateRequest(updateApiKeySchema), updateApiKey);
+router.patch(
+  '/:id',
+  validateRequest({ body: updateApiKeySchema.shape.body }),
+  updateApiKey as RequestHandler
+);
 
 // Revoke an API key
-router.delete('/:id', revokeApiKey);
+router.delete('/:id', revokeApiKey as RequestHandler);
 
 // Get usage logs for an API key
-router.get('/:id/usage', getApiKeyUsage);
+router.get('/:id/usage', getApiKeyUsage as RequestHandler);
 
 export default router;

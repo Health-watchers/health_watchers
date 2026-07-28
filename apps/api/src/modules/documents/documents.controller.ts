@@ -36,8 +36,44 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCall
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: MAX_SIZE_BYTES },
+  limits: { fileSize: MAX_SIZE_BYTES },
   fileFilter,
+});
+
+// ── GET /documents?patientId= ────────────────────────────────────────────────
+
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { patientId, clinicId, documentType, page = '1', limit = '20' } = req.query as Record<string, string>;
+
+    if (!patientId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'patientId is required.' });
+    }
+
+    const filter: Record<string, unknown> = { patientId };
+    if (clinicId) filter.clinicId = clinicId;
+    if (documentType) filter.documentType = documentType;
+
+    const pageNum  = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+
+    const [documents, total] = await Promise.all([
+      DocumentModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      DocumentModel.countDocuments(filter),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: documents,
+      meta: { page: pageNum, limit: limitNum, total },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'InternalError', message: err.message });
+  }
 });
 
 // ── POST /documents/upload ───────────────────────────────────────────────────
@@ -81,11 +117,16 @@ router.post(
 
       // multer size limit
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'FileTooLarge', message: 'File exceeds the 20 MB limit.' });
+        return res
+          .status(413)
+          .json({ error: 'FileTooLarge', message: 'File exceeds the 20 MB limit.' });
       }
       // our custom file-type rejection
       if ((err as any).code === 'INVALID_FILE_TYPE') {
-        return res.status(400).json({ error: 'InvalidFileType', message: 'Only PDF, JPEG, PNG, and DICOM files are allowed.' });
+        return res.status(400).json({
+          error: 'InvalidFileType',
+          message: 'Only PDF, JPEG, PNG, and DICOM files are allowed.',
+        });
       }
       return next(err);
     });
@@ -97,27 +138,37 @@ router.post(
       }
 
       const { patientId, clinicId, documentType, documentId } = req.body as {
-        patientId: string; clinicId: string; documentType: string; documentId?: string;
+        patientId: string;
+        clinicId: string;
+        documentType: string;
+        documentId?: string;
       };
 
       if (!patientId || !clinicId || !documentType) {
-        return res.status(400).json({ error: 'BadRequest', message: 'patientId, clinicId, and documentType are required.' });
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: 'patientId, clinicId, and documentType are required.',
+        });
       }
 
       // Build a unique storage key
-      const ext        = path.extname(req.file.originalname).toLowerCase();
+      const ext = path.extname(req.file.originalname).toLowerCase();
       const storageKey = `documents/${clinicId}/${patientId}/${crypto.randomUUID()}${ext}`;
 
       await uploadFile({
         storageKey,
-        buffer:   req.file.buffer,
+        buffer: req.file.buffer,
         mimeType: req.file.mimetype,
       });
 
       let doc;
       let version = 1;
 
-      if (documentId) {
+            if (documentId) {
+        // Validate documentId to prevent NoSQL injection via request body
+        if (!/^[a-f\d]{24}$/i.test(documentId)) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid document ID' });
+        }
         // Update existing document (new version)
         const existing = await DocumentModel.findById(documentId);
         if (!existing) {
@@ -238,7 +289,9 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response) =>
         version: versionNum,
       });
       if (!versionRecord) {
-        return res.status(404).json({ error: 'NotFound', message: `Version ${versionNum} not found.` });
+        return res
+          .status(404)
+          .json({ error: 'NotFound', message: `Version ${versionNum} not found.` });
       }
       storageKey = versionRecord.storageKey;
     }
@@ -299,7 +352,7 @@ router.get('/:id/versions', authenticate, async (req: Request, res: Response) =>
 
 router.get('/_local/:storageKey', authenticate, (req: Request, res: Response) => {
   const storageKey = decodeURIComponent(req.params.storageKey);
-  const filePath   = `${config.storage.localUploadDir}/${storageKey}`;
+  const filePath = `${config.storage.localUploadDir}/${storageKey}`;
   return res.sendFile(filePath, { root: process.cwd() }, (err) => {
     if (err) res.status(404).json({ error: 'NotFound', message: 'File not found on disk.' });
   });

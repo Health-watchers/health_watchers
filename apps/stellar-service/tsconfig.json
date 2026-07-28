@@ -4,8 +4,14 @@
     "outDir": "dist",
     "rootDir": "src",
     "lib": ["ES2020"],
-    "types": ["node", "jest"],
-    "ignoreDeprecations": "5.0"
+    "types": ["node"],
+    "ignoreDeprecations": "5.0",
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["node_modules", "src/**/*.test.ts", "src/**/*.spec.ts", "src/__tests__"]
 }

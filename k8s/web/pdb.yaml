@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: health-watchers
     app.kubernetes.io/component: web
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: web

@@ -20,7 +20,9 @@ describe('Logging instrumentation', () => {
 
     expect(res.funded).toBe(true);
     expect(infoSpy).toHaveBeenCalled();
-    const calledWith = infoSpy.mock.calls.find((c: any) => (c[0] && c[0].operation === 'fundAccount'));
+    const calledWith = infoSpy.mock.calls.find(
+      (c: any) => c[0] && c[0].operation === 'fundAccount'
+    );
     expect(calledWith).toBeTruthy();
   });
 
@@ -29,14 +31,22 @@ describe('Logging instrumentation', () => {
 
     // Mock Horizon server interactions via existing tests' mocks
     // For simplicity, call createIntent and assert logging occurs (other tests cover behavior)
-    const mockLoadAccount = jest.fn().mockResolvedValueOnce({ sequenceNumber: () => '1', accountId: () => 'A' });
+    const mockLoadAccount = jest
+      .fn()
+      .mockResolvedValueOnce({ sequenceNumber: () => '1', accountId: () => 'A' });
     const mockSubmit = jest.fn().mockResolvedValueOnce({ hash: 'tx-hash' });
 
     jest.unstable_mockModule('@stellar/stellar-sdk', () => {
       const actual = jest.requireActual('@stellar/stellar-sdk') as any;
       return {
         ...actual,
-        Horizon: { Server: jest.fn().mockImplementation(() => ({ loadAccount: mockLoadAccount, submitTransaction: mockSubmit, fetchBaseFee: jest.fn().mockResolvedValue('100') })) },
+        Horizon: {
+          Server: jest.fn().mockImplementation(() => ({
+            loadAccount: mockLoadAccount,
+            submitTransaction: mockSubmit,
+            fetchBaseFee: jest.fn().mockResolvedValue('100'),
+          })),
+        },
       };
     });
 

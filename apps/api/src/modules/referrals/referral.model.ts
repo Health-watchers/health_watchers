@@ -29,30 +29,38 @@ export interface IReferral extends Document {
 const ReferralSchema = new Schema<IReferral>(
   {
     fromClinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
-    toClinicId:   { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
-    patientId:    { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
-    referredBy:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    reason:       { type: String, required: true },
-    urgency:      { type: String, enum: ['routine', 'urgent', 'emergency'], required: true },
-    encounterId:  { type: Schema.Types.ObjectId, ref: 'Encounter' },
+    toClinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    reason: { type: String, required: true },
+    urgency: { type: String, enum: ['routine', 'urgent', 'emergency'], required: true },
+    encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter' },
     sharedData: {
-      demographics:  { type: Boolean, default: false },
-      encounters:    { type: Boolean, default: false },
-      labResults:    { type: Boolean, default: false },
+      demographics: { type: Boolean, default: false },
+      encounters: { type: Boolean, default: false },
+      labResults: { type: Boolean, default: false },
       prescriptions: { type: Boolean, default: false },
     },
-    status:        { type: String, enum: ['pending', 'accepted', 'declined', 'completed'], default: 'pending' },
-    notes:         { type: String },
-    acceptedBy:    { type: Schema.Types.ObjectId, ref: 'User' },
-    acceptedAt:    { type: Date },
-    declinedReason:{ type: String },
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'declined', 'completed'],
+      default: 'pending',
+    },
+    notes: { type: String },
+    acceptedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    acceptedAt: { type: Date },
+    declinedReason: { type: String },
     // Outcome tracking fields
-    outcome:       { type: String, enum: ['attended', 'no-show', 'cancelled', 'pending'], default: 'pending' },
-    outcomeDate:   { type: Date },
-    outcomeNotes:  { type: String },
-    completedAt:   { type: Date },
+    outcome: {
+      type: String,
+      enum: ['attended', 'no-show', 'cancelled', 'pending'],
+      default: 'pending',
+    },
+    outcomeDate: { type: Date },
+    outcomeNotes: { type: String },
+    completedAt: { type: Date },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
 ReferralSchema.index({ fromClinicId: 1, createdAt: -1 });
@@ -62,5 +70,5 @@ ReferralSchema.index({ status: 1 });
 ReferralSchema.index({ outcome: 1, outcomeDate: -1 });
 ReferralSchema.index({ toClinicId: 1, outcome: 1 });
 
-export const ReferralModel =
-  mongoose.models.Referral || mongoose.model<IReferral>('Referral', ReferralSchema);
+export const ReferralModel = (mongoose.models.Referral ||
+  mongoose.model<IReferral>('Referral', ReferralSchema)) as import('mongoose').Model<IReferral>;

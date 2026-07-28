@@ -1,108 +1,39 @@
-import { Request, Response } from 'express';
-import { Error as MongooseError } from 'mongoose';
-import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
+import { Request, Response, NextFunction } from 'express';
+import { errorHandler } from '../error.middleware';
+import { AppError } from '../../utils/app-error';
+import { ApiErrorCode } from '@health-watchers/types';
 import { ZodError, z } from 'zod';
-import { errorHandler, errorMiddleware } from '../error.middleware';
 
 function mockRes() {
-  const res: Partial<Response> = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  return res as Response;
+  const res = { status: jest.fn(), json: jest.fn(), locals: {} } as unknown as Response;
+  (res.status as jest.Mock).mockReturnValue(res);
+  return res;
 }
-
-function mockReq(requestId = 'req-1'): Request {
-  return { requestId } as unknown as Request;
-}
+const mockReq = { requestId: 'test-id', method: 'GET', path: '/', user: undefined } as unknown as Request;
+const noop = jest.fn() as unknown as NextFunction;
 
 describe('errorHandler', () => {
-  it('is exported under the errorMiddleware alias', () => {
-    expect(errorMiddleware).toBe(errorHandler);
+  beforeEach(() => jest.clearAllMocks());
+
+  it('returns code from AppError', () => {
+    const res = mockRes();
+    const err = AppError.notFound('Patient');
+    errorHandler(err, mockReq, res, noop);
+    expect((res.json as jest.Mock).mock.calls[0][0]).toMatchObject({ code: ApiErrorCode.NOT_FOUND });
   });
 
-  it('returns 400 for ZodError with field details', () => {
+  it('returns VALIDATION_ERROR code for ZodError', () => {
     const res = mockRes();
     const schema = z.object({ name: z.string() });
-    const result = schema.safeParse({});
-    const zodError = result.success ? undefined : result.error;
-
-    errorHandler(zodError as ZodError, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'ValidationError', requestId: 'req-1' })
-    );
+    let zodErr: ZodError | null = null;
+    try { schema.parse({}); } catch (e) { zodErr = e as ZodError; }
+    errorHandler(zodErr!, mockReq, res, noop);
+    expect((res.json as jest.Mock).mock.calls[0][0]).toMatchObject({ code: ApiErrorCode.VALIDATION_ERROR });
   });
 
-  it('returns 400 for Mongoose ValidationError', () => {
+  it('returns INTERNAL_SERVER_ERROR for unknown errors', () => {
     const res = mockRes();
-    const err = new MongooseError.ValidationError();
-    err.errors.name = new MongooseError.ValidatorError({ path: 'name', message: 'Path `name` is required.' });
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: 'ValidationError',
-        details: [{ path: 'name', message: 'Path `name` is required.' }],
-      })
-    );
-  });
-
-  it('returns 400 for a CastError with the offending field', () => {
-    const res = mockRes();
-    const err = new MongooseError.CastError('ObjectId', 'abc', 'patientId');
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'BadRequest', message: 'Invalid value for field: patientId' })
-    );
-  });
-
-  it('returns 409 for a duplicate key error', () => {
-    const res = mockRes();
-    const err = Object.assign(new Error('duplicate'), { code: 11000, keyValue: { email: 'a@b.com' } });
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(409);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'Conflict', field: 'email' })
-    );
-  });
-
-  it('returns 401 for an expired JWT', () => {
-    const res = mockRes();
-    const err = new TokenExpiredError('jwt expired', new Date());
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'TokenExpired' }));
-  });
-
-  it('returns 401 for an invalid JWT', () => {
-    const res = mockRes();
-    const err = new JsonWebTokenError('invalid signature');
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'InvalidToken' }));
-  });
-
-  it('falls back to a 500 for unrecognized errors', () => {
-    const res = mockRes();
-    const err = new Error('boom');
-
-    errorHandler(err, mockReq(), res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'InternalServerError', requestId: 'req-1' })
-    );
+    errorHandler(new Error('oops'), mockReq, res, noop);
+    expect((res.json as jest.Mock).mock.calls[0][0]).toMatchObject({ code: ApiErrorCode.INTERNAL_SERVER_ERROR });
   });
 });

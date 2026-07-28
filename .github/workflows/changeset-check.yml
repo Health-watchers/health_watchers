@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 20
           cache: 'npm'
@@ -26,7 +26,7 @@ jobs:
 
       - name: Check for changesets
         run: |
-          if [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README.md)" ]; then
+          if ! find .changeset/ -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit 2>/dev/null | grep -q .; then
             echo "⚠️ No changeset found. If this PR includes user-facing changes, please run 'npm run changeset' to create one."
             echo ""
             echo "Skip this check if:"

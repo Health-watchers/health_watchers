@@ -3,9 +3,12 @@ import mongoose from 'mongoose';
 import { PortalDocumentModel } from '../portal-document.model';
 
 describe('validateUploadedFile', () => {
-  it('accepts valid PDF', () => expect(validateUploadedFile('application/pdf', 1024, 'report.pdf').valid).toBe(true));
-  it('accepts JPEG', () => expect(validateUploadedFile('image/jpeg', 1024, 'card.jpg').valid).toBe(true));
-  it('accepts PNG', () => expect(validateUploadedFile('image/png', 512, 'scan.png').valid).toBe(true));
+  it('accepts valid PDF', () =>
+    expect(validateUploadedFile('application/pdf', 1024, 'report.pdf').valid).toBe(true));
+  it('accepts JPEG', () =>
+    expect(validateUploadedFile('image/jpeg', 1024, 'card.jpg').valid).toBe(true));
+  it('accepts PNG', () =>
+    expect(validateUploadedFile('image/png', 512, 'scan.png').valid).toBe(true));
   it('rejects disallowed MIME type', () => {
     const result = validateUploadedFile('application/zip', 1024, 'archive.zip');
     expect(result.valid).toBe(false);
@@ -32,8 +35,16 @@ describe('validateUploadedFile', () => {
 
 describe('PortalDocumentModel schema', () => {
   const patientId = new mongoose.Types.ObjectId();
-  const clinicId  = new mongoose.Types.ObjectId();
-  const base = { patientId, clinicId, fileName: 'lab.pdf', mimeType: 'application/pdf', sizeBytes: 2048, category: 'lab_result', storageKey: 'portal/p1/lab.pdf' };
+  const clinicId = new mongoose.Types.ObjectId();
+  const base = {
+    patientId,
+    clinicId,
+    fileName: 'lab.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 2048,
+    category: 'lab_result',
+    storageKey: 'portal/p1/lab.pdf',
+  };
 
   it('validates a complete document entry', async () => {
     await expect(new PortalDocumentModel(base).validate()).resolves.toBeUndefined();

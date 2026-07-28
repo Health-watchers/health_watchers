@@ -1,0 +1,64 @@
+# ServiceMonitor for API service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: api
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: health-watchers
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+      scrapeTimeout: 10s
+
+---
+# ServiceMonitor for Stellar Service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: stellar-service
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: stellar-service
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: health-watchers
+      app.kubernetes.io/component: stellar-service
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+      scrapeTimeout: 10s
+
+---
+# ServiceMonitor for Web service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: web
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: web
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: health-watchers
+      app.kubernetes.io/component: web
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+      scrapeTimeout: 10s

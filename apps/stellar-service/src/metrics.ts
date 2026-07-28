@@ -52,7 +52,7 @@ export const stellarStreamHealth = new client.Gauge({
 function normalisePath(path: string): string {
   return path
     .replace(/\/[A-Z0-9]{56}/gi, '/:publicKey') // Stellar public keys
-    .replace(/\/[a-f0-9]{64}/gi, '/:hash')       // transaction hashes
+    .replace(/\/[a-f0-9]{64}/gi, '/:hash') // transaction hashes
     .replace(/\?.*$/, '');
 }
 

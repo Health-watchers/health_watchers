@@ -13,7 +13,7 @@ export class AuthService {
     });
 
     // Add token to requests
-    this.api.interceptors.request.use(async (config) => {
+    this.api.interceptors.request.use(async (config: any) => {
       const token = await this.getAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -23,8 +23,8 @@ export class AuthService {
 
     // Handle token refresh on 401
     this.api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
+      (response: any) => response,
+      async (error: any) => {
         if (error.response?.status === 401) {
           const refreshed = await this.refreshToken();
           if (refreshed) {
@@ -36,7 +36,10 @@ export class AuthService {
     );
   }
 
-  async login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async login(
+    email: string,
+    password: string
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const response = await this.api.post('/auth/login', { email, password });
     const { accessToken, refreshToken } = response.data.data;
 

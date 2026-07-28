@@ -6,6 +6,12 @@ export interface IWebhook {
   events: string[];
   secret: string;
   isActive: boolean;
+  description?: string;
+  retryConfig?: {
+    maxRetries: number;
+    backoffType: 'exponential' | 'linear' | 'fixed';
+    initialDelayMs: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,13 +21,32 @@ export interface IWebhookDelivery {
   event: string;
   url: string;
   payload: Record<string, any>;
-  status: 'pending' | 'delivered' | 'failed';
+  status: 'pending' | 'delivered' | 'failed' | 'dead';
   attempts: number;
   lastAttemptAt?: Date;
   nextRetryAt?: Date;
   error?: string;
+  responseStatus?: number;
   createdAt: Date;
 }
+
+export interface IWebhookEventLog {
+  clinicId: Schema.Types.ObjectId;
+  webhookId: Schema.Types.ObjectId;
+  event: string;
+  payload: Record<string, any>;
+  status: 'dispatched' | 'delivered' | 'failed' | 'dead';
+  deliveryId?: Schema.Types.ObjectId;
+  deliveredAt?: Date;
+  error?: string;
+  createdAt: Date;
+}
+
+const defaultRetryConfig = {
+  maxRetries: 3,
+  backoffType: 'exponential' as const,
+  initialDelayMs: 1000,
+};
 
 const webhookSchema = new Schema<IWebhook>(
   {
@@ -30,9 +55,21 @@ const webhookSchema = new Schema<IWebhook>(
     events: { type: [String], required: true },
     secret: { type: String, required: true },
     isActive: { type: Boolean, default: true, index: true },
+    description: { type: String },
+    retryConfig: {
+      maxRetries: { type: Number, default: defaultRetryConfig.maxRetries, min: 1, max: 10 },
+      backoffType: {
+        type: String,
+        enum: ['exponential', 'linear', 'fixed'],
+        default: defaultRetryConfig.backoffType,
+      },
+      initialDelayMs: { type: Number, default: defaultRetryConfig.initialDelayMs, min: 100, max: 60000 },
+    },
   },
   { timestamps: true, versionKey: false }
 );
+
+webhookSchema.index({ clinicId: 1, isActive: 1 });
 
 const webhookDeliverySchema = new Schema<IWebhookDelivery>(
   {
@@ -42,7 +79,7 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     payload: { type: Schema.Types.Mixed, required: true },
     status: {
       type: String,
-      enum: ['pending', 'delivered', 'failed'],
+      enum: ['pending', 'delivered', 'failed', 'dead'],
       default: 'pending',
       index: true,
     },
@@ -50,12 +87,45 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     lastAttemptAt: { type: Date },
     nextRetryAt: { type: Date },
     error: { type: String },
+    responseStatus: { type: Number },
   },
   { timestamps: true, versionKey: false }
 );
 
 webhookDeliverySchema.index({ status: 1, nextRetryAt: 1 });
+webhookDeliverySchema.index({ webhookId: 1, status: 1 });
 
-export const WebhookModel = models.Webhook || model<IWebhook>('Webhook', webhookSchema);
-export const WebhookDeliveryModel =
-  models.WebhookDelivery || model<IWebhookDelivery>('WebhookDelivery', webhookDeliverySchema);
+const webhookEventLogSchema = new Schema<IWebhookEventLog>(
+  {
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    webhookId: { type: Schema.Types.ObjectId, ref: 'Webhook', required: true, index: true },
+    event: { type: String, required: true, index: true },
+    payload: { type: Schema.Types.Mixed, required: true },
+    status: {
+      type: String,
+      enum: ['dispatched', 'delivered', 'failed', 'dead'],
+      default: 'dispatched',
+      index: true,
+    },
+    deliveryId: { type: Schema.Types.ObjectId, ref: 'WebhookDelivery' },
+    deliveredAt: { type: Date },
+    error: { type: String },
+  },
+  { timestamps: true, versionKey: false }
+);
+
+webhookEventLogSchema.index({ clinicId: 1, event: 1 });
+webhookEventLogSchema.index({ clinicId: 1, createdAt: -1 });
+
+export const WebhookModel = (models.Webhook ||
+  model<IWebhook>('Webhook', webhookSchema)) as import('mongoose').Model<IWebhook>;
+export const WebhookDeliveryModel = (models.WebhookDelivery ||
+  model<IWebhookDelivery>(
+    'WebhookDelivery',
+    webhookDeliverySchema
+  )) as import('mongoose').Model<IWebhookDelivery>;
+export const WebhookEventLogModel = (models.WebhookEventLog ||
+  model<IWebhookEventLog>(
+    'WebhookEventLog',
+    webhookEventLogSchema
+  )) as import('mongoose').Model<IWebhookEventLog>;

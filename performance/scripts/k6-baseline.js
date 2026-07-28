@@ -108,7 +108,12 @@ export default function () {
     (res) => res.status < 500
   );
 
-  record(http.get(`${BASE_URL}/health`), healthCheckTrend, 'health check ok', (res) => res.status === 200);
+  record(
+    http.get(`${BASE_URL}/health`),
+    healthCheckTrend,
+    'health check ok',
+    (res) => res.status === 200
+  );
 
   record(
     http.get(`${BASE_URL}/api/v1/encounters`, { headers: HEADERS }),

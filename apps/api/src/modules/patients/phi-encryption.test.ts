@@ -41,8 +41,8 @@ import mongoose from 'mongoose';
 import { PatientModel } from './models/patient.model';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// AES-256-GCM encrypted strings have the form <24-hex>:<n-hex>:<32-hex>
-const ENCRYPTED_PATTERN = /^[0-9a-f]{24}:[0-9a-f]+:[0-9a-f]{32}$/;
+// AES-256-GCM encrypted strings have the form v<n>:<24-hex>:<n-hex>:<32-hex>
+const ENCRYPTED_PATTERN = /^v\d+:[0-9a-f]{24}:[0-9a-f]+:[0-9a-f]{32}$/;
 
 let idCounter = 0;
 function makeDoc(overrides: Record<string, unknown> = {}) {
@@ -327,7 +327,13 @@ describe('PHI encryption — insurance sub-documents', () => {
         ...makeDoc(),
         insurance: [
           { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
-          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+          {
+            provider: 'Aetna',
+            policyNumber: 'POL-B',
+            groupNumber: 'GRP-B',
+            coverageType: 'HMO',
+            isPrimary: false,
+          },
         ],
       };
       const patient = await PatientModel.create(doc);
@@ -344,7 +350,13 @@ describe('PHI encryption — insurance sub-documents', () => {
         ...makeDoc(),
         insurance: [
           { provider: 'BCBS', policyNumber: 'POL-A', coverageType: 'PPO', isPrimary: true },
-          { provider: 'Aetna', policyNumber: 'POL-B', groupNumber: 'GRP-B', coverageType: 'HMO', isPrimary: false },
+          {
+            provider: 'Aetna',
+            policyNumber: 'POL-B',
+            groupNumber: 'GRP-B',
+            coverageType: 'HMO',
+            isPrimary: false,
+          },
         ],
       };
       const created = await PatientModel.create(doc);

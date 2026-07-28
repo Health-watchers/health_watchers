@@ -1,82 +1,101 @@
-import { Request, Response } from 'express';
+import request from 'supertest';
+import express from 'express';
 import { z } from 'zod';
 import { validateRequest } from '../validate.middleware';
 
-function mockRes() {
-  const res: Partial<Response> = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  return res as Response;
+jest.mock('../../utils/logger', () => ({
+  __esModule: true,
+  default: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
+}));
+
+import logger from '../../utils/logger';
+
+function buildApp(schemas: Parameters<typeof validateRequest>[0]) {
+  const app = express();
+  app.use(express.json());
+  app.post('/test', validateRequest(schemas), (_req, res) => res.json({ ok: true }));
+  app.get('/test', validateRequest(schemas), (_req, res) => res.json({ ok: true }));
+  return app;
 }
 
-describe('validateRequest', () => {
-  it('rejects an invalid body with 400', () => {
-    const req = { body: { name: 123 } } as unknown as Request;
-    const res = mockRes();
-    const next = jest.fn();
+describe('validateRequest middleware', () => {
+  describe('body validation', () => {
+    const schema = z.object({ name: z.string(), age: z.number() });
 
-    validateRequest({ body: z.object({ name: z.string() }) })(req, res, next);
+    it('passes valid body to handler', async () => {
+      const app = buildApp({ body: schema });
+      const res = await request(app).post('/test').send({ name: 'Alice', age: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+    });
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'ValidationError', message: 'Invalid request body' })
-    );
-    expect(next).not.toHaveBeenCalled();
+    it('returns 400 for invalid body', async () => {
+      const app = buildApp({ body: schema });
+      const res = await request(app).post('/test').send({ name: 'Alice' }); // missing age
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('ValidationError');
+      expect(res.body.details).toBeDefined();
+    });
+
+    it('logs a warning on body validation failure', async () => {
+      const app = buildApp({ body: schema });
+      await request(app).post('/test').send({ name: 123 });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'POST', path: '/test' }),
+        'Request body validation failed'
+      );
+    });
+
+    it('strips unknown fields via schema (if schema uses strip)', async () => {
+      const strictSchema = z.object({ name: z.string() }).strip();
+      const app = buildApp({ body: strictSchema });
+      const res = await request(app).post('/test').send({ name: 'Bob', extra: 'ignored' });
+      expect(res.status).toBe(200);
+    });
   });
 
-  it('parses and replaces req.body on success', () => {
-    const req = { body: { name: 'Alice', extra: 'stripped-if-schema-strict' } } as unknown as Request;
-    const res = mockRes();
-    const next = jest.fn();
+  describe('query validation', () => {
+    const schema = z.object({ page: z.coerce.number().min(1) });
 
-    validateRequest({ body: z.object({ name: z.string() }) })(req, res, next);
+    it('passes valid query to handler', async () => {
+      const app = buildApp({ query: schema });
+      const res = await request(app).get('/test?page=2');
+      expect(res.status).toBe(200);
+    });
 
-    expect(req.body).toEqual({ name: 'Alice' });
-    expect(next).toHaveBeenCalledTimes(1);
+    it('returns 400 for invalid query', async () => {
+      const app = buildApp({ query: schema });
+      const res = await request(app).get('/test?page=0');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('ValidationError');
+      expect(res.body.message).toBe('Invalid query parameters');
+    });
+
+    it('logs a warning on query validation failure', async () => {
+      const app = buildApp({ query: schema });
+      await request(app).get('/test?page=0');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'GET', path: '/test' }),
+        'Request query validation failed'
+      );
+    });
   });
 
-  it('rejects invalid params with 400', () => {
-    const req = { params: { id: 'not-a-number' } } as unknown as Request;
-    const res = mockRes();
-    const next = jest.fn();
+  describe('edge cases', () => {
+    it('accepts request when no schemas provided', async () => {
+      const app = buildApp({});
+      const res = await request(app).post('/test').send({ anything: true });
+      expect(res.status).toBe(200);
+    });
 
-    validateRequest({ params: z.object({ id: z.string().regex(/^\d+$/) }) })(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid request params' })
-    );
-  });
-
-  it('rejects invalid query with 400', () => {
-    const req = { query: { page: 'abc' } } as unknown as Request;
-    const res = mockRes();
-    const next = jest.fn();
-
-    validateRequest({ query: z.object({ page: z.string().regex(/^\d+$/) }) })(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid query parameters' })
-    );
-  });
-
-  it('calls next once when body, params and query all validate', () => {
-    const req = {
-      body: { name: 'Bob' },
-      params: { id: '42' },
-      query: { page: '1' },
-    } as unknown as Request;
-    const res = mockRes();
-    const next = jest.fn();
-
-    validateRequest({
-      body: z.object({ name: z.string() }),
-      params: z.object({ id: z.string() }),
-      query: z.object({ page: z.string() }),
-    })(req, res, next);
-
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(res.status).not.toHaveBeenCalled();
+    it('returns first failing schema error when multiple schemas are invalid', async () => {
+      const bodySchema = z.object({ x: z.number() });
+      const querySchema = z.object({ y: z.number() });
+      const app = buildApp({ body: bodySchema, query: querySchema });
+      // body is invalid — should fail at body check first
+      const res = await request(app).post('/test?y=abc').send({ x: 'not-a-number' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('Invalid request body');
+    });
   });
 });

@@ -226,9 +226,9 @@ describe('GET /api/v1/payments/fee-estimate', () => {
   const token = makeToken();
 
   const mockFeeData = {
-    slow:     { stroops: '100', xlm: '0.0000100', confirmationTime: '~60s' },
+    slow: { stroops: '100', xlm: '0.0000100', confirmationTime: '~60s' },
     standard: { stroops: '200', xlm: '0.0000200', confirmationTime: '~30s' },
-    fast:     { stroops: '500', xlm: '0.0000500', confirmationTime: '~10s' },
+    fast: { stroops: '500', xlm: '0.0000500', confirmationTime: '~10s' },
     raw: { min: '100', mode: '200', max: '1000', p10: '100', p50: '200', p90: '500', p99: '900' },
   };
 
@@ -313,7 +313,7 @@ describe('POST /api/v1/payments/intent — feeStrategy', () => {
 
     expect(res.status).toBe(201);
     expect(PaymentRecordModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ feeStrategy: 'fast' }),
+      expect.objectContaining({ feeStrategy: 'fast' })
     );
   });
 
@@ -337,7 +337,7 @@ describe('POST /api/v1/payments/intent — feeStrategy', () => {
 
     expect(res.status).toBe(201);
     expect(PaymentRecordModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ feeStrategy: 'standard' }),
+      expect.objectContaining({ feeStrategy: 'standard' })
     );
   });
 

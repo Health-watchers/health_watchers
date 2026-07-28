@@ -1,0 +1,80 @@
+# Production Dockerfile for Web (Next.js) - Multi-stage build
+# Stage 1: Dependencies
+FROM node:18-alpine AS deps
+
+WORKDIR /app
+
+# Copy package files only (layer cache friendly)
+COPY package*.json ./
+COPY apps/web/package*.json ./apps/web/
+COPY tsconfig.base.json ./
+COPY turbo.json ./
+
+# Install all dependencies (including devDeps needed for build)
+RUN npm ci --production=false
+
+# Stage 2: Builder
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy installed dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules 2>/dev/null || true
+
+# Copy source code
+COPY package*.json ./
+COPY apps/web/package*.json ./apps/web/
+COPY apps/web/src ./apps/web/src
+COPY apps/web/public ./apps/web/public
+COPY apps/web/next.config.* ./apps/web/
+COPY apps/web/tsconfig*.json ./apps/web/
+COPY apps/web/tailwind.config.* ./apps/web/
+COPY apps/web/postcss.config.* ./apps/web/
+COPY tsconfig.base.json ./
+COPY turbo.json ./
+
+# Disable Next.js telemetry during build
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the Next.js application
+RUN npm run build --workspace=web
+
+# Stage 3: Final production image
+FROM node:18-alpine AS runner
+
+# Security: Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Security: Set working directory with proper permissions
+WORKDIR /app
+RUN chown -R appuser:appgroup /app
+
+# Set production environment
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy only what's needed to run in production
+COPY --from=builder --chown=appuser:appgroup /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=appuser:appgroup /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=appuser:appgroup /app/apps/web/public ./apps/web/public
+
+# Security: Switch to non-root user
+USER appuser
+
+# Metadata
+LABEL maintainer="Health Watchers Team"
+LABEL description="Production Web (Next.js) service"
+
+# Expose web port
+EXPOSE 3000
+
+# Set stop signal for graceful shutdown
+STOPSIGNAL SIGTERM
+
+# Health check - Next.js serves / at root
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Start production Next.js server (standalone mode)
+CMD ["node", "apps/web/server.js"]

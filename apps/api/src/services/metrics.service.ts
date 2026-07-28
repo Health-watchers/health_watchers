@@ -110,6 +110,21 @@ export const stellarTransactionFeeXlm = new client.Histogram({
   registers: [register],
 });
 
+export const feeStrategySelectedTotal = new client.Counter({
+  name: 'fee_strategy_selected_total',
+  help: 'Total number of fee strategies selected, by strategy and selection source',
+  labelNames: ['strategy', 'source'] as const,
+  registers: [register],
+});
+
+export const feeAmountPaidXlm = new client.Histogram({
+  name: 'fee_amount_paid_xlm',
+  help: 'Actual fee amounts paid in XLM per payment, by strategy',
+  labelNames: ['strategy', 'clinicId'] as const,
+  buckets: [0.00001, 0.0001, 0.001, 0.01, 0.1, 1],
+  registers: [register],
+});
+
 export const aiRequestsTotal = new client.Counter({
   name: 'ai_requests_total',
   help: 'Total number of AI endpoint requests',
@@ -196,6 +211,15 @@ export const mongodbKeyDecryptionFailures = new client.Counter({
   registers: [register],
 });
 
+// ── Balance Monitoring Metrics ────────────────────────────────────────────────
+
+export const clinicXlmBalanceGauge = new client.Gauge({
+  name: 'clinic_xlm_balance',
+  help: 'Current XLM balance for each clinic Stellar account',
+  labelNames: ['clinicId'] as const,
+  registers: [register],
+});
+
 // ── Subscription Metrics ──────────────────────────────────────────────────────
 
 export const subscriptionLimitViolations = new client.Counter({
@@ -205,13 +229,20 @@ export const subscriptionLimitViolations = new client.Counter({
   registers: [register],
 });
 
+export const rateLimitHitsTotal = new client.Counter({
+  name: 'rate_limit_hits_total',
+  help: 'Total number of rate limit violations (429 responses) by limiter and HTTP method',
+  labelNames: ['limiter', 'method'] as const,
+  registers: [register],
+});
+
 // ── Normalise path helper ─────────────────────────────────────────────────────
 // Replace dynamic segments (ObjectIds, UUIDs, numbers) with placeholders
 // to avoid high-cardinality label explosion.
 export function normalisePath(path: string): string {
   return path
-    .replace(/\/[a-f0-9]{24}/gi, '/:id')          // MongoDB ObjectIds
-    .replace(/\/[0-9a-f-]{36}/gi, '/:uuid')        // UUIDs
-    .replace(/\/\d+/g, '/:n')                      // plain numbers
-    .replace(/\?.*$/, '');                          // strip query string
+    .replace(/\/[a-f0-9]{24}/gi, '/:id') // MongoDB ObjectIds
+    .replace(/\/[0-9a-f-]{36}/gi, '/:uuid') // UUIDs
+    .replace(/\/\d+/g, '/:n') // plain numbers
+    .replace(/\?.*$/, ''); // strip query string
 }

@@ -89,7 +89,7 @@ router.post(
     }
 
     return res.status(400).json({ error: 'BadRequest', message: 'Invalid MFA method' });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/auth/mfa/verify ───────────────────────────────────────
@@ -130,7 +130,8 @@ router.post(
       }
 
       // Generate backup codes
-      const { plain: backupCodes, hashed: hashedBackupCodes } = portalMfaService.generateBackupCodes();
+      const { plain: backupCodes, hashed: hashedBackupCodes } =
+        portalMfaService.generateBackupCodes();
 
       // Enable MFA
       user.portalMfaEnabled = true;
@@ -165,7 +166,7 @@ router.post(
       error: 'BadRequest',
       message: 'Unable to determine MFA method',
     });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/auth/mfa/confirm ──────────────────────────────────────
@@ -209,7 +210,8 @@ router.post(
     }
 
     // Generate backup codes
-    const { plain: backupCodes, hashed: hashedBackupCodes } = portalMfaService.generateBackupCodes();
+    const { plain: backupCodes, hashed: hashedBackupCodes } =
+      portalMfaService.generateBackupCodes();
 
     // Enable MFA
     user.portalMfaEnabled = true;
@@ -235,7 +237,7 @@ router.post(
         method: 'sms',
       },
     });
-  }),
+  })
 );
 
 // ── POST /api/v1/portal/auth/mfa/disable ──────────────────────────────────────
@@ -309,7 +311,7 @@ router.post(
       status: 'success',
       data: { message: 'MFA disabled successfully' },
     });
-  }),
+  })
 );
 
 // ── GET /api/v1/portal/auth/mfa/status ────────────────────────────────────────
@@ -335,7 +337,7 @@ router.get(
         mfaEnabledAt: user.portalMfaEnabledAt || null,
       },
     });
-  }),
+  })
 );
 
 export { router as portalMfaRoutes };

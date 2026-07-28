@@ -59,6 +59,11 @@ export interface IClinicSettings {
     largeTransactionXlm: number;
     alertsEnabled: boolean;
   };
+  feeOptimization: {
+    enabled: boolean;
+    defaultStrategy: 'auto' | 'slow' | 'standard' | 'fast';
+    highValueThresholdXlm: number;
+  };
 }
 
 const clinicSettingsSchema = new Schema<IClinicSettings>(
@@ -102,9 +107,21 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
       largeTransactionXlm: { type: Number, default: 1000 },
       alertsEnabled: { type: Boolean, default: true },
     },
+    feeOptimization: {
+      enabled: { type: Boolean, default: true },
+      defaultStrategy: {
+        type: String,
+        enum: ['auto', 'slow', 'standard', 'fast'],
+        default: 'auto',
+      },
+      highValueThresholdXlm: { type: Number, default: 1000 },
+    },
   },
   { timestamps: true, versionKey: false }
 );
 
-export const ClinicSettingsModel =
-  models.ClinicSettings || model<IClinicSettings>('ClinicSettings', clinicSettingsSchema);
+export const ClinicSettingsModel = (models.ClinicSettings ||
+  model<IClinicSettings>(
+    'ClinicSettings',
+    clinicSettingsSchema
+  )) as import('mongoose').Model<IClinicSettings>;

@@ -6,9 +6,16 @@ export interface FileValidationResult {
   reason?: string;
 }
 
-export function validateUploadedFile(mimeType: string, sizeBytes: number, fileName: string): FileValidationResult {
+export function validateUploadedFile(
+  mimeType: string,
+  sizeBytes: number,
+  fileName: string
+): FileValidationResult {
   if (!ALLOWED_MIME_TYPES.has(mimeType))
-    return { valid: false, reason: `File type "${mimeType}" is not allowed. Accepted types: PDF, JPEG, PNG.` };
+    return {
+      valid: false,
+      reason: `File type "${mimeType}" is not allowed. Accepted types: PDF, JPEG, PNG.`,
+    };
 
   if (sizeBytes > MAX_SIZE_BYTES) {
     const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(1);

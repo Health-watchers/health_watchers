@@ -2,7 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { Error as MongooseError } from 'mongoose';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { ZodError } from 'zod';
+import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
+import { AppError, ErrorSeverity } from '../utils/app-error';
+import { ApiErrorCode } from '@health-watchers/types';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -11,11 +14,85 @@ interface MongoServerError extends Error {
   keyValue?: Record<string, unknown>;
 }
 
+export interface ErrorMetrics {
+  total: number;
+  bySeverity: Record<ErrorSeverity, number>;
+  byCategory: Record<string, number>;
+}
+
+const errorMetrics: ErrorMetrics = {
+  total: 0,
+  bySeverity: { low: 0, medium: 0, high: 0, critical: 0 },
+  byCategory: {},
+};
+
+function requestContext(req: Request) {
+  return {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    userId: req.user?.userId,
+    clinicId: req.user?.clinicId,
+  };
+}
+
+function logBySeverity(severity: ErrorSeverity, meta: object, err: unknown, message: string): void {
+  switch (severity) {
+    case 'critical':
+    case 'high':
+      logger.error({ ...meta, err }, message);
+      break;
+    case 'medium':
+      logger.warn({ ...meta, err }, message);
+      break;
+    default:
+      logger.info({ ...meta }, message);
+  }
+}
+
+function trackError(severity: ErrorSeverity, category: string): void {
+  errorMetrics.total += 1;
+  errorMetrics.bySeverity[severity] += 1;
+  errorMetrics.byCategory[category] = (errorMetrics.byCategory[category] ?? 0) + 1;
+}
+
+export function getErrorMetrics(): ErrorMetrics {
+  return {
+    total: errorMetrics.total,
+    bySeverity: { ...errorMetrics.bySeverity },
+    byCategory: { ...errorMetrics.byCategory },
+  };
+}
+
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
+  const ctx = requestContext(req);
+
+  // AppError — structured application errors with severity and category
+  if (err instanceof AppError) {
+    trackError(err.severity, err.category);
+    logBySeverity(
+      err.severity,
+      { ...ctx, category: err.category, ...(err.context ?? {}) },
+      err,
+      err.message
+    );
+    res.status(err.statusCode).json({
+      error: err.category,
+      code: err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
+      message: err.message,
+      requestId: req.requestId,
+      ...(isDev && err.stack ? { stack: err.stack } : {}),
+    });
+    return;
+  }
+
   // Zod validation errors → 400
   if (err instanceof ZodError) {
+    trackError('low', 'validation');
+    logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
     res.status(400).json({
       error: 'ValidationError',
+      code: ApiErrorCode.VALIDATION_ERROR,
       message: 'Request validation failed',
       details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
       requestId: req.requestId,
@@ -25,18 +102,26 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // Mongoose validation error → 400
   if (err instanceof MongooseError.ValidationError) {
-    const details = Object.values(err.errors).map((e) => ({
-      path: e.path,
-      message: e.message,
-    }));
-    res.status(400).json({ error: 'ValidationError', message: err.message, details, requestId: req.requestId });
+    trackError('low', 'validation');
+    const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
+    logger.info({ ...ctx, details }, 'Mongoose validation error');
+    res.status(400).json({
+      error: 'ValidationError',
+      code: ApiErrorCode.VALIDATION_ERROR,
+      message: err.message,
+      details,
+      requestId: req.requestId,
+    });
     return;
   }
 
   // Mongoose bad ObjectId → 400
   if (err instanceof MongooseError.CastError) {
+    trackError('low', 'validation');
+    logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
     res.status(400).json({
       error: 'BadRequest',
+      code: ApiErrorCode.BAD_REQUEST,
       message: `Invalid value for field: ${err.path}`,
       requestId: req.requestId,
     });
@@ -46,9 +131,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // MongoDB duplicate key → 409
   const mongoErr = err as MongoServerError;
   if (mongoErr?.code === 11000) {
+    trackError('low', 'conflict');
     const field = mongoErr.keyValue ? Object.keys(mongoErr.keyValue)[0] : 'field';
+    logger.warn({ ...ctx, field }, 'Duplicate key conflict');
     res.status(409).json({
       error: 'Conflict',
+      code: ApiErrorCode.CONFLICT,
       message: `Duplicate value for field: ${field}`,
       field,
       requestId: req.requestId,
@@ -58,23 +146,42 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
-    res.status(401).json({ error: 'TokenExpired', message: 'Token has expired', requestId: req.requestId });
+    trackError('low', 'authentication');
+    logger.info({ ...ctx }, 'JWT token expired');
+    res.status(401).json({
+      error: 'TokenExpired',
+      code: ApiErrorCode.TOKEN_EXPIRED,
+      message: 'Token has expired',
+      requestId: req.requestId,
+    });
     return;
   }
 
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
-    res.status(401).json({ error: 'InvalidToken', message: 'Invalid token', requestId: req.requestId });
+    trackError('low', 'authentication');
+    logger.info({ ...ctx }, 'Invalid JWT token');
+    res.status(401).json({
+      error: 'InvalidToken',
+      code: ApiErrorCode.INVALID_TOKEN,
+      message: 'Invalid token',
+      requestId: req.requestId,
+    });
     return;
   }
 
+  trackError('high', 'internal');
   if (isDev) {
     logger.error({ err }, 'Unhandled error');
   }
 
+  // Report unexpected errors to Sentry (skips 4xx — those are expected)
+  Sentry.captureException(err);
+
   const stack = isDev && err instanceof Error ? err.stack : undefined;
   res.status(500).json({
     error: 'InternalServerError',
+    code: ApiErrorCode.INTERNAL_SERVER_ERROR,
     message: 'An unexpected error occurred',
     requestId: req.requestId,
     ...(stack ? { stack } : {}),

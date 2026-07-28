@@ -5,7 +5,11 @@ const scopeValues = Object.values(PREDEFINED_SCOPES);
 
 export const createApiKeySchema = z.object({
   body: z.object({
-    name: z.string().trim().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
+    name: z
+      .string()
+      .trim()
+      .min(1, 'Name is required')
+      .max(100, 'Name must be less than 100 characters'),
     scopes: z
       .array(z.enum(scopeValues as [string, ...string[]]))
       .min(1, 'At least one scope is required')
@@ -16,7 +20,12 @@ export const createApiKeySchema = z.object({
 
 export const updateApiKeySchema = z.object({
   body: z.object({
-    name: z.string().trim().min(1, 'Name is required').max(100, 'Name must be less than 100 characters').optional(),
+    name: z
+      .string()
+      .trim()
+      .min(1, 'Name is required')
+      .max(100, 'Name must be less than 100 characters')
+      .optional(),
     scopes: z
       .array(z.enum(scopeValues as [string, ...string[]]))
       .min(1, 'At least one scope is required')

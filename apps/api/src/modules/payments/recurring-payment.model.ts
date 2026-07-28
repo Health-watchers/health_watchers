@@ -6,7 +6,11 @@ const recurringPaymentSchema = new Schema(
     patientId: { type: Schema.Types.ObjectId, required: true, index: true },
     amount: { type: String, required: true },
     currency: { type: String, enum: ['XLM', 'USDC'], default: 'XLM' },
-    frequency: { type: String, enum: ['weekly', 'monthly', 'quarterly', 'annually'], required: true },
+    frequency: {
+      type: String,
+      enum: ['weekly', 'monthly', 'quarterly', 'annually'],
+      required: true,
+    },
     startDate: { type: Date, required: true },
     endDate: { type: Date },
     nextPaymentDate: { type: Date, required: true, index: true },

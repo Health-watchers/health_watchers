@@ -12,10 +12,7 @@ export async function searchCPTCodes(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const results = await CPTModel.find(
-    { $text: { $search: q } },
-    { score: { $meta: 'textScore' } }
-  )
+  const results = await CPTModel.find({ $text: { $search: q } }, { score: { $meta: 'textScore' } })
     .sort({ score: { $meta: 'textScore' } })
     .limit(10)
     .lean();

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 import { PeerReviewModel } from './peer-review.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { UserModel } from '../auth/models/user.model';
@@ -10,11 +11,15 @@ const router = Router();
 
 // POST /peer-reviews — CLINIC_ADMIN assigns an encounter for peer review
 router.post('/', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request, res: Response) => {
-  const { encounterId, reviewerId, isAnonymous = false } = req.body;
+ const { encounterId, reviewerId, isAnonymous = false } = req.body;
   const clinicId = req.user!.clinicId;
 
   if (!encounterId || !reviewerId) {
     return res.status(400).json({ error: 'BadRequest', message: 'encounterId and reviewerId are required' });
+  }
+
+  if (!isValidObjectId(encounterId) || !isValidObjectId(reviewerId)) {
+    return res.status(400).json({ error: 'ValidationError', message: 'Invalid encounterId or reviewerId' });
   }
 
   const encounter = await EncounterModel.findOne({
@@ -57,12 +62,18 @@ router.post('/', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request
 
 // GET /peer-reviews/assigned — reviews assigned to the current user (DOCTOR)
 router.get('/assigned', authenticate, requireRoles('DOCTOR', 'CLINIC_ADMIN'), async (req: Request, res: Response) => {
-  const { status } = req.query as { status?: string };
+ const { status } = req.query as { status?: string };
+  const ALLOWED_STATUSES = new Set(['pending', 'completed', 'cancelled']);
   const filter: Record<string, unknown> = {
     reviewerId: new Types.ObjectId(req.user!.userId),
     clinicId: new Types.ObjectId(req.user!.clinicId),
   };
-  if (status) filter.status = status;
+  if (status) {
+    if (!ALLOWED_STATUSES.has(status)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+    }
+    filter.status = status;
+  }
 
   const reviews = await PeerReviewModel.find(filter)
     .populate('encounterId', 'chiefComplaint patientId createdAt status')

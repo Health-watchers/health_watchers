@@ -11,9 +11,7 @@
       "type": "stat",
       "title": "Payment Queue Depth",
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-      "targets": [
-        { "expr": "stellar_payment_queue_depth", "legendFormat": "Queue Depth" }
-      ],
+      "targets": [{ "expr": "stellar_payment_queue_depth", "legendFormat": "Queue Depth" }],
       "options": {
         "colorMode": "background",
         "thresholds": {
@@ -30,18 +28,14 @@
       "type": "stat",
       "title": "Stellar Transactions/min",
       "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
-      "targets": [
-        { "expr": "rate(stellar_transactions_total[1m]) * 60", "legendFormat": "tx/min" }
-      ]
+      "targets": [{ "expr": "rate(stellar_transactions_total[1m]) * 60", "legendFormat": "tx/min" }]
     },
     {
       "id": 3,
       "type": "timeseries",
       "title": "Payment Queue Depth Over Time",
       "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-      "targets": [
-        { "expr": "stellar_payment_queue_depth", "legendFormat": "Queue Depth" }
-      ],
+      "targets": [{ "expr": "stellar_payment_queue_depth", "legendFormat": "Queue Depth" }],
       "fieldConfig": {
         "defaults": {
           "thresholds": {

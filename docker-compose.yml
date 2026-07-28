@@ -6,17 +6,17 @@ services:
     container_name: health-watchers-jaeger
     restart: unless-stopped
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "4318:4318"    # OTLP HTTP receiver
+      - '16686:16686' # Jaeger UI
+      - '4318:4318' # OTLP HTTP receiver
     environment:
-      COLLECTOR_OTLP_ENABLED: "true"
+      COLLECTOR_OTLP_ENABLED: 'true'
 
   prometheus:
     image: prom/prometheus:v2.51.2
     container_name: health-watchers-prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - '9090:9090'
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -25,11 +25,11 @@ services:
       - ./monitoring/alerts-business.yml:/etc/prometheus/alerts-business.yml:ro
       - prometheus_data:/prometheus
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
-      - "--web.console.templates=/usr/share/prometheus/consoles"
-      - "--web.enable-lifecycle"
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
     environment:
       METRICS_USERNAME: ${METRICS_USERNAME:-admin}
       METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
@@ -41,14 +41,14 @@ services:
     container_name: health-watchers-grafana
     restart: unless-stopped
     ports:
-      - "3003:3000"
+      - '3003:3000'
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_ROOT_URL: http://localhost:3003
     depends_on:
       - prometheus
@@ -62,7 +62,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: password123
       MONGO_INITDB_DATABASE: health_watchers
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
       - mongodb_data:/data/db
       - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
@@ -93,11 +93,11 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       LOG_LEVEL: info
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
-      OTEL_SAMPLING_RATE: "1.0"
+      OTEL_SAMPLING_RATE: '1.0'
       METRICS_USERNAME: ${METRICS_USERNAME:-admin}
       METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
     ports:
-      - "3001:3001"
+      - '3001:3001'
     volumes:
       - ./apps/api:/app/apps/api
       - /app/node_modules
@@ -118,7 +118,7 @@ services:
       NEXT_PUBLIC_STELLAR_NETWORK: testnet
       NEXT_TELEMETRY_DISABLED: 1
     ports:
-      - "3000:3000"
+      - '3000:3000'
     volumes:
       - ./apps/web:/app/apps/web
       - /app/node_modules
@@ -139,11 +139,11 @@ services:
       STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
       LOG_LEVEL: info
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
-      OTEL_SAMPLING_RATE: "1.0"
+      OTEL_SAMPLING_RATE: '1.0'
       METRICS_USERNAME: ${METRICS_USERNAME:-admin}
       METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
     ports:
-      - "3002:3002"
+      - '3002:3002'
     volumes:
       - ./apps/stellar-service:/app/apps/stellar-service
       - /app/node_modules

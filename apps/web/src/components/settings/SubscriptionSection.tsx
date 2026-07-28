@@ -151,8 +151,16 @@ export function SubscriptionSection() {
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-neutral-700">Current Usage</h3>
           <UsageBar label="Patients" current={usage.patientCount} limit={limits.maxPatients} />
-          <UsageBar label="Encounters this month" current={usage.encounterCount} limit={limits.maxEncountersPerMonth} />
-          <UsageBar label="AI requests this month" current={usage.aiRequestCount} limit={limits.maxAiRequestsPerMonth} />
+          <UsageBar
+            label="Encounters this month"
+            current={usage.encounterCount}
+            limit={limits.maxEncountersPerMonth}
+          />
+          <UsageBar
+            label="AI requests this month"
+            current={usage.aiRequestCount}
+            limit={limits.maxAiRequestsPerMonth}
+          />
           <UsageBar label="Doctors" current={usage.doctorCount} limit={limits.maxDoctors} />
         </div>
       </section>
@@ -172,7 +180,7 @@ export function SubscriptionSection() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-semibold text-neutral-900">{TIER_LABELS[tier]}</span>
                   {isCurrent && (
-                    <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
+                    <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-medium">
                       Current
                     </span>
                   )}
@@ -183,8 +191,12 @@ export function SubscriptionSection() {
                 <ul className="mb-5 space-y-1.5 text-sm text-neutral-600">
                   <li>👤 {formatLimit(TIER_LIMITS_MAP[tier].maxDoctors)} doctors</li>
                   <li>🏥 {formatLimit(TIER_LIMITS_MAP[tier].maxPatients)} patients</li>
-                  <li>📋 {formatLimit(TIER_LIMITS_MAP[tier].maxEncountersPerMonth)} encounters/mo</li>
-                  <li>🤖 {formatLimit(TIER_LIMITS_MAP[tier].maxAiRequestsPerMonth)} AI requests/mo</li>
+                  <li>
+                    📋 {formatLimit(TIER_LIMITS_MAP[tier].maxEncountersPerMonth)} encounters/mo
+                  </li>
+                  <li>
+                    🤖 {formatLimit(TIER_LIMITS_MAP[tier].maxAiRequestsPerMonth)} AI requests/mo
+                  </li>
                 </ul>
                 {!isCurrent && (
                   <button
@@ -192,7 +204,7 @@ export function SubscriptionSection() {
                     onClick={() => setConfirmTier(tier)}
                     className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                       isUpgrade
-                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                        ? 'bg-primary-600 hover:bg-primary-700 text-white'
                         : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
@@ -229,7 +241,7 @@ export function SubscriptionSection() {
                 type="button"
                 disabled={mutation.isPending}
                 onClick={() => mutation.mutate(confirmTier)}
-                className="flex-1 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+                className="bg-primary-600 hover:bg-primary-700 flex-1 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 {mutation.isPending ? 'Saving…' : 'Confirm'}
               </button>
@@ -249,6 +261,16 @@ export function SubscriptionSection() {
 // Static limits map for display (avoids needing to pass from API for the plan cards)
 const TIER_LIMITS_MAP: Record<Tier, TierLimits> = {
   free: { maxDoctors: 1, maxPatients: 100, maxEncountersPerMonth: 500, maxAiRequestsPerMonth: 0 },
-  basic: { maxDoctors: 5, maxPatients: 1000, maxEncountersPerMonth: Infinity, maxAiRequestsPerMonth: 100 },
-  premium: { maxDoctors: Infinity, maxPatients: Infinity, maxEncountersPerMonth: Infinity, maxAiRequestsPerMonth: Infinity },
+  basic: {
+    maxDoctors: 5,
+    maxPatients: 1000,
+    maxEncountersPerMonth: Infinity,
+    maxAiRequestsPerMonth: 100,
+  },
+  premium: {
+    maxDoctors: Infinity,
+    maxPatients: Infinity,
+    maxEncountersPerMonth: Infinity,
+    maxAiRequestsPerMonth: Infinity,
+  },
 };

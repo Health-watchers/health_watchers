@@ -10,7 +10,10 @@ export const mongoObjectId = z
 
 export const icd10Code = z
   .string()
-  .regex(/^[A-Z][0-9]{2}(\.[A-Z0-9]{1,4})?$/i, 'Must be a valid ICD-10 code (e.g. Z00.00, J45.901)');
+  .regex(
+    /^[A-Z][0-9]{2}(\.[A-Z0-9]{1,4})?$/i,
+    'Must be a valid ICD-10 code (e.g. Z00.00, J45.901)'
+  );
 
 export const cptCode = z
   .string()
@@ -29,8 +32,8 @@ export const monetaryAmount = z
   .positive('Amount must be positive')
   .max(10_000_000, 'Amount exceeds maximum allowed value')
   .refine(
-    n => Number((n * 100).toFixed(0)) === Math.round(n * 100),
-    'Amount must have at most 2 decimal places',
+    (n) => Number((n * 100).toFixed(0)) === Math.round(n * 100),
+    'Amount must have at most 2 decimal places'
   );
 
 export const paginationLimit = z.number().int().min(1).max(100).default(20);

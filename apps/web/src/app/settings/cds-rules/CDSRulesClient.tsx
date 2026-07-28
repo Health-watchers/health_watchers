@@ -52,7 +52,11 @@ export default function CDSRulesClient() {
   const [view, setView] = useState<View>('list');
   const [editingRule, setEditingRule] = useState<EditingRule | null>(null);
 
-  const { data: rules = [], isLoading, error } = useQuery({
+  const {
+    data: rules = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['cds-rules'],
     queryFn: fetchRules,
   });
@@ -108,7 +112,7 @@ export default function CDSRulesClient() {
               setEditingRule(null);
               setView('create');
             }}
-            className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            className="bg-primary-600 hover:bg-primary-700 rounded-md px-4 py-2 text-sm font-medium text-white"
           >
             Create Rule
           </button>

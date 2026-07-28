@@ -54,9 +54,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     if (appointments) {
-      const upcoming = appointments.filter(
-        (apt: any) => new Date(apt.scheduledAt) > new Date()
-      );
+      const upcoming = appointments.filter((apt: any) => new Date(apt.scheduledAt) > new Date());
       setUpcomingCount(upcoming.length);
     }
   }, [appointments]);
@@ -94,9 +92,7 @@ export function DashboardScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Recent Encounters</Text>
-        <Text style={styles.appointmentStatus}>
-          {appointments?.length || 0} total appointments
-        </Text>
+        <Text style={styles.appointmentStatus}>{appointments?.length || 0} total appointments</Text>
       </View>
     </ScrollView>
   );

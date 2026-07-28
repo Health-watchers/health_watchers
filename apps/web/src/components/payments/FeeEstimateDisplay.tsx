@@ -5,9 +5,9 @@ import { useFeeEstimate, type FeeTier } from '@/hooks/useFeeEstimate';
 type FeeStrategy = 'slow' | 'standard' | 'fast';
 
 const TIERS: { value: FeeStrategy; label: string }[] = [
-  { value: 'slow',     label: 'Slow' },
+  { value: 'slow', label: 'Slow' },
   { value: 'standard', label: 'Standard' },
-  { value: 'fast',     label: 'Fast' },
+  { value: 'fast', label: 'Fast' },
 ];
 
 interface Props {
@@ -22,19 +22,17 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
   const selectedTier: FeeTier | undefined = data?.[selected];
 
   const totalXlm =
-    amount && selectedTier
-      ? (parseFloat(amount) + parseFloat(selectedTier.xlm)).toFixed(7)
-      : null;
+    amount && selectedTier ? (parseFloat(amount) + parseFloat(selectedTier.xlm)).toFixed(7) : null;
 
   return (
-    <div className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-3 text-sm">
+    <div className="space-y-3 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
       <div className="flex items-center justify-between">
         <span className="font-medium text-neutral-700">Network Fee</span>
         <button
           type="button"
           onClick={() => refetch()}
           disabled={isFetching}
-          className="text-xs text-primary-600 hover:underline disabled:opacity-50"
+          className="text-primary-600 text-xs hover:underline disabled:opacity-50"
           aria-label="Refresh fee estimate"
         >
           {isFetching ? 'Refreshing…' : '↻ Refresh'}
@@ -42,7 +40,7 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
       </div>
 
       {isError && (
-        <p className="text-xs text-danger-500">Fee estimate unavailable. Using network defaults.</p>
+        <p className="text-danger-500 text-xs">Fee estimate unavailable. Using network defaults.</p>
       )}
 
       {/* Speed selector */}
@@ -63,13 +61,11 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
             >
               <div>{label}</div>
               {isLoading ? (
-                <div className="mt-0.5 h-3 w-12 mx-auto animate-pulse rounded bg-neutral-200" />
+                <div className="mx-auto mt-0.5 h-3 w-12 animate-pulse rounded bg-neutral-200" />
               ) : tier ? (
                 <div className="mt-0.5 text-xs opacity-75">{tier.xlm} XLM</div>
               ) : null}
-              {tier && (
-                <div className="text-xs opacity-60">{tier.confirmationTime}</div>
-              )}
+              {tier && <div className="text-xs opacity-60">{tier.confirmationTime}</div>}
             </button>
           );
         })}
@@ -77,12 +73,12 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
 
       {/* Fee + total breakdown */}
       {selectedTier && (
-        <div className="space-y-1 text-neutral-600 border-t border-neutral-200 pt-2">
+        <div className="space-y-1 border-t border-neutral-200 pt-2 text-neutral-600">
           <div className="flex justify-between">
             <span>Fee ({selected})</span>
             <span className="font-mono">
               {selectedTier.xlm} XLM
-              <span className="text-neutral-400 ml-1">({selectedTier.stroops} stroops)</span>
+              <span className="ml-1 text-neutral-400">({selectedTier.stroops} stroops)</span>
             </span>
           </div>
           {totalXlm && (

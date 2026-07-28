@@ -117,13 +117,7 @@ describe('CDSRulesList', () => {
 
 describe('CDSRuleForm', () => {
   it('renders form with empty fields for new rule', () => {
-    render(
-      <CDSRuleForm
-        onSubmit={jest.fn()}
-        onCancel={jest.fn()}
-        isLoading={false}
-      />
-    );
+    render(<CDSRuleForm onSubmit={jest.fn()} onCancel={jest.fn()} isLoading={false} />);
     expect(screen.getByDisplayValue(/rule_/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Name')).toHaveValue('');
   });
@@ -138,19 +132,15 @@ describe('CDSRuleForm', () => {
       />
     );
     expect(screen.getByDisplayValue('High Blood Pressure Alert')).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/Alert when blood pressure is critically high/i)).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue(/Alert when blood pressure is critically high/i)
+    ).toBeInTheDocument();
   });
 
   it('calls onSubmit with form data', async () => {
     const onSubmit = jest.fn();
     const user = userEvent.setup();
-    render(
-      <CDSRuleForm
-        onSubmit={onSubmit}
-        onCancel={jest.fn()}
-        isLoading={false}
-      />
-    );
+    render(<CDSRuleForm onSubmit={onSubmit} onCancel={jest.fn()} isLoading={false} />);
 
     await user.type(screen.getByPlaceholderText('Name'), 'Test Rule');
     await user.type(screen.getByPlaceholderText('Description'), 'Test description');
@@ -164,38 +154,20 @@ describe('CDSRuleForm', () => {
 
   it('calls onCancel when cancel button is clicked', () => {
     const onCancel = jest.fn();
-    render(
-      <CDSRuleForm
-        onSubmit={jest.fn()}
-        onCancel={onCancel}
-        isLoading={false}
-      />
-    );
+    render(<CDSRuleForm onSubmit={jest.fn()} onCancel={onCancel} isLoading={false} />);
     fireEvent.click(screen.getByText('Cancel'));
     expect(onCancel).toHaveBeenCalled();
   });
 
   it('disables submit button when isLoading is true', () => {
-    render(
-      <CDSRuleForm
-        onSubmit={jest.fn()}
-        onCancel={jest.fn()}
-        isLoading={true}
-      />
-    );
+    render(<CDSRuleForm onSubmit={jest.fn()} onCancel={jest.fn()} isLoading={true} />);
     expect(screen.getByText('Saving…')).toBeDisabled();
   });
 
   it('validates JSON in conditions field', async () => {
     const onSubmit = jest.fn();
     const user = userEvent.setup();
-    render(
-      <CDSRuleForm
-        onSubmit={onSubmit}
-        onCancel={jest.fn()}
-        isLoading={false}
-      />
-    );
+    render(<CDSRuleForm onSubmit={onSubmit} onCancel={jest.fn()} isLoading={false} />);
 
     // Fill required fields
     await user.type(screen.getByPlaceholderText('Name'), 'Test Rule');

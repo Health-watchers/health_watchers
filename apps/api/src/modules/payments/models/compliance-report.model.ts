@@ -67,5 +67,8 @@ complianceReportSchema.index(
 );
 complianceReportSchema.index({ status: 1, createdAt: 1 });
 
-export const ComplianceReportModel =
-  models.ComplianceReport || model<IComplianceReport>('ComplianceReport', complianceReportSchema);
+export const ComplianceReportModel = (models.ComplianceReport ||
+  model<IComplianceReport>(
+    'ComplianceReport',
+    complianceReportSchema
+  )) as import('mongoose').Model<IComplianceReport>;

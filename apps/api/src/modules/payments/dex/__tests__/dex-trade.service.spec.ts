@@ -1,6 +1,13 @@
 import { validateTradeRequest, isWithinSlippage } from '../dex-trade.service';
 
-const base = { sellAsset: 'XLM', buyAsset: 'USDC', sellAmount: 100, expectedPrice: 0.12, maxSlippagePercent: 1, clinicId: 'cli_001' };
+const base = {
+  sellAsset: 'XLM',
+  buyAsset: 'USDC',
+  sellAmount: 100,
+  expectedPrice: 0.12,
+  maxSlippagePercent: 1,
+  clinicId: 'cli_001',
+};
 
 describe('validateTradeRequest', () => {
   it('accepts a valid trade request', () => {

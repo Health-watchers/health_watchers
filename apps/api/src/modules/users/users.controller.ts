@@ -73,12 +73,12 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
-          referral_received:    user.preferences?.notificationTypes?.referral_received    ?? true,
-          payment_confirmed:    user.preferences?.notificationTypes?.payment_confirmed    ?? true,
+          referral_received: user.preferences?.notificationTypes?.referral_received ?? true,
+          payment_confirmed: user.preferences?.notificationTypes?.payment_confirmed ?? true,
           appointment_reminder: user.preferences?.notificationTypes?.appointment_reminder ?? true,
-          ai_summary_ready:     user.preferences?.notificationTypes?.ai_summary_ready     ?? true,
-          lab_result_ready:     user.preferences?.notificationTypes?.lab_result_ready     ?? true,
-          system:               user.preferences?.notificationTypes?.system               ?? true,
+          ai_summary_ready: user.preferences?.notificationTypes?.ai_summary_ready ?? true,
+          lab_result_ready: user.preferences?.notificationTypes?.lab_result_ready ?? true,
+          system: user.preferences?.notificationTypes?.system ?? true,
         },
       },
     },
@@ -333,14 +333,16 @@ router.post('/me/mfa/disable', authenticate, async (req: Request, res: Response)
   });
 });
 
-const notificationTypesSchema = z.object({
-  referral_received:    z.boolean().optional(),
-  payment_confirmed:    z.boolean().optional(),
-  appointment_reminder: z.boolean().optional(),
-  ai_summary_ready:     z.boolean().optional(),
-  lab_result_ready:     z.boolean().optional(),
-  system:               z.boolean().optional(),
-}).optional();
+const notificationTypesSchema = z
+  .object({
+    referral_received: z.boolean().optional(),
+    payment_confirmed: z.boolean().optional(),
+    appointment_reminder: z.boolean().optional(),
+    ai_summary_ready: z.boolean().optional(),
+    lab_result_ready: z.boolean().optional(),
+    system: z.boolean().optional(),
+  })
+  .optional();
 
 const updatePreferencesSchema = z.object({
   language: z.enum(['en', 'fr']).optional(),
@@ -439,7 +441,8 @@ router.get('/sessions', authenticate, async (req: Request, res: Response) => {
     {
       id: currentSessionId,
       userAgent: req.headers['user-agent'] || 'Unknown',
-      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      ipAddress:
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
         (req.headers['x-real-ip'] as string) ||
         req.socket.remoteAddress ||
         'Unknown',

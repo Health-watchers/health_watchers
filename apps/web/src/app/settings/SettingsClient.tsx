@@ -8,8 +8,10 @@ import { SecuritySection } from '@/components/settings/SecuritySection';
 import { PreferencesSection } from '@/components/settings/PreferencesSection';
 import { SubscriptionSection } from '@/components/settings/SubscriptionSection';
 import { SessionManagement } from '@/components/settings/SessionManagement';
+import ApiKeyManager from '@/components/settings/ApiKeyManager';
+import WebhookManager from '@/components/settings/WebhookManager';
 
-type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions';
+type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions' | 'api-keys' | 'webhooks';
 
 interface MeResponse {
   status: 'success';
@@ -87,6 +89,8 @@ export default function SettingsClient() {
           {active === 'preferences' && <PreferencesSection preferences={data.preferences} />}
           {active === 'subscription' && <SubscriptionSection />}
           {active === 'sessions' && <SessionManagement />}
+          {active === 'api-keys' && <ApiKeyManager />}
+          {active === 'webhooks' && <WebhookManager />}
         </main>
       </div>
     </div>

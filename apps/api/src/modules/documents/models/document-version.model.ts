@@ -1,6 +1,11 @@
 import { Schema, Types, model, models } from 'mongoose';
 
-export type DocumentType = 'lab_result' | 'referral_letter' | 'consent_form' | 'medical_image' | 'other';
+export type DocumentType =
+  | 'lab_result'
+  | 'referral_letter'
+  | 'consent_form'
+  | 'medical_image'
+  | 'other';
 
 export interface DocumentVersion {
   documentId: Types.ObjectId;
@@ -20,7 +25,12 @@ export interface DocumentVersion {
 
 const documentVersionSchema = new Schema<DocumentVersion>(
   {
-    documentId: { type: Schema.Types.ObjectId, ref: 'PatientDocument', required: true, index: true },
+    documentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'PatientDocument',
+      required: true,
+      index: true,
+    },
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
     clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -44,5 +54,8 @@ const documentVersionSchema = new Schema<DocumentVersion>(
 documentVersionSchema.index({ documentId: 1, version: -1 });
 documentVersionSchema.index({ patientId: 1, clinicId: 1, isCurrentVersion: 1 });
 
-export const DocumentVersionModel =
-  models.DocumentVersion || model<DocumentVersion>('DocumentVersion', documentVersionSchema);
+export const DocumentVersionModel = (models.DocumentVersion ||
+  model<DocumentVersion>(
+    'DocumentVersion',
+    documentVersionSchema
+  )) as import('mongoose').Model<DocumentVersion>;

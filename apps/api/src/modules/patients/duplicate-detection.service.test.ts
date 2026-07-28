@@ -1,7 +1,12 @@
 /**
  * Tests for duplicate-detection fuzzy matching algorithms — Issue #641
  */
-import { jaroWinkler, soundex, normalizePhone, DuplicateDetectionService } from './duplicate-detection.service';
+import {
+  jaroWinkler,
+  soundex,
+  normalizePhone,
+  DuplicateDetectionService,
+} from './duplicate-detection.service';
 
 // ── jaroWinkler ───────────────────────────────────────────────────────────────
 describe('jaroWinkler', () => {
@@ -118,7 +123,10 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([patient]) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'John', 'Smith', '1990-05-15', CLINIC_ID
+      'John',
+      'Smith',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     expect(results.length).toBeGreaterThan(0);
@@ -131,7 +139,10 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([patient]) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'Jon', 'Smyth', '1990-05-15', CLINIC_ID
+      'Jon',
+      'Smyth',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     expect(results.length).toBeGreaterThan(0);
@@ -142,7 +153,10 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([]) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'John', 'Smith', '1990-05-15', CLINIC_ID
+      'John',
+      'Smith',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     expect(results).toHaveLength(0);
@@ -154,7 +168,10 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([patient]) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'John', 'Smith', '1990-05-15', CLINIC_ID
+      'John',
+      'Smith',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     expect(results.length).toBeGreaterThan(0);
@@ -163,13 +180,16 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
 
   it('results are sorted by confidence descending', async () => {
     const patients = [
-      makePatient({ firstName: 'Jon', lastName: 'Smyth' }),   // lower similarity
-      makePatient({ firstName: 'John', lastName: 'Smith' }),  // exact
+      makePatient({ firstName: 'Jon', lastName: 'Smyth' }), // lower similarity
+      makePatient({ firstName: 'John', lastName: 'Smith' }), // exact
     ];
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve(patients) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'John', 'Smith', '1990-05-15', CLINIC_ID
+      'John',
+      'Smith',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     for (let i = 1; i < results.length; i++) {
@@ -182,7 +202,10 @@ describe('DuplicateDetectionService.checkDuplicates', () => {
     (PatientModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([patient]) });
 
     const results = await DuplicateDetectionService.checkDuplicates(
-      'John', 'Smith', '1990-05-15', CLINIC_ID
+      'John',
+      'Smith',
+      '1990-05-15',
+      CLINIC_ID
     );
 
     expect(results).toHaveLength(0);
@@ -195,8 +218,18 @@ describe('DuplicateDetectionService.findPotentialDuplicates', () => {
 
   it('returns a pair for John Smith / Jon Smyth with same DOB', async () => {
     const patients = [
-      makePatient({ _id: new Types.ObjectId(), firstName: 'John', lastName: 'Smith', dateOfBirth: '1990-05-15' }),
-      makePatient({ _id: new Types.ObjectId(), firstName: 'Jon', lastName: 'Smyth', dateOfBirth: '1990-05-15' }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1990-05-15',
+      }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'Jon',
+        lastName: 'Smyth',
+        dateOfBirth: '1990-05-15',
+      }),
     ];
     (PatientModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -211,8 +244,18 @@ describe('DuplicateDetectionService.findPotentialDuplicates', () => {
 
   it('returns empty array when no patients share similar names + DOB', async () => {
     const patients = [
-      makePatient({ _id: new Types.ObjectId(), firstName: 'Alice', lastName: 'Brown', dateOfBirth: '1985-01-01' }),
-      makePatient({ _id: new Types.ObjectId(), firstName: 'Robert', lastName: 'Jones', dateOfBirth: '1990-05-15' }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'Alice',
+        lastName: 'Brown',
+        dateOfBirth: '1985-01-01',
+      }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'Robert',
+        lastName: 'Jones',
+        dateOfBirth: '1990-05-15',
+      }),
     ];
     (PatientModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -226,8 +269,20 @@ describe('DuplicateDetectionService.findPotentialDuplicates', () => {
 
   it('boosts confidence when phone numbers match', async () => {
     const patients = [
-      makePatient({ _id: new Types.ObjectId(), firstName: 'John', lastName: 'Smith', dateOfBirth: '1990-05-15', contactNumber: '555-1234' }),
-      makePatient({ _id: new Types.ObjectId(), firstName: 'Jon', lastName: 'Smyth', dateOfBirth: '1990-05-15', contactNumber: '(555) 1234' }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1990-05-15',
+        contactNumber: '555-1234',
+      }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'Jon',
+        lastName: 'Smyth',
+        dateOfBirth: '1990-05-15',
+        contactNumber: '(555) 1234',
+      }),
     ];
     (PatientModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -242,9 +297,24 @@ describe('DuplicateDetectionService.findPotentialDuplicates', () => {
 
   it('pairs are sorted by confidence descending', async () => {
     const patients = [
-      makePatient({ _id: new Types.ObjectId(), firstName: 'John', lastName: 'Smith', dateOfBirth: '1990-05-15' }),
-      makePatient({ _id: new Types.ObjectId(), firstName: 'Jon', lastName: 'Smyth', dateOfBirth: '1990-05-15' }),
-      makePatient({ _id: new Types.ObjectId(), firstName: 'John', lastName: 'Smith', dateOfBirth: '1990-05-15' }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1990-05-15',
+      }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'Jon',
+        lastName: 'Smyth',
+        dateOfBirth: '1990-05-15',
+      }),
+      makePatient({
+        _id: new Types.ObjectId(),
+        firstName: 'John',
+        lastName: 'Smith',
+        dateOfBirth: '1990-05-15',
+      }),
     ];
     (PatientModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnThis(),

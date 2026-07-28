@@ -3,15 +3,17 @@ import { Types } from 'mongoose';
 
 // ── Levenshtein distance ──────────────────────────────────────────────────────
 function levenshteinDistance(a: string, b: string): number {
-  const m = a.length, n = b.length;
+  const m = a.length,
+    n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
     Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
   );
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j - 1], dp[i][j - 1], dp[i - 1][j]);
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j - 1], dp[i][j - 1], dp[i - 1][j]);
     }
   }
   return dp[m][n];
@@ -20,14 +22,16 @@ function levenshteinDistance(a: string, b: string): number {
 // ── Jaro-Winkler similarity (0–1) ─────────────────────────────────────────────
 export function jaroWinkler(s1: string, s2: string): number {
   if (s1 === s2) return 1;
-  const len1 = s1.length, len2 = s2.length;
+  const len1 = s1.length,
+    len2 = s2.length;
   if (len1 === 0 || len2 === 0) return 0;
 
   const matchDist = Math.max(Math.floor(Math.max(len1, len2) / 2) - 1, 0);
   const s1Matches = new Array(len1).fill(false);
   const s2Matches = new Array(len2).fill(false);
 
-  let matches = 0, transpositions = 0;
+  let matches = 0,
+    transpositions = 0;
   for (let i = 0; i < len1; i++) {
     const start = Math.max(0, i - matchDist);
     const end = Math.min(i + matchDist + 1, len2);
@@ -52,7 +56,8 @@ export function jaroWinkler(s1: string, s2: string): number {
   // Winkler prefix bonus (up to 4 chars)
   let prefix = 0;
   for (let i = 0; i < Math.min(4, len1, len2); i++) {
-    if (s1[i] === s2[i]) prefix++; else break;
+    if (s1[i] === s2[i]) prefix++;
+    else break;
   }
   return jaro + prefix * 0.1 * (1 - jaro);
 }
@@ -62,9 +67,24 @@ export function soundex(str: string): string {
   const code = str.toUpperCase().replace(/[^A-Z]/g, '');
   if (!code) return '0000';
   const map: Record<string, string> = {
-    B: '1', F: '1', P: '1', V: '1',
-    C: '2', G: '2', J: '2', K: '2', Q: '2', S: '2', X: '2', Z: '2',
-    D: '3', T: '3', L: '4', M: '5', N: '5', R: '6',
+    B: '1',
+    F: '1',
+    P: '1',
+    V: '1',
+    C: '2',
+    G: '2',
+    J: '2',
+    K: '2',
+    Q: '2',
+    S: '2',
+    X: '2',
+    Z: '2',
+    D: '3',
+    T: '3',
+    L: '4',
+    M: '5',
+    N: '5',
+    R: '6',
   };
   let result = code[0];
   for (let i = 1; i < code.length; i++) {
@@ -84,8 +104,10 @@ function dobCandidates(dob: string): string[] {
   const d = new Date(dob);
   if (isNaN(d.getTime())) return [dob];
   const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
-  const prev = new Date(d); prev.setDate(d.getDate() - 1);
-  const next = new Date(d); next.setDate(d.getDate() + 1);
+  const prev = new Date(d);
+  prev.setDate(d.getDate() - 1);
+  const next = new Date(d);
+  next.setDate(d.getDate() + 1);
   return [fmt(prev), dob, fmt(next)];
 }
 
@@ -97,7 +119,7 @@ function computeConfidence(
   phoneMatch: boolean | null
 ): number {
   // Weighted: name 60%, DOB 30%, phone 10%
-  const nameSim = (firstSim * 0.4 + lastSim * 0.6);
+  const nameSim = firstSim * 0.4 + lastSim * 0.6;
   let score = nameSim * 60 + (dobExact ? 30 : 20);
   if (phoneMatch === true) score += 10;
   else if (phoneMatch === false) score -= 10;
@@ -219,12 +241,14 @@ export class DuplicateDetectionService {
         const a = patients[i];
         const b = patients[j];
 
-        const dobA = typeof a.dateOfBirth === 'string'
-          ? a.dateOfBirth
-          : (a.dateOfBirth as Date).toISOString().slice(0, 10);
-        const dobB = typeof b.dateOfBirth === 'string'
-          ? b.dateOfBirth
-          : (b.dateOfBirth as Date).toISOString().slice(0, 10);
+        const dobA =
+          typeof a.dateOfBirth === 'string'
+            ? a.dateOfBirth
+            : (a.dateOfBirth as Date).toISOString().slice(0, 10);
+        const dobB =
+          typeof b.dateOfBirth === 'string'
+            ? b.dateOfBirth
+            : (b.dateOfBirth as Date).toISOString().slice(0, 10);
 
         const dobExact = dobA === dobB;
         const dobClose = !dobExact && dobCandidates(dobA).includes(dobB);
@@ -244,7 +268,8 @@ export class DuplicateDetectionService {
         // Phone comparison
         let phoneMatch: boolean | null = null;
         if (a.contactNumber && b.contactNumber) {
-          phoneMatch = normalizePhone(a.contactNumber as string) === normalizePhone(b.contactNumber as string);
+          phoneMatch =
+            normalizePhone(a.contactNumber as string) === normalizePhone(b.contactNumber as string);
         }
 
         const confidence = computeConfidence(firstSim, lastSim, dobExact, phoneMatch);
@@ -253,8 +278,10 @@ export class DuplicateDetectionService {
         const reasons: string[] = [];
         if (firstSim >= 0.85) reasons.push(`first name ${(firstSim * 100).toFixed(0)}% similar`);
         if (lastSim >= 0.85) reasons.push(`last name ${(lastSim * 100).toFixed(0)}% similar`);
-        if (soundex(a.firstName as string) === soundex(b.firstName as string) &&
-            soundex(a.lastName as string) === soundex(b.lastName as string)) {
+        if (
+          soundex(a.firstName as string) === soundex(b.firstName as string) &&
+          soundex(a.lastName as string) === soundex(b.lastName as string)
+        ) {
           reasons.push('phonetic name match');
         }
         if (dobExact) reasons.push('exact DOB match');
@@ -271,12 +298,11 @@ export class DuplicateDetectionService {
   /**
    * Mark patient as potential duplicate.
    */
-  static async markPotentialDuplicate(
-    patientId: string,
-    duplicateIds: string[]
-  ): Promise<void> {
+  static async markPotentialDuplicate(patientId: string, duplicateIds: string[]): Promise<void> {
     await PatientModel.findByIdAndUpdate(patientId, {
-      $addToSet: { potentialDuplicates: { $each: duplicateIds.map((id) => new Types.ObjectId(id)) } },
+      $addToSet: {
+        potentialDuplicates: { $each: duplicateIds.map((id) => new Types.ObjectId(id)) },
+      },
     });
   }
 }

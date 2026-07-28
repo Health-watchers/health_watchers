@@ -2,7 +2,12 @@ import { Router, Request, Response } from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
-import { reportQuerySchema, exportQuerySchema, ReportQuery, ExportQuery } from './reports.validation';
+import {
+  reportQuerySchema,
+  exportQuerySchema,
+  ReportQuery,
+  ExportQuery,
+} from './reports.validation';
 import { PatientModel } from '../patients/models/patient.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
@@ -17,7 +22,7 @@ router.get(
   async (req: Request<{}, {}, {}, ReportQuery>, res: Response) => {
     const clinicId = req.user!.clinicId;
     const { from, to, period } = req.query;
-    
+
     const dateFilter: any = { clinicId };
     if (from || to) {
       dateFilter.createdAt = {};
@@ -310,29 +315,27 @@ router.get(
 
 // POST /api/v1/ai/benchmark-insights
 // Get AI-powered insights on clinic's benchmark position
-router.post(
-  '/benchmark-insights',
-  async (req: Request, res: Response) => {
-    try {
-      const { isAIServiceAvailable, stripPII } = await import('../ai/ai.service');
-      if (!isAIServiceAvailable()) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is not configured.',
-        });
-      }
+router.post('/benchmark-insights', async (req: Request, res: Response) => {
+  try {
+    const { isAIServiceAvailable, stripPII } = await import('../ai/ai.service');
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({
+        error: 'AIUnavailable',
+        message: 'AI service is not configured.',
+      });
+    }
 
-      const { getBenchmarkComparison } = await import('./benchmarking.service');
-      const benchmark = await getBenchmarkComparison(req.user!.clinicId);
+    const { getBenchmarkComparison } = await import('./benchmarking.service');
+    const benchmark = await getBenchmarkComparison(req.user!.clinicId);
 
-      const benchmarkSummary = benchmark.comparisons
-        .map(
-          (c) =>
-            `${c.metric}: clinic=${c.clinicValue}, p50=${c.percentiles.p50}, rank=${c.percentileRank}%`
-        )
-        .join('\n');
+    const benchmarkSummary = benchmark.comparisons
+      .map(
+        (c) =>
+          `${c.metric}: clinic=${c.clinicValue}, p50=${c.percentiles.p50}, rank=${c.percentileRank}%`
+      )
+      .join('\n');
 
-      const prompt = `You are a healthcare operations consultant. Analyze the following clinic's benchmark position and provide 2-3 actionable recommendations to improve performance.
+    const prompt = `You are a healthcare operations consultant. Analyze the following clinic's benchmark position and provide 2-3 actionable recommendations to improve performance.
 
 Clinic Category: ${benchmark.category}
 Benchmark Metrics:
@@ -340,27 +343,74 @@ ${benchmarkSummary}
 
 Provide concise, actionable recommendations:`;
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('@health-watchers/config');
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-      const result = await model.generateContent(prompt);
-      const insights = result.response.text();
+    const result = await model.generateContent(prompt);
+    const insights = result.response.text();
 
-      return res.json({
-        success: true,
-        clinicId: req.user!.clinicId,
-        category: benchmark.category,
-        insights,
-        disclaimer:
-          'AI-generated insights for operational guidance only. Not a substitute for professional consulting.',
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      return res.status(500).json({ error: 'InsightGenerationError', message: msg });
-    }
+    return res.json({
+      success: true,
+      clinicId: req.user!.clinicId,
+      category: benchmark.category,
+      insights,
+      disclaimer:
+        'AI-generated insights for operational guidance only. Not a substitute for professional consulting.',
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'InsightGenerationError', message: msg });
   }
-);
+});
+
+// GET /reports/outcomes — outcome analytics
+router.get('/outcomes', async (req: Request, res: Response, next) => {
+  try {
+    const clinicId = req.user!.clinicId;
+    const { from, to } = req.query as { from?: string; to?: string };
+
+    const dateFilter: Record<string, unknown> = { clinicId };
+    if (from || to) {
+      const range: Record<string, Date> = {};
+      if (from) range.$gte = new Date(from);
+      if (to) range.$lte = new Date(to);
+      dateFilter.createdAt = range;
+    }
+
+    const [outcomeDistribution, followUpStats, avgResolution] = await Promise.all([
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: { $exists: true, $ne: null } } },
+        { $group: { _id: '$outcome', count: { $sum: 1 } } },
+        { $project: { outcome: '$_id', count: 1, _id: 0 } },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, followUpRequired: true } },
+        { $group: { _id: null, total: { $sum: 1 }, completed: { $sum: { $cond: ['$followUpCompleted', 1, 0] } } } },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: 'resolved', followUpDate: { $exists: true } } },
+        { $group: { _id: null, avgDays: { $avg: { $divide: [{ $subtract: ['$followUpDate', '$createdAt'] }, 86400000] } } } },
+      ]),
+    ]);
+
+    const followUpRow = followUpStats[0];
+    const followUpComplianceRate =
+      followUpRow && followUpRow.total > 0
+        ? Math.round((followUpRow.completed / followUpRow.total) * 100)
+        : null;
+
+    const avgDaysToResolution =
+      avgResolution[0]?.avgDays != null ? Math.round(avgResolution[0].avgDays * 10) / 10 : null;
+
+    return res.json({
+      status: 'success',
+      data: { outcomeDistribution, followUpComplianceRate, avgDaysToResolution },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export const reportRoutes = router;

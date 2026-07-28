@@ -159,7 +159,14 @@ export default function NewEncounterPage() {
   function addPrescriptionRow() {
     setPrescriptions((prev) => [
       ...prev,
-      { id: nextPrescriptionId.current++, drugName: '', dosage: '', frequency: '', route: 'oral', duration: '' },
+      {
+        id: nextPrescriptionId.current++,
+        drugName: '',
+        dosage: '',
+        frequency: '',
+        route: 'oral',
+        duration: '',
+      },
     ]);
   }
 
@@ -612,7 +619,7 @@ export default function NewEncounterPage() {
                             {diff.icdCode}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
                           {diff.reasoning}
                         </p>
                         {diff.recommendedTests?.length > 0 && (
@@ -645,7 +652,9 @@ export default function NewEncounterPage() {
                           }
                           disabled={diagnoses.some((d) => d.code === diff.icdCode)}
                         >
-                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                          {diagnoses.some((d) => d.code === diff.icdCode)
+                            ? 'Added'
+                            : 'Add Diagnosis'}
                         </Button>
                       </div>
                     </div>
@@ -653,7 +662,7 @@ export default function NewEncounterPage() {
                 ))}
               </div>
 
-              <p className="mt-4 text-[10px] italic text-neutral-400">{aiSuggestions.disclaimer}</p>
+              <p className="mt-4 text-[10px] text-neutral-400 italic">{aiSuggestions.disclaimer}</p>
             </div>
           )}
         </section>
@@ -898,10 +907,7 @@ export default function NewEncounterPage() {
 
           <div className="space-y-3">
             {prescriptions.map((rx) => (
-              <div
-                key={rx.id}
-                className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"
-              >
+              <div key={rx.id} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-xs font-medium text-neutral-500">Medication</span>
                   <button
@@ -931,7 +937,7 @@ export default function NewEncounterPage() {
                         type="button"
                         onClick={() => openDosageCalculator(rx.id)}
                         title="AI Dosage Calculator"
-                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 whitespace-nowrap"
+                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium whitespace-nowrap text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         <span aria-hidden="true">✨</span> Calculate Dose
                       </button>
@@ -963,9 +969,7 @@ export default function NewEncounterPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
-                      Route
-                    </label>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">Route</label>
                     <select
                       value={rx.route}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'route', e.target.value)}
@@ -1056,7 +1060,9 @@ export default function NewEncounterPage() {
         onApply={applyDosageResult}
         patientWeight={weight ? toKg(weight) : undefined}
         patientAge={fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined}
-        patientSex={fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined}
+        patientSex={
+          fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined
+        }
       />
     </main>
   );

@@ -4,6 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { PaymentScreen } from './screens/PaymentScreen';
+import { DocumentsScreen } from './screens/DocumentsScreen';
+import { CarePlansScreen } from './screens/CarePlansScreen';
+import { ImmunizationsScreen } from './screens/ImmunizationsScreen';
 import { NotificationService } from './services/notification.service';
 
 const Stack = createNativeStackNavigator();
@@ -28,6 +31,42 @@ function PaymentStack() {
         name="Payments"
         component={PaymentScreen}
         options={{ title: 'Payments & Invoices' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function DocumentsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Documents"
+        component={DocumentsScreen}
+        options={{ title: 'Documents' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function CarePlansStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="CarePlans"
+        component={CarePlansScreen}
+        options={{ title: 'Care Plans' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function ImmunizationsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Immunizations"
+        component={ImmunizationsScreen}
+        options={{ title: 'Immunizations' }}
       />
     </Stack.Navigator>
   );
@@ -61,6 +100,30 @@ export default function App() {
           options={{
             title: 'Payments',
             tabBarLabel: 'Payments',
+          }}
+        />
+        <Tab.Screen
+          name="DocumentsStack"
+          component={DocumentsStack}
+          options={{
+            title: 'Documents',
+            tabBarLabel: 'Documents',
+          }}
+        />
+        <Tab.Screen
+          name="CarePlansStack"
+          component={CarePlansStack}
+          options={{
+            title: 'Care Plans',
+            tabBarLabel: 'Care Plans',
+          }}
+        />
+        <Tab.Screen
+          name="ImmunizationsStack"
+          component={ImmunizationsStack}
+          options={{
+            title: 'Immunizations',
+            tabBarLabel: 'Immunizations',
           }}
         />
       </Tab.Navigator>

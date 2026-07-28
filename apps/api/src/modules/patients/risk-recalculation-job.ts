@@ -42,18 +42,33 @@ export async function runRiskRecalculation(): Promise<void> {
 
         const [encounters, labResults, missedAppts] = await Promise.all([
           EncounterModel.find({ patientId, clinicId }).sort({ createdAt: -1 }).limit(20).lean(),
-          LabResultModel.find({ patientId, clinicId, status: 'resulted' }).sort({ createdAt: -1 }).limit(10).lean(),
-          AppointmentModel.countDocuments({ patientId, clinicId, status: 'no-show', scheduledAt: { $gte: ninetyDaysAgo } }),
+          LabResultModel.find({ patientId, clinicId, status: 'resulted' })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean(),
+          AppointmentModel.countDocuments({
+            patientId,
+            clinicId,
+            status: 'no-show',
+            scheduledAt: { $gte: ninetyDaysAgo },
+          }),
         ]);
 
         const dobStr = (patient as any).dateOfBirth as string;
-        const ageYears = dobStr ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
-        const allDiagnoses = encounters.flatMap((e) => (e.diagnosis ?? []).map((d: any) => d.description ?? d.code ?? ''));
+        const ageYears = dobStr
+          ? Math.floor((Date.now() - new Date(dobStr).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+          : 0;
+        const allDiagnoses = encounters.flatMap((e) =>
+          (e.diagnosis ?? []).map((d: any) => d.description ?? d.code ?? '')
+        );
         const recentHospitalization = encounters.some((e) => {
           const d = (e as any).createdAt as Date;
           return d && new Date(d) >= ninetyDaysAgo && e.status === 'closed';
         });
-        const abnormalLabCount = labResults.reduce((n, lr) => n + (lr.results ?? []).filter((r: any) => r.flag && r.flag !== 'N').length, 0);
+        const abnormalLabCount = labResults.reduce(
+          (n, lr) => n + (lr.results ?? []).filter((r: any) => r.flag && r.flag !== 'N').length,
+          0
+        );
         const highBP = encounters.some((e) => {
           const bp = e.vitalSigns?.bloodPressure;
           if (!bp) return false;
@@ -62,13 +77,19 @@ export async function runRiskRecalculation(): Promise<void> {
         });
         const latestWeight = encounters.find((e) => e.vitalSigns?.weight)?.vitalSigns?.weight;
         const latestHeight = encounters.find((e) => e.vitalSigns?.height)?.vitalSigns?.height;
-        const bmiOver30 = latestWeight && latestHeight ? (latestWeight / ((latestHeight / 100) ** 2)) > 30 : false;
+        const bmiOver30 =
+          latestWeight && latestHeight ? latestWeight / (latestHeight / 100) ** 2 > 30 : false;
         const smokingHistory = allDiagnoses.some((d) => d.toLowerCase().includes('smok'));
 
         const { score, level, factors, factorWeights } = calculateRiskScore({
-          ageYears, diagnoses: allDiagnoses, recentHospitalization,
-          missedAppointments: missedAppts, abnormalLabCount,
-          highBloodPressure: highBP, bmiOver30: !!bmiOver30, smokingHistory,
+          ageYears,
+          diagnoses: allDiagnoses,
+          recentHospitalization,
+          missedAppointments: missedAppts,
+          abnormalLabCount,
+          highBloodPressure: highBP,
+          bmiOver30: !!bmiOver30,
+          smokingHistory,
         });
 
         const previousLevel = (patient as any).riskLevel;
@@ -76,20 +97,32 @@ export async function runRiskRecalculation(): Promise<void> {
 
         const now = new Date();
         await PatientModel.findByIdAndUpdate(patientId, {
-          riskScore: score, riskLevel: level, riskFactors: factors,
+          riskScore: score,
+          riskLevel: level,
+          riskFactors: factors,
           riskFactorWeights: factorWeights,
-          lastRiskCalculatedAt: now, nextRiskReviewDate: new Date(now.getTime() + WEEK_MS),
+          lastRiskCalculatedAt: now,
+          nextRiskReviewDate: new Date(now.getTime() + WEEK_MS),
         });
 
         await RiskScoreHistoryModel.create({
-          patientId, clinicId, riskScore: score, riskLevel: level,
-          riskFactors: factors, calculatedAt: now, source: 'scheduled',
+          patientId,
+          clinicId,
+          riskScore: score,
+          riskLevel: level,
+          riskFactors: factors,
+          calculatedAt: now,
+          source: 'scheduled',
         });
 
         // Notify CLINIC_ADMIN if risk escalated to high/critical
         if (levelEscalated && (level === 'high' || level === 'critical')) {
           progress.flagged++;
-          const admins = await UserModel.find({ clinicId, role: 'CLINIC_ADMIN', isActive: true }).lean();
+          const admins = await UserModel.find({
+            clinicId,
+            role: 'CLINIC_ADMIN',
+            isActive: true,
+          }).lean();
           for (const admin of admins) {
             await createNotification({
               userId: admin._id,
@@ -111,13 +144,16 @@ export async function runRiskRecalculation(): Promise<void> {
     }
 
     // Log batch progress
-    logger.info({
-      batch: Math.ceil(skip / BATCH_SIZE) + 1,
-      processed: progress.processed,
-      total: progress.total,
-      flagged: progress.flagged,
-      errors: progress.errors,
-    }, 'Risk recalculation batch progress');
+    logger.info(
+      {
+        batch: Math.ceil(skip / BATCH_SIZE) + 1,
+        processed: progress.processed,
+        total: progress.total,
+        flagged: progress.flagged,
+        errors: progress.errors,
+      },
+      'Risk recalculation batch progress'
+    );
   }
 
   logger.info(progress, 'Risk recalculation job completed');
@@ -132,11 +168,16 @@ export function startRiskRecalculationJob(): void {
   // Run immediately then weekly
   runRiskRecalculation().catch((err) => logger.error({ err }, 'Initial risk recalculation failed'));
   jobTimer = setInterval(() => {
-    runRiskRecalculation().catch((err) => logger.error({ err }, 'Weekly risk recalculation failed'));
+    runRiskRecalculation().catch((err) =>
+      logger.error({ err }, 'Weekly risk recalculation failed')
+    );
   }, WEEK_MS);
   logger.info('Weekly risk recalculation job scheduled');
 }
 
 export function stopRiskRecalculationJob(): void {
-  if (jobTimer) { clearInterval(jobTimer); jobTimer = null; }
+  if (jobTimer) {
+    clearInterval(jobTimer);
+    jobTimer = null;
+  }
 }

@@ -19,7 +19,10 @@ const CODE_LENGTH = 8; // characters (hex)
  */
 export function generateBackupCodes(): string[] {
   return Array.from({ length: BACKUP_CODE_COUNT }, () =>
-    crypto.randomBytes(CODE_LENGTH / 2).toString('hex').toUpperCase(),
+    crypto
+      .randomBytes(CODE_LENGTH / 2)
+      .toString('hex')
+      .toUpperCase()
   );
 }
 
@@ -43,9 +46,7 @@ export function countRemainingCodes(storedCodes: (string | null)[]): number {
 /**
  * Validation result for a regeneration request.
  */
-export type RegenAuthResult =
-  | { valid: true }
-  | { valid: false; reason: string };
+export type RegenAuthResult = { valid: true } | { valid: false; reason: string };
 
 /**
  * Validates that a regeneration request is properly authenticated.

@@ -1,6 +1,10 @@
 import { RecurringPayment } from './recurring-payment.model';
-import { CreateRecurringPaymentInput, UpdateRecurringPaymentInput } from './recurring-payment.validation';
-import { sendEmail } from '@api/lib/email.service';
+import {
+  CreateRecurringPaymentInput,
+  UpdateRecurringPaymentInput,
+} from './recurring-payment.validation';
+import { sendMail } from '@api/utils/mailer';
+import { isValidObjectId } from '@api/middlewares/common.middleware';
 
 function getNextPaymentDate(startDate: Date, frequency: string): Date {
   const next = new Date(startDate);
@@ -21,10 +25,7 @@ function getNextPaymentDate(startDate: Date, frequency: string): Date {
   return next;
 }
 
-export async function createRecurringPayment(
-  clinicId: string,
-  input: CreateRecurringPaymentInput
-) {
+export async function createRecurringPayment(clinicId: string, input: CreateRecurringPaymentInput) {
   const startDate = new Date(input.startDate);
   const nextPaymentDate = getNextPaymentDate(startDate, input.frequency);
 
@@ -42,8 +43,13 @@ export async function createRecurringPayment(
 }
 
 export async function getRecurringPayments(clinicId: string, patientId?: string) {
-  const query: any = { clinicId };
-  if (patientId) query.patientId = patientId;
+  const query: Record<string, unknown> = { clinicId };
+  if (patientId) {
+    if (!isValidObjectId(patientId)) {
+      throw new Error('Invalid patientId');
+    }
+    query.patientId = patientId;
+  }
   return RecurringPayment.find(query).sort({ nextPaymentDate: 1 });
 }
 
@@ -115,7 +121,7 @@ export async function notifyPatientOfPayment(
   currency: string,
   approveUrl: string
 ) {
-  await sendEmail({
+  await sendMail({
     to: patientEmail,
     subject: 'Payment Request - Action Required',
     html: `

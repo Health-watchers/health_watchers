@@ -19,9 +19,10 @@ const icd10Schema = new Schema<IICD10Code>(
   { timestamps: false, versionKey: false }
 );
 
-// Text index for full-text description search
-icd10Schema.index({ description: 'text' });
+// Compound text index for full-text search on description and code
+icd10Schema.index({ description: 'text', code: 'text' }, { name: 'icd10_text_search', weights: { description: 10, code: 5 } });
 // Prefix search on code
 icd10Schema.index({ code: 1 });
 
-export const ICD10Model = models.ICD10Code || model<IICD10Code>('ICD10Code', icd10Schema);
+export const ICD10Model = (models.ICD10Code ||
+  model<IICD10Code>('ICD10Code', icd10Schema)) as import('mongoose').Model<IICD10Code>;

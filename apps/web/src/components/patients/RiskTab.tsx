@@ -79,9 +79,11 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
   return (
     <div className="space-y-6">
       {/* Current risk summary */}
-      <div className="rounded-lg border border-gray-200 dark:border-neutral-700 p-4 dark:bg-neutral-800/50">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900 dark:text-neutral-100">Current Risk Assessment</h3>
+      <div className="rounded-lg border border-gray-200 p-4 dark:border-neutral-700 dark:bg-neutral-800/50">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 dark:text-neutral-100">
+            Current Risk Assessment
+          </h3>
           <Button
             size="sm"
             variant="primary"
@@ -95,24 +97,29 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
         {current.riskLevel ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <Badge variant={riskVariant(current.riskLevel)} className="text-sm px-3 py-1">
+              <Badge variant={riskVariant(current.riskLevel)} className="px-3 py-1 text-sm">
                 {current.riskLevel.toUpperCase()} RISK
               </Badge>
               <span className="text-2xl font-bold text-gray-900 dark:text-neutral-100">
                 {current.riskScore ?? '—'}
-                <span className="text-sm font-normal text-gray-500 dark:text-neutral-400">/100</span>
+                <span className="text-sm font-normal text-gray-500 dark:text-neutral-400">
+                  /100
+                </span>
               </span>
             </div>
 
             {current.riskFactors && current.riskFactors.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase mb-2">
+                <p className="mb-2 text-xs font-semibold text-gray-500 uppercase dark:text-neutral-400">
                   Contributing Factors
                 </p>
                 <ul className="space-y-1">
                   {current.riskFactors.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-gray-700 dark:text-neutral-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 flex-shrink-0" />
+                    <li
+                      key={f}
+                      className="flex items-center gap-2 text-sm text-gray-700 dark:text-neutral-300"
+                    >
+                      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-400" />
                       {f}
                     </li>
                   ))}
@@ -130,7 +137,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
             <button
               type="button"
               onClick={() => setShowExplanation((v) => !v)}
-              className="mt-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline focus:outline-none"
+              className="text-primary-600 dark:text-primary-400 mt-1 text-xs font-medium hover:underline focus:outline-none"
             >
               {showExplanation ? '▲ Hide explanation' : '▼ Show factor breakdown & recommendations'}
             </button>
@@ -156,8 +163,8 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
 
       {/* Explanation panel */}
       {showExplanation && current.riskLevel && (
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-4 dark:bg-neutral-800/50">
-          <h3 className="font-semibold text-gray-900 dark:text-neutral-100 mb-4">
+        <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700 dark:bg-neutral-800/50">
+          <h3 className="mb-4 font-semibold text-gray-900 dark:text-neutral-100">
             Risk Factor Breakdown
           </h3>
           <RiskExplanationPanel patientId={patientId} apiV1={apiV1} />
@@ -166,7 +173,9 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
 
       {/* History */}
       <div>
-        <h3 className="font-semibold text-gray-900 dark:text-neutral-100 mb-3">Risk Score History</h3>
+        <h3 className="mb-3 font-semibold text-gray-900 dark:text-neutral-100">
+          Risk Score History
+        </h3>
         {isLoading ? (
           <Spinner />
         ) : history.length === 0 ? (
@@ -176,13 +185,13 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
             {history.map((h) => (
               <div
                 key={h._id}
-                className="rounded border border-gray-100 dark:border-neutral-700 p-3 text-sm dark:bg-neutral-800/30"
+                className="rounded border border-gray-100 p-3 text-sm dark:border-neutral-700 dark:bg-neutral-800/30"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant={riskVariant(h.riskLevel)}>{h.riskLevel}</Badge>
                     <span className="font-semibold dark:text-neutral-200">{h.riskScore}/100</span>
-                    <span className="text-xs text-gray-400 dark:text-neutral-500 capitalize">
+                    <span className="text-xs text-gray-400 capitalize dark:text-neutral-500">
                       {h.source}
                     </span>
                   </div>
@@ -196,7 +205,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
                   </p>
                 )}
                 {h.recommendations && (
-                  <p className="mt-1 text-xs text-gray-600 dark:text-neutral-400 italic">
+                  <p className="mt-1 text-xs text-gray-600 italic dark:text-neutral-400">
                     {h.recommendations}
                   </p>
                 )}

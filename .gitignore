@@ -11,6 +11,7 @@
 .env.development.local
 # Keep .env.example tracked (it's a template)
 !.env.example
+!.env.cdn.example
 
 # =============================================================================
 # Dependencies
@@ -58,7 +59,40 @@ coverage/
 .nyc_output/
 .jest_cache/
 jest-results.json
+
+# Jest snapshot files (auto-generated, should not be committed)
+**/__snapshots__/
+
+# Playwright test artifacts
+playwright-report/
 test-results/
+blob-report/
+playwright/.cache/
+.playwright/
+
+# Stryker mutation testing output
+.stryker-tmp/
+stryker-report/
+reports/
+
+# Pact contract test artifacts
+pacts/*.json
+
+# k6 performance test results
+k6-results/
+performance/results/
+# Vitest
+.vitest-cache/
+vitest-results/
+
+# Vitest snapshots
+**/__vitest_snapshots__/
+
+# DevOps script report/log output (generated at run time, not source)
+backup-verification-report.json
+*-verification-report.json
+blue-green-deployment.log
+rollback-deployment.log
 
 # =============================================================================
 # TypeScript
@@ -116,3 +150,81 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
+apps/api/reports/
+
+# =============================================================================
+# Runtime / Debug artifacts
+# =============================================================================
+*.heapsnapshot
+*.cpuprofile
+*.trace
+chromium-trace/
+.clinic/
+clinic-*/
+0x-*/
+
+# =============================================================================
+# Generated API / documentation artifacts
+# =============================================================================
+apps/*/docs/api/
+.docusaurus/
+apps/docs/build/
+
+# =============================================================================
+# Local override files
+# =============================================================================
+*.local
+docker-compose.override.yml
+
+# =============================================================================
+# Security Scan Reports (generated artefacts — not source files)
+# =============================================================================
+gitleaks-report.json
+.gitleaks/
+snyk.sarif
+snyk-report.json
+trivy-*.sarif
+trivy-*.json
+audit.json
+audit-report.json
+licenses.csv
+security-reports/
+scan-results/
+
+# =============================================================================
+# Generated / compiled artefacts
+# =============================================================================
+# packages/types compiled output — source is packages/types/src/index.ts
+packages/types/index.js
+packages/types/index.js.map
+packages/types/index.d.ts
+packages/types/index.d.ts.map
+packages/types/index.ts
+
+# Temporary debug scripts at repo root
+verify-jwt-implementation.js
+
+# =============================================================================
+# Helm / Kubernetes generated artifacts
+# =============================================================================
+# Helm dependency charts (downloaded via helm dep update)
+helm/*/charts/
+helm/**/Chart.lock
+
+# kubeconfig files (never commit credentials)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# =============================================================================
+# CI/CD generated artifacts
+# =============================================================================
+# SBOM outputs
+sbom-*.json
+sbom-*.xml
+
+# Docker build cache
+.docker-cache/
+
+# GitHub Actions local run artifacts (act)
+.act/

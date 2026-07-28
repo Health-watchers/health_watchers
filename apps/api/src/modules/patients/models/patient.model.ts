@@ -8,6 +8,7 @@ const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 const INSURANCE_PHI_FIELDS = ['policyNumber', 'groupNumber'] as const;
 
 export interface IAllergy {
+  _id?: Schema.Types.ObjectId;
   allergen: string;
   allergenType: 'drug' | 'food' | 'environmental' | 'other';
   reaction: string;
@@ -19,6 +20,7 @@ export interface IAllergy {
 }
 
 export interface IEmergencyContact {
+  _id?: Schema.Types.ObjectId;
   name: string;
   relationship: string;
   phone: string;
@@ -27,9 +29,18 @@ export interface IEmergencyContact {
   isPrimary: boolean;
 }
 
-export type CoverageType = 'HMO' | 'PPO' | 'EPO' | 'POS' | 'HDHP' | 'Medicare' | 'Medicaid' | 'other';
+export type CoverageType =
+  | 'HMO'
+  | 'PPO'
+  | 'EPO'
+  | 'POS'
+  | 'HDHP'
+  | 'Medicare'
+  | 'Medicaid'
+  | 'other';
 
 export interface IInsurance {
+  _id?: Schema.Types.ObjectId;
   provider: string;
   /** Encrypted PHI */
   policyNumber: string;
@@ -66,6 +77,10 @@ export interface Patient {
   nextRiskReviewDate?: Date;
   photoUrl?: string;
   thumbnailUrl?: string;
+  isDuplicate?: boolean;
+  mergedInto?: Schema.Types.ObjectId;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const allergySchema = new Schema<IAllergy>(
@@ -146,6 +161,9 @@ const patientSchema = new Schema<Patient>(
   },
   { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+// Dashboard aggregation: filter by clinic + date range, sorted by createdAt
+patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
 
 patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
@@ -239,4 +257,5 @@ patientSchema.virtual('ageGroup').get(function () {
   return 'elderly';
 });
 
-export const PatientModel = models.Patient || model<Patient>('Patient', patientSchema);
+export const PatientModel = (models.Patient ||
+  model<Patient>('Patient', patientSchema)) as import('mongoose').Model<Patient>;

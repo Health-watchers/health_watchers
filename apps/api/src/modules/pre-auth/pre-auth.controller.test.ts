@@ -31,13 +31,23 @@ jest.mock('@health-watchers/config', () => ({
 
 // Stub all unrelated route modules
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -105,7 +115,9 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('POST /api/v1/pre-auth', () => {
   it('creates a pre-auth and claimable balance', async () => {
-    (stellarClient.createClaimableBalance as jest.Mock).mockResolvedValue({ balanceId: 'cb_abc123' });
+    (stellarClient.createClaimableBalance as jest.Mock).mockResolvedValue({
+      balanceId: 'cb_abc123',
+    });
     (PreAuthModel.create as jest.Mock).mockResolvedValue(mockPreAuth);
 
     const res = await request(app)
@@ -127,7 +139,9 @@ describe('POST /api/v1/pre-auth', () => {
   });
 
   it('returns 502 when stellar service fails', async () => {
-    (stellarClient.createClaimableBalance as jest.Mock).mockRejectedValue(new Error('Horizon down'));
+    (stellarClient.createClaimableBalance as jest.Mock).mockRejectedValue(
+      new Error('Horizon down')
+    );
 
     const res = await request(app)
       .post('/api/v1/pre-auth')
@@ -197,7 +211,12 @@ describe('PUT /api/v1/pre-auth/:id/approve', () => {
 
 describe('POST /api/v1/pre-auth/:id/claim', () => {
   it('claims funds after approval', async () => {
-    const pa = { ...mockPreAuth, status: 'approved', save: jest.fn(), toObject: jest.fn().mockReturnThis() };
+    const pa = {
+      ...mockPreAuth,
+      status: 'approved',
+      save: jest.fn(),
+      toObject: jest.fn().mockReturnThis(),
+    };
     (PreAuthModel.findOne as jest.Mock).mockResolvedValue(pa);
     (stellarClient.claimBalance as jest.Mock).mockResolvedValue({ txHash: 'tx_claim_abc' });
 
@@ -226,7 +245,12 @@ describe('POST /api/v1/pre-auth/:id/claim', () => {
 
 describe('POST /api/v1/pre-auth/:id/deny', () => {
   it('denies and triggers patient reclaim', async () => {
-    const pa = { ...mockPreAuth, status: 'pending', save: jest.fn(), toObject: jest.fn().mockReturnThis() };
+    const pa = {
+      ...mockPreAuth,
+      status: 'pending',
+      save: jest.fn(),
+      toObject: jest.fn().mockReturnThis(),
+    };
     (PreAuthModel.findOne as jest.Mock).mockResolvedValue(pa);
     (stellarClient.reclaimBalance as jest.Mock).mockResolvedValue({ txHash: 'tx_reclaim_abc' });
 

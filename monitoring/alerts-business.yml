@@ -12,7 +12,7 @@ groups:
           team: product
           dashboard: hw-business-kpis
         annotations:
-          summary: "No patients created in the last 30 minutes"
+          summary: 'No patients created in the last 30 minutes'
           description: >
             The patient creation rate has been zero for 30 minutes.
             This may indicate an API issue or an unusually quiet period.
@@ -28,7 +28,7 @@ groups:
           team: product
           dashboard: hw-business-kpis
         annotations:
-          summary: "No encounters created in the last 30 minutes"
+          summary: 'No encounters created in the last 30 minutes'
           description: >
             The encounter creation rate has been zero for 30 minutes.
             This may indicate an API issue or an unusually quiet period.
@@ -43,7 +43,7 @@ groups:
           team: product
           dashboard: hw-business-kpis
         annotations:
-          summary: "No AI requests in the last 15 minutes"
+          summary: 'No AI requests in the last 15 minutes'
           description: >
             The AI request rate has been zero for 15 minutes.
             The AI service may be unavailable or the Gemini API key may be invalid.
@@ -58,7 +58,7 @@ groups:
           team: product
           dashboard: hw-business-kpis
         annotations:
-          summary: "High subscription limit violations in the last hour"
+          summary: 'High subscription limit violations in the last hour'
           description: >
             {{ $value | humanize }} subscription limit violations occurred in the last hour.
             Consider reaching out to affected clinics about plan upgrades.
@@ -74,9 +74,9 @@ groups:
           team: platform
           dashboard: hw-api-performance
         annotations:
-          summary: "Health Watchers API is down"
-          description: "The API has been unreachable for more than 1 minute"
-          runbook_url: "https://wiki.internal/runbooks/api-down"
+          summary: 'Health Watchers API is down'
+          description: 'The API has been unreachable for more than 1 minute'
+          runbook_url: 'https://wiki.internal/runbooks/api-down'
 
       # Alert when error rate exceeds 5% over 5 minutes
       - alert: HighErrorRate
@@ -91,8 +91,8 @@ groups:
           team: platform
           dashboard: hw-api-performance
         annotations:
-          summary: "High HTTP error rate on API"
-          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          summary: 'High HTTP error rate on API'
+          description: 'Error rate is {{ $value | humanizePercentage }} (threshold: 5%)'
 
       # Alert when p99 latency exceeds 2 seconds
       - alert: HighP99Latency
@@ -106,8 +106,8 @@ groups:
           team: platform
           dashboard: hw-api-performance
         annotations:
-          summary: "High p99 latency on API"
-          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+          summary: 'High p99 latency on API'
+          description: 'p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)'
 
   - name: mongodb-health
     rules:
@@ -121,8 +121,8 @@ groups:
           team: platform
           dashboard: hw-mongodb
         annotations:
-          summary: "MongoDB connection pool utilization high"
-          description: "MongoDB pool utilization has exceeded 80% for more than 2 minutes"
+          summary: 'MongoDB connection pool utilization high'
+          description: 'MongoDB pool utilization has exceeded 80% for more than 2 minutes'
 
       # Alert when MongoDB pool wait queue is non-zero (connections queuing)
       - alert: MongoDBPoolWaitQueueNonEmpty
@@ -133,6 +133,6 @@ groups:
           team: platform
           dashboard: hw-mongodb
         annotations:
-          summary: "MongoDB connection pool wait queue is non-empty"
-          description: "Requests are waiting for MongoDB connections — pool may be exhausted"
-          runbook_url: "https://wiki.internal/runbooks/mongodb-pool"
+          summary: 'MongoDB connection pool wait queue is non-empty'
+          description: 'Requests are waiting for MongoDB connections — pool may be exhausted'
+          runbook_url: 'https://wiki.internal/runbooks/mongodb-pool'

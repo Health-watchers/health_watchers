@@ -70,7 +70,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
         ref={canvasRef}
         width={400}
         height={200}
-        className="border border-gray-300 rounded cursor-crosshair"
+        className="cursor-crosshair rounded border border-gray-300"
         onMouseDown={startDrawing}
         onMouseMove={draw}
         onMouseUp={stopDrawing}
@@ -80,8 +80,12 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
         onTouchEnd={stopDrawing}
       />
       <div className="flex gap-2">
-        <Button onClick={clear} variant="outline" size="sm">Clear</Button>
-        <Button onClick={save} size="sm">Accept Signature</Button>
+        <Button onClick={clear} variant="outline" size="sm">
+          Clear
+        </Button>
+        <Button onClick={save} size="sm">
+          Accept Signature
+        </Button>
       </div>
     </div>
   );

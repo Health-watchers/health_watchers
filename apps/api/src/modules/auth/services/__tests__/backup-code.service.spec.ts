@@ -14,7 +14,7 @@ describe('generateBackupCodes', () => {
 
   it('each code is 8 hex characters (uppercase)', () => {
     const codes = generateBackupCodes();
-    codes.forEach(c => {
+    codes.forEach((c) => {
       expect(c).toMatch(/^[0-9A-F]{8}$/);
     });
   });
@@ -55,23 +55,39 @@ describe('countRemainingCodes', () => {
 
 describe('validateRegenRequest', () => {
   it('accepts password + TOTP', () => {
-    const result = validateRegenRequest({ passwordVerified: true, totpVerified: true, backupCodeVerified: false });
+    const result = validateRegenRequest({
+      passwordVerified: true,
+      totpVerified: true,
+      backupCodeVerified: false,
+    });
     expect(result.valid).toBe(true);
   });
 
   it('accepts password + backup code', () => {
-    const result = validateRegenRequest({ passwordVerified: true, totpVerified: false, backupCodeVerified: true });
+    const result = validateRegenRequest({
+      passwordVerified: true,
+      totpVerified: false,
+      backupCodeVerified: true,
+    });
     expect(result.valid).toBe(true);
   });
 
   it('rejects without password', () => {
-    const result = validateRegenRequest({ passwordVerified: false, totpVerified: true, backupCodeVerified: false });
+    const result = validateRegenRequest({
+      passwordVerified: false,
+      totpVerified: true,
+      backupCodeVerified: false,
+    });
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).toContain('password');
   });
 
   it('rejects with password but no second factor', () => {
-    const result = validateRegenRequest({ passwordVerified: true, totpVerified: false, backupCodeVerified: false });
+    const result = validateRegenRequest({
+      passwordVerified: true,
+      totpVerified: false,
+      backupCodeVerified: false,
+    });
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).toContain('TOTP');
   });

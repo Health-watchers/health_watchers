@@ -1,4 +1,9 @@
-import { calculateRiskScore, scoreToLevel } from './risk-calculator';
+import {
+  calculateRiskScore,
+  scoreToLevel,
+  buildFactorBreakdown,
+  getImprovedFactors,
+} from './risk-calculator';
 
 describe('scoreToLevel', () => {
   it('returns low for score < 20', () => expect(scoreToLevel(0)).toBe('low'));
@@ -38,13 +43,19 @@ describe('calculateRiskScore', () => {
   });
 
   it('adds 15 points for diabetes diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Type 2 Diabetes Mellitus'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Type 2 Diabetes Mellitus'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Diabetes');
   });
 
   it('adds 15 points for hypertension diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Essential Hypertension'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Essential Hypertension'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Hypertension');
   });
@@ -56,7 +67,10 @@ describe('calculateRiskScore', () => {
   });
 
   it('does not double-count same chronic condition', () => {
-    const { score } = calculateRiskScore({ ...base, diagnoses: ['Diabetes type 1', 'Diabetes type 2'] });
+    const { score } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Diabetes type 1', 'Diabetes type 2'],
+    });
     expect(score).toBe(15);
   });
 
@@ -217,7 +231,6 @@ describe('calculateRiskScore — factorWeights', () => {
   });
 });
 
-
 describe('scoreToLevel', () => {
   it('returns low for score < 20', () => expect(scoreToLevel(0)).toBe('low'));
   it('returns low for score 19', () => expect(scoreToLevel(19)).toBe('low'));
@@ -255,13 +268,19 @@ describe('calculateRiskScore', () => {
   });
 
   it('adds 15 points for diabetes diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Type 2 Diabetes Mellitus'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Type 2 Diabetes Mellitus'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Diabetes');
   });
 
   it('adds 15 points for hypertension diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Essential Hypertension'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Essential Hypertension'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Hypertension');
   });
@@ -273,7 +292,10 @@ describe('calculateRiskScore', () => {
   });
 
   it('does not double-count same chronic condition', () => {
-    const { score } = calculateRiskScore({ ...base, diagnoses: ['Diabetes type 1', 'Diabetes type 2'] });
+    const { score } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Diabetes type 1', 'Diabetes type 2'],
+    });
     expect(score).toBe(15);
   });
 
@@ -358,5 +380,62 @@ describe('calculateRiskScore', () => {
     expect(factors).toContain('Diabetes');
     expect(factors).toContain('Recent hospitalization');
     expect(factors).toContain('Smoking history');
+  });
+});
+
+describe('buildFactorBreakdown (risk explanation generation)', () => {
+  const weights = {
+    'Recent hospitalization': 20,
+    Diabetes: 15,
+    'Age > 65': 10,
+  };
+  const factors = ['Recent hospitalization', 'Diabetes', 'Age > 65'];
+
+  it('computes each factor percentage of the total weight', () => {
+    const breakdown = buildFactorBreakdown(factors, weights, [], false);
+    const byFactor = Object.fromEntries(breakdown.map((b) => [b.factor, b]));
+    // total = 45 → 20/45=44%, 15/45=33%, 10/45=22%
+    expect(byFactor['Recent hospitalization'].percentage).toBe(44);
+    expect(byFactor['Diabetes'].percentage).toBe(33);
+    expect(byFactor['Age > 65'].percentage).toBe(22);
+  });
+
+  it('carries through the point weight for each factor', () => {
+    const breakdown = buildFactorBreakdown(factors, weights, [], false);
+    expect(breakdown.find((b) => b.factor === 'Diabetes')!.weight).toBe(15);
+  });
+
+  it('marks all factors stable when there is no prior assessment', () => {
+    const breakdown = buildFactorBreakdown(factors, weights, [], false);
+    expect(breakdown.every((b) => b.trend === 'stable')).toBe(true);
+  });
+
+  it('marks a newly-appeared factor as worsening and an unchanged one as stable', () => {
+    const previous = ['Diabetes', 'Age > 65']; // hospitalization is new
+    const breakdown = buildFactorBreakdown(factors, weights, previous, true);
+    const byFactor = Object.fromEntries(breakdown.map((b) => [b.factor, b]));
+    expect(byFactor['Recent hospitalization'].trend).toBe('worsening');
+    expect(byFactor['Diabetes'].trend).toBe('stable');
+    expect(byFactor['Age > 65'].trend).toBe('stable');
+  });
+
+  it('does not divide by zero when all weights are zero', () => {
+    const breakdown = buildFactorBreakdown(['X'], { X: 0 }, [], false);
+    expect(breakdown[0].percentage).toBe(0);
+  });
+});
+
+describe('getImprovedFactors (risk explanation generation)', () => {
+  it('returns factors present before but resolved now', () => {
+    const improved = getImprovedFactors(['Diabetes'], ['Diabetes', 'Smoking history']);
+    expect(improved).toEqual(['Smoking history']);
+  });
+
+  it('returns empty when nothing resolved', () => {
+    expect(getImprovedFactors(['Diabetes'], ['Diabetes'])).toEqual([]);
+  });
+
+  it('returns empty when there is no prior assessment', () => {
+    expect(getImprovedFactors(['Diabetes'], [])).toEqual([]);
   });
 });

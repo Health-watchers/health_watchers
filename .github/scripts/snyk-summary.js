@@ -48,7 +48,8 @@ for (const project of projects) {
       pkg: v.packageName || v.moduleName || 'unknown',
       version: v.version || '',
       id: v.id || '',
-      fixedIn: Array.isArray(v.fixedIn) && v.fixedIn.length ? v.fixedIn.join(', ') : 'no fix available',
+      fixedIn:
+        Array.isArray(v.fixedIn) && v.fixedIn.length ? v.fixedIn.join(', ') : 'no fix available',
     });
   }
 }
@@ -86,11 +87,15 @@ lines.push('| --- | --- | --- | --- |');
 const emoji = { critical: '🔴', high: '🟠', medium: '🟡', low: '⚪' };
 for (const v of unique.slice(0, 25)) {
   const title = v.title.replace(/\|/g, '\\|');
-  lines.push(`| ${emoji[v.severity]} ${v.severity} | \`${v.pkg}@${v.version}\` | ${title} | ${v.fixedIn} |`);
+  lines.push(
+    `| ${emoji[v.severity]} ${v.severity} | \`${v.pkg}@${v.version}\` | ${title} | ${v.fixedIn} |`
+  );
 }
 if (unique.length > 25) {
   lines.push('');
-  lines.push(`_…and ${unique.length - 25} more. See the uploaded \`snyk-report.html\` artifact for the full report._`);
+  lines.push(
+    `_…and ${unique.length - 25} more. See the uploaded \`snyk-report.html\` artifact for the full report._`
+  );
 }
 
 console.log(lines.join('\n'));

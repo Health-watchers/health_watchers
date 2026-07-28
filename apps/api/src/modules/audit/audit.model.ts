@@ -34,7 +34,17 @@ export type AuditAction =
   | 'CRITICAL_LAB_ACKNOWLEDGED'
   | 'CLINIC_SWITCH'
   | 'DATA_EXPORT_REQUEST'
-  | 'DATA_EXPORT_FULFILLED';
+  | 'DATA_EXPORT_FULFILLED'
+  | 'CONSENT_VERSION_ACCEPTED'
+  | 'MUTATION_CREATE'
+  | 'MUTATION_UPDATE'
+  | 'MUTATION_DELETE'
+  | 'API_KEY_CREATE'
+  | 'API_KEY_ROTATE'
+  | 'API_KEY_REVOKE'
+  | 'API_KEY_UPDATE'
+  | 'COMMUNICATION_LOG_CREATED'
+  | 'COMMUNICATION_LOG_VIEWED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -92,6 +102,16 @@ const auditLogSchema = new Schema<AuditLog>(
         'CLINIC_SWITCH',
         'DATA_EXPORT_REQUEST',
         'DATA_EXPORT_FULFILLED',
+        'CONSENT_VERSION_ACCEPTED',
+        'MUTATION_CREATE',
+        'MUTATION_UPDATE',
+        'MUTATION_DELETE',
+        'API_KEY_CREATE',
+        'API_KEY_ROTATE',
+        'API_KEY_REVOKE',
+        'API_KEY_UPDATE',
+        'COMMUNICATION_LOG_CREATED',
+        'COMMUNICATION_LOG_VIEWED',
       ],
       index: true,
     },
@@ -138,5 +158,8 @@ auditLogSchema.index({ resourceType: 1, timestamp: -1 });
 auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
 // Full-text search across action field (metadata is Mixed so not indexable as text)
 auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
+// Retention policy: automatically expire audit logs after 2 years (configurable via AUDIT_LOG_RETENTION_DAYS)
+const retentionDays = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS ?? '730', 10);
+auditLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: retentionDays * 24 * 60 * 60 });
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);

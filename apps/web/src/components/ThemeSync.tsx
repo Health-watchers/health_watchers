@@ -22,7 +22,7 @@ export function ThemeSync() {
       .catch(() => {
         // silently ignore — default theme from next-themes will be used
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;

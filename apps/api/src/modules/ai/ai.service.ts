@@ -20,11 +20,11 @@ export const AI_DISCLAIMER =
 // ── PII stripping ─────────────────────────────────────────────────────────────
 // Remove common PII patterns before sending to external AI API
 const PII_PATTERNS: [RegExp, string][] = [
-  [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'],                          // phone numbers
-  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'],                 // email addresses
-  [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'],                                         // SSN
+  [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE]'], // phone numbers
+  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[EMAIL]'], // email addresses
+  [/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN]'], // SSN
   [/\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-]\d{2,4}\b/g, '[DOB]'], // dates of birth
-  [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'],                                             // zip codes
+  [/\b\d{5}(-\d{4})?\b/g, '[ZIP]'], // zip codes
 ];
 
 export function stripPII(text: string): string {
@@ -105,7 +105,9 @@ export interface PatientFriendlySummaryInput {
   prescriptions?: Array<{ drugName: string; dosage: string; frequency: string; duration: string }>;
 }
 
-export async function generatePatientFriendlySummary(input: PatientFriendlySummaryInput): Promise<string> {
+export async function generatePatientFriendlySummary(
+  input: PatientFriendlySummaryInput
+): Promise<string> {
   const client = getGeminiClient();
 
   const parts: string[] = [`Chief Complaint: ${input.chiefComplaint}`];
@@ -115,7 +117,9 @@ export async function generatePatientFriendlySummary(input: PatientFriendlySumma
     parts.push(`Diagnosis: ${input.diagnosis.map((d) => d.description).join(', ')}`);
   }
   if (input.prescriptions?.length) {
-    parts.push(`Medications: ${input.prescriptions.map((p) => `${p.drugName} ${p.dosage} ${p.frequency} for ${p.duration}`).join('; ')}`);
+    parts.push(
+      `Medications: ${input.prescriptions.map((p) => `${p.drugName} ${p.dosage} ${p.frequency} for ${p.duration}`).join('; ')}`
+    );
   }
 
   const safeText = stripPII(parts.join('\n'));
@@ -206,7 +210,9 @@ export interface PatientHealthSummary {
   riskFactors: string[];
 }
 
-export async function generatePatientHealthSummary(input: PatientHealthSummaryInput): Promise<PatientHealthSummary> {
+export async function generatePatientHealthSummary(
+  input: PatientHealthSummaryInput
+): Promise<PatientHealthSummary> {
   const client = getGeminiClient();
 
   const promptPayload = {
@@ -261,7 +267,10 @@ Patient context:
 ${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: { responseMimeType: 'application/json' } });
+    const model = client.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
     const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
@@ -420,7 +429,9 @@ const dosageResponseSchema = z.object({
   contraindications: z.array(z.string()),
 });
 
-export async function calculateDosage(input: DosageCalculatorInput): Promise<DosageCalculatorResponse> {
+export async function calculateDosage(
+  input: DosageCalculatorInput
+): Promise<DosageCalculatorResponse> {
   const client = getGeminiClient();
 
   const context = [
@@ -431,7 +442,9 @@ export async function calculateDosage(input: DosageCalculatorInput): Promise<Dos
     `Patient sex: ${input.patientSex === 'M' ? 'Male' : 'Female'}`,
     input.renalFunction ? `Renal function: ${input.renalFunction.replace(/_/g, ' ')}` : '',
     input.hepaticFunction ? `Hepatic function: ${input.hepaticFunction.replace(/_/g, ' ')}` : '',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const prompt = `You are a clinical pharmacology AI assisting a licensed clinician. Calculate the appropriate dosage for the following de-identified patient parameters using evidence-based guidelines.
 
@@ -498,7 +511,8 @@ export interface DrugInteractionResult {
 export const DRUG_INTERACTION_FALLBACK: DrugInteractionResult = {
   interactions: [],
   severity: 'none',
-  summary: 'Drug interaction analysis could not be completed. Please consult a clinical pharmacist.',
+  summary:
+    'Drug interaction analysis could not be completed. Please consult a clinical pharmacist.',
   disclaimer:
     'AI drug interaction check is unavailable. This result should NOT be used for clinical decisions. Consult a pharmacist or clinical decision support tool.',
 };
@@ -589,7 +603,10 @@ export async function checkDrugInteractions(medications: string[]): Promise<Drug
       };
     } catch (err) {
       const { default: logger } = await import('../../utils/logger');
-      logger.debug({ attempt, err: err instanceof Error ? err.message : err }, '[ai] drug interaction parse failed');
+      logger.debug(
+        { attempt, err: err instanceof Error ? err.message : err },
+        '[ai] drug interaction parse failed'
+      );
       if (attempt === 1) break;
     }
   }

@@ -162,12 +162,7 @@ icd10Routes.post(
       }
 
       const description = req.body.description || existing.description;
-      const favorites = await addFavorite(
-        req.user!.clinicId,
-        code,
-        description,
-        req.user!.userId
-      );
+      const favorites = await addFavorite(req.user!.clinicId, code, description, req.user!.userId);
       return res.status(201).json({ status: 'success', data: favorites });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });

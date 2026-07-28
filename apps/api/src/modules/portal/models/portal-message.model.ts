@@ -66,4 +66,8 @@ portalMessageSchema.index({ clinicId: 1, patientId: 1, threadId: 1 });
 portalMessageSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
 portalMessageSchema.index({ subject: 'text', body: 'text' });
 
-export const PortalMessageModel = models.PortalMessage || model<PortalMessage>('PortalMessage', portalMessageSchema);
+export const PortalMessageModel = (models.PortalMessage ||
+  model<PortalMessage>(
+    'PortalMessage',
+    portalMessageSchema
+  )) as import('mongoose').Model<PortalMessage>;

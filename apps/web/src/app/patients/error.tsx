@@ -15,9 +15,7 @@ export default function PatientsError({
         <div className="flex justify-center text-5xl" aria-hidden="true">
           👥
         </div>
-        <h1 className="text-center text-xl font-bold text-neutral-900">
-          Failed to load patients
-        </h1>
+        <h1 className="text-center text-xl font-bold text-neutral-900">Failed to load patients</h1>
         <p className="text-center text-sm text-neutral-600">
           {error.message || 'Unable to load the patients list. Please try again.'}
         </p>

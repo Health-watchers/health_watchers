@@ -78,10 +78,7 @@ test.describe('PWA Offline Support', () => {
     await expect(successMessage).toBeVisible();
   });
 
-  test('should use stale-while-revalidate for clinical data', async ({
-    page,
-    context,
-  }) => {
+  test('should use stale-while-revalidate for clinical data', async ({ page, context }) => {
     // Navigate to patient details
     await page.goto('/patients/123');
     await page.waitForLoadState('networkidle');
@@ -103,10 +100,7 @@ test.describe('PWA Offline Support', () => {
     await context.setOffline(false);
   });
 
-  test('should not cache PHI without explicit user action', async ({
-    page,
-    context,
-  }) => {
+  test('should not cache PHI without explicit user action', async ({ page, context }) => {
     // Navigate to sensitive data page
     await page.goto('/patients/123/medical-records');
     await page.waitForLoadState('networkidle');

@@ -91,20 +91,30 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     filter.timestamp = range;
   }
 
-  // Full-text search (requires text index on action + metadata)
+ // Full-text search (requires text index on action + metadata)
   if (req.query.q) {
-    filter.$text = { $search: req.query.q as string };
+    const searchTerm = String(req.query.q).slice(0, 200);
+    filter.$text = { $search: searchTerm };
   }
-
   // Cursor-based pagination: cursor encodes the last seen timestamp + _id
   if (req.query.cursor) {
     try {
       const { ts, id } = JSON.parse(Buffer.from(req.query.cursor as string, 'base64').toString());
-      const op = sortDir === -1 ? '$lt' : '$gt';
-      filter.$or = [
-        { timestamp: { [op]: new Date(ts) } },
-        { timestamp: new Date(ts), _id: { [op]: new Types.ObjectId(id) } },
-      ];
+      // Whitelist the operator — never derive it from user input
+      const op: '$lt' | '$gt' = sortDir === -1 ? '$lt' : '$gt';
+      const cursorTs = new Date(ts);
+      const cursorId = new Types.ObjectId(String(id));
+      if (op === '$lt') {
+        filter.$or = [
+          { timestamp: { $lt: cursorTs } },
+          { timestamp: cursorTs, _id: { $lt: cursorId } },
+        ];
+      } else {
+        filter.$or = [
+          { timestamp: { $gt: cursorTs } },
+          { timestamp: cursorTs, _id: { $gt: cursorId } },
+        ];
+      }
     } catch {
       return res.status(400).json({ error: 'BadRequest', message: 'Invalid cursor' });
     }
@@ -149,7 +159,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
   }
 });
 
@@ -198,11 +210,13 @@ router.get('/summary', authenticate, async (req: Request, res: Response) => {
 
     return res.json({
       status: 'success',
-      data: summary.map(s => ({ action: s._id, count: s.count })),
+      data: summary.map((s) => ({ action: s._id, count: s.count })),
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit summary');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
   }
 });
 
@@ -256,10 +270,7 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
 
   try {
     // Cap export at 10 000 rows to prevent memory exhaustion
-    const logs = await AuditLogModel.find(filter)
-      .sort({ timestamp: -1 })
-      .limit(10_000)
-      .lean();
+    const logs = await AuditLogModel.find(filter).sort({ timestamp: -1 }).limit(10_000).lean();
 
     const escape = (v: unknown): string => {
       const s = v == null ? '' : String(v);
@@ -268,8 +279,9 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
         : s;
     };
 
-    const header = 'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
-    const rows = logs.map(l =>
+    const header =
+      'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
+    const rows = logs.map((l) =>
       [
         l.timestamp?.toISOString() ?? '',
         l.action,
@@ -294,7 +306,115 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
     return res.send(csv);
   } catch (error) {
     logger.error({ err: error }, 'Error exporting audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
+  }
+});
+
+// PHI access actions per HIPAA §164.312(b) audit controls
+const PHI_ACTIONS = [
+  'PATIENT_VIEW',
+  'PATIENT_CREATE',
+  'PATIENT_UPDATE',
+  'PATIENT_DELETE',
+  'ENCOUNTER_VIEW',
+  'ENCOUNTER_CREATE',
+  'ENCOUNTER_UPDATE',
+  'PATIENT_PHOTO_UPLOAD',
+  'PATIENT_PHOTO_ACCESS',
+  'PATIENT_PHOTO_DELETE',
+  'EXPORT_PATIENT_DATA',
+  'DATA_EXPORT_REQUEST',
+  'DATA_EXPORT_FULFILLED',
+] as const;
+
+/**
+ * @swagger
+ * /audit-logs/hipaa-report:
+ *   get:
+ *     summary: HIPAA PHI access report — all PHI-touching actions grouped by user (SUPER_ADMIN only)
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: clinicId
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: HIPAA PHI access report
+ */
+router.get('/hipaa-report', authenticate, async (req: Request, res: Response) => {
+  if (req.user?.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+  }
+
+  const match: Record<string, unknown> = { action: { $in: PHI_ACTIONS } };
+  if (req.query.clinicId) match.clinicId = new Types.ObjectId(req.query.clinicId as string);
+  if (req.query.dateFrom || req.query.dateTo) {
+    const range: Record<string, Date> = {};
+    if (req.query.dateFrom) range.$gte = new Date(req.query.dateFrom as string);
+    if (req.query.dateTo) range.$lte = new Date(req.query.dateTo as string);
+    match.timestamp = range;
+  }
+
+  try {
+    const [byUser, byAction, totals] = await Promise.all([
+      AuditLogModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: '$userId',
+            accessCount: { $sum: 1 },
+            actions: { $addToSet: '$action' },
+            lastAccess: { $max: '$timestamp' },
+          },
+        },
+        { $sort: { accessCount: -1 } },
+        { $limit: 100 },
+      ]),
+      AuditLogModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$action', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+      AuditLogModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            failures: { $sum: { $cond: [{ $eq: ['$outcome', 'FAILURE'] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: {
+        summary: totals[0] ?? { total: 0, failures: 0 },
+        byAction: byAction.map((r) => ({ action: r._id, count: r.count })),
+        byUser: byUser.map((r) => ({
+          userId: r._id,
+          accessCount: r.accessCount,
+          actions: r.actions,
+          lastAccess: r.lastAccess,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Error generating HIPAA PHI report');
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to generate HIPAA report' });
   }
 });
 

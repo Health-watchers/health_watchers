@@ -1,0 +1,139 @@
+# ============================================================
+# Monitoring Stack: Prometheus, Grafana, AlertManager
+#
+# This compose file sets up the complete monitoring stack
+# for Health Watchers production environment.
+#
+# Issues: #1006 – Monitoring and Alerting Setup
+# ============================================================
+
+version: '3.8'
+
+services:
+  # Prometheus - Metrics Collection and Storage
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: health-watchers-prometheus
+    restart: always
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/alerts-payments.yml:/etc/prometheus/alerts-payments.yml:ro
+      - ./monitoring/alerts-security.yml:/etc/prometheus/alerts-security.yml:ro
+      - ./monitoring/alerts-business.yml:/etc/prometheus/alerts-business.yml:ro
+      - ./monitoring/alerts-database-replication.yml:/etc/prometheus/alerts-database-replication.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - '9090:9090'
+    environment:
+      TZ: UTC
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9090/-/healthy']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # AlertManager - Alert Routing and Grouping
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: health-watchers-alertmanager
+    restart: always
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+      - '--log.level=info'
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - '9093:9093'
+    environment:
+      TZ: UTC
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9093/-/healthy']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Grafana - Visualization and Dashboarding
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: health-watchers-grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: 'grafana-piechart-panel,grafana-worldmap-panel'
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3100}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SECURITY_DISABLE_GRAVATAR: 'true'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_LOG_LEVEL: 'warn'
+      TZ: UTC
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - '3100:3000'
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Node Exporter - Host Metrics Collection
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: health-watchers-node-exporter
+    restart: always
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|snap)($|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    ports:
+      - '9100:9100'
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9100/metrics']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  prometheus_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  health-watchers-monitoring:
+    driver: bridge

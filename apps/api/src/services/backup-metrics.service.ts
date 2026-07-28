@@ -202,7 +202,8 @@ export function isBackupVerificationStale(thresholdDays: number = 8): boolean {
 
   const lastVerifiedDate = new Date(lastVerified * 1000);
   const now = new Date();
-  const daysSinceVerification = (now.getTime() - lastVerifiedDate.getTime()) / (1000 * 60 * 60 * 24);
+  const daysSinceVerification =
+    (now.getTime() - lastVerifiedDate.getTime()) / (1000 * 60 * 60 * 24);
 
   return daysSinceVerification > thresholdDays;
 }
@@ -234,7 +235,7 @@ export function getBackupVerificationStatus(): {
 
   return {
     lastVerified,
-    status: statusValue === 1 ? 'success' : 'failure',
+    status: (statusValue as any) === 1 ? 'success' : 'failure',
     isStale: daysSinceVerification > 8,
     daysSinceVerification,
   };

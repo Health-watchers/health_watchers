@@ -15,6 +15,35 @@ router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 
+// GET /api/v1/care-plans?patientId=
+router.get(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { patientId, status, page = '1', limit = '20' } = req.query as Record<string, string>;
+
+    if (!patientId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'patientId is required.' });
+    }
+
+    const filter: Record<string, unknown> = { patientId, clinicId: req.user!.clinicId };
+    if (status) filter.status = status;
+
+    const pageNum  = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+
+    const [plans, total] = await Promise.all([
+      CarePlanModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      CarePlanModel.countDocuments(filter),
+    ]);
+
+    return res.json({ status: 'success', data: plans, meta: { page: pageNum, limit: limitNum, total } });
+  })
+);
+
 // POST /api/v1/care-plans
 router.post(
   '/',

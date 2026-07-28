@@ -28,30 +28,45 @@ export const PREDEFINED_SCOPES = {
   API_KEYS_READ: 'api-keys:read',
 } as const;
 
-export type ApiKeyScope = typeof PREDEFINED_SCOPES[keyof typeof PREDEFINED_SCOPES];
+export type ApiKeyScope = (typeof PREDEFINED_SCOPES)[keyof typeof PREDEFINED_SCOPES];
 
 /**
  * Scope to endpoint pattern mapping
  * Used for validating if a scope grants access to a specific endpoint
  */
 export const SCOPE_ENDPOINT_MAP: Record<ApiKeyScope, RegExp[]> = {
-  [PREDEFINED_SCOPES.PATIENTS_READ]: [/^\/api\/v1\/patients\/?$/i, /^\/api\/v1\/patients\/[^/]+\/?$/i],
+  [PREDEFINED_SCOPES.PATIENTS_READ]: [
+    /^\/api\/v1\/patients\/?$/i,
+    /^\/api\/v1\/patients\/[^/]+\/?$/i,
+  ],
   [PREDEFINED_SCOPES.PATIENTS_WRITE]: [/^\/api\/v1\/patients\/?$/i],
   [PREDEFINED_SCOPES.PATIENTS_DELETE]: [/^\/api\/v1\/patients\/[^/]+\/?$/i],
 
-  [PREDEFINED_SCOPES.ENCOUNTERS_READ]: [/^\/api\/v1\/encounters\/?$/i, /^\/api\/v1\/encounters\/[^/]+\/?$/i],
+  [PREDEFINED_SCOPES.ENCOUNTERS_READ]: [
+    /^\/api\/v1\/encounters\/?$/i,
+    /^\/api\/v1\/encounters\/[^/]+\/?$/i,
+  ],
   [PREDEFINED_SCOPES.ENCOUNTERS_WRITE]: [/^\/api\/v1\/encounters\/?$/i],
   [PREDEFINED_SCOPES.ENCOUNTERS_DELETE]: [/^\/api\/v1\/encounters\/[^/]+\/?$/i],
 
-  [PREDEFINED_SCOPES.PAYMENTS_READ]: [/^\/api\/v1\/payments\/?$/i, /^\/api\/v1\/payments\/[^/]+\/?$/i],
+  [PREDEFINED_SCOPES.PAYMENTS_READ]: [
+    /^\/api\/v1\/payments\/?$/i,
+    /^\/api\/v1\/payments\/[^/]+\/?$/i,
+  ],
   [PREDEFINED_SCOPES.PAYMENTS_WRITE]: [/^\/api\/v1\/payments\/?$/i],
   [PREDEFINED_SCOPES.PAYMENTS_CONFIRM]: [/^\/api\/v1\/payments\/[^/]+\/confirm\/?$/i],
 
   [PREDEFINED_SCOPES.AI_READ]: [/^\/api\/v1\/ai\/?$/i],
   [PREDEFINED_SCOPES.AI_WRITE]: [/^\/api\/v1\/ai\/?$/i],
 
-  [PREDEFINED_SCOPES.API_KEYS_MANAGE]: [/^\/api\/v1\/api-keys\/?$/i, /^\/api\/v1\/api-keys\/[^/]+\/?$/i],
-  [PREDEFINED_SCOPES.API_KEYS_READ]: [/^\/api\/v1\/api-keys\/?$/i, /^\/api\/v1\/api-keys\/[^/]+\/?$/i],
+  [PREDEFINED_SCOPES.API_KEYS_MANAGE]: [
+    /^\/api\/v1\/api-keys\/?$/i,
+    /^\/api\/v1\/api-keys\/[^/]+\/?$/i,
+  ],
+  [PREDEFINED_SCOPES.API_KEYS_READ]: [
+    /^\/api\/v1\/api-keys\/?$/i,
+    /^\/api\/v1\/api-keys\/[^/]+\/?$/i,
+  ],
 };
 
 /**
@@ -62,7 +77,11 @@ export const getAllScopes = (): ApiKeyScope[] => Object.values(PREDEFINED_SCOPES
 /**
  * Check if a scope grants access to an endpoint
  */
-export const scopeGrantsAccess = (scope: ApiKeyScope, endpoint: string, method: string): boolean => {
+export const scopeGrantsAccess = (
+  scope: ApiKeyScope,
+  endpoint: string,
+  method: string
+): boolean => {
   const patterns = SCOPE_ENDPOINT_MAP[scope];
   if (!patterns) return false;
 
@@ -73,7 +92,8 @@ export const scopeGrantsAccess = (scope: ApiKeyScope, endpoint: string, method: 
 
   // For write operations (POST, PUT, PATCH), only :write scopes apply
   if (['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
-    if (!scope.includes(':write') && !scope.includes(':confirm') && !scope.includes(':manage')) return false;
+    if (!scope.includes(':write') && !scope.includes(':confirm') && !scope.includes(':manage'))
+      return false;
   }
 
   // For delete operations, only :delete scopes apply
@@ -81,5 +101,5 @@ export const scopeGrantsAccess = (scope: ApiKeyScope, endpoint: string, method: 
     if (!scope.includes(':delete')) return false;
   }
 
-  return patterns.some(pattern => pattern.test(endpoint));
+  return patterns.some((pattern) => pattern.test(endpoint));
 };

@@ -25,10 +25,9 @@ export async function up(db: Db): Promise<void> {
   );
 
   // Create index for doctor stellar wallet lookups
-  await db.collection('users').createIndex(
-    { stellarPublicKey: 1 },
-    { sparse: true, name: 'stellarPublicKey_1' }
-  );
+  await db
+    .collection('users')
+    .createIndex({ stellarPublicKey: 1 }, { sparse: true, name: 'stellarPublicKey_1' });
 }
 
 export async function down(db: Db): Promise<void> {
@@ -53,5 +52,8 @@ export async function down(db: Db): Promise<void> {
   );
 
   // Drop index
-  await db.collection('users').dropIndex('stellarPublicKey_1').catch(() => {});
+  await db
+    .collection('users')
+    .dropIndex('stellarPublicKey_1')
+    .catch(() => {});
 }
