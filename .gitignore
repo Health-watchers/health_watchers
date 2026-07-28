@@ -72,22 +72,21 @@ reports/
 # Pact contract test artifacts
 pacts/*.json
 
-# Jest snapshots (auto-generated, should not be committed unless intentional)
-**/__snapshots__/
-
 # Playwright artifacts
-playwright-report/
-test-results/
 .playwright/
 
 # Stryker mutation testing
-.stryker-tmp/
-reports/
 stryker-report/
 
 # k6 performance test results
 k6-results/
 performance/results/
+
+# DevOps script report/log output (generated at run time, not source)
+backup-verification-report.json
+*-verification-report.json
+blue-green-deployment.log
+rollback-deployment.log
 
 # =============================================================================
 # TypeScript
