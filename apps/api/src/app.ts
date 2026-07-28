@@ -58,6 +58,7 @@ import {
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
+import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
 import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
@@ -264,6 +265,7 @@ async function startServer() {
   );
   startMfaGracePeriodJob();
   startFollowUpReminderJob();
+  startRetryWorker();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -284,6 +286,7 @@ async function startServer() {
       stopXLMRateJob,
       stopMfaGracePeriodJob,
       stopFollowUpReminderJob,
+      stopRetryWorker,
     ],
   });
 }
