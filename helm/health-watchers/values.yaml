@@ -81,6 +81,12 @@ web:
   service:
     type: ClusterIP
     port: 3000
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
   pdb:
     enabled: true
     minAvailable: 1
@@ -92,6 +98,11 @@ web:
     path: /
     initialDelaySeconds: 15
     periodSeconds: 10
+  startupProbe:
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
   env:
     NODE_ENV: "production"
     NEXT_TELEMETRY_DISABLED: "1"

@@ -10,6 +10,7 @@ import {
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
 import logger from './logger.js';
+import { batchProcessor } from './batch-processor.js';
 import ResilientHorizonClient from './horizon-client.js';
 
 // Initialize resilient Horizon client
@@ -1064,3 +1065,7 @@ export async function processBatchPayments(
     throw error;
   }
 }
+
+// Wire the batch processor singleton to use processBatchPayments as its executor.
+// This is done after the function definition so the reference is valid.
+batchProcessor.setExecutor(processBatchPayments);
