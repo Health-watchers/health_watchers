@@ -80,6 +80,9 @@ pacts/*.json
 # k6 performance test results
 k6-results/
 performance/results/
+# Vitest
+.vitest-cache/
+vitest-results/
 
 # =============================================================================
 # TypeScript
@@ -138,6 +141,30 @@ docker-volumes/
 *.tgz
 *.tar.gz
 apps/api/reports/
+
+# =============================================================================
+# Runtime / Debug artifacts
+# =============================================================================
+*.heapsnapshot
+*.cpuprofile
+*.trace
+chromium-trace/
+.clinic/
+clinic-*/
+0x-*/
+
+# =============================================================================
+# Generated API / documentation artifacts
+# =============================================================================
+apps/*/docs/api/
+.docusaurus/
+apps/docs/build/
+
+# =============================================================================
+# Local override files
+# =============================================================================
+*.local
+docker-compose.override.yml
 
 # =============================================================================
 # Security Scan Reports (generated artifacts, not source)
