@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
+import { toAppointmentResponse } from './appointments.transformer';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
@@ -149,7 +150,7 @@ appointmentRoutes.post(
 
       return res.json({ 
         status: 'success', 
-        data: updated,
+        data: toAppointmentResponse(updated, req.user!.role),
         message: 'Patient checked in successfully'
       });
     } catch (err: any) {
@@ -251,7 +252,7 @@ appointmentRoutes.get(
 
       return res.json({
         status: 'success',
-        data,
+        data: data.map((d) => toAppointmentResponse(d, req.user!.role)),
         pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)), totalPages: Math.ceil(total / Number(limit)), hasNext: Number(page) < Math.ceil(total / Number(limit)), hasPrev: Number(page) > 1 },
       });
     } catch (err: any) {
@@ -274,7 +275,7 @@ appointmentRoutes.get(
       if (!appointment)
         return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
 
-      return res.json({ status: 'success', data: appointment });
+      return res.json({ status: 'success', data: toAppointmentResponse(appointment, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -335,7 +336,7 @@ appointmentRoutes.post(
         },
       });
 
-      return res.status(201).json({ status: 'success', data: appointment });
+      return res.status(201).json({ status: 'success', data: toAppointmentResponse(appointment, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -409,7 +410,7 @@ appointmentRoutes.put(
         });
       }
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -481,7 +482,7 @@ appointmentRoutes.delete(
         scheduledAt: appointment.scheduledAt,
       }).catch(() => {});
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
@@ -589,7 +590,7 @@ appointmentRoutes.post(
       emitToUser(String(appointment.doctorId), 'appointment:video_started', payload);
       emitToUser(String(appointment.patientId), 'appointment:video_started', payload);
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }

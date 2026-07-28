@@ -75,6 +75,7 @@ import { seedBuiltInRules } from './modules/cds/cds-seed';
 import federationRouter from './modules/federation/federation.router';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
+import { responseFilterMiddleware } from './middlewares/response-filter.middleware';
 
 const app = express();
 const server = createServer(app);
@@ -211,12 +212,14 @@ app.use('/api/v1', v1DeprecationWarning);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
 app.use('/api/v1', generalLimiter);
+app.use('/api/v1', responseFilterMiddleware);
 app.use('/api/v1', v1Router);
 
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
 app.use('/api/v2', apiVersionHeader('2.0'));
 app.use('/api/v2', traceIdHeader);
 app.use('/api/v2', generalLimiter);
+app.use('/api/v2', responseFilterMiddleware);
 app.use('/api/v2', v2Router);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
