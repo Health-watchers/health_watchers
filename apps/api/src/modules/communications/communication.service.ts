@@ -1,6 +1,6 @@
 import { CommunicationLogModel, ICommunicationLog } from './communication-log.model';
 import { LogCommunicationInput, ListCommunicationsQuery } from './communication.validation';
-import { auditLog } from '../../services/audit.service';
+import { auditLog } from '../audit/audit.service';
 import { paginate } from '../../utils/paginate';
 import { PatientModel } from '../patients/models/patient.model';
 
