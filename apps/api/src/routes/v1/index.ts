@@ -89,6 +89,7 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
+import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -154,6 +155,9 @@ v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
 
 // ── Security (no auth, no CSRF) ───────────────────────────────────────────────
 v1Router.use('/csp-report', cspReportRoutes);
+
+// ── Comprehensive Health Checks (no auth required) ───────────────────────────
+v1Router.use('/health', comprehensiveHealthRoutes);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)
