@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import type { AxeResults } from 'axe-core';
+import type { AxeResults, Result } from 'axe-core';
+import * as fs from 'fs';
+import * as path from 'path';
 
-/** Format axe violations into a readable string for assertion failure messages. */
+// ── Violation reporter ────────────────────────────────────────────────────────
+
+/**
+ * Format axe violations into a human-readable string for assertion messages.
+ */
 function formatViolations(results: AxeResults): string {
   if (results.violations.length === 0) return 'No violations';
   return results.violations
@@ -17,11 +23,50 @@ function formatViolations(results: AxeResults): string {
     .join('\n\n');
 }
 
+/**
+ * Persist violation details to a JSON report for compliance tracking.
+ * The report is uploaded as a CI artefact for trend analysis.
+ */
+function reportViolations(pageName: string, results: AxeResults): void {
+  const reportDir = path.join(process.cwd(), 'accessibility-reports');
+  if (!fs.existsSync(reportDir)) {
+    fs.mkdirSync(reportDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString();
+  const report = {
+    timestamp,
+    page: pageName,
+    url: results.url,
+    violations: results.violations.map((v: Result) => ({
+      id: v.id,
+      impact: v.impact,
+      description: v.description,
+      help: v.help,
+      helpUrl: v.helpUrl,
+      wcagTags: v.tags.filter((t: string) => t.startsWith('wcag')),
+      nodeCount: v.nodes.length,
+      nodes: v.nodes.slice(0, 5).map((n) => ({
+        html: n.html,
+        target: n.target,
+        failureSummary: n.failureSummary,
+      })),
+    })),
+    passes: results.passes.length,
+    incomplete: results.incomplete.length,
+    inapplicable: results.inapplicable.length,
+  };
+
+  const filename = `${pageName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}.json`;
+  fs.writeFileSync(path.join(reportDir, filename), JSON.stringify(report, null, 2));
+}
+
 const BASE_URL = 'http://localhost:3000';
 
-test.describe('WCAG 2.1 AA Accessibility', () => {
+// ── Authenticated tests ───────────────────────────────────────────────────────
+
+test.describe('WCAG 2.1 AA Accessibility — Authenticated Pages', () => {
   test.beforeEach(async ({ page }) => {
-    // Login before each test
     await page.goto(`${BASE_URL}/login`);
     await page.fill('input[type="email"]', 'admin@clinic.com');
     await page.fill('input[type="password"]', 'password123');
@@ -29,7 +74,7 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     await page.waitForURL(`${BASE_URL}/dashboard`);
   });
 
-  // ── Dashboard Page ────────────────────────────────────────────────────────
+  // ── Dashboard ──────────────────────────────────────────────────────────────
   test('dashboard: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
     await expect(page.locator('h1')).toBeVisible();
@@ -38,24 +83,28 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('dashboard', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('dashboard: keyboard navigation', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
-    // Tab through interactive elements
     await page.keyboard.press('Tab');
-    let focused = await page.evaluate(() => document.activeElement?.getAttribute('role'));
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('role'));
     expect(['button', 'link', 'menuitem']).toContain(focused);
 
-    // Shift+Tab to go back
     await page.keyboard.press('Shift+Tab');
-    focused = await page.evaluate(() => document.activeElement?.getAttribute('role'));
-    expect(focused).toBeTruthy();
+    const refocused = await page.evaluate(() => document.activeElement?.getAttribute('role'));
+    expect(refocused).toBeTruthy();
   });
 
-  // ── Patients Page ────────────────────────────────────────────────────────
+  test('dashboard: screen reader live regions present', async ({ page }) => {
+    await page.goto(`${BASE_URL}/dashboard`);
+    const liveRegions = await page.locator('[role="status"], [role="alert"], [aria-live]').all();
+    expect(liveRegions.length).toBeGreaterThan(0);
+  });
+
+  // ── Patients ───────────────────────────────────────────────────────────────
   test('patients: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/patients`);
     await expect(page.locator('h1')).toBeVisible();
@@ -64,22 +113,19 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('patients', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('patients: keyboard navigation in table', async ({ page }) => {
     await page.goto(`${BASE_URL}/patients`);
-
-    // Tab to first interactive element
     await page.keyboard.press('Tab');
     const focused = await page.evaluate(() => document.activeElement?.tagName);
     expect(['BUTTON', 'A', 'INPUT']).toContain(focused);
   });
 
-  test('patients: form has proper labels', async ({ page }) => {
+  test('patients: form inputs have accessible labels', async ({ page }) => {
     await page.goto(`${BASE_URL}/patients`);
-
-    // Check all inputs have associated labels
     const inputs = await page.locator('input').all();
     for (const input of inputs) {
       const id = await input.getAttribute('id');
@@ -90,7 +136,36 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     }
   });
 
-  // ── Encounters Page ──────────────────────────────────────────────────────
+  test('patients: modal focus trap and restoration', async ({ page }) => {
+    await page.goto(`${BASE_URL}/patients`);
+
+    const createButton = page.locator('button:has-text("Create"), button:has-text("New")').first();
+    if (await createButton.isVisible()) {
+      await createButton.click();
+      await page.waitForSelector('[role="dialog"]');
+
+      const modalContainsFocus = await page.evaluate(() => {
+        const modal = document.querySelector('[role="dialog"]');
+        return modal?.contains(document.activeElement);
+      });
+      expect(modalContainsFocus).toBeTruthy();
+
+      const closeButton = page
+        .locator('[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]')
+        .first();
+      if (await closeButton.isVisible()) {
+        await closeButton.click();
+      } else {
+        await page.keyboard.press('Escape');
+      }
+
+      await page.waitForTimeout(100);
+      const restoredFocus = await page.evaluate(() => document.activeElement?.tagName);
+      expect(restoredFocus).toBeTruthy();
+    }
+  });
+
+  // ── Encounters ─────────────────────────────────────────────────────────────
   test('encounters: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/encounters`);
     await expect(page.locator('h1')).toBeVisible();
@@ -99,24 +174,22 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('encounters', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
-  test('encounters: form error announcements', async ({ page }) => {
+  test('encounters: form error announcements use ARIA alerts', async ({ page }) => {
     await page.goto(`${BASE_URL}/encounters`);
 
-    // Try to submit empty form
     const submitButton = page.locator('button[type="submit"]').first();
     if (await submitButton.isVisible()) {
       await submitButton.click();
-
-      // Check for error messages with proper ARIA
       const errors = await page.locator('[role="alert"]').all();
       expect(errors.length).toBeGreaterThan(0);
     }
   });
 
-  // ── Payments Page ────────────────────────────────────────────────────────
+  // ── Payments ───────────────────────────────────────────────────────────────
   test('payments: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/payments`);
     await expect(page.locator('h1')).toBeVisible();
@@ -125,18 +198,18 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('payments', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
-  test('payments: color contrast', async ({ page }) => {
+  test('payments: color contrast passes', async ({ page }) => {
     await page.goto(`${BASE_URL}/payments`);
-
     const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
-
+    reportViolations('payments-contrast', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
-  // ── Settings Page ────────────────────────────────────────────────────────
+  // ── Settings ───────────────────────────────────────────────────────────────
   test('settings: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/settings`);
     await expect(page.locator('h1')).toBeVisible();
@@ -145,19 +218,17 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('settings', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
-  test('settings: navigation keyboard accessible', async ({ page }) => {
+  test('settings: navigation is keyboard accessible', async ({ page }) => {
     await page.goto(`${BASE_URL}/settings`);
-
-    // Tab through navigation items
     const navItems = await page.locator('nav button, nav a').all();
     expect(navItems.length).toBeGreaterThan(0);
 
     for (const item of navItems.slice(0, 3)) {
-      const isVisible = await item.isVisible();
-      if (isVisible) {
+      if (await item.isVisible()) {
         await item.focus();
         const focused = await page.evaluate(() => document.activeElement?.tagName);
         expect(['BUTTON', 'A']).toContain(focused);
@@ -165,80 +236,12 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     }
   });
 
-  // ── Modal/Dialog Focus Management ────────────────────────────────────────
-  test('modals: focus trap and restoration', async ({ page }) => {
-    await page.goto(`${BASE_URL}/patients`);
-
-    // Open modal if available
-    const createButton = page.locator('button:has-text("Create"), button:has-text("New")').first();
-    if (await createButton.isVisible()) {
-      const initialFocus = await page.evaluate(() => document.activeElement?.tagName);
-
-      await createButton.click();
-      await page.waitForSelector('[role="dialog"]');
-
-      // Focus should be in modal
-      const modalFocus = await page.evaluate(() => {
-        const modal = document.querySelector('[role="dialog"]');
-        return modal?.contains(document.activeElement);
-      });
-      expect(modalFocus).toBeTruthy();
-
-      // Close modal
-      const closeButton = page
-        .locator(
-          '[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]'
-        )
-        .first();
-      if (await closeButton.isVisible()) {
-        await closeButton.click();
-      } else {
-        await page.keyboard.press('Escape');
-      }
-
-      // Focus should return to trigger
-      await page.waitForTimeout(100);
-      const restoredFocus = await page.evaluate(() => document.activeElement?.tagName);
-      expect(restoredFocus).toBeTruthy();
-    }
-  });
-
-  // ── Dynamic Content Announcements ────────────────────────────────────────
-  test('notifications: screen reader announcements', async ({ page }) => {
-    await page.goto(`${BASE_URL}/dashboard`);
-
-    // Check for live regions
-    const liveRegions = await page.locator('[role="status"], [role="alert"], [aria-live]').all();
-    expect(liveRegions.length).toBeGreaterThan(0);
-  });
-
-  test('form validation: error announcements', async ({ page }) => {
-    await page.goto(`${BASE_URL}/patients`);
-
-    // Find and interact with form
-    const form = page.locator('form').first();
-    if (await form.isVisible()) {
-      const submitButton = form.locator('button[type="submit"]');
-      if (await submitButton.isVisible()) {
-        await submitButton.click();
-
-        // Check for error announcements
-        const errorMessages = await page
-          .locator('[role="alert"], .error, [aria-invalid="true"]')
-          .all();
-        expect(errorMessages.length).toBeGreaterThanOrEqual(0);
-      }
-    }
-  });
-
-  // ── ARIA Attributes ──────────────────────────────────────────────────────
+  // ── ARIA attributes ────────────────────────────────────────────────────────
   test('buttons: have accessible names', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
     const buttons = await page.locator('button').all();
     for (const button of buttons.slice(0, 5)) {
-      const isVisible = await button.isVisible();
-      if (isVisible) {
+      if (await button.isVisible()) {
         const name = (await button.getAttribute('aria-label')) || (await button.textContent());
         expect(name?.trim()).toBeTruthy();
       }
@@ -247,11 +250,9 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
 
   test('links: have accessible names', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
     const links = await page.locator('a').all();
     for (const link of links.slice(0, 5)) {
-      const isVisible = await link.isVisible();
-      if (isVisible) {
+      if (await link.isVisible()) {
         const name = (await link.getAttribute('aria-label')) || (await link.textContent());
         expect(name?.trim()).toBeTruthy();
       }
@@ -260,15 +261,12 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
 
   test('form inputs: have accessible labels', async ({ page }) => {
     await page.goto(`${BASE_URL}/patients`);
-
     const inputs = await page.locator('input, textarea, select').all();
     for (const input of inputs.slice(0, 5)) {
-      const isVisible = await input.isVisible();
-      if (isVisible) {
+      if (await input.isVisible()) {
         const id = await input.getAttribute('id');
         const ariaLabel = await input.getAttribute('aria-label');
         const ariaLabelledBy = await input.getAttribute('aria-labelledby');
-
         if (id) {
           const label = await page.locator(`label[for="${id}"]`).count();
           expect(label + (ariaLabel ? 1 : 0) + (ariaLabelledBy ? 1 : 0)).toBeGreaterThan(0);
@@ -277,26 +275,21 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     }
   });
 
-  // ── Heading Structure ────────────────────────────────────────────────────
-  test('headings: proper hierarchy', async ({ page }) => {
+  // ── Heading structure ──────────────────────────────────────────────────────
+  test('headings: proper hierarchy starting with h1', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
     const headings = await page.locator('h1, h2, h3, h4, h5, h6').all();
     expect(headings.length).toBeGreaterThan(0);
-
-    // First heading should be h1
-    const firstHeading = await headings[0].evaluate((el) => el.tagName);
-    expect(firstHeading).toBe('H1');
+    const first = await headings[0].evaluate((el) => el.tagName);
+    expect(first).toBe('H1');
   });
 
-  // ── Images Alt Text ──────────────────────────────────────────────────────
+  // ── Images ─────────────────────────────────────────────────────────────────
   test('images: have alt text', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
     const images = await page.locator('img').all();
     for (const img of images) {
-      const isVisible = await img.isVisible();
-      if (isVisible) {
+      if (await img.isVisible()) {
         const alt = await img.getAttribute('alt');
         const ariaLabel = await img.getAttribute('aria-label');
         expect(alt || ariaLabel).toBeTruthy();
@@ -304,27 +297,22 @@ test.describe('WCAG 2.1 AA Accessibility', () => {
     }
   });
 
-  // ── Focus Visible ────────────────────────────────────────────────────────
-  test('interactive elements: focus visible', async ({ page }) => {
+  // ── Focus visible ──────────────────────────────────────────────────────────
+  test('interactive elements: focus outline is visible', async ({ page }) => {
     await page.goto(`${BASE_URL}/dashboard`);
-
-    // Tab to first interactive element
     await page.keyboard.press('Tab');
-
-    const focused = await page.evaluate(() => {
+    const hasFocusStyle = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement;
-      return (
-        window.getComputedStyle(el).outline !== 'none' ||
-        window.getComputedStyle(el).boxShadow !== 'none'
-      );
+      const styles = window.getComputedStyle(el);
+      return styles.outline !== 'none' || styles.boxShadow !== 'none';
     });
-
-    expect(focused).toBeTruthy();
+    expect(hasFocusStyle).toBeTruthy();
   });
 });
 
-// ── Public pages (no authentication required) ─────────────────────────────
-test.describe('WCAG 2.1 AA — Public Pages', () => {
+// ── Public pages ──────────────────────────────────────────────────────────────
+
+test.describe('WCAG 2.1 AA Accessibility — Public Pages', () => {
   test('login page: no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
     await expect(page.locator('form')).toBeVisible();
@@ -333,30 +321,28 @@ test.describe('WCAG 2.1 AA — Public Pages', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 
+    reportViolations('login', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('login page: form inputs have accessible labels', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
-
     const inputs = await page.locator('input').all();
     for (const input of inputs) {
-      const isVisible = await input.isVisible();
-      if (!isVisible) continue;
+      if (!(await input.isVisible())) continue;
       const id = await input.getAttribute('id');
       const ariaLabel = await input.getAttribute('aria-label');
       const ariaLabelledBy = await input.getAttribute('aria-labelledby');
       const labelCount = id ? await page.locator(`label[for="${id}"]`).count() : 0;
       expect(
         labelCount + (ariaLabel ? 1 : 0) + (ariaLabelledBy ? 1 : 0),
-        `Input is missing an accessible label: ${await input.getAttribute('type')}`
+        `Input missing accessible label: ${await input.getAttribute('type')}`
       ).toBeGreaterThan(0);
     }
   });
 
-  test('login page: keyboard accessible and submit button focusable', async ({ page }) => {
+  test('login page: submit button is keyboard focusable', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
-
     const submitButton = page.locator('button[type="submit"]');
     await submitButton.focus();
     const focused = await page.evaluate(() => document.activeElement?.getAttribute('type'));
@@ -365,14 +351,13 @@ test.describe('WCAG 2.1 AA — Public Pages', () => {
 
   test('login page: color contrast passes', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
-
     const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
+    reportViolations('login-contrast', results);
     expect(results.violations, formatViolations(results)).toHaveLength(0);
   });
 
   test('login page: ARIA landmark regions present', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
-
     const landmarks = await page
       .locator('main, [role="main"], header, [role="banner"], nav, [role="navigation"]')
       .all();

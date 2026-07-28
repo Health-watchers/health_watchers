@@ -58,6 +58,14 @@ jobs:
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: accessibility-results.xml
 
+      - name: Upload accessibility violation reports (compliance tracking)
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: accessibility-violation-reports
+          path: apps/web/accessibility-reports/
+          retention-days: 90
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -65,7 +73,8 @@ jobs:
           name: accessibility-test-results
           path: |
             accessibility-results.xml
-            test-results/
+            apps/web/playwright-a11y-report/
+          retention-days: 30
 
       - name: Publish test results
         if: always()

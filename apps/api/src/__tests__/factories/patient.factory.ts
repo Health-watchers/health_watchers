@@ -25,6 +25,40 @@ export function buildPatient(overrides: Partial<Patient> = {}): Omit<Patient, 's
   } as any;
 }
 
+/** Patient with common PHI fields populated for HIPAA coverage tests. */
+export function buildPatientWithPhi(overrides: Partial<Patient> = {}): ReturnType<typeof buildPatient> {
+  const i = nextSeq();
+  return buildPatient({
+    phone: `555-100-${String(i).padStart(4, '0')}`,
+    email: `patient${i}@example.com`,
+    address: {
+      street: `${i} Elm Street`,
+      city: 'Springfield',
+      state: 'IL',
+      zipCode: '62701',
+      country: 'USA',
+    },
+    allergies: [buildAllergy()],
+    emergencyContacts: [buildEmergencyContact()],
+    insurance: [buildInsurance()],
+    ...overrides,
+  });
+}
+
+/** High-risk patient with elevated risk score for AI/CDS tests. */
+export function buildHighRiskPatient(overrides: Partial<Patient> = {}): ReturnType<typeof buildPatient> {
+  return buildPatient({
+    riskScore: 85,
+    riskCategory: 'high',
+    ...overrides,
+  });
+}
+
+/** Inactive (archived) patient record. */
+export function buildInactivePatient(overrides: Partial<Patient> = {}): ReturnType<typeof buildPatient> {
+  return buildPatient({ isActive: false, ...overrides });
+}
+
 export function buildAllergy(overrides: Partial<IAllergy> = {}): Omit<IAllergy, '_id'> {
   return {
     allergen: 'Penicillin',
