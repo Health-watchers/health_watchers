@@ -164,6 +164,25 @@ const patientSchema = new Schema<Patient>(
 
 // Dashboard aggregation: filter by clinic + date range, sorted by createdAt
 patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
+patientSchema.index(
+  { firstName: 'text', lastName: 'text', searchName: 'text', systemId: 'text' },
+  {
+    name: 'patients_text_search',
+    weights: { searchName: 10, lastName: 5, firstName: 5, systemId: 3 },
+  }
+);
+patientSchema.index(
+  { clinicId: 1, isActive: 1, searchName: 1 },
+  { name: 'patients_clinicId_isActive_searchName' }
+);
+patientSchema.index(
+  { clinicId: 1, lastName: 1, firstName: 1 },
+  { name: 'patients_clinicId_lastName_firstName' }
+);
+patientSchema.index(
+  { clinicId: 1, riskLevel: 1, nextRiskReviewDate: 1 },
+  { name: 'patients_clinicId_riskLevel_nextRiskReviewDate' }
+);
 
 patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
