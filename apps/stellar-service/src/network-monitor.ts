@@ -309,6 +309,11 @@ export function clearAlertHistory(): void {
 }
 
 /**
+ * Alias for getNetworkStatus — used by monitor routes in index.ts
+ */
+export const getMonitoredNetworkStatus = getNetworkStatus;
+
+/**
  * Start periodic network monitoring
  */
 export function startNetworkMonitoring(

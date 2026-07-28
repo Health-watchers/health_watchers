@@ -58,32 +58,24 @@ coverage/
 .nyc_output/
 .jest_cache/
 jest-results.json
-test-results/
-# Jest snapshot files
+
+# Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
+
 # Playwright test artifacts
 playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
-# Stryker mutation testing output
-.stryker-tmp/
-reports/
-# Pact contract test artifacts
-pacts/*.json
-
-# Jest snapshots (auto-generated, should not be committed unless intentional)
-**/__snapshots__/
-
-# Playwright artifacts
-playwright-report/
-test-results/
 .playwright/
 
-# Stryker mutation testing
+# Stryker mutation testing output
 .stryker-tmp/
-reports/
 stryker-report/
+reports/
+
+# Pact contract test artifacts
+pacts/*.json
 
 # k6 performance test results
 k6-results/
@@ -145,9 +137,7 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-pacts/*.json
 apps/api/reports/
-.stryker-tmp/
 
 # =============================================================================
 # Security Scan Reports (generated artifacts, not source)
