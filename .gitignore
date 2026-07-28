@@ -58,25 +58,31 @@ coverage/
 .nyc_output/
 .jest_cache/
 jest-results.json
-test-results/
-# Jest snapshot files (auto-generated; commit intentionally only)
+
+# Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
+
 # Playwright test artifacts
 playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
 .playwright/
+
 # Stryker mutation testing output
 .stryker-tmp/
-reports/
 stryker-report/
+reports/
+
 # Pact contract test artifacts
 pacts/*.json
 
 # k6 performance test results
 k6-results/
 performance/results/
+# Vitest
+.vitest-cache/
+vitest-results/
 
 # Vitest snapshots
 **/__vitest_snapshots__/
@@ -137,9 +143,31 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-pacts/*.json
 apps/api/reports/
-.stryker-tmp/
+
+# =============================================================================
+# Runtime / Debug artifacts
+# =============================================================================
+*.heapsnapshot
+*.cpuprofile
+*.trace
+chromium-trace/
+.clinic/
+clinic-*/
+0x-*/
+
+# =============================================================================
+# Generated API / documentation artifacts
+# =============================================================================
+apps/*/docs/api/
+.docusaurus/
+apps/docs/build/
+
+# =============================================================================
+# Local override files
+# =============================================================================
+*.local
+docker-compose.override.yml
 
 # =============================================================================
 # Security Scan Reports (generated artifacts, not source)
