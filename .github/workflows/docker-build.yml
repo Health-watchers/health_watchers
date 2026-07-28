@@ -35,6 +35,9 @@ jobs:
           - service: api
             dockerfile: apps/api/Dockerfile.prod
             context: .
+          - service: web
+            dockerfile: apps/web/Dockerfile.prod
+            context: .
           - service: stellar-service
             dockerfile: apps/stellar-service/Dockerfile.prod
             context: .

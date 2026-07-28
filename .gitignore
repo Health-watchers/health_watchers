@@ -58,29 +58,34 @@ coverage/
 .nyc_output/
 .jest_cache/
 jest-results.json
-test-results/
-# Jest snapshot files
+
+# Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
+
 # Playwright test artifacts
 playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
-# Stryker mutation testing output
-.stryker-tmp/
-reports/
-# Pact contract test artifacts
-pacts/*.json
-
-# Playwright artifacts
 .playwright/
 
-# Stryker mutation testing
+# Stryker mutation testing output
+.stryker-tmp/
 stryker-report/
+reports/
+
+# Pact contract test artifacts
+pacts/*.json
 
 # k6 performance test results
 k6-results/
 performance/results/
+# Vitest
+.vitest-cache/
+vitest-results/
+
+# Vitest snapshots
+**/__vitest_snapshots__/
 
 # DevOps script report/log output (generated at run time, not source)
 backup-verification-report.json
@@ -144,9 +149,31 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-pacts/*.json
 apps/api/reports/
-.stryker-tmp/
+
+# =============================================================================
+# Runtime / Debug artifacts
+# =============================================================================
+*.heapsnapshot
+*.cpuprofile
+*.trace
+chromium-trace/
+.clinic/
+clinic-*/
+0x-*/
+
+# =============================================================================
+# Generated API / documentation artifacts
+# =============================================================================
+apps/*/docs/api/
+.docusaurus/
+apps/docs/build/
+
+# =============================================================================
+# Local override files
+# =============================================================================
+*.local
+docker-compose.override.yml
 
 # =============================================================================
 # Security Scan Reports (generated artifacts, not source)
@@ -189,3 +216,28 @@ packages/types/index.ts
 
 # Temporary debug scripts at repo root
 verify-jwt-implementation.js
+
+# =============================================================================
+# Helm / Kubernetes generated artifacts
+# =============================================================================
+# Helm dependency charts (downloaded via helm dep update)
+helm/*/charts/
+helm/**/Chart.lock
+
+# kubeconfig files (never commit credentials)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# =============================================================================
+# CI/CD generated artifacts
+# =============================================================================
+# SBOM outputs
+sbom-*.json
+sbom-*.xml
+
+# Docker build cache
+.docker-cache/
+
+# GitHub Actions local run artifacts (act)
+.act/
