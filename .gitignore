@@ -84,6 +84,9 @@ performance/results/
 .vitest-cache/
 vitest-results/
 
+# Vitest snapshots
+**/__vitest_snapshots__/
+
 # =============================================================================
 # TypeScript
 # =============================================================================
@@ -207,3 +210,28 @@ packages/types/index.ts
 
 # Temporary debug scripts at repo root
 verify-jwt-implementation.js
+
+# =============================================================================
+# Helm / Kubernetes generated artifacts
+# =============================================================================
+# Helm dependency charts (downloaded via helm dep update)
+helm/*/charts/
+helm/**/Chart.lock
+
+# kubeconfig files (never commit credentials)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# =============================================================================
+# CI/CD generated artifacts
+# =============================================================================
+# SBOM outputs
+sbom-*.json
+sbom-*.xml
+
+# Docker build cache
+.docker-cache/
+
+# GitHub Actions local run artifacts (act)
+.act/

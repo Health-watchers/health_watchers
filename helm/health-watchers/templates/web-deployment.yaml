@@ -55,6 +55,14 @@ spec:
             periodSeconds: {{ .Values.web.readinessProbe.periodSeconds }}
             timeoutSeconds: 5
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: {{ .Values.web.startupProbe.path }}
+              port: {{ .Values.web.service.port }}
+            initialDelaySeconds: {{ .Values.web.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.web.startupProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: {{ .Values.web.startupProbe.failureThreshold }}
           env:
             {{- range $key, $val := .Values.web.env }}
             - name: {{ $key }}
