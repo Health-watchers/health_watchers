@@ -59,35 +59,27 @@ coverage/
 .jest_cache/
 jest-results.json
 test-results/
-# Jest snapshot files
+# Jest snapshot files (auto-generated; commit intentionally only)
 **/__snapshots__/
 # Playwright test artifacts
 playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
+.playwright/
 # Stryker mutation testing output
 .stryker-tmp/
 reports/
+stryker-report/
 # Pact contract test artifacts
 pacts/*.json
-
-# Jest snapshots (auto-generated, should not be committed unless intentional)
-**/__snapshots__/
-
-# Playwright artifacts
-playwright-report/
-test-results/
-.playwright/
-
-# Stryker mutation testing
-.stryker-tmp/
-reports/
-stryker-report/
 
 # k6 performance test results
 k6-results/
 performance/results/
+
+# Vitest snapshots
+**/__vitest_snapshots__/
 
 # =============================================================================
 # TypeScript
@@ -190,3 +182,28 @@ packages/types/index.ts
 
 # Temporary debug scripts at repo root
 verify-jwt-implementation.js
+
+# =============================================================================
+# Helm / Kubernetes generated artifacts
+# =============================================================================
+# Helm dependency charts (downloaded via helm dep update)
+helm/*/charts/
+helm/**/Chart.lock
+
+# kubeconfig files (never commit credentials)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# =============================================================================
+# CI/CD generated artifacts
+# =============================================================================
+# SBOM outputs
+sbom-*.json
+sbom-*.xml
+
+# Docker build cache
+.docker-cache/
+
+# GitHub Actions local run artifacts (act)
+.act/

@@ -405,10 +405,10 @@ health-watchers/
 ├── README.md                        # This file
 ├── templates/
 │   ├── _helpers.tpl                # Template helpers
+│   ├── NOTES.txt                    # Post-install notes
 │   ├── namespace.yaml               # Namespace definition
 │   ├── configmap.yaml               # ConfigMap
 │   ├── secret.yaml                  # Secrets
-│   ├── rbac.yaml                    # RBAC resources
 │   ├── network-policies.yaml        # Network policies
 │   ├── ingress.yaml                 # Ingress configuration
 │   ├── api-deployment.yaml          # API deployment
@@ -417,6 +417,7 @@ health-watchers/
 │   ├── api-pdb.yaml                 # API PDB
 │   ├── web-deployment.yaml          # Web deployment
 │   ├── web-service.yaml             # Web service
+│   ├── web-hpa.yaml                 # Web HPA
 │   ├── web-pdb.yaml                 # Web PDB
 │   ├── stellar-service-deployment.yaml  # Stellar deployment
 │   ├── stellar-service-service.yaml     # Stellar service

@@ -21,6 +21,10 @@ api:
 
 web:
   replicaCount: 1
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
   env:
     NODE_ENV: 'staging'
     NEXT_PUBLIC_API_URL: 'https://staging.healthwatchers.example.com/api'
