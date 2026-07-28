@@ -88,6 +88,12 @@ vitest-results/
 # Vitest snapshots
 **/__vitest_snapshots__/
 
+# DevOps script report/log output (generated at run time, not source)
+backup-verification-report.json
+*-verification-report.json
+blue-green-deployment.log
+rollback-deployment.log
+
 # =============================================================================
 # TypeScript
 # =============================================================================

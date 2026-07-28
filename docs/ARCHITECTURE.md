@@ -252,6 +252,46 @@ User Role → Permission Set → Resource Access
 └──────────────────┘
 ```
 
+### Authentication Flow
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │ POST /auth/login (email, password)
+       ↓
+┌──────────────────┐
+│   API Gateway    │
+└────────┬──────────┘
+         │
+         ↓
+┌───────────────────┐
+│   Express API     │
+├───────────────────┤
+│ - Verify password │
+│ - Check MFA       │
+│ - Issue JWT + RT  │
+└────────┬──────────┘
+         │ Read/Write
+         ↓
+┌───────────────────┐
+│     MongoDB       │
+├───────────────────┤
+│ users collection  │
+└────────┬──────────┘
+         │ Audit event
+         ↓
+┌───────────────────┐
+│     RabbitMQ       │
+├───────────────────┤
+│ Audit log entry   │
+└───────────────────┘
+
+Response: { accessToken (15m), refreshToken (7d) }
+Subsequent requests: Authorization: Bearer <accessToken>
+Expired token → POST /auth/refresh using refreshToken
+```
+
 ## Deployment Architecture
 
 ### Kubernetes Topology
@@ -300,6 +340,11 @@ After validation:
 Traffic switches to Green
 Blue becomes Standby
 ```
+
+Both slots run full replica counts at all times so traffic only switches once
+the new slot reports healthy, giving zero-downtime cutover and an instant
+rollback path. See [docs/BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)
+for the full runbook and `k8s/api/blue-green/` for the manifests.
 
 ## Integration Points
 

@@ -8,6 +8,7 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Deployment](#docker-deployment)
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
+- [Blue-Green Deployment](../docs/BLUE_GREEN_DEPLOYMENT.md)
 - [Health Checks](#health-checks)
 - [Troubleshooting](#troubleshooting)
 - [Runbooks](#runbooks)
