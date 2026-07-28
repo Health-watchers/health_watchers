@@ -56,6 +56,49 @@ import {
 } from './error-handler.js';
 import { metricsMiddleware, metricsHandler } from './metrics.js';
 import { startPaymentStream, registerPaymentConfirmationListener, notifyApiOfPayment } from './payment-stream.js';
+// #998: Fee Calculator
+import {
+  calculateBaseFee,
+  calculateSurgedFee,
+  calculateSubsidizedFee,
+  calculateCompleteFeatures,
+  formatFeeForDisplay,
+  getSurgePricingTiers,
+  getAvailableSubsidyTiers,
+} from './fee-calculator.js';
+// #999: Network Monitor
+import {
+  getMonitoredNetworkStatus,
+  getLedgerStatus,
+  getTransactionBacklog,
+  checkNetworkAlerts,
+  trackLedgerGrowth,
+  getAlertHistory,
+  clearAlertHistory,
+} from './network-monitor.js';
+// #1000: Payment Reconciliation
+import {
+  runReconciliation,
+  getReconciliationHistory,
+  getReconciliationStatistics,
+  recordResolution,
+  getResolutionHistory,
+  clearReconciliationHistory,
+  type PaymentRecord,
+} from './payment-reconciliation.js';
+// #1001: Cold Wallet
+import {
+  storeKeyPair,
+  signTransaction,
+  rotateKey,
+  getStoredKeyIds,
+  getKeyMetadata,
+  deactivateKey,
+  getAuditLogs,
+  getRotationHistory,
+  getColdWalletStatistics,
+  type SigningRequest,
+} from './cold-wallet.js';
 
 dotenv.config();
 
