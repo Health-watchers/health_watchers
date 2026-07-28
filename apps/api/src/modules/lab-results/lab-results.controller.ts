@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { LabResultModel } from './lab-result.model';
+import { toLabResultResponse } from './lab-results.transformer';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
@@ -40,7 +41,7 @@ router.post(
       status: 'ordered',
       orderedAt: new Date(),
     });
-    return res.status(201).json({ status: 'success', data: doc });
+    return res.status(201).json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 
@@ -64,7 +65,7 @@ router.get(
     }
     const { page, limit } = pagination;
     const result = await paginate(LabResultModel, filter, page, limit, { orderedAt: -1 });
-    return res.json({ status: 'success', data: result.data, meta: result.meta });
+    return res.json({ status: 'success', data: result.data.map((d: any) => toLabResultResponse(d, req.user!.role)), meta: result.meta });
   }),
 );
 
@@ -80,7 +81,7 @@ router.get(
       .populate('patientId', 'firstName lastName')
       .populate('orderedBy', 'firstName lastName')
       .sort({ resultedAt: -1 });
-    return res.json({ status: 'success', data: docs });
+    return res.json({ status: 'success', data: docs.map((d) => toLabResultResponse(d, req.user!.role)) });
   }),
 );
 
@@ -91,7 +92,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await LabResultModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
-    return res.json({ status: 'success', data: doc });
+    return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 
@@ -171,7 +172,7 @@ router.put(
 
     return res.json({
       status: 'success',
-      data: doc,
+      data: toLabResultResponse(doc, req.user!.role),
       ...(isCritical && { alert: { critical: true, reason: criticalReason } }),
     });
   }),
@@ -206,7 +207,7 @@ router.post(
       outcome: 'SUCCESS',
     });
 
-    return res.json({ status: 'success', data: doc });
+    return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
   }),
 );
 
