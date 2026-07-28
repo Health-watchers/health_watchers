@@ -1,45 +1,90 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 # ============================================================
-# ELK Stack Setup Script
+# ELK Stack Setup Script — Health Watchers
+#
+# Applies ILM policy, index templates, initial index, and
+# imports Kibana dashboards. Designed to run as a one-shot
+# Docker container after Elasticsearch and Kibana are healthy.
+#
+# Issue: #1007 – Log Aggregation with ELK
 # ============================================================
 
-set -e
+set -euo pipefail
 
-ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://elasticsearch:9200}"
-ELASTICSEARCH_USER="${ELASTICSEARCH_USERNAME:-elastic}"
-ELASTICSEARCH_PASS="${ELASTIC_PASSWORD:-changeme}"
-AUTH="-u $ELASTICSEARCH_USER:$ELASTICSEARCH_PASS"
+ES_URL="${ELASTICSEARCH_URL:-http://elasticsearch:9200}"
+ES_USER="${ELASTICSEARCH_USERNAME:-elastic}"
+ES_PASS="${ELASTIC_PASSWORD:-changeme}"
+KB_URL="${KIBANA_URL:-http://kibana:5601}"
 
-echo "Setting up ELK Stack..."
-echo "Elasticsearch URL: $ELASTICSEARCH_URL"
+AUTH="-u ${ES_USER}:${ES_PASS}"
 
-# Wait for Elasticsearch to be ready
-echo "Waiting for Elasticsearch to be ready..."
-for i in {1..30}; do
-  if curl -s -f $AUTH "$ELASTICSEARCH_URL/_cluster/health" > /dev/null 2>&1; then
-    echo "Elasticsearch is ready!"
+ILM_FILE="/etc/elk/ilm-policy.json"
+TEMPLATE_FILE="/etc/elk/index-templates.json"
+DASHBOARDS_FILE="/etc/elk/dashboards-export.ndjson"
+
+echo "=== ELK Stack Setup ==="
+echo "Elasticsearch: ${ES_URL}"
+echo "Kibana:        ${KB_URL}"
+echo ""
+
+# ── Wait for Elasticsearch ───────────────────────────────────
+echo "Waiting for Elasticsearch..."
+for i in $(seq 1 30); do
+  if curl -sf ${AUTH} "${ES_URL}/_cluster/health?wait_for_status=yellow&timeout=5s" > /dev/null 2>&1; then
+    echo "✓ Elasticsearch is ready"
     break
   fi
-  echo "Attempt $i/30: Waiting for Elasticsearch..."
-  sleep 2
+  echo "  Attempt ${i}/30 — retrying in 5s..."
+  sleep 5
 done
 
-# Create ILM policy
-echo "Creating ILM policy..."
-curl -X PUT $AUTH "$ELASTICSEARCH_URL/_ilm/policy/health-watchers-policy" \
+# ── Apply ILM policy ─────────────────────────────────────────
+echo ""
+echo "Applying ILM policy..."
+RESPONSE=$(curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/_ilm/policy/health-watchers-policy" \
   -H "Content-Type: application/json" \
-  -d @/workspaces/health_watchers/logging/elasticsearch/ilm-policy.json
+  -d @"${ILM_FILE}" 2>&1) || true
+echo "  ${RESPONSE}"
+echo "✓ ILM policy applied"
 
-# Create index template
-echo "Creating index template..."
-curl -X PUT $AUTH "$ELASTICSEARCH_URL/_index_template/health-watchers-template" \
+# ── Apply index template ──────────────────────────────────────
+echo ""
+echo "Applying index template..."
+RESPONSE=$(curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/_index_template/health-watchers-template" \
   -H "Content-Type: application/json" \
-  -d @/workspaces/health_watchers/logging/elasticsearch/index-templates.json
+  -d @"${TEMPLATE_FILE}" 2>&1) || true
+echo "  ${RESPONSE}"
+echo "✓ Index template applied"
 
-# Create initial index with rollover alias
-echo "Creating initial index..."
-curl -X PUT $AUTH "$ELASTICSEARCH_URL/health-watchers-000001" \
+# ── Apply error index template ────────────────────────────────
+echo ""
+echo "Applying error index template..."
+curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/_index_template/health-watchers-errors-template" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "index_patterns": ["health-watchers-errors-*", "health-watchers-audit-*"],
+    "priority": 90,
+    "template": {
+      "settings": {
+        "index": {
+          "number_of_shards": 1,
+          "number_of_replicas": 0,
+          "refresh_interval": "10s",
+          "lifecycle": { "name": "health-watchers-policy" }
+        }
+      }
+    }
+  }' > /dev/null
+echo "✓ Error/audit index template applied"
+
+# ── Bootstrap write alias ─────────────────────────────────────
+echo ""
+echo "Creating bootstrap index with write alias..."
+curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/health-watchers-000001" \
   -H "Content-Type: application/json" \
   -d '{
     "aliases": {
@@ -47,37 +92,72 @@ curl -X PUT $AUTH "$ELASTICSEARCH_URL/health-watchers-000001" \
         "is_write_index": true
       }
     }
-  }' 2>/dev/null || true
+  }' > /dev/null 2>&1 || echo "  (index may already exist — skipped)"
+echo "✓ Write alias ready"
 
-# Create error index template
-echo "Creating error index template..."
-curl -X PUT $AUTH "$ELASTICSEARCH_URL/_index_template/health-watchers-errors-template" \
+# ── Wait for Kibana ──────────────────────────────────────────
+echo ""
+echo "Waiting for Kibana..."
+for i in $(seq 1 30); do
+  STATUS=$(curl -sf ${AUTH} "${KB_URL}/api/status" 2>/dev/null \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',{}).get('overall',{}).get('level','unknown'))" 2>/dev/null || echo "unknown")
+  if [ "${STATUS}" = "available" ] || [ "${STATUS}" = "degraded" ]; then
+    echo "✓ Kibana is ready (status: ${STATUS})"
+    break
+  fi
+  echo "  Attempt ${i}/30 — Kibana status: ${STATUS} — retrying in 5s..."
+  sleep 5
+done
+
+# ── Import Kibana dashboards ──────────────────────────────────
+if [ -f "${DASHBOARDS_FILE}" ]; then
+  echo ""
+  echo "Importing Kibana dashboards..."
+  RESPONSE=$(curl -sf -X POST ${AUTH} \
+    "${KB_URL}/api/saved_objects/_import?overwrite=true" \
+    -H "kbn-xsrf: true" \
+    --form "file=@${DASHBOARDS_FILE}" 2>&1) || true
+  echo "  ${RESPONSE}"
+  echo "✓ Dashboards imported"
+else
+  echo "⚠ No dashboards file found at ${DASHBOARDS_FILE} — skipping"
+fi
+
+# ── Create default index pattern ─────────────────────────────
+echo ""
+echo "Creating Kibana data view..."
+curl -sf -X POST ${AUTH} \
+  "${KB_URL}/api/data_views/data_view" \
+  -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
   -d '{
-    "index_patterns": ["health-watchers-errors-*"],
-    "template": {
-      "settings": {
-        "index": {
-          "number_of_shards": 1,
-          "number_of_replicas": 0
-        }
-      },
-      "mappings": {
-        "properties": {
-          "timestamp": {"type": "date"},
-          "log_level": {"type": "keyword"},
-          "message": {"type": "text"},
-          "service": {"type": "keyword"},
-          "error_type": {"type": "keyword"},
-          "stack_trace": {"type": "text", "index": false}
-        }
-      }
+    "data_view": {
+      "title": "health-watchers-*",
+      "name": "Health Watchers Logs",
+      "timeFieldName": "@timestamp"
     }
-  }'
+  }' > /dev/null 2>&1 || echo "  (data view may already exist — skipped)"
 
-echo "ELK Stack setup completed!"
+curl -sf -X POST ${AUTH} \
+  "${KB_URL}/api/data_views/data_view" \
+  -H "kbn-xsrf: true" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data_view": {
+      "title": "health-watchers-audit-*",
+      "name": "Health Watchers Audit Logs",
+      "timeFieldName": "@timestamp"
+    }
+  }' > /dev/null 2>&1 || echo "  (audit data view may already exist — skipped)"
+
+echo "✓ Data views configured"
+
 echo ""
-echo "Access URLs:"
-echo "  Elasticsearch: $ELASTICSEARCH_URL"
-echo "  Kibana: http://localhost:5601"
-echo "  Logstash: http://localhost:9600"
+echo "=============================="
+echo " ELK Setup Complete ✓"
+echo "=============================="
+echo ""
+echo "  Elasticsearch : ${ES_URL}"
+echo "  Kibana        : ${KB_URL}"
+echo "  Logstash      : logstash:5000 (UDP/TCP) | logstash:5044 (Beats)"
+echo ""

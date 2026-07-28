@@ -1,7 +1,33 @@
 groups:
-  - name: health-watchers-alerts
+  - name: health-watchers-api
+    interval: 30s
     rules:
-      # Alert when error rate exceeds 5% over 5 minutes
+      # API down — most critical alert
+      - alert: APIDown
+        expr: up{job="health-watchers-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: 'Health Watchers API is down'
+          description: 'The API has been unreachable for more than 1 minute'
+          runbook: 'monitoring/runbooks/API_DOWN.md'
+          dashboard: 'http://grafana:3100/d/hw-api-performance'
+
+      # Stellar service down
+      - alert: StellarServiceDown
+        expr: up{job="health-watchers-stellar"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: stellar
+        annotations:
+          summary: 'Stellar service is down'
+          description: 'The Stellar service has been unreachable for more than 1 minute'
+          runbook: 'monitoring/runbooks/API_DOWN.md'
+
+      # High HTTP error rate
       - alert: HighErrorRate
         expr: |
           (
@@ -12,11 +38,14 @@ groups:
         for: 2m
         labels:
           severity: warning
+          service: api
         annotations:
           summary: 'High HTTP error rate on {{ $labels.job }}'
           description: 'Error rate is {{ $value | humanizePercentage }} (threshold: 5%)'
+          runbook: 'monitoring/runbooks/HIGH_ERROR_RATE.md'
+          dashboard: 'http://grafana:3100/d/hw-api-performance'
 
-      # Alert when p99 latency exceeds 2 seconds
+      # High p99 latency
       - alert: HighP99Latency
         expr: |
           histogram_quantile(0.99,
@@ -25,60 +54,54 @@ groups:
         for: 2m
         labels:
           severity: warning
+          service: api
         annotations:
           summary: 'High p99 latency on {{ $labels.job }}'
           description: 'p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)'
+          runbook: 'monitoring/runbooks/HIGH_LATENCY.md'
+          dashboard: 'http://grafana:3100/d/hw-api-performance'
 
-      # Alert when API is down
-      - alert: APIDown
-        expr: up{job="health-watchers-api"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: 'Health Watchers API is down'
-          description: 'The API has been unreachable for more than 1 minute'
-
-      # Alert when stellar service is down
-      - alert: StellarServiceDown
-        expr: up{job="health-watchers-stellar"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: 'Stellar service is down'
-          description: 'The Stellar service has been unreachable for more than 1 minute'
-
-      # Alert when MongoDB connection pool utilization exceeds 80%
+  - name: health-watchers-mongodb
+    interval: 30s
+    rules:
+      # MongoDB connection pool utilisation
       - alert: MongoDBPoolHighUtilization
         expr: |
-          mongodb_connection_pool_size{job="health-watchers-api"}
-          / on() group_left()
-          scalar(mongodb_connection_pool_size{job="health-watchers-api"} * 0 + ignoring() (count(up{job="health-watchers-api"}) * 0 + 10))
-          > 0.8
+          (
+            mongodb_connection_pool_size{job="health-watchers-api"}
+            / 10
+          ) > 0.8
         for: 2m
         labels:
           severity: warning
+          service: mongodb
+          component: database
         annotations:
-          summary: 'MongoDB connection pool utilization high'
-          description: 'MongoDB pool utilization has exceeded 80% for more than 2 minutes'
+          summary: 'MongoDB connection pool utilization is high'
+          description: 'Pool utilization has exceeded 80% for more than 2 minutes'
+          runbook: 'monitoring/runbooks/MONGODB_POOL_WAIT_QUEUE.md'
 
-      # Alert when MongoDB pool wait queue is non-zero (connections queuing)
+      # MongoDB pool wait queue non-empty
       - alert: MongoDBPoolWaitQueueNonEmpty
         expr: mongodb_pool_wait_queue_size{job="health-watchers-api"} > 0
         for: 2m
         labels:
           severity: critical
+          service: mongodb
+          component: database
         annotations:
           summary: 'MongoDB connection pool wait queue is non-empty'
           description: 'Requests are waiting for MongoDB connections — pool may be exhausted'
+          runbook: 'monitoring/runbooks/MONGODB_POOL_WAIT_QUEUE.md'
 
-      # Alert for Stellar keypair decryption failures
+      # Stellar keypair decryption failures
       - alert: StellarKeypairDecryptionFailure
         expr: increase(mongodb_keypair_decryption_failures_total{job="health-watchers-api"}[5m]) > 0
         for: 0m
         labels:
           severity: critical
+          service: stellar
         annotations:
           summary: 'Stellar keypair decryption failure detected'
           description: 'One or more Stellar keypair decryption failures occurred in the last 5 minutes'
+          runbook: 'monitoring/runbooks/STELLAR_KEYPAIR_DECRYPTION_FAILURE.md'

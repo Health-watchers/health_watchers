@@ -1,19 +1,25 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: 'health-watchers'
+    environment: '${ENVIRONMENT:-production}'
 
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
+        - targets:
+            - 'alertmanager:9093'
 
 rule_files:
   - 'alerts.yml'
   - 'alerts-payments.yml'
   - 'alerts-security.yml'
   - 'alerts-business.yml'
+  - 'alerts-database-replication.yml'
 
 scrape_configs:
+  # Health Watchers API
   - job_name: 'health-watchers-api'
     static_configs:
       - targets: ['api:3001']
@@ -21,7 +27,11 @@ scrape_configs:
     basic_auth:
       username: '${METRICS_USERNAME}'
       password: '${METRICS_PASSWORD}'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
 
+  # Stellar Service
   - job_name: 'health-watchers-stellar'
     static_configs:
       - targets: ['stellar-service:3002']
@@ -29,3 +39,40 @@ scrape_configs:
     basic_auth:
       username: '${METRICS_USERNAME}'
       password: '${METRICS_PASSWORD}'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # MongoDB Exporter (Replica Set metrics)
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+        labels:
+          component: 'database'
+          replset: 'rs0'
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          component: 'monitoring'
+
+  # AlertManager
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          component: 'monitoring'
+
+  # Node Exporter (host metrics — optional, if node-exporter is deployed)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          component: 'infrastructure'
+    honor_labels: true

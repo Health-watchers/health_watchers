@@ -1,11 +1,12 @@
 apiVersion: 1
 
 providers:
-  - name: 'Default'
+  - name: 'Health Watchers Dashboards'
     orgId: 1
-    folder: ''
+    folder: 'Health Watchers'
     type: file
     disableDeletion: false
-    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
     options:
-      path: /var/lib/grafana/dashboards
+      path: /etc/grafana/provisioning/dashboards

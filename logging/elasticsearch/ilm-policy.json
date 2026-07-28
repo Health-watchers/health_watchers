@@ -1,44 +1,38 @@
 {
-  "policy": "health-watchers-policy",
-  "phases": {
-    "hot": {
-      "min_age": "0ms",
-      "actions": {
-        "set_priority": {
-          "priority": 100
-        },
-        "rollover": {
-          "max_primary_shard_size": "50gb",
-          "max_age": "1d"
+  "policy": {
+    "phases": {
+      "hot": {
+        "min_age": "0ms",
+        "actions": {
+          "set_priority": { "priority": 100 },
+          "rollover": {
+            "max_primary_shard_size": "50gb",
+            "max_age": "1d"
+          }
         }
-      }
-    },
-    "warm": {
-      "min_age": "7d",
-      "actions": {
-        "set_priority": {
-          "priority": 50
-        },
-        "forcemerge": {
-          "max_num_segments": 1
+      },
+      "warm": {
+        "min_age": "3d",
+        "actions": {
+          "set_priority": { "priority": 50 },
+          "forcemerge": { "max_num_segments": 1 },
+          "shrink": { "number_of_shards": 1 },
+          "allocate": { "require": { "data": "warm" } }
         }
-      }
-    },
-    "cold": {
-      "min_age": "30d",
-      "actions": {
-        "set_priority": {
-          "priority": 0
-        },
-        "searchable_snapshot": {
-          "snapshot_repository": "found-snapshots"
+      },
+      "cold": {
+        "min_age": "30d",
+        "actions": {
+          "set_priority": { "priority": 0 },
+          "freeze": {},
+          "allocate": { "require": { "data": "cold" } }
         }
-      }
-    },
-    "delete": {
-      "min_age": "90d",
-      "actions": {
-        "delete": {}
+      },
+      "delete": {
+        "min_age": "90d",
+        "actions": {
+          "delete": {}
+        }
       }
     }
   }
