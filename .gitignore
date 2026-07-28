@@ -11,6 +11,7 @@
 .env.development.local
 # Keep .env.example tracked (it's a template)
 !.env.example
+!.env.cdn.example
 
 # =============================================================================
 # Dependencies
@@ -170,42 +171,28 @@ apps/docs/build/
 docker-compose.override.yml
 
 # =============================================================================
-# Security Scan Reports (generated artifacts, not source)
+# Security Scan Reports (generated artefacts — not source files)
 # =============================================================================
-# Gitleaks
 gitleaks-report.json
 .gitleaks/
-
-# Snyk
 snyk.sarif
 snyk-report.json
-
-# Trivy
 trivy-*.sarif
 trivy-*.json
-
-# npm audit
 audit.json
 audit-report.json
-
-# License checker
 licenses.csv
-
-# Generic security report outputs
 security-reports/
 scan-results/
 
 # =============================================================================
-# Generated / compiled artifacts that shouldn't be tracked
+# Generated / compiled artefacts
 # =============================================================================
-# Compiled JS output from packages/types (source of truth is packages/types/src/index.ts).
-# These root-level files were stale compiled artifacts — removed in issue #928.
+# packages/types compiled output — source is packages/types/src/index.ts
 packages/types/index.js
 packages/types/index.js.map
 packages/types/index.d.ts
 packages/types/index.d.ts.map
-# The root index.ts in packages/types was a stale compiled copy — removed in issue #928.
-# The canonical source is packages/types/src/index.ts.
 packages/types/index.ts
 
 # Temporary debug scripts at repo root

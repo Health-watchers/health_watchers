@@ -1,5 +1,6 @@
 {
   "index_patterns": ["health-watchers-*"],
+  "priority": 100,
   "template": {
     "settings": {
       "index": {
@@ -14,72 +15,57 @@
       }
     },
     "mappings": {
+      "dynamic": "false",
       "properties": {
+        "@timestamp": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
         "timestamp": {
           "type": "date",
           "format": "strict_date_optional_time||epoch_millis"
         },
-        "log_level": {
-          "type": "keyword"
-        },
+        "log_level": { "type": "keyword" },
         "message": {
           "type": "text",
-          "analyzer": "standard"
-        },
-        "service": {
-          "type": "keyword"
-        },
-        "request_id": {
-          "type": "keyword"
-        },
-        "user_id": {
-          "type": "keyword"
-        },
-        "http_method": {
-          "type": "keyword"
-        },
-        "http_path": {
-          "type": "text",
+          "analyzer": "standard",
           "fields": {
-            "keyword": {
-              "type": "keyword"
-            }
+            "keyword": { "type": "keyword", "ignore_above": 1024 }
           }
         },
-        "http_status": {
-          "type": "short"
-        },
-        "response_time_ms": {
-          "type": "long"
-        },
-        "response_time_bucket": {
-          "type": "keyword"
-        },
-        "error_message": {
-          "type": "text"
-        },
-        "error_type": {
-          "type": "keyword"
-        },
-        "stack_trace": {
+        "service": { "type": "keyword" },
+        "environment": { "type": "keyword" },
+        "cluster": { "type": "keyword" },
+        "request_id": { "type": "keyword" },
+        "trace_id": { "type": "keyword" },
+        "span_id": { "type": "keyword" },
+        "user_id": { "type": "keyword" },
+        "clinic_id": { "type": "keyword" },
+        "http_method": { "type": "keyword" },
+        "http_path": {
           "type": "text",
-          "index": false
+          "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } }
         },
-        "is_error": {
-          "type": "boolean"
-        },
-        "environment": {
-          "type": "keyword"
-        },
-        "cluster": {
-          "type": "keyword"
-        },
-        "source_ip": {
-          "type": "ip"
-        },
+        "http_status": { "type": "short" },
+        "response_time_ms": { "type": "long" },
+        "response_time_bucket": { "type": "keyword" },
+        "error_message": { "type": "text" },
+        "error_type": { "type": "keyword" },
+        "stack_trace": { "type": "text", "index": false },
+        "is_error": { "type": "boolean" },
+        "source_ip": { "type": "ip" },
+        "user_agent": { "type": "keyword" },
         "geoip": {
-          "type": "geo_point"
-        }
+          "type": "object",
+          "properties": {
+            "location": { "type": "geo_point" },
+            "country_code2": { "type": "keyword" },
+            "city_name": { "type": "keyword" }
+          }
+        },
+        "audit_action": { "type": "keyword" },
+        "audit_resource": { "type": "keyword" },
+        "audit_outcome": { "type": "keyword" }
       }
     }
   }

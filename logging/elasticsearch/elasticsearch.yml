@@ -1,23 +1,25 @@
 # ============================================================
-# Elasticsearch Configuration
+# Elasticsearch Configuration — Health Watchers
+# Issue: #1007 – Log Aggregation with ELK
 # ============================================================
 
 cluster.name: health-watchers-cluster
 node.name: health-watchers-node-1
 
-# Network settings
+# Network
 network.host: 0.0.0.0
 http.port: 9200
+transport.port: 9300
 
-# Data and log paths
+# Paths
 path.data: /usr/share/elasticsearch/data
 path.logs: /usr/share/elasticsearch/logs
 
-# Index management
-action.auto_create_index: '+health-watchers-*,-*'
-indices.memory.index_buffer_size: 30%
+# Index management — allow health-watchers indices only via template
+action.auto_create_index: '+health-watchers-*,+.kibana*,+.security*,+.monitoring*,-*'
 
-# Performance tuning
+# Performance
+indices.memory.index_buffer_size: 30%
 thread_pool.write.queue_size: 1000
 thread_pool.search.queue_size: 1000
 
@@ -26,10 +28,9 @@ logger.level: info
 logger.org.elasticsearch: warn
 logger.deprecation: warn
 
-# Shutdown gracefully
-node.max_local_storage_nodes: 1
-
-# Xpack settings (if enabled)
+# Licence
 xpack.license.self_generated.type: basic
-xpack.watcher.enabled: true
-xpack.monitoring.enabled: true
+
+# Monitoring
+xpack.monitoring.collection.enabled: true
+xpack.monitoring.collection.interval: 30s

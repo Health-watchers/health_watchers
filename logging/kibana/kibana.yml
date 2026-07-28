@@ -1,32 +1,46 @@
 # ============================================================
-# Kibana Configuration
+# Kibana Configuration — Health Watchers
+# Issue: #1007 – Log Aggregation with ELK
 # ============================================================
 
-# Server settings
 server.name: health-watchers-kibana
 server.host: '0.0.0.0'
 server.port: 5601
-server.basePath: ''
-server.rewriteBasePath: false
 
 # Elasticsearch connection
 elasticsearch.hosts: ['http://elasticsearch:9200']
 elasticsearch.username: elastic
 elasticsearch.password: changeme
 
-# Kibana user settings
-kibana.defaultAppId: 'discover'
-kibana.autocomplete.valueSuggestionTimeout: 1000
+# Security
+xpack.security.enabled: true
+xpack.encryptedSavedObjects.encryptionKey: '${KIBANA_ENCRYPTION_KEY:a-32-character-encryption-key!!}'
 
-# Logging
-logging.verbose: true
-logging.dest: stdout
-logging.timezone: UTC
-
-# Advanced settings
-xpack.discoverEnhancements.enabled: true
-xpack.monitoring.ui.enabled: true
+# Alerting (Watcher)
 xpack.alerting.enabled: true
 
-# Saved objects
-saved_objects.maxImportPayloadBytes: 26214400
+# Fleet / APM
+xpack.fleet.enabled: false
+apm.enabled: false
+
+# Monitoring
+monitoring.ui.enabled: true
+monitoring.ui.elasticsearch.hosts: ['http://elasticsearch:9200']
+
+# Saved objects import size
+savedObjects.maxImportPayloadBytes: 26214400
+
+# Session
+xpack.security.session.idleTimeout: '1h'
+xpack.security.session.lifespan: '8h'
+
+# Logging
+logging:
+  appenders:
+    console:
+      type: console
+      layout:
+        type: json
+  root:
+    appenders: [console]
+    level: warn

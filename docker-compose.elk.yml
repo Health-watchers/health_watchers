@@ -1,15 +1,18 @@
 # ============================================================
 # ELK Stack: Elasticsearch, Logstash, Kibana
 #
-# Centralized log aggregation and analysis platform
+# Centralised log aggregation and analysis platform for
+# Health Watchers.
+#
+# Issue: #1007 – Log Aggregation with ELK
 # ============================================================
 
 version: '3.8'
 
 services:
-  # Elasticsearch - Log Storage and Indexing
+  # ── Elasticsearch — Log Storage and Indexing ──────────────
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.0.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
     container_name: health-watchers-elasticsearch
     restart: always
     environment:
@@ -18,25 +21,41 @@ services:
       - xpack.security.enrollment.enabled=true
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
       - xpack.security.authc.api_key.enabled=true
-      - ELASTICSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.monitoring.collection.enabled=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - TZ=UTC
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
       - ./logging/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     ports:
       - '9200:9200'
+      - '9300:9300'
     networks:
       - health-watchers-logging
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
     healthcheck:
-      test: curl -s http://localhost:9200 >/dev/null || exit 1
+      test:
+        - CMD
+        - bash
+        - -c
+        - >
+          curl -sf -u elastic:${ELASTIC_PASSWORD:-changeme}
+          http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s
+          | grep -vq '"status":"red"'
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
 
-  # Logstash - Log Processing and Transformation
+  # ── Logstash — Log Processing and Transformation ──────────
   logstash:
-    image: docker.elastic.co/logstash/logstash:8.0.0
+    image: docker.elastic.co/logstash/logstash:8.13.0
     container_name: health-watchers-logstash
     restart: always
     depends_on:
@@ -44,29 +63,34 @@ services:
         condition: service_healthy
     volumes:
       - ./logging/logstash/pipeline:/usr/share/logstash/pipeline:ro
-      - ./logging/logstash/patterns:/usr/share/logstash/patterns:ro
       - ./logging/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
     ports:
       - '5000:5000/udp'
       - '5000:5000/tcp'
+      - '5044:5044'
       - '9600:9600'
     environment:
-      LS_JAVA_OPTS: '-Xmx256m -Xms256m'
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      LS_JAVA_OPTS: '-Xmx512m -Xms512m'
+      ELASTICSEARCH_HOSTS: 'http://elasticsearch:9200'
       ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
       ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      XPACK_MONITORING_ENABLED: 'true'
+      XPACK_MONITORING_ELASTICSEARCH_HOSTS: 'http://elasticsearch:9200'
+      XPACK_MONITORING_ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      XPACK_MONITORING_ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      TZ: UTC
     networks:
       - health-watchers-logging
     healthcheck:
-      test: curl -s http://localhost:9600 >/dev/null || exit 1
+      test: ['CMD', 'curl', '-sf', 'http://localhost:9600/?pretty']
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
 
-  # Kibana - Visualization and Log Analysis
+  # ── Kibana — Visualisation and Log Analysis ───────────────
   kibana:
-    image: docker.elastic.co/kibana/kibana:8.0.0
+    image: docker.elastic.co/kibana/kibana:8.13.0
     container_name: health-watchers-kibana
     restart: always
     depends_on:
@@ -77,9 +101,9 @@ services:
       ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
       ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
       ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
-      KIBANA_DEFAULTAPPID: discover
-      KIBANA_AUTOCOMPLETETIMEOUT: 1000
-      KIBANA_AUTOCOMPLETETERM_BUCKET_SIZE: 10
+      XPACK_SECURITY_ENABLED: 'true'
+      XPACK_MONITORING_UI_ENABLED: 'true'
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:-a-32-character-encryption-key!!}
       TZ: UTC
     volumes:
       - ./logging/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
@@ -89,11 +113,38 @@ services:
     networks:
       - health-watchers-logging
     healthcheck:
-      test: curl -s http://localhost:5601/api/status >/dev/null || exit 1
+      test:
+        - CMD
+        - bash
+        - -c
+        - "curl -sf -u elastic:${ELASTIC_PASSWORD:-changeme} http://localhost:5601/api/status | grep -v '\"overall\":{\"level\":\"critical\"'"
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  # ── ELK Initialiser — runs once to apply ILM, templates, dashboards ─
+  elk-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: health-watchers-elk-setup
+    restart: 'no'
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+    volumes:
+      - ./logging/setup-elk.sh:/setup-elk.sh:ro
+      - ./logging/elasticsearch/ilm-policy.json:/etc/elk/ilm-policy.json:ro
+      - ./logging/elasticsearch/index-templates.json:/etc/elk/index-templates.json:ro
+      - ./logging/kibana/dashboards-export.ndjson:/etc/elk/dashboards-export.ndjson:ro
+    command: bash /setup-elk.sh
+    networks:
+      - health-watchers-logging
 
 volumes:
   elasticsearch_data:
