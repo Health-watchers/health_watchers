@@ -21,6 +21,7 @@ import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
 import { errorHandler } from './middlewares/error.middleware';
 import { generalLimiter } from './middlewares/rate-limit.middleware';
+import { rateLimitMonitor } from './middlewares/rate-limit-monitor.middleware';
 import {
   apiVersionHeader,
   v1DeprecationWarning,
@@ -211,6 +212,7 @@ app.use('/api', acceptVersionMiddleware);
 app.use('/api/v1', v1DeprecationWarning);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
+app.use('/api/v1', rateLimitMonitor);
 app.use('/api/v1', generalLimiter);
 app.use('/api/v1', responseFilterMiddleware);
 app.use('/api/v1', v1Router);
@@ -218,6 +220,7 @@ app.use('/api/v1', v1Router);
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
 app.use('/api/v2', apiVersionHeader('2.0'));
 app.use('/api/v2', traceIdHeader);
+app.use('/api/v2', rateLimitMonitor);
 app.use('/api/v2', generalLimiter);
 app.use('/api/v2', responseFilterMiddleware);
 app.use('/api/v2', v2Router);
