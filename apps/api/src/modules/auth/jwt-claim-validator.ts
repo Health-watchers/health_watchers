@@ -91,6 +91,7 @@ export function validateJwtClaims(
   // Step 7: Verify signature (also re-checks iss, aud, exp via the library)
   try {
     const verified = jwt.verify(token, secret, {
+      algorithms: ['HS256'],
       issuer: expectedIssuer,
       audience: expectedAudience,
     }) as jwt.JwtPayload;

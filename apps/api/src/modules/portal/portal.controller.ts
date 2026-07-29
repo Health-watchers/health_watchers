@@ -13,6 +13,7 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
 import { paginate, parsePagination } from '@api/utils/paginate';
+import { escapeRegex } from '@api/utils/regex';
 import {
   signAccessToken,
   signRefreshToken,
@@ -406,9 +407,10 @@ router.get(
 
     if (threadId) filter.threadId = new Types.ObjectId(threadId);
     if (q) {
+      const safeQ = escapeRegex(q);
       filter.$or = [
-        { subject: { $regex: q, $options: 'i' } },
-        { body: { $regex: q, $options: 'i' } },
+        { subject: { $regex: safeQ, $options: 'i' } },
+        { body: { $regex: safeQ, $options: 'i' } },
       ];
     }
 

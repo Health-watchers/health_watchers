@@ -5,7 +5,11 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import logger from '@api/utils/logger';
 import { WebhookModel, WebhookDeliveryModel, WebhookEventLogModel } from './webhook.model';
-import { generateWebhookSecret, verifyWebhookSignature, enqueueWebhookDelivery } from './webhook.service';
+import {
+  generateWebhookSecret,
+  verifyWebhookSignature,
+  enqueueWebhookDelivery,
+} from './webhook.service';
 import {
   registerWebhookSchema,
   updateWebhookSchema,
@@ -73,10 +77,10 @@ router.post(
     const { transactionHash, amount, destination, memo, status } = req.body;
     const payloadString = JSON.stringify(req.body);
 
-    // Find matching webhook by destination (clinic's public key)
-    const webhook = await WebhookModel.findOne({
-      url: { $regex: destination },
-    });
+    // Find matching webhook by destination (clinic's public key).
+    // Exact match — this runs before signature verification, so treating `destination`
+    // (unauthenticated request body input) as a regex would allow ReDoS (see PENTEST_FINDINGS FIND-005).
+    const webhook = await WebhookModel.findOne({ url: destination });
 
     if (!webhook) {
       return res.status(404).json({
