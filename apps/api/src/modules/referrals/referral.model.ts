@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { sanitizeText } from '@api/utils/sanitize';
 
 export interface IReferral extends Document {
   fromClinicId: mongoose.Types.ObjectId;
@@ -62,6 +63,15 @@ const ReferralSchema = new Schema<IReferral>(
   },
   { timestamps: true, versionKey: false }
 );
+
+const FREE_TEXT_FIELDS = ['reason', 'notes', 'declinedReason', 'outcomeNotes'] as const;
+
+ReferralSchema.pre('save', function () {
+  for (const field of FREE_TEXT_FIELDS) {
+    const val = this[field];
+    if (val) (this as any)[field] = sanitizeText(val);
+  }
+});
 
 ReferralSchema.index({ fromClinicId: 1, createdAt: -1 });
 ReferralSchema.index({ toClinicId: 1, createdAt: -1 });

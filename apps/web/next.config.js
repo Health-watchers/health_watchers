@@ -10,10 +10,14 @@ const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
 const isProduction = process.env.NODE_ENV === 'production';
 
 const cdnImageSources = cdnUrl ? `${cdnUrl} ` : '';
+// Reuse the API's CSP violation report collector so browser-reported violations from pages
+// served by this app (which the API's own `report-uri` never sees, since Next.js serves its
+// own HTML/JS on a different origin/CSP) land in the same place as the API's.
+const cspReportUri = `${apiUrl}/api/v1/csp-report`;
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
-    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnUrl}; style-src 'self' 'unsafe-inline' ${cdnUrl}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnUrl}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none';`,
+    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnUrl}; style-src 'self' 'unsafe-inline' ${cdnUrl}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnUrl}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none'; report-uri ${cspReportUri};`,
   },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
