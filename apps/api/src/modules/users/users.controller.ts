@@ -8,6 +8,7 @@ import { UserModel } from '../auth/models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
 import { addToDenylist } from '@api/services/token-denylist.service';
+import { passwordSchema } from '../auth/auth.validation';
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(100),
@@ -143,7 +144,7 @@ router.patch(
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  newPassword: passwordSchema,
 });
 
 /**

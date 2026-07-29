@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { LabResultModel } from './lab-result.model';
 import { toLabResultResponse } from './lab-results.transformer';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
 import { detectCriticalValues } from './critical-value.service';
@@ -41,8 +42,10 @@ router.post(
       status: 'ordered',
       orderedAt: new Date(),
     });
-    return res.status(201).json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
-  }),
+    return res
+      .status(201)
+      .json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
+  })
 );
 
 // GET /api/v1/lab-results — List lab results (filter by patient, status, date)
@@ -61,12 +64,18 @@ router.get(
     }
     const pagination = parsePagination(req.query as Record<string, any>);
     if (!pagination) {
-      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
     }
     const { page, limit } = pagination;
     const result = await paginate(LabResultModel, filter, page, limit, { orderedAt: -1 });
-    return res.json({ status: 'success', data: result.data.map((d: any) => toLabResultResponse(d, req.user!.role)), meta: result.meta });
-  }),
+    return res.json({
+      status: 'success',
+      data: result.data.map((d: any) => toLabResultResponse(d, req.user!.role)),
+      meta: result.meta,
+    });
+  })
 );
 
 // GET /api/v1/lab-results/critical — Get pending critical value acknowledgments
@@ -81,8 +90,11 @@ router.get(
       .populate('patientId', 'firstName lastName')
       .populate('orderedBy', 'firstName lastName')
       .sort({ resultedAt: -1 });
-    return res.json({ status: 'success', data: docs.map((d) => toLabResultResponse(d, req.user!.role)) });
-  }),
+    return res.json({
+      status: 'success',
+      data: docs.map((d) => toLabResultResponse(d, req.user!.role)),
+    });
+  })
 );
 
 // GET /api/v1/lab-results/:id — Get lab result details
@@ -93,7 +105,7 @@ router.get(
     const doc = await LabResultModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
     return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
-  }),
+  })
 );
 
 // PUT /api/v1/lab-results/:id/results — Enter lab results (DOCTOR/NURSE)
@@ -118,7 +130,7 @@ router.put(
         isCritical,
         criticalReason: isCritical ? criticalReason : undefined,
       },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     );
 
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
@@ -175,7 +187,7 @@ router.put(
       data: toLabResultResponse(doc, req.user!.role),
       ...(isCritical && { alert: { critical: true, reason: criticalReason } }),
     });
-  }),
+  })
 );
 
 // POST /api/v1/lab-results/:id/acknowledge — Acknowledge critical value
@@ -190,7 +202,7 @@ router.post(
         criticalAcknowledgedBy: req.user!.userId,
         criticalAcknowledgedAt: new Date(),
       },
-      { new: true },
+      { new: true }
     );
 
     if (!doc) {
@@ -208,7 +220,7 @@ router.post(
     });
 
     return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
-  }),
+  })
 );
 
 export const labResultRoutes = router;
