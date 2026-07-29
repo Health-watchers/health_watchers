@@ -78,6 +78,32 @@ describe('csrfMiddleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  it('bypasses CSRF check for the signature-verified inbound stellar-payment webhook', () => {
+    const req = makeReq({
+      method: 'POST',
+      path: '/api/v1/webhooks/stellar-payment',
+      cookies: {},
+      headers: { 'x-webhook-signature': 'sig' },
+    });
+    const res = makeRes();
+    csrfMiddleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass CSRF for other /api/v1/webhooks routes (session-authenticated CRUD)', () => {
+    const req = makeReq({
+      method: 'POST',
+      path: '/api/v1/webhooks',
+      cookies: { 'csrf-token': 'tok' },
+      headers: {},
+    });
+    const res = makeRes();
+    csrfMiddleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   // ── Token generation ───────────────────────────────────────────────────────
 
   it('generates and sets csrf-token cookie when none exists on GET', () => {
@@ -171,6 +197,18 @@ describe('csrfMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
+  it('rejects when header token has a different length than the cookie token (timing-safe compare)', () => {
+    const req = makeReq({
+      method: 'POST',
+      cookies: { 'csrf-token': 'a-much-longer-valid-token' },
+      headers: { 'x-csrf-token': 'short' },
+    });
+    const res = makeRes();
+    csrfMiddleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('returns CSRF_TOKEN_INVALID error code on rejection', () => {
     const req = makeReq({
       method: 'POST',
@@ -179,8 +217,6 @@ describe('csrfMiddleware', () => {
     });
     const res = makeRes();
     csrfMiddleware(req, res, next);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'CSRF_TOKEN_INVALID' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'CSRF_TOKEN_INVALID' }));
   });
 });

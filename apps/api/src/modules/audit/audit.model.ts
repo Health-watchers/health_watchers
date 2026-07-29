@@ -128,7 +128,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  },
+  }
 );
 
 // Prevent updates and deletes - immutable logs
@@ -158,8 +158,12 @@ auditLogSchema.index({ resourceType: 1, timestamp: -1 });
 auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
 // Full-text search across action field (metadata is Mixed so not indexable as text)
 auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
-// Retention policy: automatically expire audit logs after 2 years (configurable via AUDIT_LOG_RETENTION_DAYS)
-const retentionDays = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS ?? '730', 10);
-auditLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: retentionDays * 24 * 60 * 60 });
+// Retention policy: the 6-year HIPAA-mandated TTL index (`audit_logs_ttl_6yr`) on `timestamp`
+// is created by migration `20260425_audit_logs_ttl.ts`, which is the single source of truth.
+// A second TTL index was previously defined here with a 2-year default (overridable down to
+// 90 days via AUDIT_LOG_RETENTION_DAYS) — since both indexed the same `{ timestamp: 1 }` key,
+// whichever won created a real risk of purging PHI audit logs years before the HIPAA-required
+// retention period. Do not add another TTL index on `timestamp` here; change the migration
+// instead if retention needs differ.
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);

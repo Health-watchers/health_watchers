@@ -26,9 +26,13 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const url = `${API_URL}${endpoint}`;
 
   // Read CSRF token from cookie for state-changing requests
-  const csrfToken = typeof document !== 'undefined'
-    ? document.cookie.split('; ').find(r => r.startsWith('csrf-token='))?.split('=')[1]
-    : undefined;
+  const csrfToken =
+    typeof document !== 'undefined'
+      ? document.cookie
+          .split('; ')
+          .find((r) => r.startsWith('csrf-token='))
+          ?.split('=')[1]
+      : undefined;
 
   const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
     (options.method ?? 'GET').toUpperCase()
@@ -36,6 +40,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(isMutation && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
