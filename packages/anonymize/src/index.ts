@@ -21,14 +21,14 @@ export interface PatientData {
 }
 
 export interface AnonymizedPatientData {
-  firstName?: string;
-  lastName?: string;
-  dateOfBirth?: string;
-  contactNumber?: string;
-  address?: string;
-  email?: string;
-  systemId?: string;
-  clinicalNotes?: string;
+  firstName?: string | undefined;
+  lastName?: string | undefined;
+  dateOfBirth?: string | undefined;
+  contactNumber?: string | undefined;
+  address?: string | undefined;
+  email?: string | undefined;
+  systemId?: string | undefined;
+  clinicalNotes?: string | undefined;
   [key: string]: unknown;
 }
 

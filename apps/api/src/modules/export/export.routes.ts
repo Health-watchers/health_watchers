@@ -4,6 +4,7 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { auditLog } from '@api/modules/audit/audit.service';
 import logger from '@api/utils/logger';
 import { bulkExportLimiter } from '@api/middlewares/rate-limit.middleware';
+import { AnonymizationLevel } from '@health-watchers/anonymize';
 import {
   buildPatientRecord,
   sendPatientJson,
@@ -16,6 +17,27 @@ import { buildFhirBundle } from './fhir-mapper';
 
 /** Roles considered "authorized staff" for cross-patient access within a clinic */
 const STAFF_ROLES = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT'] as const;
+
+/** Anonymization levels safe to expose as an opt-in export flag (aggregation collapses per-record shape) */
+const EXPORTABLE_ANON_LEVELS = ['de-identification', 'pseudonymization'] as const;
+
+/** Parse and validate the `?anonymize=` query param, or send a 400 and return undefined */
+function parseAnonymizeParam(
+  req: Request,
+  res: Response
+): { ok: true; level: AnonymizationLevel | undefined } | { ok: false } {
+  const raw = (req.query.anonymize as string | undefined)?.toLowerCase();
+  if (!raw) return { ok: true, level: undefined };
+
+  if (!(EXPORTABLE_ANON_LEVELS as readonly string[]).includes(raw)) {
+    res.status(400).json({
+      error: 'BadRequest',
+      message: 'anonymize must be "de-identification" or "pseudonymization"',
+    });
+    return { ok: false };
+  }
+  return { ok: true, level: raw as AnonymizationLevel };
+}
 
 const router = Router();
 
@@ -43,6 +65,16 @@ router.get(
       return res
         .status(400)
         .json({ error: 'BadRequest', message: 'format must be "json" or "pdf"' });
+
+    const anonymizeResult = parseAnonymizeParam(req, res);
+    if (!anonymizeResult.ok) return;
+    const anonymizeLevel = anonymizeResult.level;
+
+    if (anonymizeLevel && format !== 'json')
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'anonymize is only supported for format=json',
+      });
 
     try {
       const record = await buildPatientRecord(id);
@@ -80,11 +112,14 @@ router.get(
           resourceId: id,
           userId,
           clinicId,
+          metadata: anonymizeLevel
+            ? { anonymized: true, anonymizationLevel: anonymizeLevel }
+            : undefined,
         },
         req
       ).catch((err) => logger.error({ err }, 'Audit log failed for patient export'));
 
-      if (format === 'json') return sendPatientJson(res, record);
+      if (format === 'json') return sendPatientJson(res, record, anonymizeLevel);
       return sendPatientPdf(res, record);
     } catch (err: any) {
       logger.error({ err }, 'Patient export error');
@@ -113,6 +148,10 @@ router.get(
     if (!Types.ObjectId.isValid(id))
       return res.status(400).json({ error: 'BadRequest', message: 'Invalid clinic ID format' });
 
+    const anonymizeResult = parseAnonymizeParam(req, res);
+    if (!anonymizeResult.ok) return;
+    const anonymizeLevel = anonymizeResult.level;
+
     try {
       const record = await buildClinicRecord(id);
 
@@ -128,11 +167,14 @@ router.get(
           resourceId: id,
           userId: req.user!.userId,
           clinicId: req.user!.clinicId,
+          metadata: anonymizeLevel
+            ? { anonymized: true, anonymizationLevel: anonymizeLevel }
+            : undefined,
         },
         req
       ).catch((err) => logger.error({ err }, 'Audit log failed for clinic export'));
 
-      return sendClinicZip(res, id, record);
+      return sendClinicZip(res, id, record, anonymizeLevel);
     } catch (err: any) {
       logger.error({ err }, 'Clinic export error');
       return res.status(500).json({ error: 'InternalError', message: 'Export failed' });

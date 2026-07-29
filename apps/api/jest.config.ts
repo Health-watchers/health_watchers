@@ -16,6 +16,12 @@ const config: Config = {
   moduleNameMapper: {
     '^@api/(.*)$': `${srcRoot}/$1`,
     '^@/(.*)$': `${srcRoot}/$1`,
+    // Resolve the anonymize workspace package explicitly rather than relying on
+    // npm workspace hoisting/symlinks to place it under node_modules.
+    '^@health-watchers/anonymize$': path.resolve(
+      __dirname,
+      '../../packages/anonymize/src/index.ts'
+    ),
     // Mock the rate-limit middleware so tests don't need redis installed.
     // Match both the @api alias and the resolved absolute path.
     '^@api/middlewares/rate-limit\\.middleware$': `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
