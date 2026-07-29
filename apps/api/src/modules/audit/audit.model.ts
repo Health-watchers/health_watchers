@@ -44,7 +44,9 @@ export type AuditAction =
   | 'API_KEY_REVOKE'
   | 'API_KEY_UPDATE'
   | 'COMMUNICATION_LOG_CREATED'
-  | 'COMMUNICATION_LOG_VIEWED';
+  | 'COMMUNICATION_LOG_VIEWED'
+  | 'ACCOUNT_LOCKED'
+  | 'ACCOUNT_UNLOCKED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -112,6 +114,8 @@ const auditLogSchema = new Schema<AuditLog>(
         'API_KEY_UPDATE',
         'COMMUNICATION_LOG_CREATED',
         'COMMUNICATION_LOG_VIEWED',
+        'ACCOUNT_LOCKED',
+        'ACCOUNT_UNLOCKED',
       ],
       index: true,
     },
@@ -128,7 +132,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  },
+  }
 );
 
 // Prevent updates and deletes - immutable logs

@@ -171,6 +171,16 @@ router.post(
           Math.round(LOCK_DURATION_MS / 60_000),
           user.preferences?.language
         );
+        await auditLog(
+          {
+            action: 'ACCOUNT_LOCKED',
+            userId: user.id,
+            clinicId: String(user.clinicId),
+            outcome: 'SUCCESS',
+            metadata: { email: user.email, failedLoginAttempts: user.failedLoginAttempts },
+          },
+          req
+        );
       }
       await user.save();
       return res.status(401).json({ error: 'Unauthorized', message: INVALID });
@@ -457,6 +467,16 @@ router.post(
       user.failedMfaAttempts = (user.failedMfaAttempts ?? 0) + 1;
       if (user.failedMfaAttempts >= MAX_MFA_ATTEMPTS) {
         user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+        await auditLog(
+          {
+            action: 'ACCOUNT_LOCKED',
+            userId: user.id,
+            clinicId: String(user.clinicId),
+            outcome: 'SUCCESS',
+            metadata: { email: user.email, failedMfaAttempts: user.failedMfaAttempts },
+          },
+          req
+        );
       }
       await user.save();
       return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
@@ -625,8 +645,20 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
   if (!user) return res.status(404).json({ error: 'NotFound', message: 'User not found' });
 
   user.failedLoginAttempts = 0;
+  user.failedMfaAttempts = 0;
   user.lockedUntil = undefined;
   await user.save();
+
+  await auditLog(
+    {
+      action: 'ACCOUNT_UNLOCKED',
+      userId: user.id,
+      clinicId: String(user.clinicId),
+      outcome: 'SUCCESS',
+      metadata: { email: user.email, unlockedBy: req.user!.userId },
+    },
+    req
+  );
 
   return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
 });

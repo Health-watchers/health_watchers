@@ -95,8 +95,8 @@ Cross-origin requests from a malicious site cannot read the `csrf-token` cookie 
 - Clinic-scoped data isolation — providers can only access patients within their own clinic
 
 ### Data Protection
-- AES-256-GCM field-level encryption for all PHI (name, DOB, diagnoses, contact info)
-- Encryption keys managed in AWS Secrets Manager with quarterly rotation
+- AES-256-GCM field-level encryption for PHI (DOB, contact number, address, insurance policy/group numbers); see `docs/SECURITY_POLICY.md` for full field coverage
+- Encryption keys managed in AWS Secrets Manager, with versioned key rotation supported at the application layer
 - TLS 1.3 enforced for all data in transit
 - MongoDB encryption at rest enabled in production
 

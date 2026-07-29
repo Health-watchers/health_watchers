@@ -15,7 +15,7 @@ const resetPasswordSchema = z
   .object({
     password: z
       .string()
-      .min(12, 'At least 12 characters')
+      .min(8, 'At least 8 characters')
       .regex(/[A-Z]/, 'One uppercase letter required')
       .regex(/[a-z]/, 'One lowercase letter required')
       .regex(/[0-9]/, 'One digit required')
