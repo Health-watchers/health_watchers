@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
-import cors from 'cors';
+import cors, { type CorsOptions } from 'cors';
 import {
   createCompressionMiddleware,
   compressionMetricsEndpoint,
@@ -124,19 +124,22 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
   .map((o) => o.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server requests (no origin) and listed origins
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error(`CORS: origin '${origin}' not allowed`));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-  })
-);
-app.options('*', cors());
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow server-to-server requests (no origin) and listed origins.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
+  maxAge: 600,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // ── HTTP request logging with correlation ID ──────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';

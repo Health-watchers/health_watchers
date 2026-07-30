@@ -1,5 +1,11 @@
-import rateLimit, { type Options, type RateLimitRequestHandler } from 'express-rate-limit';
+import rateLimit, {
+  type Options,
+  type RateLimitRequestHandler,
+  type Store,
+} from 'express-rate-limit';
 import type { Request, Response } from 'express';
+import { createClient } from 'redis';
+import { RedisStore } from 'rate-limit-redis';
 import logger from '../utils/logger';
 import { rateLimitHitsTotal } from '../services/metrics.service';
 
@@ -17,13 +23,7 @@ const makeHandler =
   };
 
 // ── Redis store initialization ────────────────────────────────────────────────
-let redisStore: any = undefined;
-let redisInitialized = false;
-
-async function initializeRedisStore(): Promise<void> {
-  if (redisInitialized) return;
-  redisInitialized = true;
-
+function createRedisStore(): Store | undefined {
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
     logger.warn(
@@ -31,38 +31,36 @@ async function initializeRedisStore(): Promise<void> {
         'Multi-instance deployments are NOT protected against distributed brute-force attacks. ' +
         'Set REDIS_URL for production deployments.'
     );
-    return;
+    return undefined;
   }
 
   try {
-    const { createClient } = await import('redis');
-    const { RedisStore } = await import('rate-limit-redis');
-
     const client = createClient({ url: redisUrl });
     client.on('error', (err: Error) => {
       logger.error(`[rate-limit] Redis connection error: ${err.message}`);
       logger.warn('[rate-limit] Falling back to in-memory store for rate limiting');
     });
 
-    await client.connect();
-    redisStore = new RedisStore({
-      sendCommand: (...args: string[]) => client.sendCommand(args),
+    client.connect().catch((err: Error) => {
+      logger.error(`[rate-limit] Failed to connect Redis store: ${err.message}`);
     });
-    logger.info('[rate-limit] Redis store initialized successfully');
+
+    logger.info('[rate-limit] Redis store configured');
+    return new RedisStore({
+      sendCommand: (...args: string[]) => client.sendCommand(args),
+    }) as Store;
   } catch (err) {
     logger.error(
-      `[rate-limit] Failed to initialize Redis store: ${err instanceof Error ? err.message : String(err)}`
+      `[rate-limit] Failed to configure Redis store: ${err instanceof Error ? err.message : String(err)}`
     );
     logger.warn(
       '[rate-limit] Falling back to in-memory store. Multi-instance deployments are NOT protected.'
     );
+    return undefined;
   }
 }
 
-// Initialize Redis on module load
-initializeRedisStore().catch((err) => {
-  logger.error(`[rate-limit] Unexpected error during Redis initialization: ${err}`);
-});
+const redisStore = createRedisStore();
 
 function make(
   windowMs: number,
