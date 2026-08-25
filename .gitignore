@@ -82,7 +82,10 @@ playwright/.cache/
 # Stryker mutation testing output
 .stryker-tmp/
 stryker-report/
-reports/
+# Scope to known generated-report directories only — do NOT use bare `reports/`
+# which would accidentally ignore apps/api/src/modules/reports/
+apps/api/reports/
+apps/api/stryker-reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -159,7 +162,6 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-apps/api/reports/
 
 # =============================================================================
 # Runtime / Debug artifacts
@@ -237,3 +239,18 @@ sbom-*.xml
 
 # GitHub Actions local run artifacts (act)
 .act/
+
+# =============================================================================
+# Export / batch job temp files
+# =============================================================================
+exports/
+export-tmp/
+*.export.csv
+*.export.json
+
+# BullMQ / Redis local dumps
+dump.rdb
+
+# Performance benchmark result snapshots (generated at run time)
+performance/results/*.json
+k6-results/*.json

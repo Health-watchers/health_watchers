@@ -42,19 +42,35 @@ function sanitizeQuery<T>(query: FilterQuery<T>): FilterQuery<T> {
   return sanitize(query) as FilterQuery<T>;
 }
 
+export interface PaginateOptions {
+  sort?: Record<string, 1 | -1>;
+  /** Selective field projection — pass only the fields you need (1 = include, 0 = exclude). */
+  projection?: Record<string, 0 | 1>;
+  /** MongoDB query hint — name of the index to force (e.g. 'clinicId_1_isActive_1'). */
+  hint?: string | Record<string, unknown>;
+}
+
 export async function paginate<T>(
   model: Model<T>,
   query: FilterQuery<T>,
   page: number,
   limit: number,
-  sort: Record<string, 1 | -1> = { createdAt: -1 }
+  sort: Record<string, 1 | -1> = { createdAt: -1 },
+  options?: PaginateOptions
 ): Promise<{ data: T[]; meta: PaginationMeta }> {
   const safeQuery = sanitizeQuery(query);
+  const effectiveSort = options?.sort ?? sort;
+  const projection = options?.projection;
+  const hint = options?.hint;
+
+  let findQuery = model.find(safeQuery);
+  if (projection) findQuery = findQuery.select(projection as Record<string, 0 | 1>);
+  if (hint) findQuery = findQuery.hint(hint as any);
+
   const [total, data] = await Promise.all([
     model.countDocuments(safeQuery),
-    model
-      .find(safeQuery)
-      .sort(sort)
+    findQuery
+      .sort(effectiveSort)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean() as Promise<T[]>,
