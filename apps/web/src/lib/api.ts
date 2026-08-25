@@ -1,15 +1,14 @@
 import { ApiErrorCode } from '@health-watchers/types';
+import { webConfig } from './config';
 
 if (!process.env.NEXT_PUBLIC_API_URL) {
   console.warn('⚠️ NEXT_PUBLIC_API_URL is not set. API calls may fail.');
 }
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+export const API_URL = webConfig.api.url;
 
 // Normalised /api/v1 base — handles trailing slashes and already-versioned URLs
-export const API_V1 = API_URL.endsWith('/api/v1')
-  ? API_URL
-  : `${API_URL.replace(/\/$/, '')}/api/v1`;
+export const API_V1 = API_URL.endsWith('/api/v1') ? API_URL : webConfig.api.v1BaseUrl;
 
 export class ApiError extends Error {
   constructor(

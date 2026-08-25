@@ -18,7 +18,8 @@
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
  * │                 │ /audit, /audit-logs, /notifications,             │
  * │                 │ /documents, /security/csp-report                 │
- * │ system          │ /metrics, /federation (well-known)               │
+ * │ infrastructure  │ /cdn, /replication                              │
+ * │ system          │ /metrics, /federation (well-known), /health      │
  * └─────────────────┴──────────────────────────────────────────────────┘
  */
 
@@ -91,6 +92,10 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
+// ── Infrastructure group ──────────────────────────────────────────────────────
+import { cdnRouter } from '../cdn';
+import replicationRouter from '../replication';
+
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
 
@@ -158,6 +163,10 @@ v1Router.use('/csp-report', cspReportRoutes);
 
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);
+
+// ── Infrastructure group (admin-only) ─────────────────────────────────────────
+v1Router.use('/cdn', cdnRouter);
+v1Router.use('/replication', replicationRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)

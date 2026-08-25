@@ -5,6 +5,7 @@
 
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
+import { webConfig } from './config';
 
 export interface DynamicImportOptions {
   ssr?: boolean;
@@ -67,7 +68,7 @@ export interface BundleMetrics {
 
 export const reportBundleMetrics = (metrics: BundleMetrics): void => {
   // This can be integrated with your analytics service
-  if (process.env.NODE_ENV === 'development') {
+  if (webConfig.isDev()) {
     console.log('[Bundle Metrics]', {
       route: metrics.routeName,
       sizeKB: (metrics.chunkSize / 1024).toFixed(2),
