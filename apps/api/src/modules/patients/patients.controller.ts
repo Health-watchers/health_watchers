@@ -370,6 +370,7 @@ router.patch(
     await Promise.all([
       cache.del(`${clinicId}:patient:${req.params.id}`),
       cache.delPattern(`${clinicId}:GET:/dashboard*`),
+      cache.invalidatePatientList(clinicId), // #1071 — keep list pages consistent after partial update
     ]);
 
     return res.json({ status: 'success', data: toPatientResponse(updated) });

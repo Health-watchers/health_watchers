@@ -254,3 +254,9 @@ dump.rdb
 # Performance benchmark result snapshots (generated at run time)
 performance/results/*.json
 k6-results/*.json
+
+# =============================================================================
+# Cache service temp files
+# =============================================================================
+# Redis append-only file (local dev leftovers)
+appendonly.aof

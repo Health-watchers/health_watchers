@@ -72,6 +72,7 @@ import { reimbursementRoutes } from '../../modules/payments/reimbursement.contro
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
 import exportRouter from '../../modules/export/export.routes';
+import batchExportRouter from '../../modules/export/batch-export.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -139,6 +140,8 @@ v1Router.use('/subscriptions', subscriptionRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// Batch export routes (#1072) — async job queue + SSE progress tracking
+v1Router.use('/exports', batchExportRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
