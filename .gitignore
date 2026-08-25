@@ -237,3 +237,27 @@ sbom-*.xml
 
 # GitHub Actions local run artifacts (act)
 .act/
+
+# =============================================================================
+# Additional exclusions — issues #1061-#1064 (feature branch cleanup)
+# =============================================================================
+
+# k6 test result artifacts
+k6-results.json
+k6-summary.json
+
+# Query optimisation profiling output
+query-profile-*.json
+slow-queries-*.json
+
+# Benchmark result snapshots (generated at CI run time, not source)
+benchmark-results/
+benchmark-*.json
+
+# Local migration lock files
+.migrate
+
+# Temporary REPL / debug files
+*.repl.ts
+*.debug.ts
+scratch.*
