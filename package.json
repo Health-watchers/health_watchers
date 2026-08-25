@@ -19,6 +19,11 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "audit:secrets": "ts-node scripts/audit-secrets.ts",
+    "audit:secrets:staged": "ts-node scripts/audit-secrets.ts -- --mode=staged",
+    "audit:secrets:full": "ts-node scripts/audit-secrets.ts -- --mode=full",
+    "audit:secrets:since-main": "ts-node scripts/audit-secrets.ts -- --mode=commits",
+    "setup:hooks": "bash scripts/setup-git-hooks.sh"
   }
 }

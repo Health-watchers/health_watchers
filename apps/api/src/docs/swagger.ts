@@ -12,13 +12,25 @@ const options: swaggerJsdoc.Options = {
       description:
         'HIPAA-compliant healthcare management platform API with Stellar blockchain payment integration.',
     },
-    servers: [{ url: '/api/v1', description: 'API v1' }],
+    servers: [
+      { url: '/api/v1', description: 'API v1 (production, stable)' },
+      { url: '/api/v2', description: 'API v2 (current, expanding)' },
+      { url: 'http://localhost:3001/api/v1', description: 'Local development v1' },
+      { url: 'https://api.healthwatchers.com/api/v1', description: 'Production v1' },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+          description: 'JWT access token obtained from POST /auth/login. Expires in 1 hour.',
+        },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API key for service-to-service communication. Create via POST /api-keys.',
         },
       },
       schemas: {
@@ -207,15 +219,59 @@ const options: swaggerJsdoc.Options = {
         },
       },
     },
-    security: [{ bearerAuth: [] }],
+    security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
   },
   apis: [
+    // Auth & Users
+    path.join(__dirname, '../modules/auth/auth.controller.ts'),
+    path.join(__dirname, '../modules/users/users.controller.ts'),
+    path.join(__dirname, '../modules/users/user-management.controller.ts'),
+    // Clinical
+    path.join(__dirname, '../modules/patients/patients.controller.ts'),
+    path.join(__dirname, '../modules/encounters/encounters.controller.ts'),
+    path.join(__dirname, '../modules/appointments/appointments.controller.ts'),
+    path.join(__dirname, '../modules/appointments/waitlist.controller.ts'),
+    path.join(__dirname, '../modules/lab-results/lab-results.controller.ts'),
+    path.join(__dirname, '../modules/immunizations/immunizations.controller.ts'),
+    path.join(__dirname, '../modules/care-plans/care-plans.controller.ts'),
+    path.join(__dirname, '../modules/referrals/referrals.controller.ts'),
+    path.join(__dirname, '../modules/consent/consent.controller.ts'),
+    path.join(__dirname, '../modules/schedules/schedules.controller.ts'),
+    path.join(__dirname, '../modules/cds/cds.controller.ts'),
+    path.join(__dirname, '../modules/cds/cds.swagger.ts'),
+    path.join(__dirname, '../modules/pre-auth/pre-auth.controller.ts'),
+    path.join(__dirname, '../modules/peer-reviews/peer-reviews.router.ts'),
+    path.join(__dirname, '../modules/icd10/icd10.controller.ts'),
+    path.join(__dirname, '../modules/reports/reports.controller.ts'),
+    path.join(__dirname, '../modules/ai/ai.routes.ts'),
+    path.join(__dirname, '../modules/dashboard/dashboard.routes.ts'),
+    path.join(__dirname, '../modules/portal/portal.controller.ts'),
+    // Payments
     path.join(__dirname, '../modules/payments/payments.controller.ts'),
     path.join(__dirname, '../modules/payments/analytics.controller.ts'),
     path.join(__dirname, '../modules/payments/dispute.controller.ts'),
     path.join(__dirname, '../modules/payments/payments.export.controller.ts'),
+    path.join(__dirname, '../modules/payments/recurring-payment.controller.ts'),
+    path.join(__dirname, '../modules/payments/batch-payment.controller.ts'),
+    path.join(__dirname, '../modules/payments/claimable-balance.controller.ts'),
+    path.join(__dirname, '../modules/invoices/invoices.controller.ts'),
+    path.join(__dirname, '../modules/subscriptions/subscriptions.controller.ts'),
+    // Export
     path.join(__dirname, '../modules/export/export.routes.ts'),
-    path.join(__dirname, '../modules/portal/portal.controller.ts'),
+    path.join(__dirname, '../modules/export/export-request.controller.ts'),
+    // Admin
+    path.join(__dirname, '../modules/clinics/clinics.controller.ts'),
+    path.join(__dirname, '../modules/clinics/clinic-settings.controller.ts'),
+    path.join(__dirname, '../modules/api-keys/api-keys.controller.ts'),
+    path.join(__dirname, '../modules/webhooks/webhooks.controller.ts'),
+    path.join(__dirname, '../modules/audit/audit.controller.ts'),
+    path.join(__dirname, '../modules/audit/audit-logs.controller.ts'),
+    path.join(__dirname, '../modules/documents/documents.controller.ts'),
+    path.join(__dirname, '../modules/notifications/notifications.controller.ts'),
+    path.join(__dirname, '../modules/compliance/compliance.controller.ts'),
+    path.join(__dirname, '../modules/breach-incidents/breach-incidents.controller.ts'),
+    // Health
+    path.join(__dirname, '../modules/health/health.controller.ts'),
   ],
 };
 

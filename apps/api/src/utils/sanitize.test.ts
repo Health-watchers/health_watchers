@@ -173,4 +173,24 @@ describe('sanitizeHtml — XSS vector tests', () => {
     expect(out).not.toContain('img');
     expect(out).toContain('hello');
   });
+
+  // ── Nested-tag mutation XSS (tag fragments that could reconstruct a
+  //    dangerous tag once an inner tag is stripped) ──────────────────────────
+
+  it('does not reconstruct <script> from a tag split by an allowed inner tag', () => {
+    const out = sanitizeHtml('<scr<em>ipt>alert(1)</scr</em>ipt>');
+    expect(out).not.toMatch(/<script/i);
+    expect(out).not.toContain('<em>ipt>'); // fragment must not survive as markup either
+  });
+
+  it('does not reconstruct <script> from a tag split by a disallowed inner tag', () => {
+    const out = sanitizeHtml('<scr<div>ipt>alert(1)</scr</div>ipt>');
+    expect(out).not.toMatch(/<script/i);
+    expect(out).not.toContain('<div>');
+  });
+
+  it('does not leave a reconstructed bare <script> tag after removing an inner nested <script>', () => {
+    const out = sanitizeHtml('<scr<script>ipt>alert(1)</scr</script>ipt>');
+    expect(out).not.toMatch(/<script/i);
+  });
 });

@@ -62,6 +62,32 @@ export function buildEncounterWithBilling(overrides: Partial<Encounter> = {}): P
   });
 }
 
+/** Closed/completed encounter — useful for reporting and archival tests. */
+export function buildClosedEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounterWithDiagnosis({
+    status: 'closed',
+    closedAt: new Date(),
+    ...overrides,
+  });
+}
+
+/** Telemedicine encounter variant. */
+export function buildTelemedicineEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounter({
+    type: 'telemedicine',
+    ...overrides,
+  });
+}
+
+/** Emergency encounter variant. */
+export function buildEmergencyEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounterWithVitals({
+    type: 'emergency',
+    chiefComplaint: 'Chest pain, shortness of breath',
+    ...overrides,
+  });
+}
+
 export function buildEncounterBatch(count: number, overrides: Partial<Encounter> = {}): Partial<Encounter>[] {
   return Array.from({ length: count }, () => buildEncounter(overrides));
 }

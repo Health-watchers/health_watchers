@@ -307,68 +307,42 @@ git push origin feature/your-feature
 ```
 
 2. **Create PR on GitHub**
-- Title: Keep under 70 characters, be descriptive
-- Description: Fill out the PR template completely
+- Title: Follow Conventional Commits format (enforced by CI)
+- Description: Fill out the PR template (`.github/PULL_REQUEST_TEMPLATE.md`) completely
 
 3. **PR Title Format**
 ```
-[type]: Brief description
+[type](scope): Brief description under 70 characters
 
-Types: feat, fix, docs, refactor, test, chore
+Examples:
+feat(patients): add duplicate detection
+fix(payments): resolve stellar transaction timeout
+docs(api): update authentication examples
 ```
 
 ### PR Template
 
-```markdown
-## Description
-Brief explanation of changes
+The `.github/PULL_REQUEST_TEMPLATE.md` is pre-filled when you open a PR on GitHub. Key sections:
 
-## Type of Change
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Performance improvement
-
-## Related Issues
-Closes #897
-
-## Changes Made
-- Item 1
-- Item 2
-- Item 3
-
-## Testing
-- [ ] Unit tests added
-- [ ] Integration tests added
-- [ ] Manual testing completed
-
-## Screenshots (if applicable)
-Paste images here
-
-## Checklist
-- [ ] Code follows style guidelines
-- [ ] Tests pass locally
-- [ ] No console errors/warnings
-- [ ] Docs updated
-- [ ] No breaking changes
-```
+- **Description** — what and why (not how)
+- **Type of Change** — one of: feat, fix, docs, refactor, test, perf, chore, breaking
+- **Related Issues** — `Closes #<number>` (required)
+- **Testing** — what tests were added/updated and manual test steps
+- **Security Considerations** — flag any auth, PHI, or encryption changes
+- **Documentation** — confirm OpenAPI annotations, docs, README updated
+- **Checklist** — all boxes must be checked before requesting review
 
 ### PR Review Requirements
 
-- [ ] Passes CI/CD pipeline
-- [ ] Code review approval (minimum 2)
-- [ ] Tests pass with coverage >= 80%
-- [ ] No conflicts with main branch
-- [ ] Commits follow guidelines
+- [ ] Passes all CI/CD checks (lint, typecheck, tests, security scan, build)
+- [ ] At least 1 approving review from a maintainer
+- [ ] Tests pass with statement coverage >= 80%
+- [ ] No unresolved conflicts with main branch
+- [ ] All PR template checklist items checked
 
 ### Merging
 
-Once approved, use "Squash and merge":
-```bash
-git checkout main
-git pull upstream main
-git log origin/main..my-feature  # Verify commits
-```
+Once approved, maintainers will squash-merge your PR. The PR title becomes the commit message on `main` and feeds the automated changelog. Keep it accurate.
 
 ## Commit Guidelines
 

@@ -9,9 +9,18 @@
 .env.staging
 .env.test.local
 .env.development.local
+.env.save
+.env.*.save
 # Keep .env.example tracked (it's a template)
 !.env.example
 !.env.cdn.example
+
+# Reject any file containing merge conflict markers (should never be committed)
+*.orig
+*.rej
+<<<<<<<*
+=======*
+>>>>>>>*
 
 # =============================================================================
 # Dependencies

@@ -32,6 +32,21 @@
    - Application servers
    - Message queues
 
+### Risk Register
+
+| Threat | Likelihood | Impact | Residual Risk | Primary Control |
+|--------|-----------|--------|---------------|-----------------|
+| PHI data breach via API | Medium | Critical | Low | Field-level AES-256-GCM encryption + RBAC |
+| Credential theft | Medium | High | Low | MFA enforcement + JWT short expiry |
+| NoSQL injection | Low | Critical | Very Low | `express-mongo-sanitize` + Joi validation |
+| Insider threat (staff access to PHI) | Low | High | Low | Clinic-scoped RBAC + audit logging |
+| Stolen Stellar keypair | Low | Critical | Very Low | HSM-backed encrypted keypairs + multi-sig |
+| API key exfiltration | Medium | High | Low | Short-lived keys + scope restriction |
+| DDoS | Medium | Medium | Low | Rate limiting + AWS Shield |
+| Ransomware | Very Low | Critical | Low | Encrypted backups + DR plan |
+| Dependency supply chain attack | Medium | High | Medium | npm audit + Snyk + Dependabot |
+| JWT secret compromise | Very Low | Critical | Very Low | Quarterly rotation + AWS Secrets Manager |
+
 ### Threats
 
 #### Data Breaches
@@ -62,11 +77,34 @@
 - Automatic session expiration
 - Rotate service credentials regularly
 - Secrets management (AWS Secrets Manager)
+- Account lockout after repeated failed attempts
 
 **Detection:**
 - Alert on failed login spikes
 - Monitor geographic anomalies
 - Track privilege escalation attempts
+
+**Password Complexity Requirements**
+
+Enforced server-side (`apps/api/src/modules/auth/auth.validation.ts`, `passwordSchema`) on registration, password reset, and change-password, and mirrored in the web client UI:
+
+- Minimum 8 characters
+- At least one uppercase letter (A-Z)
+- At least one lowercase letter (a-z)
+- At least one digit (0-9)
+- At least one special character (non-alphanumeric)
+- Must not match a list of common/breached passwords
+
+**Account Lockout**
+
+Enforced server-side in `apps/api/src/modules/auth/auth.controller.ts`:
+
+- After 5 consecutive failed login attempts (`failedLoginAttempts`), the account is locked for 15 minutes (`lockedUntil`).
+- The same threshold and duration apply separately to failed MFA challenge attempts (`failedMfaAttempts`).
+- While locked, login/MFA-challenge requests return `423 Locked` with a `Retry-After` header.
+- A `SUPER_ADMIN` can manually unlock an account via `POST /auth/unlock`, which resets the failed-attempt counter.
+- The account holder receives an email notification when their account is locked.
+- Successful authentication resets the failed-attempt counters.
 
 #### Injection Attacks
 
@@ -215,23 +253,34 @@ async function canAccessPatient(userId: string, patientId: string) {
 
 **Database:**
 - MongoDB encryption at rest enabled
-- Separate encryption key per collection
-- Key rotation quarterly
+- Field-level AES-256-GCM encryption for PHI, independent of the database's own encryption at rest
+- Key rotation supported via versioned keys (see below)
 
 **Backups:**
 - Encrypted with separate key
 - Stored in secure S3 bucket
 - Key in AWS Secrets Manager
 
-**Code:**
-```typescript
-// Encrypt PHI before storage
-const encrypted = encryptPHI(patientData, encryptionKey);
-await db.collection('patients').insertOne(encrypted);
+**Field-level encryption (`apps/api/src/lib/encrypt.ts`):**
 
-// Decrypt when needed
-const decrypted = decryptPHI(patient, encryptionKey);
+`encrypt()`/`decrypt()` implement AES-256-GCM with a versioned key prefix (`v<n>:iv:ciphertext:tag`) so old ciphertext keeps decrypting after a key rotation. The active key comes from `FIELD_ENCRYPTION_KEY` (32-byte/64-char hex) with `FIELD_ENCRYPTION_KEY_VERSION`; prior key versions are kept available via `FIELD_ENCRYPTION_KEY_V<n>` for as long as data encrypted under them may still need to be read.
+
+```typescript
+import { encrypt, decrypt } from '@api/lib/encrypt';
+
+// Encrypt a PHI field before storage
+patient.contactNumber = encrypt(rawContactNumber);
+await patient.save();
+
+// Decrypt when read back
+const rawContactNumber = decrypt(patient.contactNumber);
 ```
+
+Currently applied to (`apps/api/src/modules/patients/models/patient.model.ts`, `PHI_FIELDS` / `INSURANCE_PHI_FIELDS`): `contactNumber`, `address`, `dateOfBirth`, `insurance.policyNumber`, `insurance.groupNumber` — encrypted/decrypted transparently via Mongoose hooks. Also used for the MFA TOTP secret (`user.mfaSecret`) in the auth module.
+
+`firstName`/`lastName` and encounter diagnosis fields are not currently in this list — they are used in patient search (`searchName` index) and diagnosis-code filtering (aggregation pipelines), so encrypting them requires a separate, dedicated change (e.g. blind-index/tokenization for searchable PHI) rather than the direct field-swap used above.
+
+Performance of the encryption path is covered by `apps/api/src/lib/encrypt.perf.test.ts`.
 
 #### Encryption in Transit
 
@@ -494,41 +543,59 @@ Resources:
 ### Report Security Issues
 
 **DO NOT:**
-- Create public GitHub issues
-- Post on social media
-- Share with competitors
-- Publicly disclose the vulnerability
+- Create public GitHub issues for security vulnerabilities
+- Post on social media before a fix is deployed
+- Share details with competitors or third parties
+- Publicly disclose before coordinated disclosure is agreed
 
 **DO:**
-- Email: security@healthwatchers.com
-- Include: steps to reproduce, impact assessment, suggested fix
-- Sign with PGP key (optional)
+- Email: **security@healthwatchers.com**
+- Include:
+  - Steps to reproduce (proof-of-concept if available)
+  - Affected component(s) and version(s)
+  - Impact assessment — what data or functionality is at risk
+  - Suggested remediation (optional but appreciated)
+- Optionally sign with your PGP key for confidential communication
+
+### Expected Response Timeline
+
+| Step | Timeline |
+|------|----------|
+| Acknowledgement | Within 24 hours |
+| Initial severity assessment | Within 3 business days |
+| Fix or workaround | Within 30 days (critical: 7 days) |
+| Coordinated public disclosure | Agreed with reporter |
 
 ### Responsible Disclosure Policy
 
-1. **Report** vulnerability to security@healthwatchers.com
-2. **Wait** for acknowledgment (within 24 hours)
-3. **Work with us** to develop a fix (typically 30 days)
-4. **Coordinate** public disclosure date
-5. **Receive** credit and swag
+1. **Report** the vulnerability to security@healthwatchers.com
+2. **Wait** for acknowledgement (within 24 hours)
+3. **Work with us** on a fix — we aim to resolve critical issues within 7 days
+4. **Coordinate** public disclosure date — we will publish a CVE and credit you
+5. **Receive** credit in the release notes and our Hall of Thanks
+
+We will not pursue legal action against researchers who follow this policy in good faith.
 
 ### Scope
 
-**In Scope:**
-- Authentication bypass
-- Authorization flaws
-- Injection attacks
-- Data exposure
-- Cryptographic weaknesses
-- Server-side vulnerabilities
+**In scope:**
+- Authentication bypass (all endpoints)
+- Authorisation/IDOR flaws in patient and payment data
+- NoSQL, command, or template injection
+- Sensitive data exposure (PHI, credentials, private keys)
+- Cryptographic weaknesses (weak algorithms, poor key management)
+- Server-side vulnerabilities in `apps/api`, `apps/stellar-service`
+- Cross-site scripting (XSS) that accesses PHI
+- Insecure direct object references to patient records
 
-**Out of Scope:**
-- Social engineering
-- Physical security issues
-- XSRF on public forms
-- Publicly disclosed vulnerabilities
-- Issues with dependencies
-- Performance issues
+**Out of scope:**
+- Social engineering or phishing attacks
+- Physical security
+- Issues in dependencies that are already publicly disclosed (CVE assigned)
+- Vulnerabilities that require physical access to a device
+- Performance-only issues with no security impact
+- Automated scan results without reproduction steps
+- Issues on test/development environments not reachable from the internet
 
 ## Security Checklist
 

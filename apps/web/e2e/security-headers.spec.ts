@@ -10,4 +10,5 @@ test('web responses include security headers', async ({ page }) => {
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
   expect(headers['content-security-policy']).toContain("default-src 'self'");
   expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(headers['content-security-policy']).toContain('report-uri');
 });

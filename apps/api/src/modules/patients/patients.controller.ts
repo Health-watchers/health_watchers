@@ -27,10 +27,7 @@ import {
 import { DuplicateDetectionService } from './duplicate-detection.service';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
-import {
-  createInsuranceSchema,
-  updateInsuranceSchema,
-} from './insurance.validation';
+import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
 import {
   createEmergencyContactSchema,
   updateEmergencyContactSchema,
@@ -49,6 +46,7 @@ router.use(authenticate);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 const ADMIN_ROLES = requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN');
+const requireStaff = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE');
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'firstName',
@@ -89,7 +87,12 @@ router.get(
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const filter: Record<string, any> = { isActive: true };
-    if (req.query.clinicId) filter.clinicId = req.query.clinicId;
+    // Only SUPER_ADMIN may cross clinic boundaries; everyone else is scoped to their own clinic
+    // regardless of what the query param says (cross-clinic PHI access — see PENTEST_FINDINGS FIND-004).
+    filter.clinicId =
+      req.user!.role === 'SUPER_ADMIN' && req.query.clinicId
+        ? req.query.clinicId
+        : req.user!.clinicId;
 
     const result = await paginate(PatientModel, filter, page, limit);
     return res.json({
@@ -202,6 +205,19 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    // Does not fire on cache hits (served above by cacheResponse), so repeat views by the
+    // same user within the 300s TTL are not individually logged — acceptable since the
+    // originating access within that window is always recorded.
+    auditLog(
+      {
+        action: 'PATIENT_VIEW',
+        resourceType: 'Patient',
+        resourceId: String(doc._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+      },
+      req
+    );
     return res.json({ status: 'success', data: toPatientResponse(doc) });
   })
 );
@@ -213,26 +229,25 @@ router.post(
   checkSubscriptionLimit('patients'),
   validateRequest({ body: createPatientSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { firstName, lastName, dateOfBirth, sex, contactNumber, address, clinicId } = req.body;
+    const { firstName, lastName, dateOfBirth, sex, contactNumber, address } = req.body;
     const searchName = `${firstName} ${lastName}`.toLowerCase();
-    const targetClinicId = clinicId || req.user!.clinicId;
+    // Never trust a client-supplied clinicId — always scope creation to the caller's own clinic
+    // (see PENTEST_FINDINGS FIND-004).
+    const targetClinicId = req.user!.clinicId;
     const systemId = await nextSystemId(targetClinicId);
-    const doc = await withSpan(
-      'patient.create',
-      { 'clinic.id': targetClinicId },
-      async () =>
-        PatientModel.create({
-          systemId,
-          firstName,
-          lastName,
-          dateOfBirth: new Date(dateOfBirth),
-          sex,
-          contactNumber,
-          address,
-          clinicId: targetClinicId,
-          isActive: true,
-          searchName,
-        })
+    const doc = await withSpan('patient.create', { 'clinic.id': targetClinicId }, async () =>
+      PatientModel.create({
+        systemId,
+        firstName,
+        lastName,
+        dateOfBirth: new Date(dateOfBirth),
+        sex,
+        contactNumber,
+        address,
+        clinicId: targetClinicId,
+        isActive: true,
+        searchName,
+      })
     );
     emitToClinic(String(targetClinicId), 'patient:created', {
       patientId: String(doc._id),
@@ -258,10 +273,14 @@ router.put(
     }
     if (dateOfBirth) update.dateOfBirth = new Date(dateOfBirth);
 
-    const doc = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    const clinicId = req.user!.clinicId;
+    // Scope by clinicId so a caller can't update another clinic's patient by guessing its ID
+    // (see PENTEST_FINDINGS FIND-004).
+    const doc = await PatientModel.findOneAndUpdate({ _id: req.params.id, clinicId }, update, {
+      new: true,
+    });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const clinicId = req.user!.clinicId;
     await Promise.all([
       cache.del(`${clinicId}:patient:${req.params.id}`),
       cache.delPattern(`${clinicId}:GET:/dashboard*`),
@@ -324,8 +343,10 @@ router.delete(
   '/:id',
   ADMIN_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const doc = await PatientModel.findByIdAndUpdate(
-      req.params.id,
+    // Scope by clinicId so an admin can't deactivate another clinic's patient by guessing its ID
+    // (see PENTEST_FINDINGS FIND-004).
+    const doc = await PatientModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
       { isActive: false },
       { new: true }
     );
@@ -1081,9 +1102,7 @@ router.delete(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const index = patient.insurance?.findIndex(
-      (ins) => String(ins._id) === req.params.insuranceId
-    );
+    const index = patient.insurance?.findIndex((ins) => String(ins._id) === req.params.insuranceId);
     if (index === undefined || index === -1) {
       return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
     }
@@ -1616,7 +1635,8 @@ Return ONLY valid JSON (no markdown) with this exact schema:
         improvedFactors,
         naturalLanguageExplanation,
         recommendations,
-        disclaimer: 'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
+        disclaimer:
+          'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
       },
     });
   })

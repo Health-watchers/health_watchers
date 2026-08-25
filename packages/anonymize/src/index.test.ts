@@ -315,6 +315,26 @@ describe('Level: aggregation (anonymizeBatch)', () => {
   it('throws for unsupported level on single record', () => {
     expect(() => anonymize(BASE_PATIENT, { level: 'aggregation' as AnonymizationLevel })).toThrow();
   });
+
+  it('throws for an unrecognized level string on a single record', () => {
+    expect(() =>
+      anonymize(BASE_PATIENT, { level: 'not-a-real-level' as AnonymizationLevel })
+    ).toThrow();
+  });
+
+  it('propagates the throw when batch de-identifying with an unrecognized level', () => {
+    expect(() =>
+      anonymizeBatch(PATIENTS, { level: 'not-a-real-level' as AnonymizationLevel })
+    ).toThrow();
+  });
+
+  it('handles a completely empty patient object without throwing', () => {
+    expect(() => anonymize({}, DE_ID)).not.toThrow();
+    expect(() => anonymize({}, PSEUDO)).not.toThrow();
+    const r = anonymize({}, DE_ID);
+    expect(r.firstName).toBeUndefined();
+    expect(r.contactNumber).toBe('[REDACTED]');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -385,7 +405,8 @@ describe('Clinical notes — PII stripping', () => {
   });
 
   it('handles undefined clinicalNotes', () => {
-    const r = anonymize({ ...BASE_PATIENT, clinicalNotes: undefined }, DE_ID);
+    const { clinicalNotes: _clinicalNotes, ...withoutNotes } = BASE_PATIENT;
+    const r = anonymize(withoutNotes, DE_ID);
     expect(r.clinicalNotes).toBeUndefined();
   });
 
@@ -439,8 +460,8 @@ describe('Edge cases — names and identifiers', () => {
     const r = anonymize({ dateOfBirth: '1982-01-01' }, DE_ID);
     const match = r.dateOfBirth?.match(/^(\d+)-(\d+) years$/);
     expect(match).not.toBeNull();
-    const low = parseInt(match![1]);
-    const high = parseInt(match![2]);
+    const low = parseInt(match![1]!);
+    const high = parseInt(match![2]!);
     expect(high - low).toBe(4);
     expect(low % 5).toBe(0);
   });
@@ -619,12 +640,13 @@ describe('Property-based tests — PII pattern matching', () => {
   it('age range always matches NNN-NNN years format with 5-year bucket', () => {
     fc.assert(
       fc.property(fc.date({ min: new Date('1920-01-01'), max: new Date('2005-12-31') }), (dob) => {
-        const r = anonymize({ dateOfBirth: dob.toISOString().split('T')[0] }, DE_ID);
+        const dateOfBirth = dob.toISOString().split('T')[0]!;
+        const r = anonymize({ dateOfBirth }, DE_ID);
         if (!r.dateOfBirth) return true;
         const m = r.dateOfBirth.match(/^(\d+)-(\d+) years$/);
         if (!m) return false;
-        const low = parseInt(m[1]);
-        const high = parseInt(m[2]);
+        const low = parseInt(m[1]!);
+        const high = parseInt(m[2]!);
         return high - low === 4 && low % 5 === 0;
       })
     );

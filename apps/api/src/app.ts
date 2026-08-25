@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
-import cors from 'cors';
+import cors, { type CorsOptions } from 'cors';
 import {
   createCompressionMiddleware,
   compressionMetricsEndpoint,
@@ -21,6 +21,7 @@ import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
 import { errorHandler } from './middlewares/error.middleware';
 import { generalLimiter } from './middlewares/rate-limit.middleware';
+import { rateLimitMonitor } from './middlewares/rate-limit-monitor.middleware';
 import {
   apiVersionHeader,
   v1DeprecationWarning,
@@ -58,10 +59,7 @@ import {
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
-import {
-  startFollowUpReminderJob,
-  stopFollowUpReminderJob,
-} from './modules/encounters/follow-up-reminder-job';
+import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
 import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
@@ -79,11 +77,6 @@ import federationRouter from './modules/federation/federation.router';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { responseFilterMiddleware } from './middlewares/response-filter.middleware';
-import {
-  optimizeResponsePayload,
-  addResponseOptimizationHeaders,
-} from './middleware/response-optimization.middleware';
-import { parseLazyLoadQuery } from './middleware/lazy-load.middleware';
 
 const app = express();
 const server = createServer(app);
@@ -131,19 +124,22 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
   .map((o) => o.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server requests (no origin) and listed origins
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error(`CORS: origin '${origin}' not allowed`));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-  })
-);
-app.options('*', cors());
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow server-to-server requests (no origin) and listed origins.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
+  maxAge: 600,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // ── HTTP request logging with correlation ID ──────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';
@@ -219,31 +215,17 @@ app.use('/api', acceptVersionMiddleware);
 app.use('/api/v1', v1DeprecationWarning);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
+app.use('/api/v1', rateLimitMonitor);
 app.use('/api/v1', generalLimiter);
-// ── Request/Response optimization (#1075, #1076) ──────────────────────────────
-// Parse ?fields= and ?excludeFields= query parameters for lazy loading & field selection
-app.use('/api/v1', parseLazyLoadQuery);
-// Strip role-restricted fields from JSON responses
 app.use('/api/v1', responseFilterMiddleware);
-// Add optimization metric headers and remove null/empty fields from JSON responses
-app.use('/api/v1', addResponseOptimizationHeaders);
-app.use(
-  '/api/v1',
-  optimizeResponsePayload({ enableMetrics: true, removeNullFields: true, removeEmptyArrays: true })
-);
 app.use('/api/v1', v1Router);
 
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
 app.use('/api/v2', apiVersionHeader('2.0'));
 app.use('/api/v2', traceIdHeader);
+app.use('/api/v2', rateLimitMonitor);
 app.use('/api/v2', generalLimiter);
-app.use('/api/v2', parseLazyLoadQuery);
 app.use('/api/v2', responseFilterMiddleware);
-app.use('/api/v2', addResponseOptimizationHeaders);
-app.use(
-  '/api/v2',
-  optimizeResponsePayload({ enableMetrics: true, removeNullFields: true, removeEmptyArrays: true })
-);
 app.use('/api/v2', v2Router);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
@@ -292,6 +274,7 @@ async function startServer() {
   );
   startMfaGracePeriodJob();
   startFollowUpReminderJob();
+  startRetryWorker();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -312,6 +295,7 @@ async function startServer() {
       stopXLMRateJob,
       stopMfaGracePeriodJob,
       stopFollowUpReminderJob,
+      stopRetryWorker,
     ],
   });
 }

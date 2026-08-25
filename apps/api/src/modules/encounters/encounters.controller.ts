@@ -438,13 +438,9 @@ router.get(
       if (q.to) dateRange.$lte = new Date(q.to + 'T23:59:59.999Z');
       filter.followUpDate = dateRange;
     }
-    const result = await paginate(
-      EncounterModel,
-      filter as any,
-      q.page,
-      q.limit,
-      { followUpDate: 1 }
-    );
+    const result = await paginate(EncounterModel, filter as any, q.page, q.limit, {
+      followUpDate: 1,
+    });
     return res.status(200).json({
       status: 'success',
       data: result.data.map((d) => toEncounterResponse(d as any)),
@@ -464,6 +460,16 @@ router.get(
       isActive: true,
     });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    auditLog(
+      {
+        action: 'ENCOUNTER_VIEW',
+        resourceType: 'Encounter',
+        resourceId: String(doc._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+      },
+      req
+    );
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
   })
 );
@@ -476,14 +482,20 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const clinicId = req.user!.clinicId;
     const encounter = await EncounterModel.findOne({ _id: req.params.id, clinicId });
-    if (!encounter) return res.status(404).json({ status: 'error', message: 'Encounter not found' });
+    if (!encounter)
+      return res.status(404).json({ status: 'error', message: 'Encounter not found' });
     if (encounter.status === 'cancelled') {
-      return res.status(409).json({ status: 'error', message: 'Cannot record outcome for a cancelled encounter' });
+      return res
+        .status(409)
+        .json({ status: 'error', message: 'Cannot record outcome for a cancelled encounter' });
     }
     const body = req.body as RecordOutcomeDto;
     if (body.followUpEncounterId) {
       const linked = await EncounterModel.findOne({ _id: body.followUpEncounterId, clinicId });
-      if (!linked) return res.status(400).json({ status: 'error', message: 'followUpEncounterId does not belong to this clinic' });
+      if (!linked)
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'followUpEncounterId does not belong to this clinic' });
     }
     const updated = await EncounterModel.findOneAndUpdate(
       { _id: req.params.id, clinicId },

@@ -10,7 +10,13 @@
   "mutate": [
     "src/modules/auth/token.service.ts",
     "src/modules/auth/jwt-claim-validator.ts",
-    "src/services/token-denylist.service.ts"
+    "src/services/token-denylist.service.ts",
+    "src/modules/auth/services/backup-code.service.ts",
+    "src/utils/paginate.ts",
+    "src/utils/sanitize.ts",
+    "src/lib/encrypt.ts",
+    "src/modules/patients/duplicate-detection.service.ts",
+    "src/utils/app-error.ts"
   ],
   "thresholds": {
     "high": 80,

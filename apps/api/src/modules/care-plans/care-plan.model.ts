@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { sanitizeText } from '@api/utils/sanitize';
 
 export interface ICarePlanGoal {
   description: string;
@@ -105,6 +106,45 @@ const carePlanSchema = new Schema<ICarePlan>(
   },
   { timestamps: true, versionKey: false }
 );
+
+function sanitizeGoals(goals: unknown): void {
+  if (!Array.isArray(goals)) return;
+  for (const g of goals) if (g?.description) g.description = sanitizeText(g.description);
+}
+
+function sanitizeInterventions(interventions: unknown): void {
+  if (!Array.isArray(interventions)) return;
+  for (const i of interventions) if (i?.description) i.description = sanitizeText(i.description);
+}
+
+function sanitizeReviewHistory(reviewHistory: unknown): void {
+  if (!Array.isArray(reviewHistory)) return;
+  for (const r of reviewHistory) if (r?.notes) r.notes = sanitizeText(r.notes);
+}
+
+carePlanSchema.pre('save', function () {
+  if (this.condition) this.condition = sanitizeText(this.condition);
+  sanitizeGoals(this.goals);
+  sanitizeInterventions(this.interventions);
+  sanitizeReviewHistory(this.reviewHistory);
+});
+
+// Covers PUT /:id (direct field update) and POST /:id/review ($push onto reviewHistory)
+carePlanSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as any;
+  if (!update) return;
+
+  for (const target of [update, update.$set]) {
+    if (!target) continue;
+    if (target.condition) target.condition = sanitizeText(target.condition);
+    sanitizeGoals(target.goals);
+    sanitizeInterventions(target.interventions);
+    sanitizeReviewHistory(target.reviewHistory);
+  }
+
+  const pushedReview = update.$push?.reviewHistory;
+  if (pushedReview?.notes) pushedReview.notes = sanitizeText(pushedReview.notes);
+});
 
 export const CarePlanModel = (models.CarePlan ||
   model<ICarePlan>('CarePlan', carePlanSchema)) as import('mongoose').Model<ICarePlan>;

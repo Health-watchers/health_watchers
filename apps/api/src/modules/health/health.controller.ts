@@ -188,6 +188,11 @@ router.get('/', (_req: Request, res: Response) => {
       '/health/backup',
       '/health/tracing',
       '/health/trace-context',
+      '/api/v1/health/comprehensive',
+      '/api/v1/health/history',
+      '/api/v1/health/dependencies',
+      '/api/v1/health/system',
+      '/api/v1/health/quick',
     ],
     timestamp: new Date().toISOString(),
   });

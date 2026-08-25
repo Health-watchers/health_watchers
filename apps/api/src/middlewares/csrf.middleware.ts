@@ -30,11 +30,14 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   // Skip CSRF check for auth endpoints (login/register) since no session exists yet,
-  // and for CSP reports which are browser-generated with no user session.
+  // for CSP reports which are browser-generated with no user session, and for the
+  // inbound Stellar payment webhook, which is a server-to-server call authenticated by
+  // its own HMAC signature (X-Webhook-Signature) rather than a cookie session.
   if (
     req.path.startsWith('/api/v1/auth/login') ||
     req.path.startsWith('/api/v1/auth/register') ||
-    req.path.startsWith('/api/v1/csp-report')
+    req.path.startsWith('/api/v1/csp-report') ||
+    req.path.startsWith('/api/v1/webhooks/stellar-payment')
   ) {
     return next();
   }
@@ -42,10 +45,26 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
   const cookieToken = req.cookies?.['csrf-token'];
   const headerToken = req.headers['x-csrf-token'] as string | undefined;
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-    res.status(403).json({ error: 'Forbidden', code: 'CSRF_TOKEN_INVALID', message: 'Invalid or missing CSRF token' });
+  if (!cookieToken || !headerToken || !timingSafeEqualStrings(cookieToken, headerToken)) {
+    res.status(403).json({
+      error: 'Forbidden',
+      code: 'CSRF_TOKEN_INVALID',
+      message: 'Invalid or missing CSRF token',
+    });
     return;
   }
 
   next();
+}
+
+/**
+ * Constant-time string comparison to avoid leaking the valid CSRF token via
+ * response-timing side channels. Falls back to `false` on length mismatch
+ * (crypto.timingSafeEqual requires equal-length buffers).
+ */
+function timingSafeEqualStrings(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }

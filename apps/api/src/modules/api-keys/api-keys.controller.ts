@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { ApiKeyModel, ALL_SCOPES, ApiKeyScope } from './models/api-key.model';
 import { ApiKeyUsageModel } from './models/api-key-usage.model';
 import { AuditService } from '../audit/audit.service';
+import logger from '@api/utils/logger';
 
 const sha256 = (val: string) => crypto.createHash('sha256').update(val).digest('hex');
 
@@ -10,6 +11,20 @@ const generateRawKey = () => {
   const randomBytes = crypto.randomBytes(32).toString('hex');
   return { rawKey: `hw_${randomBytes}`, prefix: `hw_${randomBytes.slice(0, 8)}` };
 };
+
+const isDev = process.env.NODE_ENV !== 'production';
+
+/**
+ * Log the real error server-side and respond with a generic message in production —
+ * returning err.message directly leaked internal paths/schema details (see PENTEST_FINDINGS FIND-006).
+ */
+function sendServerError(res: Response, err: unknown, action: string) {
+  logger.error({ err }, `API key ${action} failed`);
+  return res.status(500).json({
+    error: 'ServerError',
+    message: isDev && err instanceof Error ? err.message : 'An unexpected error occurred',
+  });
+}
 
 // POST /api/v1/api-keys
 export const createApiKey = async (req: Request, res: Response) => {
@@ -66,7 +81,7 @@ export const createApiKey = async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'create');
   }
 };
 
@@ -77,7 +92,7 @@ export const listApiKeys = async (req: Request, res: Response) => {
     const keys = await ApiKeyModel.find({ clinicId }).lean();
     return res.json({ status: 'success', data: keys });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'list');
   }
 };
 
@@ -116,7 +131,7 @@ export const updateApiKey = async (req: Request, res: Response) => {
 
     return res.json({ status: 'success', data: apiKey });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'update');
   }
 };
 
@@ -167,7 +182,7 @@ export const rotateApiKey = async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'rotate');
   }
 };
 
@@ -200,7 +215,7 @@ export const revokeApiKey = async (req: Request, res: Response) => {
 
     return res.json({ status: 'success', data: { id: key._id, isActive: key.isActive } });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'revoke');
   }
 };
 
@@ -218,6 +233,6 @@ export const getApiKeyUsage = async (req: Request, res: Response) => {
 
     return res.json({ status: 'success', data: usage });
   } catch (err: any) {
-    return res.status(500).json({ error: 'ServerError', message: err.message });
+    return sendServerError(res, err, 'usage lookup');
   }
 };

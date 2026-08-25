@@ -16,6 +16,12 @@ const config: Config = {
   moduleNameMapper: {
     '^@api/(.*)$': `${srcRoot}/$1`,
     '^@/(.*)$': `${srcRoot}/$1`,
+    // Resolve the anonymize workspace package explicitly rather than relying on
+    // npm workspace hoisting/symlinks to place it under node_modules.
+    '^@health-watchers/anonymize$': path.resolve(
+      __dirname,
+      '../../packages/anonymize/src/index.ts'
+    ),
     // Mock the rate-limit middleware so tests don't need redis installed.
     // Match both the @api alias and the resolved absolute path.
     '^@api/middlewares/rate-limit\\.middleware$': `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
@@ -61,16 +67,52 @@ const config: Config = {
     ],
   },
 
-  // Coverage: auth + payments + patient model
+  // Coverage: auth + payments + patient model + middlewares + newly-tested modules
   collectCoverageFrom: [
     'src/modules/auth/**/*.ts',
     'src/modules/payments/**/*.ts',
     'src/modules/patients/models/patient.model.ts',
+    'src/middlewares/**/*.ts',
+    'src/utils/asyncHandler.ts',
+    'src/modules/care-plans/care-plan.model.ts',
+    'src/modules/care-plans/care-plan.validation.ts',
+    'src/modules/care-plans/care-plans.controller.ts',
+    'src/modules/communications/communication-log.model.ts',
+    'src/modules/communications/communication.validation.ts',
+    'src/modules/communications/communication.service.ts',
+    'src/modules/compliance/baa.model.ts',
+    'src/modules/compliance/breach.model.ts',
+    'src/modules/consent/consent.model.ts',
+    'src/modules/consent/consent.controller.ts',
+    'src/modules/cpt/cpt.model.ts',
+    'src/modules/documents/models/document.model.ts',
+    'src/modules/documents/models/document-version.model.ts',
+    'src/modules/immunizations/immunization.model.ts',
+    'src/modules/immunizations/immunization.validation.ts',
+    'src/modules/lab-results/lab-result.model.ts',
+    'src/modules/lab-results/critical-value.service.ts',
+    'src/modules/notifications/notification.model.ts',
+    'src/modules/notifications/notification.service.ts',
+    'src/modules/notifications/notifications.controller.ts',
+    'src/modules/referrals/referral.model.ts',
+    'src/modules/reports/reports.validation.ts',
+    'src/modules/reports/benchmarking.service.ts',
+    'src/modules/subscriptions/usage.service.ts',
+    'src/modules/subscriptions/billing.service.ts',
+    'src/modules/surveys/survey.model.ts',
+    'src/modules/surveys/survey.validation.ts',
+    'src/modules/webhooks/webhook.model.ts',
+    'src/modules/webhooks/webhook.validation.ts',
+    'src/modules/cds/cds-rules-engine.ts',
+    'src/modules/cds/cds-rule.model.ts',
     '!src/modules/auth/**/*.test.ts',
     '!src/modules/auth/**/*.d.ts',
     '!src/modules/payments/**/*.test.ts',
     '!src/modules/payments/**/__tests__/**',
     '!src/modules/payments/**/*.d.ts',
+    '!src/middlewares/**/*.test.ts',
+    '!src/middlewares/__tests__/**',
+    '!src/middlewares/__mocks__/**',
   ],
 
   coverageThreshold: {

@@ -39,7 +39,9 @@ export class SocketService {
           return next(new Error('Authentication token required'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
+          algorithms: ['HS256'],
+        }) as any;
         const user = await UserModel.findById(decoded.userId).select('-password');
 
         if (!user) {

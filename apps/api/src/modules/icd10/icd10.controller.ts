@@ -4,6 +4,7 @@ import { ICD10Model } from './icd10.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
+import { escapeRegex } from '@api/utils/regex';
 import {
   listFavorites,
   addFavorite,
@@ -68,7 +69,7 @@ icd10Routes.get(
       let results: ICD10SearchResult[];
       if (isCodeLike) {
         results = await ICD10Model.find({
-          code: { $regex: `^${q.toUpperCase()}`, $options: 'i' },
+          code: { $regex: `^${escapeRegex(q.toUpperCase())}`, $options: 'i' },
           isValid: true,
         })
           .select('code description category chapter')

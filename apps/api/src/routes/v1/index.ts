@@ -92,6 +92,7 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
+import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
 // ── Data Management ───────────────────────────────────────────────────────────
 import { archiveRouter } from '../../modules/archive';
@@ -162,11 +163,8 @@ v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
 // ── Security (no auth, no CSRF) ───────────────────────────────────────────────
 v1Router.use('/csp-report', cspReportRoutes);
 
-// ── Archive (data archival & retrieval) ──────────────────────────────────────
-v1Router.use('/archive', archiveRouter);
-
-// ── Encounter lazy loading ────────────────────────────────────────────────────
-v1Router.use('/encounters', encounterLazyLoadRouter);
+// ── Comprehensive Health Checks (no auth required) ───────────────────────────
+v1Router.use('/health', comprehensiveHealthRoutes);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)
