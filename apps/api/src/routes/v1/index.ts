@@ -52,7 +52,10 @@ import { icd10Routes } from '../../modules/icd10/icd10.controller';
 import { carePlanRoutes } from '../../modules/care-plans/care-plans.controller';
 import { referralRoutes } from '../../modules/referrals/referrals.controller';
 import { consentRoutes } from '../../modules/consent/consent.controller';
-import { immunizationRoutes, cvxCodesRouter } from '../../modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from '../../modules/immunizations/immunizations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
 import {
   healthLogRouter,
@@ -89,6 +92,10 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
+
+// ── Data Management ───────────────────────────────────────────────────────────
+import { archiveRouter } from '../../modules/archive';
+import encounterLazyLoadRouter from '../../modules/encounters/encounter-lazy-load.routes';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -154,6 +161,12 @@ v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
 
 // ── Security (no auth, no CSRF) ───────────────────────────────────────────────
 v1Router.use('/csp-report', cspReportRoutes);
+
+// ── Archive (data archival & retrieval) ──────────────────────────────────────
+v1Router.use('/archive', archiveRouter);
+
+// ── Encounter lazy loading ────────────────────────────────────────────────────
+v1Router.use('/encounters', encounterLazyLoadRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)

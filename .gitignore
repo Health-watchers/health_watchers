@@ -63,6 +63,10 @@ jest-results.json
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
 
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
+
 # Playwright test artifacts
 playwright-report/
 test-results/
