@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 import { ApiErrorCode } from '@health-watchers/types';
+import { sendApiError } from '../utils/api-response';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -76,13 +77,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       err,
       err.message
     );
-    res.status(err.statusCode).json({
-      error: err.category,
-      code: err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
-      message: err.message,
-      requestId: req.requestId,
-      ...(isDev && err.stack ? { stack: err.stack } : {}),
-    });
+    sendApiError(
+      res,
+      err.statusCode,
+      err.category,
+      err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
+      err.message,
+      { requestId: req.requestId, ...(isDev && err.stack ? { stack: err.stack } : {}) }
+    );
     return;
   }
 
@@ -90,13 +92,17 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (err instanceof ZodError) {
     trackError('low', 'validation');
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: 'Request validation failed',
-      details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'ValidationError',
+      ApiErrorCode.VALIDATION_ERROR,
+      'Request validation failed',
+      {
+        details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
+        requestId: req.requestId,
+      }
+    );
     return;
   }
 
@@ -105,10 +111,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     trackError('low', 'validation');
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
     logger.info({ ...ctx, details }, 'Mongoose validation error');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: err.message,
+    sendApiError(res, 400, 'ValidationError', ApiErrorCode.VALIDATION_ERROR, err.message, {
       details,
       requestId: req.requestId,
     });

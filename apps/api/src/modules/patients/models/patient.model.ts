@@ -54,7 +54,7 @@ export interface IInsurance {
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export interface Patient {
+export interface PatientDocument {
   systemId: string;
   firstName: string;
   lastName: string;
@@ -82,6 +82,9 @@ export interface Patient {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+/** @deprecated Use PatientDocument for persistence-layer values. */
+export type Patient = PatientDocument;
 
 const allergySchema = new Schema<IAllergy>(
   {
@@ -134,7 +137,7 @@ const insuranceSchema = new Schema<IInsurance>(
   { _id: true }
 );
 
-const patientSchema = new Schema<Patient>(
+const patientSchema = new Schema<PatientDocument>(
   {
     systemId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true, trim: true },
@@ -202,7 +205,7 @@ patientSchema.pre('save', function () {
 });
 
 patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any> | null;
+  const update = this.getUpdate() as Record<string, unknown> | null;
   if (!update) return;
   const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
   for (const field of PHI_FIELDS) {
@@ -229,20 +232,25 @@ function decryptDoc(doc: unknown) {
   }
 }
 
-function encryptUpdatePayload(update: Record<string, any>) {
-  const target = update.$set ?? update;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function encryptUpdatePayload(update: Record<string, unknown>) {
+  const target = isRecord(update.$set) ? update.$set : update;
   for (const field of PHI_FIELDS) {
-    if (target[field]) target[field] = encrypt(target[field]);
+    const value = target[field];
+    if (typeof value === 'string') target[field] = encrypt(value);
   }
 }
 
 patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any>;
+  const update = this.getUpdate() as Record<string, unknown>;
   if (update) encryptUpdatePayload(update);
 });
 
 patientSchema.pre('updateMany', function () {
-  const update = this.getUpdate() as Record<string, any>;
+  const update = this.getUpdate() as Record<string, unknown>;
   if (update) encryptUpdatePayload(update);
 });
 
@@ -266,8 +274,8 @@ patientSchema.virtual('age').get(function () {
 });
 
 patientSchema.virtual('ageGroup').get(function () {
-  const age = (this as any).age;
-  if (age === null) return null;
+  const age = this.get('age') as number | null | undefined;
+  if (age == null) return null;
   if (age < 1) return 'infant';
   if (age < 3) return 'toddler';
   if (age < 12) return 'child';
@@ -277,4 +285,4 @@ patientSchema.virtual('ageGroup').get(function () {
 });
 
 export const PatientModel = (models.Patient ||
-  model<Patient>('Patient', patientSchema)) as import('mongoose').Model<Patient>;
+  model<PatientDocument>('Patient', patientSchema)) as import('mongoose').Model<PatientDocument>;
