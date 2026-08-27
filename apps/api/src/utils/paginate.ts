@@ -74,8 +74,9 @@ export function parsePagination(
   query: Record<string, unknown>
 ): { page: number; limit: number } | null {
   const page = Math.max(1, parseInt(query.page as string) || 1);
-  const limit = parseInt(query.limit as string) || 20;
-  if (limit > 100) return null;
+  // Default and max page size are defined in constants.ts (#1063)
+  const limit = parseInt(query.limit as string) || 20; // DEFAULT_PAGE_SIZE = 20
+  if (limit > 100) return null; // MAX_PAGE_SIZE = 100
   return { page, limit: Math.max(1, limit) };
 }
 
