@@ -92,6 +92,16 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
+// ── Sharding (#1077) ──────────────────────────────────────────────────────────
+import shardingRouter from '../../routes/sharding';
+
+// ── CDN (#1078) ───────────────────────────────────────────────────────────────
+import cdnCacheRouter from '../../routes/cdn/cache-invalidation';
+import cdnHealthRouter from '../../routes/cdn/cdn-health';
+
+// ── Replication (#1080) ───────────────────────────────────────────────────────
+import replicationRouter from '../../routes/replication';
+
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
 
@@ -161,6 +171,16 @@ v1Router.use('/csp-report', cspReportRoutes);
 
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);
+
+// ── Sharding admin (#1077) ────────────────────────────────────────────────────
+v1Router.use('/sharding', shardingRouter);
+
+// ── CDN management (#1078) ────────────────────────────────────────────────────
+v1Router.use('/cdn', cdnCacheRouter);
+v1Router.use('/cdn', cdnHealthRouter);
+
+// ── Replication monitoring (#1080) ───────────────────────────────────────────
+v1Router.use('/replication', replicationRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)
