@@ -18,9 +18,6 @@
 # Reject any file containing merge conflict markers (should never be committed)
 *.orig
 *.rej
-<<<<<<<*
-=======*
->>>>>>>*
 
 # =============================================================================
 # Dependencies
@@ -82,7 +79,10 @@ playwright/.cache/
 # Stryker mutation testing output
 .stryker-tmp/
 stryker-report/
-reports/
+# Scope to known generated-report directories only — do NOT use bare `reports/`
+# which would accidentally ignore apps/api/src/modules/reports/
+apps/api/reports/
+apps/api/stryker-reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -159,7 +159,6 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-apps/api/reports/
 
 # =============================================================================
 # Runtime / Debug artifacts
