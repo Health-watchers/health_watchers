@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { type Patient, formatDate } from '@health-watchers/types';
 import {
@@ -14,6 +14,8 @@ import {
 import PatientThumbnail from '@/components/patients/PatientThumbnail';
 import PatientImport from '@/components/patients/PatientImport';
 import { usePatients, type PatientFilters } from '@/lib/queries/usePatients';
+import { SearchTips } from '@/components/patients/SearchTips';
+import { DuplicateDetectionWarning } from '@/components/patients/DuplicateDetectionWarning';
 
 interface Labels {
   title: string;
@@ -80,17 +82,79 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const [appliedFilters, setAppliedFilters] = useState<typeof DEFAULT_FILTERS>(DEFAULT_FILTERS);
   const [inputValue, setInputValue] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout>();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: patients = [], isLoading, error } = usePatients({
     ...appliedFilters,
     q: searchQuery,
   });
 
+  useEffect(() => {
+    const loadSearchHistory = () => {
+      try {
+        const history = localStorage.getItem('patientSearchHistory');
+        if (history) {
+          setSearchHistory(JSON.parse(history).slice(0, 10));
+        }
+      } catch {
+      }
+    };
+    loadSearchHistory();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   const handleSearch = (value: string) => {
     setInputValue(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => setSearchQuery(value.trim()), 300);
+    debounceTimer.current = setTimeout(() => {
+      const trimmed = value.trim();
+      setSearchQuery(trimmed);
+      if (trimmed && trimmed.length > 2) {
+        const newHistory = [trimmed, ...searchHistory.filter((h) => h !== trimmed)].slice(0, 10);
+        setSearchHistory(newHistory);
+        localStorage.setItem('patientSearchHistory', JSON.stringify(newHistory));
+      }
+    }, 300);
+  };
+
+  const exportToCSV = () => {
+    if (patients.length === 0) return;
+
+    const headers = ['ID', 'First Name', 'Last Name', 'DOB', 'Sex', 'Contact', 'Risk Level'];
+    const rows = patients.map((p: Patient & { riskLevel?: string }) => [
+      p.systemId || '',
+      p.firstName || '',
+      p.lastName || '',
+      formatDate(p.dateOfBirth) || '',
+      p.sex || '',
+      p.contactNumber || '',
+      p.riskLevel || '',
+    ]);
+
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `patients-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const applyFilters = () => {
@@ -116,18 +180,38 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{labels.title}</h1>
-        <Link
-          href="/patients/new"
-          id="register-new-patient-btn"
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-blue-800"
-        >
-          <span aria-hidden="true">+</span>
-          {labels.registerNew}
-        </Link>
+        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50 sm:text-3xl">{labels.title}</h1>
+        <div className="flex flex-wrap gap-2">
+          {patients.length > 0 && (
+            <Button
+              onClick={exportToCSV}
+              variant="outline"
+              className="inline-flex items-center gap-2 text-sm"
+            >
+              📥 Export CSV
+            </Button>
+          )}
+          <Link
+            href="/patients/new"
+            id="register-new-patient-btn"
+            className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-primary-800"
+          >
+            <span aria-hidden="true">+</span>
+            {labels.registerNew}
+          </Link>
+        </div>
       </div>
 
-      <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 shadow-sm">
+      {patients.length > 0 && (
+        <DuplicateDetectionWarning
+          patients={patients.map((p) => ({
+            ...p,
+            matchScore: 0.8,
+          }))}
+        />
+      )}
+
+      <div className="mb-6 rounded-xl border border-neutral-200 bg-neutral-50 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
         <div className="p-5">
           <div className="mb-4">
             <label htmlFor="patient-search" className="sr-only">
@@ -135,14 +219,43 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             </label>
             <div className="relative">
               <input
+                ref={searchInputRef}
                 id="patient-search"
                 type="search"
                 value={inputValue}
                 onChange={(e) => handleSearch(e.target.value)}
+                onFocus={() => setShowSearchHistory(true)}
+                onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
                 placeholder={`${labels.search} by name, ID, or medical condition`}
-                className="w-full rounded-md border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700 placeholder-gray-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-700 placeholder-neutral-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-400 dark:focus:ring-primary-900/50"
                 aria-label={labels.search}
               />
+              <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-2">
+                <SearchTips />
+                <span className="text-xs text-neutral-400">Ctrl+/</span>
+              </div>
+              {showSearchHistory && searchHistory.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                  <div className="p-2">
+                    <p className="px-2 py-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                      Recent Searches
+                    </p>
+                    {searchHistory.map((query) => (
+                      <button
+                        key={query}
+                        onClick={() => {
+                          setInputValue(query);
+                          handleSearch(query);
+                          setShowSearchHistory(false);
+                        }}
+                        className="block w-full rounded px-2 py-1 text-left text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        🕐 {query}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
