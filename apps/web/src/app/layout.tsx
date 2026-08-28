@@ -2,14 +2,15 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
-import { ThemeProvider } from 'next-themes';
 import { QueryProvider } from '@/lib/QueryProvider';
 import { AuthProvider } from '@/context/AuthContext';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 import { Toaster } from '@/components/ui';
 import { ThemeSync } from '@/components/ThemeSync';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PWAInit } from '@/components/PWAInit';
+import { SessionTimeoutWarning } from '@/components/SessionTimeoutWarning';
 import './globals.css';
 
 const inter = Inter({
@@ -90,13 +91,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen bg-neutral-50 font-sans antialiased dark:bg-neutral-900">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <QueryProvider>
               <AuthProvider>
                 <ThemeSync />
                 <PWAInit />
                 <OfflineIndicator />
+                <SessionTimeoutWarning />
                 {children}
                 <Toaster />
               </AuthProvider>
