@@ -15,6 +15,7 @@ import { paginate, parsePagination } from '@api/utils/paginate';
 import { sendInvoiceEmail } from '@api/lib/email.service';
 import { randomUUID } from 'crypto';
 import { createInvoiceSchema, listInvoicesQuerySchema, idParamSchema } from './invoices.validation';
+import { calculateInvoiceTotals } from '../billing/line-item-calculator';
 import { z } from 'zod';
 
 const router = Router();
@@ -65,15 +66,14 @@ router.post(
 
     const resolvedCurrency: 'XLM' | 'USDC' = currency ?? settings?.currency ?? 'XLM';
 
-    // Compute totals
-    const computedItems = (
+    // Compute totals via the shared line-item calculation engine (no tax layer for now)
+    const {
+      lineItems: computedItems,
+      subtotal,
+      total,
+    } = calculateInvoiceTotals(
       lineItems as { description: string; quantity: number; unitPrice: string }[]
-    ).map((item) => ({
-      ...item,
-      total: (item.quantity * parseFloat(item.unitPrice)).toFixed(7),
-    }));
-    const subtotal = computedItems.reduce((s, i) => s + parseFloat(i.total), 0).toFixed(7);
-    const total = subtotal; // no tax layer for now
+    );
 
     const invoiceNumber = await nextInvoiceNumber(req.user!.clinicId);
     const stellarMemo = invoiceNumber; // use invoice number as memo
