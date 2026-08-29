@@ -21,6 +21,7 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('../../utils/logger', () => ({
+  __esModule: true,
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
@@ -44,9 +45,7 @@ describe('connectDB retry logic', () => {
   it('connects on first attempt', async () => {
     mockConnect.mockResolvedValueOnce(undefined);
 
-    // Re-import to get fresh module
-    jest.resetModules();
-    const { connectDB } = await import('../config/db');
+    const { connectDB } = await import('../../config/db');
 
     const promise = connectDB();
     await promise;
@@ -60,8 +59,7 @@ describe('connectDB retry logic', () => {
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
       .mockResolvedValueOnce(undefined);
 
-    jest.resetModules();
-    const { connectDB } = await import('../config/db');
+    const { connectDB } = await import('../../config/db');
 
     const promise = connectDB();
 

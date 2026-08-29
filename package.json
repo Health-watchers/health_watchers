@@ -23,8 +23,10 @@
   },
   "packageManager": "npm@10.9.2",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/api",
+    "packages/config",
+    "packages/types",
+    "packages/anonymize"
   ],
   "scripts": {
     "dev": "turbo run dev",
