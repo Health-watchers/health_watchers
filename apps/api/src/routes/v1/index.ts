@@ -57,6 +57,7 @@ import {
   immunizationRoutes,
   cvxCodesRouter,
 } from '../../modules/immunizations/immunizations.controller';
+import { immunizationOpsRoutes } from '../../modules/immunizations/immunization-operations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
 import {
   healthLogRouter,
@@ -136,6 +137,7 @@ v1Router.use('/referrals', referralRoutes);
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', consentRoutes);
 v1Router.use('/immunizations/cvx', cvxCodesRouter);
+v1Router.use('/immunizations', immunizationOpsRoutes);
 v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
