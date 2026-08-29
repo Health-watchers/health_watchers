@@ -1,6 +1,6 @@
 import { lazyLoader, type LazyLoadOptions, type LazyLoadField } from '../../utils/lazy-loader';
-import { UserModel } from '../users/user.model';
-import { PatientModel } from '../patients/patient.model';
+import { UserModel } from '../auth/models/user.model';
+import { PatientModel } from '../patients/models/patient.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { AppointmentModel } from '../appointments/appointment.model';
 import { EncounterTemplateModel } from './encounter-template.model';
@@ -86,9 +86,7 @@ export class EncounterLazyLoadService {
   }
 
   async loadAppointment(encounterId: string, appointmentId: string) {
-    return await AppointmentModel.findById(appointmentId)
-      .select('status scheduledAt')
-      .lean();
+    return await AppointmentModel.findById(appointmentId).select('status scheduledAt').lean();
   }
 
   async loadEncounteredBy(encounterId: string, userId: string) {
@@ -96,16 +94,12 @@ export class EncounterLazyLoadService {
   }
 
   async loadTemplateVersion(encounterId: string, templateId: string) {
-    return await EncounterTemplateModel.findById(templateId)
-      .select('name version')
-      .lean();
+    return await EncounterTemplateModel.findById(templateId).select('name version').lean();
   }
 
   async loadFollowUpEncounter(encounterId: string, followUpId: string) {
     const { EncounterModel } = await import('./encounter.model');
-    return await EncounterModel.findById(followUpId)
-      .select('chiefComplaint status')
-      .lean();
+    return await EncounterModel.findById(followUpId).select('chiefComplaint status').lean();
   }
 
   async loadPrescribingDoctors(encounterId: string, doctorIds: string[]) {

@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { protect } from '../../middleware/auth';
+import { authenticate as protect } from '../../middlewares/auth.middleware';
 import { parseLazyLoadQuery } from '../../middleware/lazy-load.middleware';
-import { getEncounterRelation, getMultipleEncounterRelations } from './encounter-lazy-load.controller';
+import {
+  getEncounterRelation,
+  getMultipleEncounterRelations,
+} from './encounter-lazy-load.controller';
 
 const router = Router({ mergeParams: true });
 

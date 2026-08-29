@@ -3,6 +3,8 @@ import { validateAccessTokenClaims } from '../modules/auth/jwt-claim-validator';
 import { isDenylisted, isInvalidatedForUser } from '../services/token-denylist.service';
 import jwt from 'jsonwebtoken';
 import { AppRole } from '../types/express';
+import { ApiErrorCode } from '@health-watchers/types';
+import { sendApiError } from '../utils/api-response';
 
 /**
  * authenticate — Express middleware that enforces full JWT claim validation.
@@ -18,10 +20,14 @@ import { AppRole } from '../types/express';
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Missing or invalid Authorization header',
-    });
+    sendApiError(
+      res,
+      401,
+      'Unauthorized',
+      ApiErrorCode.UNAUTHORIZED,
+      'Missing or invalid Authorization header'
+    );
+    return;
   }
 
   const token = authHeader.slice(7);
@@ -40,10 +46,14 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       INVALID_SIGNATURE: 'Token signature verification failed',
       MALFORMED_TOKEN: 'Token is malformed',
     };
-    return res.status(401).json({
-      error: 'Unauthorized',
-      message: messageMap[result.error ?? ''] ?? 'Invalid token',
-    });
+    sendApiError(
+      res,
+      401,
+      'Unauthorized',
+      ApiErrorCode.INVALID_TOKEN,
+      messageMap[result.error ?? ''] ?? 'Invalid token'
+    );
+    return;
   }
 
   const payload = result.payload;
@@ -51,17 +61,22 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   // Denylist check — token-level (logout / compromised token)
   if (payload.jti) {
     if (await isDenylisted(payload.jti)) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Token has been revoked' });
+      sendApiError(res, 401, 'Unauthorized', ApiErrorCode.INVALID_TOKEN, 'Token has been revoked');
+      return;
     }
   }
 
   // Per-user invalidation check (e.g. password change invalidates all prior tokens)
   const iat = payload.iat ?? (jwt.decode(token) as jwt.JwtPayload)?.iat ?? 0;
   if (payload.userId && (await isInvalidatedForUser(payload.userId as string, iat))) {
-    return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Token has been invalidated — please log in again',
-    });
+    sendApiError(
+      res,
+      401,
+      'Unauthorized',
+      ApiErrorCode.INVALID_TOKEN,
+      'Token has been invalidated — please log in again'
+    );
+    return;
   }
 
   req.user = {
@@ -78,7 +93,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 export function requireRoles(...roles: AppRole[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+      sendApiError(res, 403, 'Forbidden', ApiErrorCode.FORBIDDEN, 'Insufficient permissions');
+      return;
     }
     return next();
   };

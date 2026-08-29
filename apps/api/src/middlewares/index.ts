@@ -67,4 +67,4 @@ export { cacheResponse } from './cache.middleware';
 export { correlationMiddleware } from './correlation.middleware';
 export { traceIdHeader } from './trace-id.middleware';
 export { metricsMiddleware } from './metrics.middleware';
-export { paginationMiddleware } from '../middleware/pagination.middleware';
+export { paginationMiddleware } from './pagination.middleware';
