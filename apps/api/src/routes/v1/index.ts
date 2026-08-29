@@ -13,7 +13,8 @@
  * │                 │ /peer-reviews, /pre-auth, /icd10, /reports,     │
  * │                 │ /consent, /ai, /dashboard, /portal, /surveys     │
  * │ payments        │ /payments, /invoices, /subscriptions,            │
- * │                 │ /billing, /export                                │
+ * │                 │ /billing, /export, /exports/schedules,           │
+ * │                 │ HL7 v2 (patients/:id/hl7v2)                      │
  * │ admin           │ /clinics, /onboarding, /settings, /api-keys,    │
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
  * │                 │ /audit, /audit-logs, /notifications,             │
@@ -73,6 +74,8 @@ import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
 import exportRouter from '../../modules/export/export.routes';
 import batchExportRouter from '../../modules/export/batch-export.routes';
+import hl7v2ExportRouter from '../../modules/export/hl7-v2-export.routes';
+import exportScheduleRouter from '../../modules/export/export-schedule.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -150,8 +153,12 @@ v1Router.use('/subscriptions', subscriptionRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// HL7 v2 export routes (#1243) — /patients/:id/hl7v2 and sub-routes
+v1Router.use('/', hl7v2ExportRouter);
 // Batch export routes (#1072) — async job queue + SSE progress tracking
 v1Router.use('/exports', batchExportRouter);
+// Export scheduling & automation (#1243) — CRUD for recurring export schedules
+v1Router.use('/exports/schedules', exportScheduleRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
