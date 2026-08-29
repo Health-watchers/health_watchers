@@ -8,9 +8,7 @@
  * ├─────────────────┼──────────────────────────────────────────────────┤
  * │ auth            │ /auth, /users, /portal (MFA)                     │
  * │ clinical        │ /patients, /encounters, /appointments,           │
- * │                 │ /waitlist, /appointment-analytics,               │
- * │                 │ /appointment-templates, /lab-results,            │
- * │                 │ /immunizations, /care-plans,                     │
+ * │                 │ /lab-results, /immunizations, /care-plans,       │
  * │                 │ /referrals, /medications, /schedules, /cds,      │
  * │                 │ /peer-reviews, /pre-auth, /icd10, /reports,     │
  * │                 │ /consent, /ai, /dashboard, /portal, /surveys     │
@@ -49,8 +47,6 @@ import { encounterRoutes } from '../../modules/encounters/encounters.controller'
 import { encounterTemplateRoutes } from '../../modules/encounters/encounter-templates.controller';
 import { appointmentRoutes } from '../../modules/appointments/appointments.controller';
 import { waitlistRoutes } from '../../modules/appointments/waitlist.controller';
-import { appointmentAnalyticsRoutes } from '../../modules/appointments/appointment-analytics.controller';
-import { appointmentTemplateRoutes } from '../../modules/appointments/appointment-template.controller';
 import { labResultRoutes } from '../../modules/lab-results/lab-results.controller';
 import { icd10Routes } from '../../modules/icd10/icd10.controller';
 import { carePlanRoutes } from '../../modules/care-plans/care-plans.controller';
@@ -128,8 +124,6 @@ v1Router.use('/encounters', encounterRoutes);
 v1Router.use('/encounter-templates', encounterTemplateRoutes);
 v1Router.use('/appointments', appointmentRoutes);
 v1Router.use('/waitlist', waitlistRoutes);
-v1Router.use('/appointment-analytics', appointmentAnalyticsRoutes);
-v1Router.use('/appointment-templates', appointmentTemplateRoutes);
 v1Router.use('/lab-results', labResultRoutes);
 v1Router.use('/icd10', icd10Routes);
 v1Router.use('/care-plans', carePlanRoutes);
