@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { advancedCaching } from '../../services/advanced-caching.service';
-import { requireAuth } from '../../middlewares/auth.middleware';
+import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
 import { requireRole } from '../../middlewares/role.middleware';
 import logger from '../../utils/logger';
 

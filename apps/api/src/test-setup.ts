@@ -13,3 +13,5 @@ process.env.JWT_REFRESH_TOKEN_SECRET =
   process.env.JWT_REFRESH_TOKEN_SECRET || 'test-refresh-secret-32-chars-long!';
 process.env.API_PORT = process.env.API_PORT || '3001';
 process.env.NODE_ENV = 'test';
+// Strict 64-char hex key required by src/lib/encrypt.ts (32 bytes).
+process.env.FIELD_ENCRYPTION_KEY = process.env.FIELD_ENCRYPTION_KEY || 'a'.repeat(64);

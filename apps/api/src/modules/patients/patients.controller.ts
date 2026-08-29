@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
@@ -25,6 +26,7 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { DuplicateDetectionService } from './duplicate-detection.service';
+import { DuplicateController } from './duplicate.controller';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
 import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
@@ -118,10 +120,17 @@ router.get(
     };
 
     // #1069 — Force the compound index that covers clinicId + isActive for this list query
-    const result = await paginate(PatientModel, filter, page, limit, { createdAt: -1 }, {
-      projection: listProjection,
-      hint: 'clinicId_1_isActive_1',
-    });
+    const result = await paginate(
+      PatientModel,
+      filter,
+      page,
+      limit,
+      { createdAt: -1 },
+      {
+        projection: listProjection,
+        hint: 'clinicId_1_isActive_1',
+      }
+    );
 
     const payload = {
       data: result.data.map(toPatientResponse),
