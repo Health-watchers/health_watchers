@@ -5,6 +5,7 @@ import './config/env'; // must be second — validates env vars
 import crypto from 'crypto';
 import express from 'express';
 import { createServer } from 'http';
+import mongoose from 'mongoose';
 import helmet from 'helmet';
 import cors, { type CorsOptions } from 'cors';
 import {
@@ -90,6 +91,12 @@ import federationRouter from './modules/federation/federation.router';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { responseFilterMiddleware } from './middlewares/response-filter.middleware';
+import { migrationStatusRouter } from './modules/migrations/migration-status.controller';
+import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.controller';
+import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config.controller';
+import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
+import { errorAnalytics } from './services/error-analytics.service';
+import { migrationManager } from './services/migration-manager.service';
 
 const app = express();
 const server = createServer(app);
@@ -246,6 +253,12 @@ app.use('/api/v2', v2Router);
 app.use('/.well-known', federationRouter);
 app.use('/federation', federationRouter);
 
+// ── Admin monitoring & management endpoints ───────────────────────────────────
+app.use('/api/v2', migrationStatusRouter);
+app.use('/api/v2', errorAnalyticsRouter);
+app.use('/api/v2', rateLimitConfigRouter);
+app.use('/api/v2', cacheDebugRouter);
+
 setupSwagger(app);
 
 // ── 404 & global error handler ────────────────────────────────────────────────
@@ -257,6 +270,15 @@ export default app;
 // ── Start server ──────────────────────────────────────────────────────────────
 async function startServer() {
   await connectDB();
+
+  // Initialize migration manager
+  try {
+    migrationManager.setDatabase(mongoose.connection.db as any);
+    await migrationManager.initialize();
+    logger.info('[migration-manager] Initialized successfully');
+  } catch (err) {
+    logger.warn({ err }, '[migration-manager] Initialization failed, continuing without migration tracking');
+  }
 
   // Seed built-in CDS rules
   await seedBuiltInRules();

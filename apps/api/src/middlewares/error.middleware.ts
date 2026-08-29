@@ -71,6 +71,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // AppError — structured application errors with severity and category
   if (err instanceof AppError) {
     trackError(err.severity, err.category);
+    errorAnalytics.recordError(
+      err.code ?? 'UNKNOWN_ERROR',
+      err.category as unknown as ErrorCategory,
+      err.severity,
+      req.user?.userId,
+      0
+    );
     logBySeverity(
       err.severity,
       { ...ctx, category: err.category, ...(err.context ?? {}) },
@@ -91,6 +98,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // Zod validation errors → 400
   if (err instanceof ZodError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError('VALIDATION_ERROR', ErrorCategory.VALIDATION, 'low', req.user?.userId);
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
     const details = err.errors.map((e) => ({ path: e.path.join('.'), message: e.message }));
     const fieldList = details.map((d) => `"${d.path}"`).join(', ');
@@ -107,6 +115,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // Mongoose validation error → 400
   if (err instanceof MongooseError.ValidationError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError('VALIDATION_ERROR', ErrorCategory.VALIDATION, 'low', req.user?.userId);
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
     const fieldList = details.map((d) => `"${d.path}"`).join(', ');
     logger.info({ ...ctx, details }, 'Mongoose validation error');
@@ -123,6 +132,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // Mongoose bad ObjectId → 400
   if (err instanceof MongooseError.CastError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError('INVALID_REQUEST', ErrorCategory.VALIDATION, 'low', req.user?.userId);
     logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
     res.status(400).json({
       error: 'BadRequest',
@@ -137,6 +147,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   const mongoErr = err as MongoServerError;
   if (mongoErr?.code === 11000) {
     trackError('low', 'conflict');
+    errorAnalytics.recordError('DUPLICATE_ENTRY', ErrorCategory.CONFLICT, 'low', req.user?.userId);
     const field = mongoErr.keyValue ? Object.keys(mongoErr.keyValue)[0] : 'field';
     const value = mongoErr.keyValue?.[field];
     const valueHint = value ? ` ("${value}")` : '';
@@ -154,6 +165,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
     trackError('low', 'authentication');
+    errorAnalytics.recordError('TOKEN_EXPIRED', ErrorCategory.AUTHENTICATION, 'low', req.user?.userId);
     logger.info({ ...ctx }, 'JWT token expired');
     res.status(401).json({
       error: 'TokenExpired',
@@ -167,6 +179,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
     trackError('low', 'authentication');
+    errorAnalytics.recordError('INVALID_TOKEN', ErrorCategory.AUTHENTICATION, 'low', req.user?.userId);
     logger.info({ ...ctx }, 'Invalid JWT token');
     res.status(401).json({
       error: 'InvalidToken',
@@ -178,6 +191,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
 
   trackError('high', 'internal');
+  errorAnalytics.recordError('INTERNAL_SERVER_ERROR', ErrorCategory.INTERNAL, 'high', req.user?.userId);
   if (isDev) {
     logger.error({ err }, 'Unhandled error');
   }
