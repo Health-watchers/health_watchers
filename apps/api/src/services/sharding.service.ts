@@ -1,267 +1,316 @@
+/**
+ * ShardingService — Issue #1077
+ *
+ * Provides shard routing, health-checking, and rebalancing for the
+ * Health Watchers database sharding strategy.
+ *
+ * Strategy   : SHA-256 hashed shard keys (clinic-affinity, patient-affinity,
+ *               time-range for audit/communication logs).
+ * Shard count : 4 (configurable via SHARDING_STRATEGIES).
+ * Failover   : Marks unavailable shards, redirects to healthy replicas.
+ */
+
 import crypto from 'crypto';
+import logger from '../utils/logger';
 import {
-  getShardingConfig,
+  SHARD_SERVERS,
+  SHARDING_STRATEGIES,
   getShardMapping,
-  type ShardKeyValue,
   type ShardInfo,
+  type ShardingConfig,
 } from '../config/sharding-strategy';
-import logger from '../lib/logger';
 
-export class ShardingService {
-  determineShardForDocument(collectionName: string, document: any): ShardInfo | undefined {
-    const config = getShardingConfig(collectionName);
-    const mapping = getShardMapping(collectionName);
+export interface ShardRouteResult {
+  shardId: string;
+  connectionString: string;
+  shardName: string;
+}
 
-    if (!config || !mapping) {
-      logger.warn(`No sharding config for collection: ${collectionName}`);
-      return undefined;
+export interface ShardHealthStatus {
+  healthy: ShardInfo[];
+  degraded: ShardInfo[];
+  unavailable: ShardInfo[];
+  totalShards: number;
+  healthyCount: number;
+}
+
+export interface ShardBalanceReport {
+  collection: string;
+  shards: Array<{
+    shardName: string;
+    documentCount: number;
+    dataSize: number;
+    percentage: number;
+  }>;
+  imbalance: number;
+  needsRebalance: boolean;
+}
+
+/**
+ * Compute SHA-256 hash of a string and return a hex digest.
+ */
+function sha256(value: string): string {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+/**
+ * Determine which shard index (0-based) a given key maps to.
+ */
+function computeShardIndex(key: string, shardCount: number, config: ShardingConfig): number {
+  switch (config.shardKeyType) {
+    case 'hashed': {
+      const hash = sha256(key);
+      // Take first 8 hex chars → 32-bit integer, mod shardCount
+      const numeric = parseInt(hash.substring(0, 8), 16);
+      return numeric % shardCount;
     }
 
-    const shardKeyValue = this.extractShardKey(document, config.shardKeyPath);
-    const shardId = this.computeShardId(shardKeyValue, config);
-
-    return Array.from(mapping.shards.values()).find((shard) => shard.shardName === shardId);
-  }
-
-  private extractShardKey(document: any, keyPath: string): any {
-    const keys = keyPath.split('.');
-    let value = document;
-
-    for (const key of keys) {
-      if (value && typeof value === 'object') {
-        value = value[key];
-      } else {
-        return null;
+    case 'range': {
+      if (!config.rangeDistribution) {
+        throw new Error('rangeDistribution is required for range sharding');
       }
+      // For date-based range sharding (month 0-11)
+      const numericKey = typeof key === 'string' ? parseInt(key, 10) : Number(key);
+      const range = config.rangeDistribution.ranges.find(
+        (r) => numericKey >= r.start && numericKey < r.end,
+      );
+      if (range) {
+        // "shard-N" → extract N and return 0-based index
+        const shardNum = parseInt(range.shard.replace('shard-', ''), 10);
+        return (shardNum - 1) % shardCount;
+      }
+      return numericKey % shardCount;
     }
 
-    return value;
-  }
+    case 'directory':
+      // Directory sharding falls back to hash-based routing
+      return parseInt(sha256(key).substring(0, 8), 16) % shardCount;
 
-  private computeShardId(keyValue: any, config: any): string {
-    if (config.shardKeyType === 'hashed') {
-      return this.hashBasedSharding(keyValue, config);
-    } else if (config.shardKeyType === 'range') {
-      return this.rangeBasedSharding(keyValue, config);
-    } else if (config.shardKeyType === 'directory') {
-      return this.directoryBasedSharding(keyValue, config);
-    }
-
-    throw new Error(`Unknown shard key type: ${config.shardKeyType}`);
-  }
-
-  private hashBasedSharding(keyValue: any, config: any): string {
-    const keyStr = keyValue.toString();
-    const hash = this.hashValue(keyStr, config.hashFunction || 'sha256');
-    const hashInt = parseInt(hash.substring(0, 8), 16);
-    const shardIndex = Math.abs(hashInt) % config.shardCount;
-
-    return `shard-${shardIndex + 1}`;
-  }
-
-  private rangeBasedSharding(keyValue: any, config: any): string {
-    if (!config.rangeDistribution || !config.rangeDistribution.ranges) {
-      throw new Error('Range distribution not configured');
-    }
-
-    let value: number;
-
-    if (keyValue instanceof Date) {
-      const month = keyValue.getMonth();
-      value = month;
-    } else {
-      value = Number(keyValue);
-    }
-
-    const range = config.rangeDistribution.ranges.find(
-      (r: any) => value >= r.start && value <= r.end
-    );
-
-    if (!range) {
-      // Default to first shard if outside range
-      return config.rangeDistribution.ranges[0].shard;
-    }
-
-    return range.shard;
-  }
-
-  private directoryBasedSharding(keyValue: any, config: any): string {
-    if (!config.directory || typeof config.directory !== 'object') {
-      throw new Error('Directory not configured');
-    }
-
-    const mapped = config.directory[keyValue.toString()];
-
-    if (!mapped) {
-      throw new Error(`No shard mapping found for key: ${keyValue}`);
-    }
-
-    return mapped;
-  }
-
-  private hashValue(value: string, hashFunction: string): string {
-    const algorithm = hashFunction || 'sha256';
-    return crypto.createHash(algorithm).update(value).digest('hex');
-  }
-
-  getShardDistribution(collectionName: string): Record<string, number> {
-    const mapping = getShardMapping(collectionName);
-
-    if (!mapping) {
-      return {};
-    }
-
-    const distribution: Record<string, number> = {};
-
-    for (const [shardName, shardInfo] of mapping.shards.entries()) {
-      distribution[shardName] = shardInfo.documentCount;
-    }
-
-    return distribution;
-  }
-
-  checkShardBalance(collectionName: string): {
-    balanced: boolean;
-    imbalancePercentage: number;
-    recommendation?: string;
-  } {
-    const config = getShardingConfig(collectionName);
-    const mapping = getShardMapping(collectionName);
-
-    if (!config || !mapping) {
-      return { balanced: true, imbalancePercentage: 0 };
-    }
-
-    const shards = Array.from(mapping.shards.values());
-    const totalDocs = shards.reduce((sum, s) => sum + s.documentCount, 0);
-
-    if (totalDocs === 0) {
-      return { balanced: true, imbalancePercentage: 0 };
-    }
-
-    const avgDocsPerShard = totalDocs / shards.length;
-    const maxDeviation = Math.max(
-      ...shards.map((s) => Math.abs(s.documentCount - avgDocsPerShard))
-    );
-
-    const imbalancePercentage = (maxDeviation / avgDocsPerShard) * 100;
-    const threshold = config.balanceThreshold || 15;
-
-    return {
-      balanced: imbalancePercentage <= threshold,
-      imbalancePercentage,
-      recommendation:
-        imbalancePercentage > threshold
-          ? `Consider rebalancing shards. Imbalance: ${imbalancePercentage.toFixed(2)}%`
-          : undefined,
-    };
-  }
-
-  async getShardHealth(): Promise<{
-    healthy: boolean;
-    shards: Array<{
-      name: string;
-      status: string;
-      responsiveness: boolean;
-    }>;
-  }> {
-    // This would need actual shard health checks
-    // Placeholder implementation
-    return {
-      healthy: true,
-      shards: [],
-    };
-  }
-
-  generateMigrationPlan(
-    collectionName: string,
-    targetShardCount: number
-  ): {
-    currentShardCount: number;
-    targetShardCount: number;
-    affectedDocuments: number;
-    estimatedTime: string;
-    steps: string[];
-  } {
-    const config = getShardingConfig(collectionName);
-    const mapping = getShardMapping(collectionName);
-
-    if (!config || !mapping) {
-      throw new Error(`No sharding config for collection: ${collectionName}`);
-    }
-
-    const totalDocs = Array.from(mapping.shards.values()).reduce(
-      (sum, s) => sum + s.documentCount,
-      0
-    );
-
-    const docsPerShard = Math.ceil(totalDocs / targetShardCount);
-    const estimatedTimeMinutes = Math.ceil(totalDocs / 10000); // Rough estimate: 10k docs/min
-
-    return {
-      currentShardCount: config.shardCount,
-      targetShardCount,
-      affectedDocuments: totalDocs,
-      estimatedTime: `${estimatedTimeMinutes} minutes`,
-      steps: [
-        'Create new shards',
-        'Configure shard ranges',
-        'Enable balancer',
-        'Monitor chunk migration',
-        'Verify data consistency',
-        'Update shard configuration',
-      ],
-    };
-  }
-
-  getShardingMetrics(
-    collectionName: string
-  ): {
-    shardCount: number;
-    totalDocuments: number;
-    totalDataSize: number;
-    avgDocsPerShard: number;
-    avgSizePerShard: string;
-    imbalance: string;
-  } {
-    const mapping = getShardMapping(collectionName);
-
-    if (!mapping) {
-      return {
-        shardCount: 0,
-        totalDocuments: 0,
-        totalDataSize: 0,
-        avgDocsPerShard: 0,
-        avgSizePerShard: '0 MB',
-        imbalance: 'N/A',
-      };
-    }
-
-    const shards = Array.from(mapping.shards.values());
-    const totalDocs = shards.reduce((sum, s) => sum + s.documentCount, 0);
-    const totalSize = shards.reduce((sum, s) => sum + s.dataSize, 0);
-
-    const balance = this.checkShardBalance(collectionName);
-
-    return {
-      shardCount: shards.length,
-      totalDocuments: totalDocs,
-      totalDataSize: totalSize,
-      avgDocsPerShard: Math.round(totalDocs / shards.length),
-      avgSizePerShard: this.formatBytes(totalSize / shards.length),
-      imbalance: `${balance.imbalancePercentage.toFixed(2)}%`,
-    };
-  }
-
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    default:
+      return 0;
   }
 }
 
-export const shardingService = new ShardingService();
+/**
+ * ShardingService — singleton responsible for all shard-routing decisions.
+ */
+export class ShardingService {
+  private static instance: ShardingService;
+  private shards: Map<string, ShardInfo> = new Map();
+
+  private constructor() {
+    for (const shard of SHARD_SERVERS) {
+      this.shards.set(shard.shardName, { ...shard });
+    }
+    logger.info({ shardCount: this.shards.size }, 'ShardingService initialised');
+  }
+
+  static getInstance(): ShardingService {
+    if (!ShardingService.instance) {
+      ShardingService.instance = new ShardingService();
+    }
+    return ShardingService.instance;
+  }
+
+  /**
+   * Determine which shard should handle a document from the given collection
+   * using the document's shard-key value.
+   */
+  getShardForDocument(collectionName: string, shardKeyValue: unknown): ShardRouteResult {
+    const config = SHARDING_STRATEGIES[collectionName];
+    if (!config) {
+      // Default to shard-1 for unmapped collections
+      const defaultShard = this.shards.get('shard-1')!;
+      return {
+        shardId: 'shard-1',
+        connectionString: defaultShard.connectionString,
+        shardName: defaultShard.shardName,
+      };
+    }
+
+    const key =
+      config.shardKeyType === 'range' && shardKeyValue instanceof Date
+        ? String(shardKeyValue.getMonth())
+        : String(shardKeyValue);
+
+    const shardIndex = computeShardIndex(key, config.shardCount, config);
+    const shardName = `shard-${shardIndex + 1}`;
+
+    const shard = this.shards.get(shardName);
+    if (!shard || shard.status === 'unavailable') {
+      return this._fallbackShard(collectionName, shardKeyValue);
+    }
+
+    return {
+      shardId: shardName,
+      connectionString: shard.connectionString,
+      shardName: shard.shardName,
+    };
+  }
+
+  /**
+   * Return an overall health summary for all known shards.
+   */
+  getShardHealth(): ShardHealthStatus {
+    const healthy: ShardInfo[] = [];
+    const degraded: ShardInfo[] = [];
+    const unavailable: ShardInfo[] = [];
+
+    for (const shard of this.shards.values()) {
+      switch (shard.status) {
+        case 'active':
+          healthy.push(shard);
+          break;
+        case 'recovering':
+          degraded.push(shard);
+          break;
+        case 'unavailable':
+          unavailable.push(shard);
+          break;
+      }
+    }
+
+    return {
+      healthy,
+      degraded,
+      unavailable,
+      totalShards: this.shards.size,
+      healthyCount: healthy.length,
+    };
+  }
+
+  /**
+   * Update the runtime status of a shard (e.g. after a health-check ping).
+   */
+  updateShardStatus(shardName: string, status: ShardInfo['status']): void {
+    const shard = this.shards.get(shardName);
+    if (shard) {
+      shard.status = status;
+      shard.lastHealthCheck = new Date();
+      logger.info({ shardName, status }, 'Shard status updated');
+    }
+  }
+
+  /**
+   * Perform health-check pings against all configured shards and update their
+   * statuses in-memory.  Returns the updated health summary.
+   */
+  async performHealthChecks(): Promise<ShardHealthStatus> {
+    const checks = Array.from(this.shards.values()).map(async (shard) => {
+      const start = Date.now();
+      try {
+        // Lightweight connectivity test — try creating a transient connection
+        const { MongoClient } = await import('mongodb');
+        const client = new MongoClient(shard.connectionString, {
+          connectTimeoutMS: 3000,
+          serverSelectionTimeoutMS: 3000,
+        });
+        await client.connect();
+        await client.db('admin').command({ ping: 1 });
+        await client.close();
+
+        this.updateShardStatus(shard.shardName, 'active');
+        logger.debug(
+          { shardName: shard.shardName, latencyMs: Date.now() - start },
+          'Shard health-check passed',
+        );
+      } catch (error) {
+        logger.warn(
+          { shardName: shard.shardName, error: (error as Error).message },
+          'Shard health-check failed — marking unavailable',
+        );
+        this.updateShardStatus(shard.shardName, 'unavailable');
+      }
+    });
+
+    await Promise.allSettled(checks);
+    return this.getShardHealth();
+  }
+
+  /**
+   * Generate a balance report for a collection, using the stored document-
+   * count metrics on each ShardInfo.
+   */
+  getBalanceReport(collectionName: string): ShardBalanceReport {
+    const mapping = getShardMapping(collectionName);
+    if (!mapping) {
+      return {
+        collection: collectionName,
+        shards: [],
+        imbalance: 0,
+        needsRebalance: false,
+      };
+    }
+
+    const config = mapping.config;
+    const totalDocs = Array.from(mapping.shards.values()).reduce(
+      (sum, s) => sum + s.documentCount,
+      0,
+    );
+
+    const shards = Array.from(mapping.shards.values()).map((s) => ({
+      shardName: s.shardName,
+      documentCount: s.documentCount,
+      dataSize: s.dataSize,
+      percentage: totalDocs > 0 ? (s.documentCount / totalDocs) * 100 : 0,
+    }));
+
+    const percentages = shards.map((s) => s.percentage);
+    const maxPct = Math.max(...percentages);
+    const minPct = Math.min(...percentages);
+    const imbalance = maxPct - minPct;
+    const threshold = config.balanceThreshold ?? 15;
+
+    return {
+      collection: collectionName,
+      shards,
+      imbalance: parseFloat(imbalance.toFixed(2)),
+      needsRebalance: imbalance > threshold,
+    };
+  }
+
+  /**
+   * Return all configured collections and their sharding configurations.
+   */
+  getShardingStrategy(): Record<string, ShardingConfig> {
+    return { ...SHARDING_STRATEGIES };
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Find a healthy fallback shard when the preferred shard is unavailable.
+   */
+  private _fallbackShard(collectionName: string, shardKeyValue: unknown): ShardRouteResult {
+    const activeShard = Array.from(this.shards.values()).find(
+      (s) => s.status === 'active' || s.status === 'recovering',
+    );
+
+    if (!activeShard) {
+      // All shards down — last resort: return shard-1 config regardless
+      const defaultShard = SHARD_SERVERS[0];
+      logger.error(
+        { collectionName, shardKeyValue },
+        'All shards unavailable — using shard-1 as emergency fallback',
+      );
+      return {
+        shardId: 'shard-1',
+        connectionString: defaultShard.connectionString,
+        shardName: defaultShard.shardName,
+      };
+    }
+
+    logger.warn(
+      { collectionName, fallbackShard: activeShard.shardName },
+      'Primary shard unavailable — rerouting to fallback',
+    );
+
+    return {
+      shardId: activeShard.shardName,
+      connectionString: activeShard.connectionString,
+      shardName: activeShard.shardName,
+    };
+  }
+}
+
+export default ShardingService;

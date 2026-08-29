@@ -73,6 +73,7 @@ import { reimbursementRoutes } from '../../modules/payments/reimbursement.contro
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
 import exportRouter from '../../modules/export/export.routes';
+import batchExportRouter from '../../modules/export/batch-export.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -92,9 +93,15 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
-// ── Infrastructure group ──────────────────────────────────────────────────────
-import { cdnRouter } from '../cdn';
-import replicationRouter from '../replication';
+// ── Sharding (#1077) ──────────────────────────────────────────────────────────
+import shardingRouter from '../../routes/sharding';
+
+// ── CDN (#1078) ───────────────────────────────────────────────────────────────
+import cdnCacheRouter from '../../routes/cdn/cache-invalidation';
+import cdnHealthRouter from '../../routes/cdn/cdn-health';
+
+// ── Replication (#1080) ───────────────────────────────────────────────────────
+import replicationRouter from '../../routes/replication';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -144,6 +151,8 @@ v1Router.use('/subscriptions', subscriptionRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// Batch export routes (#1072) — async job queue + SSE progress tracking
+v1Router.use('/exports', batchExportRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
@@ -164,8 +173,14 @@ v1Router.use('/csp-report', cspReportRoutes);
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);
 
-// ── Infrastructure group (admin-only) ─────────────────────────────────────────
-v1Router.use('/cdn', cdnRouter);
+// ── Sharding admin (#1077) ────────────────────────────────────────────────────
+v1Router.use('/sharding', shardingRouter);
+
+// ── CDN management (#1078) ────────────────────────────────────────────────────
+v1Router.use('/cdn', cdnCacheRouter);
+v1Router.use('/cdn', cdnHealthRouter);
+
+// ── Replication monitoring (#1080) ───────────────────────────────────────────
 v1Router.use('/replication', replicationRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
