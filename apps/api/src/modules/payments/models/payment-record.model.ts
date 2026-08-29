@@ -21,4 +21,7 @@ const PaymentRecordSchema = new Schema<IPaymentRecord>(
   { timestamps: true }
 );
 
+// Supports "list/reconcile payments for a clinic" queries, newest first.
+PaymentRecordSchema.index({ clinicId: 1, createdAt: -1 });
+
 export const PaymentRecordModel = mongoose.model<IPaymentRecord>('PaymentRecord', PaymentRecordSchema);

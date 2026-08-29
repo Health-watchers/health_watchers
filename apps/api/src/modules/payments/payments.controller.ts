@@ -1,43 +1,46 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middlewares/auth.middleware';
+import { validateRequest } from '../../middlewares/validate.middleware';
+import { asyncHandler, sendSuccess, sendError } from '@health-watchers/utils';
 import { PaymentRecordModel } from './models/payment-record.model';
-import { config } from '@health-watchers/config';
-import crypto from 'crypto';
+import { createPaymentIntent } from './payments.service';
+import {
+  createPaymentIntentSchema,
+  paymentIntentIdParamsSchema,
+  CreatePaymentIntentDto,
+  PaymentIntentIdParamsDto,
+} from './payments.validation';
 
 const router = Router();
 
 // POST /api/v1/payments/intent
-router.post('/intent', authenticate, async (req: Request, res: Response) => {
-  try {
-    const { amount } = req.body;
-    const clinicId = req.user?.clinicId!;
-    const intentId = crypto.randomUUID();
+router.post(
+  '/intent',
+  authenticate,
+  validateRequest({ body: createPaymentIntentSchema }),
+  asyncHandler(async (req: Request<Record<string, never>, unknown, CreatePaymentIntentDto>, res: Response) => {
+    const clinicId = req.user?.clinicId;
+    if (!clinicId) return sendError(res, 401, 'Unauthorized', 'Missing clinic context');
 
-    const intent = {
-      intentId,
-      clinicId,
-      amount,
-      destination: config.stellar.platformPublicKey,
-      memo: `hw-${intentId.slice(0, 8)}`,
-      network: config.stellar.network,
-    };
-
-    await PaymentRecordModel.create({ ...intent, status: 'pending' });
-    return res.json({ status: 'success', data: intent });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
+    const intent = await createPaymentIntent(clinicId, req.body.amount);
+    return sendSuccess(res, intent);
+  })
+);
 
 // GET /api/v1/payments/status/:intentId
-router.get('/status/:intentId', authenticate, async (req: Request, res: Response) => {
-  const record = await PaymentRecordModel.findOne({
-    intentId: req.params.intentId,
-    clinicId: req.user?.clinicId,
-  }).lean();
+router.get(
+  '/status/:intentId',
+  authenticate,
+  validateRequest({ params: paymentIntentIdParamsSchema }),
+  asyncHandler(async (req: Request<PaymentIntentIdParamsDto>, res: Response) => {
+    const record = await PaymentRecordModel.findOne({
+      intentId: req.params.intentId,
+      clinicId: req.user?.clinicId,
+    }).lean();
 
-  if (!record) return res.status(404).json({ error: 'NotFound', message: 'Payment intent not found' });
-  return res.json({ status: 'success', data: { intentId: record.intentId, paymentStatus: record.status } });
-});
+    if (!record) return sendError(res, 404, 'NotFound', 'Payment intent not found');
+    return sendSuccess(res, { intentId: record.intentId, paymentStatus: record.status });
+  })
+);
 
 export const paymentRoutes = router;

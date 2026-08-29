@@ -19,4 +19,7 @@ const EncounterSchema = new Schema<IEncounter>(
   { timestamps: true }
 );
 
+// Supports the "list encounters for a patient" query: filter by clinicId + patientId, sort by createdAt desc.
+EncounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
+
 export const EncounterModel = mongoose.model<IEncounter>('Encounter', EncounterSchema);

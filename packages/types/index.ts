@@ -1,29 +1,21 @@
-export interface Patient {
-  id: string;
-  fullName: string;
-  dateOfBirth: string;
-  gender: "male" | "female" | "other";
-  phone: string;
-  createdAt: string;
+import { z } from 'zod';
+
+export const PatientSchema = z.object({
+  firstName:     z.string().trim().min(1),
+  lastName:      z.string().trim().min(1),
+  dateOfBirth:   z.string().trim().min(1),
+  sex:           z.enum(['M', 'F', 'O']),
+  contactNumber: z.string().trim().min(1),
+  address:       z.string().trim().min(1),
+});
+export type Patient = z.infer<typeof PatientSchema>;
+
+export type AppRole = 'SUPER_ADMIN' | 'CLINIC_ADMIN' | 'DOCTOR' | 'NURSE' | 'ASSISTANT' | 'READ_ONLY';
+
+export interface AuthenticatedUser {
+  userId: string;
+  role: AppRole;
+  clinicId: string;
 }
 
-export interface Encounter {
-  id: string;
-  patientId: string;
-  notes: string;
-  diagnosis: string;
-  createdAt: string;
-}
-
-export interface PaymentIntent {
-  patientId: string;
-  amount: number;
-  asset: string;
-  memo?: string;
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+export type TokenUser = AuthenticatedUser;

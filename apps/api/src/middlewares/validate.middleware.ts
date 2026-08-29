@@ -10,7 +10,7 @@ export const validateRequest = (schema: Schema): RequestHandler =>
   async (req, res, next) => {
     try {
       if (schema.body)   req.body   = await schema.body.parseAsync(req.body);
-      if (schema.query)  req.query  = await schema.query.parseAsync(req.query)   as Record<string, unknown>;
+      if (schema.query)  req.query  = (await schema.query.parseAsync(req.query)) as unknown as typeof req.query;
       if (schema.params) req.params = await schema.params.parseAsync(req.params) as Record<string, string>;
       next();
     } catch (err) {
