@@ -25,14 +25,14 @@ const DEFAULT_ACCESS: FieldAccessMap = {
   breachRisk: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
 };
 
-export function stripRestrictedFields<T extends Record<string, any>>(
+export function stripRestrictedFields<T extends Record<string, unknown>>(
   data: T,
   role: AppRole,
   accessMap: FieldAccessMap = DEFAULT_ACCESS
 ): Partial<T> {
   if (role === 'SUPER_ADMIN') return data;
 
-  const result: Record<string, any> = {};
+  const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     const allowedRoles = accessMap[key];
     if (allowedRoles && !allowedRoles.includes(role)) {
@@ -50,7 +50,8 @@ export function stripRestrictedFieldsDeep(
 ): unknown {
   if (role === 'SUPER_ADMIN') return body;
   if (body === null || typeof body !== 'object') return body;
-  if (Array.isArray(body)) return body.map((item) => stripRestrictedFieldsDeep(item, role, accessMap));
+  if (Array.isArray(body))
+    return body.map((item) => stripRestrictedFieldsDeep(item, role, accessMap));
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {

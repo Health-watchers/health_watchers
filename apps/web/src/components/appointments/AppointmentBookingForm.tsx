@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SchedulingCalendar } from './SchedulingCalendar';
+import { formatScheduleDate } from '@/lib/utils';
 
 interface TimeSlot {
   time: string;
@@ -241,7 +242,7 @@ export function AppointmentBookingForm({
         {selectedTime && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
-              <strong>Selected:</strong> {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at {selectedTime}
+              <strong>Selected:</strong> {formatScheduleDate(selectedDate)} at {selectedTime}
             </p>
           </div>
         )}

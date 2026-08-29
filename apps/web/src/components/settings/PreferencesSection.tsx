@@ -173,7 +173,10 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
             className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
           >
             <option value="en">English</option>
-            <option value="fr">French</option>
+            <option value="fr">Français (French)</option>
+            <option value="pt">Português (Portuguese)</option>
+            <option value="yo">Yoruba</option>
+            <option value="ha">Hausa</option>
           </select>
         </div>
 

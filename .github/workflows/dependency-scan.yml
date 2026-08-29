@@ -1,0 +1,210 @@
+name: Dependency Vulnerability Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace:
+          - apps/api
+          - apps/web
+          - apps/mobile
+          - apps/stellar-service
+          - packages/anonymize
+          - packages/config
+          - packages/types
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.workspace }}
+
+      - name: Run npm audit
+        id: npm-audit
+        run: |
+          npm audit --audit-level=moderate --json > audit-report.json || true
+          npm audit --audit-level=moderate
+        working-directory: ${{ matrix.workspace }}
+        continue-on-error: true
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-${{ matrix.workspace }}-report
+          path: ${{ matrix.workspace }}/audit-report.json
+          retention-days: 30
+
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule' # Skip on scheduled runs to save Snyk credits
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --all-projects --severity-threshold=medium
+
+      - name: Upload Snyk report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+
+  trivy-scan:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          vuln-type: 'library'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Generate human-readable report
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          output: 'trivy-report.txt'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+          retention-days: 30
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+
+  aggregate-results:
+    name: Aggregate Scan Results
+    runs-on: ubuntu-latest
+    needs: [npm-audit, trivy-scan]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create summary report
+        run: |
+          echo "# Dependency Vulnerability Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Date: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f trivy-report/trivy-report.txt ]; then
+            echo "## Trivy Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -n 50 trivy-report/trivy-report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## NPM Audit Results" >> $GITHUB_STEP_SUMMARY
+          
+          for dir in npm-audit-*-report; do
+            if [ -d "$dir" ]; then
+              workspace=$(echo $dir | sed 's/npm-audit-//;s/-report//')
+              echo "### $workspace" >> $GITHUB_STEP_SUMMARY
+              if [ -f "$dir/audit-report.json" ]; then
+                vulnerabilities=$(jq -r '.metadata.vulnerabilities | to_entries[] | "\(.key): \(.value)"' "$dir/audit-report.json" 2>/dev/null || echo "No vulnerabilities data")
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                echo "$vulnerabilities" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+
+      - name: Check for critical vulnerabilities
+        run: |
+          critical_found=false
+          
+          if [ -f trivy-report/trivy-report.txt ]; then
+            if grep -q "CRITICAL" trivy-report/trivy-report.txt; then
+              critical_found=true
+              echo "::error::Critical vulnerabilities found by Trivy"
+            fi
+          fi
+          
+          for dir in npm-audit-*-report; do
+            if [ -d "$dir" ] && [ -f "$dir/audit-report.json" ]; then
+              critical=$(jq -r '.metadata.vulnerabilities.critical // 0' "$dir/audit-report.json")
+              if [ "$critical" -gt 0 ]; then
+                critical_found=true
+                workspace=$(echo $dir | sed 's/npm-audit-//;s/-report//')
+                echo "::warning::Critical vulnerabilities found in $workspace"
+              fi
+            fi
+          done
+          
+          if [ "$critical_found" = true ]; then
+            echo "::notice::Critical vulnerabilities detected. Please review and address them."
+          fi

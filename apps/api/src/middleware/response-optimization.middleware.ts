@@ -19,9 +19,7 @@ const defaultOptions: ResponseOptimizationOptions = {
   enableLogging: false,
 };
 
-export const optimizeResponsePayload = (
-  options: ResponseOptimizationOptions = {}
-) => {
+export const optimizeResponsePayload = (options: ResponseOptimizationOptions = {}) => {
   const mergedOptions = { ...defaultOptions, ...options };
 
   return (req: Request, res: Response, next: NextFunction) => {
@@ -42,11 +40,16 @@ export const optimizeResponsePayload = (
         }
 
         if (mergedOptions.enableLogging && metrics.compressionRatio > 10) {
-          console.log(`[Response Optimization] ${req.path}: ${metrics.compressionRatio.toFixed(2)}% reduction`);
+          console.log(
+            `[Response Optimization] ${req.path}: ${metrics.compressionRatio.toFixed(2)}% reduction`
+          );
         }
 
         if (mergedOptions.maxPayloadSize && metrics.optimizedSize > mergedOptions.maxPayloadSize) {
-          res.warning(`Payload size (${metrics.optimizedSize} bytes) exceeds recommended maximum`);
+          res.setHeader(
+            'X-Payload-Warning',
+            `Payload size (${metrics.optimizedSize} bytes) exceeds recommended maximum`
+          );
         }
 
         return originalJson(optimized);
@@ -101,9 +104,11 @@ export const addResponseOptimizationHeaders = (req: Request, res: Response, next
     }
 
     if (req.lazyLoadQuery?.fields) {
-      res.setHeader('X-Fields-Selected', Array.isArray(req.lazyLoadQuery.fields)
-        ? req.lazyLoadQuery.fields.join(',')
-        : req.lazyLoadQuery.fields
+      res.setHeader(
+        'X-Fields-Selected',
+        Array.isArray(req.lazyLoadQuery.fields)
+          ? req.lazyLoadQuery.fields.join(',')
+          : req.lazyLoadQuery.fields
       );
     }
   });

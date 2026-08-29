@@ -3,24 +3,26 @@
  * Handles CDN configuration, cache invalidation, and asset serving
  */
 
+import { webConfig } from './config';
+
 export interface CDNConfig {
   url: string;
   provider: 'cloudflare' | 'cloudfront' | 'fastly' | 'custom';
   apiKey?: string;
-  zoneId?: string; // For Cloudflare
-  distributionId?: string; // For CloudFront
+  zoneId?: string;
+  distributionId?: string;
   cacheMaxAge: number;
   staleWhileRevalidate: number;
 }
 
 export const CDN_CONFIG: CDNConfig = {
-  url: process.env.NEXT_PUBLIC_CDN_URL || '',
-  provider: (process.env.NEXT_PUBLIC_CDN_PROVIDER as any) || 'custom',
-  apiKey: process.env.CDN_API_KEY,
-  zoneId: process.env.CLOUDFLARE_ZONE_ID,
-  distributionId: process.env.CLOUDFRONT_DISTRIBUTION_ID,
-  cacheMaxAge: 31536000, // 1 year for immutable assets
-  staleWhileRevalidate: 86400, // 1 day
+  url: webConfig.cdn.url,
+  provider: webConfig.cdn.provider,
+  apiKey: webConfig.cdn.apiKey,
+  zoneId: webConfig.cdn.cloudflareZoneId,
+  distributionId: webConfig.cdn.cloudfrontDistributionId,
+  cacheMaxAge: webConfig.cdn.cacheMaxAge,
+  staleWhileRevalidate: webConfig.cdn.staleWhileRevalidate,
 };
 
 /**
@@ -198,7 +200,7 @@ const getCloudflareMetrics = async (): Promise<CDNMetrics | null> => {
  */
 export const getVersionedAssetUrl = (
   path: string,
-  version: string = process.env.NEXT_PUBLIC_APP_VERSION || 'latest',
+  version: string = webConfig.app.version,
 ): string => {
   const cdnUrl = getCDNUrl(path);
   const separator = cdnUrl.includes('?') ? '&' : '?';

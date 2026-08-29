@@ -1,13 +1,13 @@
-import { Document } from 'mongoose';
+import type { Patient as SharedPatient } from '@health-watchers/types';
+import { isRecord } from '@health-watchers/types';
 
-export interface PatientResponse {
+export interface PatientResponse extends Pick<
+  SharedPatient,
+  'systemId' | 'firstName' | 'lastName' | 'dateOfBirth'
+> {
   _id: string;
   id: string;
-  systemId: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  sex: string;
+  sex: SharedPatient['sex'];
   contactNumber?: string;
   address?: string;
   allergies: unknown[];
@@ -20,24 +20,41 @@ export interface PatientResponse {
   ageGroup?: string | null;
 }
 
-export function toPatientResponse(doc: Document & Record<string, any>): PatientResponse {
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function asIsoString(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  return asString(value);
+}
+
+export function toPatientResponse(doc: unknown): PatientResponse {
+  const source = isRecord(doc) ? doc : {};
+  const id = String(source._id ?? source.id ?? '');
+  const sex = source.sex === 'M' || source.sex === 'F' || source.sex === 'O' ? source.sex : 'O';
+
   return {
-    _id: String(doc._id),
-    id: String(doc._id),
-    systemId: doc.systemId,
-    firstName: doc.firstName,
-    lastName: doc.lastName,
-    dateOfBirth: doc.dateOfBirth instanceof Date ? doc.dateOfBirth.toISOString() : doc.dateOfBirth,
-    sex: doc.sex,
-    contactNumber: doc.contactNumber,
-    address: doc.address,
-    allergies: doc.allergies ?? [],
-    insurance: doc.insurance ?? [],
-    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
-    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
-    photoUrl: doc.photoUrl,
-    thumbnailUrl: doc.thumbnailUrl,
-    age: doc.age ?? null,
-    ageGroup: doc.ageGroup ?? null,
+    _id: id,
+    id,
+    systemId: asString(source.systemId),
+    firstName: asString(source.firstName),
+    lastName: asString(source.lastName),
+    dateOfBirth: asIsoString(source.dateOfBirth),
+    sex,
+    contactNumber: asOptionalString(source.contactNumber),
+    address: asOptionalString(source.address),
+    allergies: Array.isArray(source.allergies) ? source.allergies : [],
+    insurance: Array.isArray(source.insurance) ? source.insurance : [],
+    createdAt: asIsoString(source.createdAt),
+    updatedAt: asIsoString(source.updatedAt),
+    photoUrl: asOptionalString(source.photoUrl),
+    thumbnailUrl: asOptionalString(source.thumbnailUrl),
+    age: typeof source.age === 'number' ? source.age : null,
+    ageGroup: asOptionalString(source.ageGroup) ?? null,
   };
 }

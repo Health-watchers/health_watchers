@@ -6,8 +6,7 @@ import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 import { ApiErrorCode } from '@health-watchers/types';
-import { errorAnalytics } from '../services/error-analytics.service';
-import { getTaxonomy, ErrorCategory } from '../utils/error-taxonomy';
+import { sendApiError } from '../utils/api-response';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -85,13 +84,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       err,
       err.message
     );
-    res.status(err.statusCode).json({
-      error: err.category,
-      code: err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
-      message: err.message,
-      requestId: req.requestId,
-      ...(isDev && err.stack ? { stack: err.stack } : {}),
-    });
+    sendApiError(
+      res,
+      err.statusCode,
+      err.category,
+      err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
+      err.message,
+      { requestId: req.requestId, ...(isDev && err.stack ? { stack: err.stack } : {}) }
+    );
     return;
   }
 

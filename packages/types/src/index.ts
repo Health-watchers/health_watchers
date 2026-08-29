@@ -68,6 +68,43 @@ export interface Patient {
   updatedAt?: string;
 }
 
+// ─── Runtime Type Guards and API Responses ─────────────────────────────────────
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export interface ApiErrorDetail {
+  path?: string;
+  message: string;
+}
+
+export interface ApiErrorResponse {
+  error: string;
+  code: ApiErrorCode;
+  message: string;
+  requestId?: string;
+  details?: ApiErrorDetail[];
+  field?: string;
+  stack?: string;
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function isError(value: unknown): value is Error {
+  return value instanceof Error;
+}
+
+export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return (
+    isRecord(value) &&
+    typeof value.error === 'string' &&
+    typeof value.code === 'string' &&
+    typeof value.message === 'string'
+  );
+}
+
 // ─── Date Utilities ───────────────────────────────────────────────────────────
 
 /** Format a date string for display (e.g. "Jan 1, 2024"). */
