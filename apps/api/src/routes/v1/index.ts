@@ -18,7 +18,8 @@
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
  * │                 │ /audit, /audit-logs, /notifications,             │
  * │                 │ /documents, /security/csp-report                 │
- * │ system          │ /metrics, /federation (well-known)               │
+ * │ infrastructure  │ /cdn, /replication                              │
+ * │ system          │ /metrics, /federation (well-known), /health      │
  * └─────────────────┴──────────────────────────────────────────────────┘
  */
 
@@ -52,7 +53,10 @@ import { icd10Routes } from '../../modules/icd10/icd10.controller';
 import { carePlanRoutes } from '../../modules/care-plans/care-plans.controller';
 import { referralRoutes } from '../../modules/referrals/referrals.controller';
 import { consentRoutes } from '../../modules/consent/consent.controller';
-import { immunizationRoutes, cvxCodesRouter } from '../../modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from '../../modules/immunizations/immunizations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
 import {
   healthLogRouter,
@@ -72,6 +76,7 @@ import { reimbursementRoutes } from '../../modules/payments/reimbursement.contro
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
 import exportRouter from '../../modules/export/export.routes';
+import batchExportRouter from '../../modules/export/batch-export.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -90,6 +95,16 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
+
+// ── Sharding (#1077) ──────────────────────────────────────────────────────────
+import shardingRouter from '../../routes/sharding';
+
+// ── CDN (#1078) ───────────────────────────────────────────────────────────────
+import cdnCacheRouter from '../../routes/cdn/cache-invalidation';
+import cdnHealthRouter from '../../routes/cdn/cdn-health';
+
+// ── Replication (#1080) ───────────────────────────────────────────────────────
+import replicationRouter from '../../routes/replication';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -139,6 +154,8 @@ v1Router.use('/subscriptions', subscriptionRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// Batch export routes (#1072) — async job queue + SSE progress tracking
+v1Router.use('/exports', batchExportRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
@@ -158,6 +175,16 @@ v1Router.use('/csp-report', cspReportRoutes);
 
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);
+
+// ── Sharding admin (#1077) ────────────────────────────────────────────────────
+v1Router.use('/sharding', shardingRouter);
+
+// ── CDN management (#1078) ────────────────────────────────────────────────────
+v1Router.use('/cdn', cdnCacheRouter);
+v1Router.use('/cdn', cdnHealthRouter);
+
+// ── Replication monitoring (#1080) ───────────────────────────────────────────
+v1Router.use('/replication', replicationRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)

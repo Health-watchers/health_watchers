@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_URL } from '@/lib/api';
+import { webConfig } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   const refreshToken = request.cookies.get('refreshToken')?.value;
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
   // Clear auth cookies
   response.cookies.set('accessToken', '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: webConfig.isProd(),
     sameSite: 'lax',
     maxAge: 0,
     path: '/',
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   response.cookies.set('refreshToken', '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: webConfig.isProd(),
     sameSite: 'lax',
     maxAge: 0,
     path: '/',

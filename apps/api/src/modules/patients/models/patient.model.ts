@@ -167,6 +167,8 @@ const patientSchema = new Schema<PatientDocument>(
 
 // Dashboard aggregation: filter by clinic + date range, sorted by createdAt
 patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
+// #1069 — Patient list query: clinicId + isActive filter used with query hint
+patientSchema.index({ clinicId: 1, isActive: 1 }, { name: 'clinicId_1_isActive_1' });
 patientSchema.index(
   { firstName: 'text', lastName: 'text', searchName: 'text', systemId: 'text' },
   {

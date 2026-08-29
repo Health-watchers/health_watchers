@@ -18,9 +18,6 @@
 # Reject any file containing merge conflict markers (should never be committed)
 *.orig
 *.rej
-<<<<<<<*
-=======*
->>>>>>>*
 
 # =============================================================================
 # Dependencies
@@ -72,6 +69,10 @@ jest-results.json
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
 
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
+
 # Playwright test artifacts
 playwright-report/
 test-results/
@@ -82,7 +83,10 @@ playwright/.cache/
 # Stryker mutation testing output
 .stryker-tmp/
 stryker-report/
-reports/
+# Scope to known generated-report directories only — do NOT use bare `reports/`
+# which would accidentally ignore apps/api/src/modules/reports/
+apps/api/reports/
+apps/api/stryker-reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -159,7 +163,6 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-apps/api/reports/
 
 # =============================================================================
 # Runtime / Debug artifacts
@@ -237,3 +240,27 @@ sbom-*.xml
 
 # GitHub Actions local run artifacts (act)
 .act/
+
+# =============================================================================
+# Additional exclusions — issues #1061-#1064 (feature branch cleanup)
+# =============================================================================
+
+# k6 test result artifacts
+k6-results.json
+k6-summary.json
+
+# Query optimisation profiling output
+query-profile-*.json
+slow-queries-*.json
+
+# Benchmark result snapshots (generated at CI run time, not source)
+benchmark-results/
+benchmark-*.json
+
+# Local migration lock files
+.migrate
+
+# Temporary REPL / debug files
+*.repl.ts
+*.debug.ts
+scratch.*

@@ -94,11 +94,46 @@ router.get(
         ? req.query.clinicId
         : req.user!.clinicId;
 
-    const result = await paginate(PatientModel, filter, page, limit);
-    return res.json({
-      status: 'success',
+    // #1069 — Cache patient list by clinicId + page + limit (TTL: 60 s)
+    const cacheKey = `patients:list:${filter.clinicId}:page=${page}:limit=${limit}`;
+    const cached = await cache.get<{ data: unknown[]; pagination: unknown }>(cacheKey);
+    if (cached !== null) {
+      return res.json({ status: 'success', ...cached });
+    }
+
+    // #1069 — Selective field projection: only the fields needed for the list view
+    const listProjection: Record<string, 1> = {
+      systemId: 1,
+      firstName: 1,
+      lastName: 1,
+      searchName: 1,
+      dateOfBirth: 1,
+      sex: 1,
+      contactNumber: 1,
+      clinicId: 1,
+      isActive: 1,
+      riskLevel: 1,
+      riskScore: 1,
+      createdAt: 1,
+    };
+
+    // #1069 — Force the compound index that covers clinicId + isActive for this list query
+    const result = await paginate(PatientModel, filter, page, limit, { createdAt: -1 }, {
+      projection: listProjection,
+      hint: 'clinicId_1_isActive_1',
+    });
+
+    const payload = {
       data: result.data.map(toPatientResponse),
       pagination: result.meta,
+    };
+
+    // Cache the response payload (exclude status wrapper for reuse)
+    await cache.set(cacheKey, payload, 60);
+
+    return res.json({
+      status: 'success',
+      ...payload,
     });
   })
 );
@@ -254,6 +289,8 @@ router.post(
     });
     patientsCreatedTotal.inc({ clinicId: targetClinicId });
     await incrementUsage(targetClinicId, 'patientCount');
+    // #1071 — Invalidate the patient list cache for this clinic after creation
+    await cache.invalidatePatientList(targetClinicId);
     return res.status(201).json({ status: 'success', data: toPatientResponse(doc) });
   })
 );
@@ -284,6 +321,7 @@ router.put(
     await Promise.all([
       cache.del(`${clinicId}:patient:${req.params.id}`),
       cache.delPattern(`${clinicId}:GET:/dashboard*`),
+      cache.invalidatePatientList(clinicId), // #1071 — keep list pages consistent
     ]);
 
     return res.json({ status: 'success', data: toPatientResponse(doc) });
@@ -332,6 +370,7 @@ router.patch(
     await Promise.all([
       cache.del(`${clinicId}:patient:${req.params.id}`),
       cache.delPattern(`${clinicId}:GET:/dashboard*`),
+      cache.invalidatePatientList(clinicId), // #1071 — keep list pages consistent after partial update
     ]);
 
     return res.json({ status: 'success', data: toPatientResponse(updated) });
@@ -351,6 +390,8 @@ router.delete(
       { new: true }
     );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    // #1071 — Invalidate list cache so deleted patient doesn't appear in paginated results
+    await cache.invalidatePatientList(String(req.user!.clinicId));
     return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
   })
 );

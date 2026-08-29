@@ -39,5 +39,13 @@ declare global {
       };
       lazyLoadQuery?: LazyLoadQuery;
     }
+
+    interface Response {
+      getOptimizationMetrics?: () => {
+        originalSize: string | number | undefined;
+        optimizedSize: string | number | undefined;
+        compressionRatio: string | number | undefined;
+      };
+    }
   }
 }

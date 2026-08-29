@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
+import { webConfig } from '@/lib/config';
 import {
   PageWrapper,
   PageHeader,
@@ -26,9 +27,9 @@ const BalanceTrendChart = dynamic(
   { ssr: false }
 );
 
-const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
-const IS_TESTNET = NETWORK === 'testnet';
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const NETWORK = webConfig.stellar.network;
+const IS_TESTNET = webConfig.stellar.isTestnet;
+const API = webConfig.api.url;
 
 function FederationAddressCard({ address }: { address: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

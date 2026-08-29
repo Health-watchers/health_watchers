@@ -1,8 +1,7 @@
 import { ArchiveModel } from './archive.model';
-import { getPolicyForCollection, type ArchivePolicy } from './archive-policies';
-import { getConnection } from 'mongoose';
-import { Schema } from 'mongoose';
-import logger from '../../lib/logger';
+import { type ArchivePolicy } from './archive-policies';
+import { getConnection, Types } from 'mongoose';
+import logger from '../../utils/logger';
 
 export class ArchiveService {
   private connection = getConnection();
@@ -19,7 +18,7 @@ export class ArchiveService {
 
       const collection = this.connection.collection(collectionName);
       const query = {
-        clinicId: new Schema.Types.ObjectId(clinicId),
+        clinicId: new Types.ObjectId(clinicId),
         createdAt: { $lt: cutoffDate },
       };
 
@@ -34,7 +33,10 @@ export class ArchiveService {
           expiryDate.setDate(expiryDate.getDate() + policy.retentionDays);
 
           const restoreableUntil = new Date();
-          restoreableUntil.setDate(restoreableUntil.getDate() + Math.min(90, policy.retentionDays / 30)); // Allow restore for 90 days or less
+          // Allow restore for 90 days or less
+          restoreableUntil.setDate(
+            restoreableUntil.getDate() + Math.min(90, policy.retentionDays / 30)
+          );
 
           await ArchiveModel.create({
             originalCollectionName: collectionName,
@@ -42,18 +44,21 @@ export class ArchiveService {
             archiveReason: 'age',
             archivedData: doc,
             archivedAt: new Date(),
-            archivedBy: userId ? new Schema.Types.ObjectId(userId) : undefined,
+            archivedBy: userId ? new Types.ObjectId(userId) : undefined,
             expiryDate,
             restoreMetadata: {
               restoreableUntil,
             },
-            clinicId: new Schema.Types.ObjectId(clinicId),
+            clinicId: new Types.ObjectId(clinicId),
           });
 
           await collection.deleteOne({ _id: doc._id });
           archivedCount++;
         } catch (error) {
-          logger.error(`Failed to archive document ${doc._id} from ${collectionName}`, error);
+          logger.error(
+            { err: error },
+            `Failed to archive document ${doc._id} from ${collectionName}`
+          );
           skippedCount++;
         }
       }
@@ -63,7 +68,7 @@ export class ArchiveService {
       );
       return { archivedCount, skippedCount };
     } catch (error) {
-      logger.error(`Error archiving records from ${collectionName}`, error);
+      logger.error({ err: error }, `Error archiving records from ${collectionName}`);
       throw error;
     }
   }
@@ -75,7 +80,7 @@ export class ArchiveService {
     offset: number = 0
   ) {
     const query: Record<string, any> = {
-      clinicId: new Schema.Types.ObjectId(clinicId),
+      clinicId: new Types.ObjectId(clinicId),
     };
 
     if (collectionName) {
@@ -98,33 +103,26 @@ export class ArchiveService {
 
   async restoreArchivedRecord(archiveId: string, clinicId: string, userId: string) {
     const archive = await ArchiveModel.findOne({
-      _id: new Schema.Types.ObjectId(archiveId),
-      clinicId: new Schema.Types.ObjectId(clinicId),
+      _id: new Types.ObjectId(archiveId),
+      clinicId: new Types.ObjectId(clinicId),
     });
 
     if (!archive) {
       throw new Error('Archive record not found');
     }
 
-    if (
-      archive.restoreMetadata &&
-      archive.restoreMetadata.restoreableUntil < new Date()
-    ) {
+    if (archive.restoreMetadata && archive.restoreMetadata.restoreableUntil < new Date()) {
       throw new Error('Archive is no longer restorable');
     }
 
     const collection = this.connection.collection(archive.originalCollectionName);
     const docId = archive.originalDocumentId;
 
-    await collection.updateOne(
-      { _id: docId },
-      { $set: archive.archivedData },
-      { upsert: true }
-    );
+    await collection.updateOne({ _id: docId }, { $set: archive.archivedData }, { upsert: true });
 
     if (archive.restoreMetadata) {
       archive.restoreMetadata.restoredAt = new Date();
-      archive.restoreMetadata.restoredBy = new Schema.Types.ObjectId(userId);
+      archive.restoreMetadata.restoredBy = new Types.ObjectId(userId);
     }
 
     await archive.save();
@@ -134,7 +132,7 @@ export class ArchiveService {
 
   async deleteExpiredArchives(clinicId: string): Promise<number> {
     const result = await ArchiveModel.deleteMany({
-      clinicId: new Schema.Types.ObjectId(clinicId),
+      clinicId: new Types.ObjectId(clinicId),
       expiryDate: { $lt: new Date() },
     });
 
@@ -144,7 +142,7 @@ export class ArchiveService {
   async getArchiveStats(clinicId: string) {
     const stats = await ArchiveModel.aggregate([
       {
-        $match: { clinicId: new Schema.Types.ObjectId(clinicId) },
+        $match: { clinicId: new Types.ObjectId(clinicId) },
       },
       {
         $group: {
@@ -157,7 +155,9 @@ export class ArchiveService {
       { $sort: { count: -1 } },
     ]);
 
-    const total = await ArchiveModel.countDocuments({ clinicId: new Schema.Types.ObjectId(clinicId) });
+    const total = await ArchiveModel.countDocuments({
+      clinicId: new Types.ObjectId(clinicId),
+    });
 
     return { total, byCollection: stats };
   }
