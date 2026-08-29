@@ -1,113 +1,227 @@
-# Helm Chart — Health Watchers
+# Health Watchers Helm Charts
 
-A Helm chart for deploying Health Watchers to Kubernetes with configurable values for dev, staging, and production environments.
+This directory contains Helm charts for deploying Health Watchers to Kubernetes clusters.
 
-## Chart Structure
+## Overview
+
+Helm is a package manager for Kubernetes that allows you to define, install, and upgrade complex Kubernetes applications. The Health Watchers Helm charts provide:
+
+- **Templated Manifests**: Reusable Kubernetes manifests
+- **Environment Management**: Separate configurations for staging and production
+- **Best Practices**: Security, scaling, and monitoring built-in
+- **Easy Deployment**: Single command installation and upgrades
+
+## Directory Structure
 
 ```
-helm/health-watchers/
-├── Chart.yaml                          # Chart metadata
-├── values.yaml                         # Default values
-├── values-staging.yaml                 # Staging overrides
-├── values-production.yaml              # Production overrides
-└── templates/
-    ├── _helpers.tpl                    # Template helpers
-    ├── namespace.yaml
-    ├── configmap.yaml
-    ├── secret.yaml                     # Inline secrets (non-prod)
-    ├── external-secret.yaml            # ESO integration (prod)
-    ├── api-deployment.yaml
-    ├── api-service.yaml
-    ├── api-hpa.yaml
-    ├── web-deployment.yaml
-    ├── web-service.yaml
-    ├── stellar-service-deployment.yaml
-    ├── stellar-service-service.yaml
-    ├── ingress.yaml
-    └── redis-deployment.yaml           # Optional Redis
+helm/
+├── health-watchers/                    # Main application chart
+│   ├── Chart.yaml                     # Chart metadata
+│   ├── values.yaml                    # Default configuration
+│   ├── values-staging.yaml            # Staging overrides
+│   ├── values-production.yaml         # Production overrides
+│   ├── README.md                      # Chart documentation
+│   └── templates/                     # Kubernetes manifest templates
+│       ├── api-deployment.yaml
+│       ├── api-service.yaml
+│       ├── web-deployment.yaml
+│       ├── stellar-service-deployment.yaml
+│       ├── ingress.yaml
+│       ├── configmap.yaml
+│       ├── secret.yaml
+│       ├── rbac.yaml
+│       ├── network-policies.yaml
+│       └── ...
+└── README.md                          # This file
 ```
 
-## Prerequisites
+## Quick Start
 
-- Helm 3.10+
-- Kubernetes 1.25+
-- cert-manager (for TLS)
-- nginx ingress controller
+### Installation Steps
 
-## Installation
+1. **Prerequisites**
+   ```bash
+   # Check kubectl and helm are installed
+   kubectl version
+   helm version
 
-### Lint the chart
+   # Configure kubectl to access your cluster
+   kubectl config current-context
+   ```
 
+2. **Deploy to Staging**
+   ```bash
+   helm upgrade --install health-watchers ./health-watchers \
+     -f health-watchers/values.yaml \
+     -f health-watchers/values-staging.yaml \
+     --namespace health-watchers-staging \
+     --create-namespace \
+     --wait
+   ```
+
+3. **Deploy to Production**
+   ```bash
+   helm upgrade --install health-watchers ./health-watchers \
+     -f health-watchers/values.yaml \
+     -f health-watchers/values-production.yaml \
+     --namespace health-watchers \
+     --create-namespace \
+     --wait
+   ```
+
+4. **Verify Deployment**
+   ```bash
+   # Check release status
+   helm status health-watchers -n health-watchers
+
+   # Check pods
+   kubectl get pods -n health-watchers
+
+   # Check ingress
+   kubectl get ingress -n health-watchers
+   ```
+
+## Chart: health-watchers
+
+The main application chart deploying all Health Watchers services.
+
+### Quick Installation
 ```bash
-helm lint helm/health-watchers/
-```
-
-### Render templates (dry run)
-
-```bash
-# Default values
-helm template health-watchers helm/health-watchers/
-
-# With staging overrides
-helm template health-watchers helm/health-watchers/ \
-  -f helm/health-watchers/values-staging.yaml
-
-# With production overrides
-helm template health-watchers helm/health-watchers/ \
-  -f helm/health-watchers/values-production.yaml
-```
-
-### Deploy to staging
-
-```bash
-helm upgrade --install health-watchers helm/health-watchers/ \
-  -f helm/health-watchers/values.yaml \
-  -f helm/health-watchers/values-staging.yaml \
-  --namespace health-watchers-staging \
-  --create-namespace \
-  --set secrets.mongoUri="mongodb+srv://..." \
-  --set secrets.jwtAccessTokenSecret="..." \
-  --set secrets.fieldEncryptionKey="..."
-```
-
-### Deploy to production (with External Secrets Operator)
-
-```bash
-helm upgrade --install health-watchers helm/health-watchers/ \
-  -f helm/health-watchers/values.yaml \
-  -f helm/health-watchers/values-production.yaml \
+helm upgrade --install health-watchers ./health-watchers \
+  -f health-watchers/values-production.yaml \
   --namespace health-watchers \
   --create-namespace
 ```
 
-> In production, `secrets.useExternalSecrets: true` is set in `values-production.yaml`, so no inline secret values are needed. ESO pulls them from your secrets provider.
+### Features
 
-## Key Configuration Options
+- ✅ Multi-service deployment (API, Web, Stellar Service)
+- ✅ Automatic scaling (HPA)
+- ✅ Pod disruption budgets (PDB)
+- ✅ Health checks (startup, readiness, liveness)
+- ✅ Network policies for security
+- ✅ Ingress with TLS
+- ✅ ConfigMap and Secrets
+- ✅ RBAC
+- ✅ Prometheus monitoring
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `global.imageRegistry` | Container image registry | `ghcr.io/chisom92` |
-| `api.replicaCount` | API pod replicas | `2` |
-| `api.hpa.maxReplicas` | Max API pods (autoscaling) | `10` |
-| `web.replicaCount` | Web pod replicas | `2` |
-| `stellarService.replicaCount` | Stellar service replicas | `1` |
-| `ingress.host` | Public hostname | `app.healthwatchers.example.com` |
-| `ingress.tls.enabled` | Enable TLS via cert-manager | `true` |
-| `secrets.useExternalSecrets` | Use ESO instead of inline secrets | `false` |
-| `redis.enabled` | Deploy Redis sidecar | `false` |
+For detailed information, see [health-watchers README](./health-watchers/README.md).
 
-## Updating Image Tags
+## Common Commands
 
 ```bash
-helm upgrade health-watchers helm/health-watchers/ \
-  --reuse-values \
-  --set api.image.tag=v1.2.3 \
-  --set web.image.tag=v1.2.3 \
-  --set stellarService.image.tag=v1.2.3
+# Lint chart
+helm lint ./health-watchers
+
+# Dry-run (preview changes)
+helm install health-watchers ./health-watchers --dry-run --debug
+
+# Install release
+helm install health-watchers ./health-watchers -f values-production.yaml
+
+# Upgrade release
+helm upgrade health-watchers ./health-watchers -f values-production.yaml
+
+# Check status
+helm status health-watchers
+
+# Rollback to previous version
+helm rollback health-watchers
+
+# Uninstall release
+helm uninstall health-watchers
 ```
 
-## Uninstall
+## Configuration
+
+Override values:
 
 ```bash
-helm uninstall health-watchers --namespace health-watchers
+# Via command line
+helm install health-watchers ./health-watchers \
+  --set api.replicaCount=3 \
+  --set web.replicaCount=3
+
+# Via values file
+helm install health-watchers ./health-watchers \
+  -f values-production.yaml \
+  -f my-custom-values.yaml
 ```
+
+## Environments
+
+The chart supports multiple environments:
+
+### Staging
+```bash
+helm upgrade --install health-watchers ./health-watchers \
+  -f health-watchers/values.yaml \
+  -f health-watchers/values-staging.yaml \
+  --namespace health-watchers-staging
+```
+
+### Production
+```bash
+helm upgrade --install health-watchers ./health-watchers \
+  -f health-watchers/values.yaml \
+  -f health-watchers/values-production.yaml \
+  --namespace health-watchers
+```
+
+## Monitoring
+
+Check deployment status:
+
+```bash
+# Pods
+kubectl get pods -n health-watchers
+
+# Services
+kubectl get svc -n health-watchers
+
+# Ingress
+kubectl get ingress -n health-watchers
+
+# HPA status
+kubectl get hpa -n health-watchers
+
+# Events
+kubectl get events -n health-watchers
+```
+
+View logs:
+
+```bash
+# All pods
+kubectl logs -l app=api -n health-watchers
+
+# Follow logs
+kubectl logs -f deployment/api -n health-watchers
+```
+
+## Troubleshooting
+
+### Check Helm Release
+```bash
+helm status health-watchers -n health-watchers
+helm get values health-watchers -n health-watchers
+helm get manifest health-watchers -n health-watchers
+```
+
+### Check Pods
+```bash
+kubectl describe pod <pod-name> -n health-watchers
+kubectl logs <pod-name> -n health-watchers
+```
+
+### Validate Chart
+```bash
+helm lint ./health-watchers
+helm template health-watchers ./health-watchers
+```
+
+## References
+
+- [Chart README](./health-watchers/README.md)
+- [Helm Docs](https://helm.sh/docs/)
+- [Kubernetes Docs](https://kubernetes.io/docs/)

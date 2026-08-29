@@ -2,6 +2,8 @@ import { Schema, Types, model, models } from 'mongoose';
 
 export interface IEncounterTemplate {
   clinicId: Types.ObjectId;
+  /** null for global (system-wide) templates */
+  isGlobal: boolean;
   name: string;
   description?: string;
   category: string;
@@ -21,11 +23,18 @@ export interface IEncounterTemplate {
   tags?: string[];
   isApproved?: boolean;
   approvedBy?: Types.ObjectId;
+  /** Monotonically increasing version number within a lineage. Starts at 1. */
+  version: number;
+  /** Points to the template this was cloned/versioned from. Null for originals. */
+  previousVersionId?: Types.ObjectId;
+  /** True only for the most recent version in a lineage. */
+  isLatest: boolean;
 }
 
 const encounterTemplateSchema = new Schema<IEncounterTemplate>(
   {
     clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    isGlobal: { type: Boolean, default: false, index: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
     category: { type: String, required: true, trim: true },
@@ -50,6 +59,9 @@ const encounterTemplateSchema = new Schema<IEncounterTemplate>(
     tags: { type: [String], default: [] },
     isApproved: { type: Boolean, default: false, index: true },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    version: { type: Number, default: 1, min: 1 },
+    previousVersionId: { type: Schema.Types.ObjectId, ref: 'EncounterTemplate', index: true },
+    isLatest: { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );

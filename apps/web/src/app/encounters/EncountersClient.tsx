@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, TableSkeleton, ModuleEmptyState, Button } from '@/components/ui';
+import {
+  ErrorMessage,
+  Toast,
+  TableSkeleton,
+  ModuleEmptyState,
+  Button,
+  SectionErrorBoundary,
+} from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
@@ -85,7 +92,9 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
       {showForm && (
         <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">New Encounter</h2>
-          <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
+          <SectionErrorBoundary name="encounter form">
+            <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
+          </SectionErrorBoundary>
         </div>
       )}
 
@@ -104,19 +113,19 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
             <li key={e.id} className="rounded border border-gray-200 p-4 shadow-sm">
               <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
-                  <p className="font-medium break-all text-gray-900">{e.id}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">{labels.id}</p>
+                  <p className="break-all font-medium text-gray-900">{e.id}</p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.patient}</p>
-                  <p className="font-medium break-all text-gray-900">{e.patientId}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">{labels.patient}</p>
+                  <p className="break-all font-medium text-gray-900">{e.patientId}</p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.date}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">{labels.date}</p>
                   <p className="text-gray-700">{e.date}</p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.notes}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">{labels.notes}</p>
                   <p className="text-gray-700">{e.notes}</p>
                 </div>
               </div>

@@ -17,12 +17,13 @@ jest.mock('nodemailer', () => {
 
 jest.mock('@health-watchers/config', () => ({
   config: {
-    smtp: {
-      host: 'smtp.example.com',
-      port: 587,
-      secure: false,
-      user: 'user',
-      pass: 'pass',
+    email: {
+      smtp: {
+        host: 'smtp.example.com',
+        port: 587,
+        user: 'user',
+        pass: 'pass',
+      },
       from: 'noreply@example.com',
     },
   },

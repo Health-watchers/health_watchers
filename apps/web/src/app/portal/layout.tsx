@@ -3,10 +3,13 @@ import { ReactNode } from 'react';
 
 const NAV = [
   { href: '/portal/dashboard', label: 'Dashboard' },
+  { href: '/portal/timeline', label: 'Timeline' },
   { href: '/portal/records', label: 'My Records' },
+  { href: '/portal/encounters', label: 'My Encounters' },
   { href: '/portal/appointments', label: 'Appointments' },
   { href: '/portal/payments', label: 'Payments' },
   { href: '/portal/consent', label: 'Consent' },
+  { href: '/portal/health-log', label: 'Health Log' },
 ];
 
 export default function PortalLayout({ children }: { children: ReactNode }) {

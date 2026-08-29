@@ -1,6 +1,5 @@
 #!/bin/sh
 # Run translation check when en.json or fr.json are staged
-# `|| true` guards against grep exiting 1 when nothing matches — the hook runs under `sh -e`
 STAGED=$(git diff --cached --name-only | grep -E 'apps/web/messages/(en|fr)\.json' || true)
 if [ -n "$STAGED" ]; then
   echo "🌐 Running translation completeness check..."

@@ -8,6 +8,7 @@ import { UserModel } from '../auth/models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
 import { addToDenylist } from '@api/services/token-denylist.service';
+import { passwordSchema } from '../auth/auth.validation';
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(100),
@@ -69,15 +70,16 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? 'en',
+        theme: user.preferences?.theme ?? 'system',
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
-          referral_received:    user.preferences?.notificationTypes?.referral_received    ?? true,
-          payment_confirmed:    user.preferences?.notificationTypes?.payment_confirmed    ?? true,
+          referral_received: user.preferences?.notificationTypes?.referral_received ?? true,
+          payment_confirmed: user.preferences?.notificationTypes?.payment_confirmed ?? true,
           appointment_reminder: user.preferences?.notificationTypes?.appointment_reminder ?? true,
-          ai_summary_ready:     user.preferences?.notificationTypes?.ai_summary_ready     ?? true,
-          lab_result_ready:     user.preferences?.notificationTypes?.lab_result_ready     ?? true,
-          system:               user.preferences?.notificationTypes?.system               ?? true,
+          ai_summary_ready: user.preferences?.notificationTypes?.ai_summary_ready ?? true,
+          lab_result_ready: user.preferences?.notificationTypes?.lab_result_ready ?? true,
+          system: user.preferences?.notificationTypes?.system ?? true,
         },
       },
     },
@@ -142,7 +144,7 @@ router.patch(
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  newPassword: passwordSchema,
 });
 
 /**
@@ -332,17 +334,20 @@ router.post('/me/mfa/disable', authenticate, async (req: Request, res: Response)
   });
 });
 
-const notificationTypesSchema = z.object({
-  referral_received:    z.boolean().optional(),
-  payment_confirmed:    z.boolean().optional(),
-  appointment_reminder: z.boolean().optional(),
-  ai_summary_ready:     z.boolean().optional(),
-  lab_result_ready:     z.boolean().optional(),
-  system:               z.boolean().optional(),
-}).optional();
+const notificationTypesSchema = z
+  .object({
+    referral_received: z.boolean().optional(),
+    payment_confirmed: z.boolean().optional(),
+    appointment_reminder: z.boolean().optional(),
+    ai_summary_ready: z.boolean().optional(),
+    lab_result_ready: z.boolean().optional(),
+    system: z.boolean().optional(),
+  })
+  .optional();
 
 const updatePreferencesSchema = z.object({
   language: z.enum(['en', 'fr']).optional(),
+  theme: z.enum(['light', 'dark', 'system']).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
   notificationTypes: notificationTypesSchema,
@@ -384,9 +389,10 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    const { language, emailNotifications, inAppNotifications, notificationTypes } = req.body;
+    const { language, theme, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
+    if (theme !== undefined) user.preferences.theme = theme;
     if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined) user.preferences.inAppNotifications = inAppNotifications;
     if (notificationTypes !== undefined) {
@@ -400,6 +406,7 @@ router.patch(
       data: {
         preferences: {
           language: user.preferences.language,
+          theme: user.preferences.theme,
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
           notificationTypes: user.preferences.notificationTypes,
@@ -435,7 +442,8 @@ router.get('/sessions', authenticate, async (req: Request, res: Response) => {
     {
       id: currentSessionId,
       userAgent: req.headers['user-agent'] || 'Unknown',
-      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      ipAddress:
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
         (req.headers['x-real-ip'] as string) ||
         req.socket.remoteAddress ||
         'Unknown',

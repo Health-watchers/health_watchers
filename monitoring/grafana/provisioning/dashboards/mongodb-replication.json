@@ -1,0 +1,237 @@
+{
+  "uid": "hw-mongodb-replication",
+  "title": "MongoDB Replication",
+  "description": "Replica set health, replication lag, oplog usage, and member status for Health Watchers",
+  "tags": ["mongodb", "replication", "database"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Replica Set Members Healthy",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "count(mongodb_replset_member_health{job=\"mongodb\"} == 1)",
+          "legendFormat": "Healthy"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 2 },
+            { "color": "green", "value": 3 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Primary Available",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "count(mongodb_replset_member_state{job=\"mongodb\"} == 1)",
+          "legendFormat": "Primary"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            { "color": "red", "value": null },
+            { "color": "green", "value": 1 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Max Replication Lag (s)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "max(mongodb_replset_member_replication_lag_seconds{job=\"mongodb\"})",
+          "legendFormat": "Max Lag"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "s",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 10 },
+            { "color": "red", "value": 30 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Oplog Used (%)",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "100 * mongodb_replset_oplog_used_bytes{job=\"mongodb\"} / mongodb_replset_oplog_size_bytes{job=\"mongodb\"}",
+          "legendFormat": "Oplog Usage"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "unit": "percent",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 60 },
+            { "color": "red", "value": 80 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Elections (last 1h)",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "increase(mongodb_replset_number_of_elections_total{job=\"mongodb\"}[1h])",
+          "legendFormat": "Elections"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 3 }
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Replication Lag per Secondary (seconds)",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "mongodb_replset_member_replication_lag_seconds{job=\"mongodb\", state!=\"PRIMARY\"}",
+          "legendFormat": "{{ member }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Oplog Usage Over Time",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "100 * mongodb_replset_oplog_used_bytes{job=\"mongodb\"} / mongodb_replset_oplog_size_bytes{job=\"mongodb\"}",
+          "legendFormat": "Oplog Used %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Replica Set Member Status",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 6 },
+      "targets": [
+        {
+          "expr": "mongodb_replset_member_health{job=\"mongodb\"}",
+          "legendFormat": "{{ member }}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        {
+          "id": "organize",
+          "options": { "renameByName": { "member": "Member", "Value": "Health (1=OK)" } }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "MongoDB Operations per Second",
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(mongodb_op_counters_total{job=\"mongodb\"}[5m])",
+          "legendFormat": "{{ type }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Active Connections",
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "mongodb_connections{job=\"mongodb\", state=\"current\"}",
+          "legendFormat": "Current"
+        },
+        {
+          "expr": "mongodb_connections{job=\"mongodb\", state=\"available\"}",
+          "legendFormat": "Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      }
+    }
+  ]
+}

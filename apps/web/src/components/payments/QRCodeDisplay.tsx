@@ -60,7 +60,7 @@ export function QRCodeDisplay({ intentId, onClose }: QRCodeDisplayProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+      <div className="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border p-4 text-sm">
         {error}
       </div>
     );

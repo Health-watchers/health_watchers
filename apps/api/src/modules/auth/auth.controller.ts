@@ -14,6 +14,7 @@ import {
   ResetPasswordDto,
   MfaBackupCodeDto,
   MfaDisableDto,
+  MfaBackupCodesRegenerateDto,
   loginSchema,
   refreshSchema,
   registerSchema,
@@ -23,8 +24,13 @@ import {
   resetPasswordSchema,
   mfaBackupCodeSchema,
   mfaDisableSchema,
+  mfaBackupCodesRegenerateSchema,
 } from './auth.validation';
-import { sendPasswordResetEmail } from '@api/lib/email.service';
+import {
+  sendPasswordResetEmail,
+  sendMfaBackupCodesRegeneratedEmail,
+  sendAccountLockedEmail,
+} from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -49,7 +55,8 @@ const MAX_MFA_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 // Roles that must have 2FA enabled
-const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN']);
+const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'NURSE']);
+const MFA_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /** SHA-256 hash of a token for safe storage */
 function hashToken(token: string): string {
@@ -120,8 +127,8 @@ router.post(
     const rawToken = crypto.randomBytes(32).toString('hex');
     user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     await user.save();
-    await sendVerificationEmail(user.email, rawToken);
-    sendWelcomeEmail(user.email, user.fullName);
+    await sendVerificationEmail(user.email, rawToken, user.preferences?.language);
+    sendWelcomeEmail(user.email, user.fullName, user.preferences?.language);
 
     const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
@@ -158,6 +165,22 @@ router.post(
       user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
       if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
         user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+        sendAccountLockedEmail(
+          user.email,
+          user.fullName,
+          Math.round(LOCK_DURATION_MS / 60_000),
+          user.preferences?.language
+        );
+        await auditLog(
+          {
+            action: 'ACCOUNT_LOCKED',
+            userId: user.id,
+            clinicId: String(user.clinicId),
+            outcome: 'SUCCESS',
+            metadata: { email: user.email, failedLoginAttempts: user.failedLoginAttempts },
+          },
+          req
+        );
       }
       await user.save();
       return res.status(401).json({ error: 'Unauthorized', message: INVALID });
@@ -176,17 +199,53 @@ router.post(
       });
     }
 
-    // Enforce 2FA for admin roles — block login if not set up
+    // Enforce 2FA for required roles — with 7-day grace period for DOCTOR/NURSE
     if (MFA_REQUIRED_ROLES.has(user.role) && !user.mfaEnabled) {
-      return res.status(403).json({
-        error: 'MfaRequired',
-        message: '2FA is mandatory for your role. Please set up 2FA before logging in.',
-        requiresMfaSetup: true,
-        tempToken: signTempToken(user.id),
+      const now = new Date();
+
+      // Assign grace period on first login after becoming required
+      if (!user.mfaGracePeriodEndsAt) {
+        user.mfaGracePeriodEndsAt = new Date(now.getTime() + MFA_GRACE_PERIOD_MS);
+        await user.save();
+      }
+
+      // Grace period expired — block login
+      if (user.mfaGracePeriodEndsAt <= now) {
+        return res.status(403).json({
+          error: 'MfaRequired',
+          message: '2FA is mandatory for your role. Please set up 2FA to log in.',
+          requiresMfaSetup: true,
+          tempToken: signTempToken(user.id),
+        });
+      }
+
+      // Within grace period — allow login with a warning
+      const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+      const { token: refreshToken, jti, family } = signRefreshToken(p);
+      await RefreshTokenModel.create({
+        jti,
+        userId: user.id,
+        family,
+        consumed: false,
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+      });
+      return res.json({
+        status: 'success',
+        data: {
+          accessToken: signAccessToken(p),
+          refreshToken,
+          warning: 'mfa_required',
+          mfaGracePeriodEndsAt: user.mfaGracePeriodEndsAt,
+        },
       });
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -237,7 +296,12 @@ router.post(
     existing.consumed = true;
     await existing.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
     await RefreshTokenModel.create({
       jti,
@@ -352,7 +416,12 @@ router.post(
     await user.save();
 
     await auditLog(
-      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_enabled' } },
+      {
+        action: 'LOGIN_SUCCESS',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        metadata: { event: '2fa_enabled' },
+      },
       req
     );
 
@@ -398,6 +467,16 @@ router.post(
       user.failedMfaAttempts = (user.failedMfaAttempts ?? 0) + 1;
       if (user.failedMfaAttempts >= MAX_MFA_ATTEMPTS) {
         user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+        await auditLog(
+          {
+            action: 'ACCOUNT_LOCKED',
+            userId: user.id,
+            clinicId: String(user.clinicId),
+            outcome: 'SUCCESS',
+            metadata: { email: user.email, failedMfaAttempts: user.failedMfaAttempts },
+          },
+          req
+        );
       }
       await user.save();
       return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
@@ -410,7 +489,12 @@ router.post(
       await user.save();
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -439,7 +523,9 @@ router.post(
   async (req: Request<Record<string, never>, unknown, MfaBackupCodeDto>, res: Response) => {
     const userId = verifyTempToken(req.body.tempToken);
     if (!userId)
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
 
     const user = await UserModel.findById(userId).select('+mfaBackupCodes');
     if (!user || !user.isActive || !user.mfaEnabled || !user.mfaBackupCodes)
@@ -448,14 +534,21 @@ router.post(
     const codeHash = hashToken(req.body.backupCode);
     const idx = user.mfaBackupCodes.indexOf(codeHash);
     if (idx === -1) {
-      return res.status(400).json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
+      return res
+        .status(400)
+        .json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
     }
 
     // Mark code as used by removing it
     user.mfaBackupCodes.splice(idx, 1);
     await user.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -466,7 +559,11 @@ router.post(
     });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken, remainingBackupCodes: user.mfaBackupCodes.length },
+      data: {
+        accessToken: signAccessToken(p),
+        refreshToken,
+        remainingBackupCodes: user.mfaBackupCodes.length,
+      },
     });
   }
 );
@@ -485,7 +582,9 @@ router.delete(
   authenticate,
   validateRequest({ body: mfaDisableSchema }),
   async (req: Request<Record<string, never>, unknown, MfaDisableDto>, res: Response) => {
-    const user = await UserModel.findById(req.user!.userId).select('+password +mfaSecret +mfaBackupCodes');
+    const user = await UserModel.findById(req.user!.userId).select(
+      '+password +mfaSecret +mfaBackupCodes'
+    );
     if (!user || !user.mfaEnabled)
       return res.status(400).json({ error: 'BadRequest', message: '2FA is not enabled' });
 
@@ -513,7 +612,12 @@ router.delete(
     await user.save();
 
     await auditLog(
-      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_disabled' } },
+      {
+        action: 'LOGIN_SUCCESS',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        metadata: { event: '2fa_disabled' },
+      },
       req
     );
 
@@ -541,10 +645,95 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
   if (!user) return res.status(404).json({ error: 'NotFound', message: 'User not found' });
 
   user.failedLoginAttempts = 0;
+  user.failedMfaAttempts = 0;
   user.lockedUntil = undefined;
   await user.save();
 
+  await auditLog(
+    {
+      action: 'ACCOUNT_UNLOCKED',
+      userId: user.id,
+      clinicId: String(user.clinicId),
+      outcome: 'SUCCESS',
+      metadata: { email: user.email, unlockedBy: req.user!.userId },
+    },
+    req
+  );
+
   return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
+});
+
+/**
+ * @swagger
+ * /auth/switch-clinic:
+ *   post:
+ *     summary: Switch the active clinic for a SUPER_ADMIN and obtain tokens scoped to it
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clinicId]
+ *             properties:
+ *               clinicId: { type: string, description: MongoDB ObjectId of the target clinic }
+ *     responses:
+ *       200:
+ *         description: New access + refresh tokens scoped to the selected clinic
+ *       400: { description: Missing or invalid clinicId }
+ *       403: { description: Caller is not a SUPER_ADMIN }
+ *       404: { description: Clinic not found }
+ */
+router.post('/switch-clinic', authenticate, async (req: Request, res: Response) => {
+  if (req.user!.role !== 'SUPER_ADMIN')
+    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+
+  const { clinicId } = req.body as { clinicId?: string };
+  if (!clinicId || !/^[a-f\d]{24}$/i.test(clinicId))
+    return res.status(400).json({ error: 'BadRequest', message: 'A valid clinicId is required' });
+
+  const clinic = await ClinicModel.findById(clinicId);
+  if (!clinic || clinic.isActive === false)
+    return res.status(404).json({ error: 'NotFound', message: 'Clinic not found or inactive' });
+
+  const user = await UserModel.findById(req.user!.userId);
+  if (!user || !user.isActive)
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
+
+  const previousClinicId = req.user!.clinicId;
+  const p = { userId: user.id, role: user.role, clinicId, isSuperAdmin: true };
+  const { token: refreshToken, jti, family } = signRefreshToken(p);
+  await RefreshTokenModel.create({
+    jti,
+    userId: user.id,
+    family,
+    consumed: false,
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+  });
+
+  await auditLog(
+    {
+      action: 'CLINIC_SWITCH',
+      userId: user.id,
+      clinicId,
+      resourceType: 'Clinic',
+      resourceId: clinicId,
+      metadata: { from: previousClinicId, to: clinicId },
+    },
+    req
+  );
+
+  return res.json({
+    status: 'success',
+    data: {
+      accessToken: signAccessToken(p),
+      refreshToken,
+      clinic: { id: String(clinic._id), name: clinic.name },
+    },
+  });
 });
 
 /**
@@ -594,7 +783,7 @@ router.post(
       user.resetPasswordTokenHash = hashToken(rawToken);
       user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
       await user.save();
-      await sendPasswordResetEmail(user.email, rawToken);
+      await sendPasswordResetEmail(user.email, rawToken, user.preferences?.language);
     }
     return res.json({
       status: 'success',
@@ -634,6 +823,121 @@ router.post(
     return res.json({
       status: 'success',
       data: { message: 'Password has been reset successfully.' },
+    });
+  }
+);
+
+/**
+ * @swagger
+ * /auth/mfa/backup-codes/count:
+ *   get:
+ *     summary: Get the number of remaining (unused) MFA backup codes
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/mfa/backup-codes/count', authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).select('+mfaBackupCodes');
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  if (!user.mfaEnabled) {
+    return res
+      .status(409)
+      .json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
+  }
+
+  const remaining = (user.mfaBackupCodes ?? []).length;
+  return res.json({
+    status: 'success',
+    data: {
+      remaining,
+      total: 10,
+      low: remaining < 3,
+    },
+  });
+});
+
+/**
+ * @swagger
+ * /auth/mfa/backup-codes/regenerate:
+ *   post:
+ *     summary: Regenerate MFA backup codes — invalidates all existing codes
+ *     description: Requires current password and either a valid TOTP code or an existing backup code.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  '/mfa/backup-codes/regenerate',
+  authenticate,
+  validateRequest({ body: mfaBackupCodesRegenerateSchema }),
+  async (
+    req: Request<Record<string, never>, unknown, MfaBackupCodesRegenerateDto>,
+    res: Response
+  ) => {
+    const user = await UserModel.findById(req.user!.userId).select(
+      '+mfaSecret +mfaBackupCodes +password'
+    );
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      return res
+        .status(409)
+        .json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
+    }
+
+    // Verify current password
+    const passwordMatch = await bcrypt.compare(req.body.password, user.password);
+    if (!passwordMatch) {
+      return res
+        .status(400)
+        .json({ error: 'InvalidCredentials', message: 'Current password is incorrect' });
+    }
+
+    // Verify TOTP or backup code (second factor)
+    let totpVerified = false;
+    let backupCodeVerified = false;
+
+    if (req.body.totp) {
+      const plainSecret = decrypt(user.mfaSecret);
+      totpVerified = totpService.verify(req.body.totp, plainSecret);
+      if (!totpVerified) {
+        return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+      }
+    } else if (req.body.backupCode) {
+      const codeHash = hashToken(req.body.backupCode);
+      const idx = (user.mfaBackupCodes ?? []).indexOf(codeHash);
+      if (idx === -1) {
+        return res
+          .status(400)
+          .json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
+      }
+      backupCodeVerified = true;
+    }
+
+    const { plain, hashed } = generateBackupCodes();
+    user.mfaBackupCodes = hashed;
+    await user.save();
+
+    // Fire-and-forget email notification
+    sendMfaBackupCodesRegeneratedEmail(user.email, user.fullName, plain);
+
+    await auditLog(
+      {
+        action: 'MFA_BACKUP_CODES_REGENERATED',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        details: { totpVerified, backupCodeVerified },
+      },
+      req
+    );
+
+    return res.json({
+      status: 'success',
+      data: {
+        backupCodes: plain,
+        message: 'Backup codes regenerated. Store them securely — they will not be shown again.',
+      },
     });
   }
 );

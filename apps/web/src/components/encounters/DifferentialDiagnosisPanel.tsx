@@ -189,7 +189,7 @@ export default function DifferentialDiagnosisPanel({
           <div className="space-y-4">
             {/* Urgency badge */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Urgency:
               </span>
               <span

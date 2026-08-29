@@ -74,7 +74,7 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
           }));
         }
       },
-      [errors],
+      [errors]
     );
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

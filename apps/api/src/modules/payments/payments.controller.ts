@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
+import { paginate } from '../../utils/paginate';
 import { PaymentRecordModel } from './models/payment-record.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import { PaymentDisputeModel } from './models/payment-dispute.model';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
   createPaymentIntentSchema,
@@ -11,15 +13,17 @@ import {
   ListPaymentsQuery,
 } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
+import { authorize } from '@api/middlewares/rbac.middleware';
 import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
-import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
-import { emitToClinic } from '@api/realtime/socket';
-import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { paymentsInitiatedTotal, feeStrategySelectedTotal } from '@api/services/metrics.service';
+import { feeOptimizer } from './services/fee-optimizer.service';
+import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
+import { confirmPayment } from './services/payment-confirmation.service';
 
 const router = Router();
 router.use(authenticate);
@@ -321,16 +325,11 @@ router.get(
     if (patientId) filter.patientId = patientId;
     if (status) filter.status = status;
 
-    const skip = (page - 1) * limit;
-    const [payments, total] = await Promise.all([
-      PaymentRecordModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      PaymentRecordModel.countDocuments(filter),
-    ]);
-
+    const result = await paginate(PaymentRecordModel, filter, page, limit, { createdAt: -1 });
     return res.json({
       status: 'success',
-      data: payments.map(toPaymentResponse),
-      meta: { total, page, limit },
+      data: result.data.map(toPaymentResponse),
+      pagination: result.meta,
     });
   })
 );
@@ -550,7 +549,7 @@ router.post(
       destinationAmount,
       maxSourceAmount,
       path,
-      feeStrategy = 'standard',
+      feeStrategy: requestedFeeStrategy,
       sponsorFee = false,
       idempotencyKey,
     } = req.body;
@@ -573,6 +572,20 @@ router.post(
     }
     // `currency` takes precedence over `assetCode` for convenience
     const normalizedAsset = (currency ?? String(assetCode)).toUpperCase().trim();
+
+    // Resolve fee strategy: explicit request > clinic preference > auto
+    let feeStrategy: 'slow' | 'standard' | 'fast';
+    if (requestedFeeStrategy) {
+      feeStrategy = requestedFeeStrategy;
+    } else {
+      const clinicSettings = await ClinicSettingsModel.findOne({ clinicId }).lean();
+      const clinicPreference = clinicSettings?.feeOptimization?.enabled
+        ? clinicSettings.feeOptimization.defaultStrategy
+        : undefined;
+      const amountXLM = normalizedAsset === 'XLM' ? parseFloat(amount) : 0;
+      feeStrategy = await feeOptimizer.selectStrategyAuto(amountXLM, clinicPreference);
+      feeStrategySelectedTotal.inc({ strategy: feeStrategy, source: 'auto' });
+    }
 
     // Generate standardized memo: HW:{8-char-intentId}
     const memo = `HW:${intentId.slice(0, 8).toUpperCase()}`;
@@ -634,6 +647,7 @@ router.post(
 
     logger.info({ intentId, memo, amount, destination }, 'Payment intent created');
     paymentsInitiatedTotal.inc({ currency: normalizedAsset });
+    cache.del(dashboardCacheKey(String(clinicId)));
 
     let feeBump: { xdr: string; hash: string; feeStroops: number } | undefined;
     if (sponsorFee) {
@@ -855,49 +869,14 @@ router.patch(
       }
     }
 
-    const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
-      payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date() },
-      { new: true }
-    );
-
-    logger.info({ intentId, txHash }, 'Payment confirmed');
-    paymentsConfirmedTotal.inc({ currency: updatedPayment?.assetCode ?? 'XLM' });
-
-    // Auto-update linked invoice if any (non-blocking)
-    try {
-      const { InvoiceModel } = await import('../invoices/invoice.model');
-      await InvoiceModel.findOneAndUpdate(
-        { paymentIntentId: intentId, status: { $ne: 'paid' } },
-        { status: 'paid', paidAt: new Date(), paidTxHash: txHash }
-      );
-    } catch {
-      /* non-critical */
+    const confirmation = await confirmPayment({ intentId, txHash });
+    if (!confirmation.payment) {
+      return res
+        .status(404)
+        .json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
     }
 
-    // Send confirmation email to clinic (non-blocking)
-    try {
-      const { ClinicModel } = await import('../clinics/clinic.model');
-      const clinic = await ClinicModel.findById(updatedPayment!.clinicId).lean();
-      if (clinic?.email) {
-        sendPaymentConfirmationEmail(
-          clinic.email,
-          updatedPayment!.amount,
-          updatedPayment!.assetCode,
-          txHash
-        );
-      }
-    } catch {
-      /* non-critical */
-    }
-
-    emitToClinic(String(updatedPayment!.clinicId), 'payment:confirmed', {
-      paymentId: String(updatedPayment!._id),
-      txHash,
-      amount: updatedPayment!.amount,
-      assetCode: updatedPayment!.assetCode,
-    });
-    return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
+    return res.json({ status: 'success', data: toPaymentResponse(confirmation.payment) });
   })
 );
 
@@ -1529,6 +1508,11 @@ router.get(
     }
 
     try {
+      // Surface dispute status on the receipt so patients/clinics see it at a glance.
+      const dispute = await PaymentDisputeModel.findOne({ paymentIntentId: intentId })
+        .select('status resolution refundIntentId')
+        .lean();
+
       // Return pre-signed S3 URL or receipt data
       return res.json({
         status: 'success',
@@ -1536,6 +1520,8 @@ router.get(
           receiptUrl: payment.receiptUrl,
           receiptNumber: payment.receiptNumber,
           generatedAt: payment.receiptGeneratedAt,
+          disputeStatus: dispute ? (dispute as any).status : 'none',
+          refundIntentId: dispute ? (dispute as any).refundIntentId : undefined,
         },
       });
     } catch (err: any) {
@@ -1778,15 +1764,16 @@ router.post(
 
     try {
       const { multiSigPaymentService } = await import('./services/multisig-payment.service');
-      const { payment, multiSigPayment } = await multiSigPaymentService.createMultiSigPaymentRequest({
-        paymentId: undefined as any,
-        clinicId,
-        amount,
-        currency,
-        requiredSignatures,
-        signers,
-        description,
-      });
+      const { payment, multiSigPayment } =
+        await multiSigPaymentService.createMultiSigPaymentRequest({
+          paymentId: undefined as any,
+          clinicId: clinicId as any,
+          amount,
+          currency,
+          requiredSignatures,
+          signers,
+          description,
+        });
 
       paymentsInitiatedTotal.inc({ currency });
 
@@ -1811,14 +1798,24 @@ router.post(
 // POST /payments/multisig/:paymentId/sign — add a signature to a multi-sig payment
 router.post(
   '/multisig/:paymentId/sign',
-  validateRequest({ body: { type: 'object', properties: { signer: { type: 'string' }, signature: { type: 'string' } }, required: ['signer', 'signature'] } as any }),
+  validateRequest({
+    body: {
+      type: 'object',
+      properties: { signer: { type: 'string' }, signature: { type: 'string' } },
+      required: ['signer', 'signature'],
+    } as any,
+  }),
   asyncHandler(async (req: Request, res: Response) => {
     const { paymentId } = req.params;
     const { signer, signature } = req.body;
 
     try {
       const { multiSigPaymentService } = await import('./services/multisig-payment.service');
-      const multiSigPayment = await multiSigPaymentService.addSignature(paymentId, signer, signature);
+      const multiSigPayment = await multiSigPaymentService.addSignature(
+        paymentId,
+        signer,
+        signature
+      );
 
       return res.json({
         status: 'success',
@@ -1868,6 +1865,66 @@ router.get(
     } catch (err: any) {
       return res.status(400).json({ error: 'Error', message: err.message });
     }
+  })
+);
+
+/**
+ * @swagger
+ * /payments/expiring-claimable:
+ *   get:
+ *     summary: List claimable balances expiring within 24 hours (CLINIC_ADMIN)
+ *     description: >
+ *       Returns all unclaimed claimable-balance payment records whose `claimableUntil`
+ *       falls within the next 24 hours. Useful for clinic admins to monitor patients
+ *       who have not yet claimed their payment before the window closes.
+ *       The hourly expiry-notification job also uses this window to send proactive
+ *       email, in-app, and Socket.IO notifications to patients (issue #714).
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of expiring claimable balances for the clinic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       intentId: { type: string }
+ *                       claimableBalanceId: { type: string }
+ *                       amount: { type: string }
+ *                       patientId: { type: string }
+ *                       claimableUntil: { type: string, format: date-time }
+ *                       claimableExpiryNotificationSent: { type: boolean }
+ *       403:
+ *         description: Forbidden — CLINIC_ADMIN or SUPER_ADMIN only
+ */
+// GET /payments/expiring-claimable — list claimable balances expiring within 24h (CLINIC_ADMIN)
+router.get(
+  '/expiring-claimable',
+  authorize(['CLINIC_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId } = req.user!;
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const records = await PaymentRecordModel.find({
+      clinicId,
+      claimableUntil: { $gte: now, $lte: in24h },
+      claimed: { $ne: true },
+    })
+      .select(
+        'intentId claimableBalanceId amount patientId claimableUntil claimableExpiryNotificationSent'
+      )
+      .lean();
+
+    return res.json({ status: 'success', data: records });
   })
 );
 

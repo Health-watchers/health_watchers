@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "test": "jest dist",
+    "test": "jest --config jest.config.js",
     "build": "tsc"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
+    "fast-check": "^4.7.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.0",
     "typescript": "^5.0.0"

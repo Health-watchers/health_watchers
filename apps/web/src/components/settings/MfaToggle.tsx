@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { MfaSetupModal } from './MfaSetupModal';
+import { BackupCodeManager } from './BackupCodeManager';
 
 interface MfaToggleProps {
   mfaEnabled: boolean;
@@ -115,6 +116,13 @@ export function MfaToggle({ mfaEnabled, onMfaStatusChange }: MfaToggleProps) {
         <p role="alert" className="text-danger-500 text-sm">
           {error}
         </p>
+      )}
+
+      {mfaEnabled && (
+        <>
+          <hr className="border-neutral-200" />
+          <BackupCodeManager onRegenerated={onMfaStatusChange} />
+        </>
       )}
 
       <MfaSetupModal

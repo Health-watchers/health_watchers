@@ -33,7 +33,7 @@ export class ReceiptService {
    */
   static generateReceiptHTML(data: ReceiptData): string {
     const explorerUrl = `https://stellar.expert/explorer/public/${data.txHash}`;
-    
+
     return `
 <!DOCTYPE html>
 <html>
@@ -70,12 +70,16 @@ export class ReceiptService {
         <span class="label">Clinic:</span>
         <span class="value">${data.clinicName}</span>
       </div>
-      ${data.clinicAddress ? `
+      ${
+        data.clinicAddress
+          ? `
       <div class="row">
         <span class="label">Address:</span>
         <span class="value">${data.clinicAddress}</span>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
 
     <div class="section">

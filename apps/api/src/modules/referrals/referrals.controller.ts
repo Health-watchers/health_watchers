@@ -8,8 +8,18 @@ import { AuditLogModel } from '../audit/audit.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { UserModel } from '../auth/models/user.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
+import { parsePagination } from '@api/utils/paginate';
 import { sendReferralNotificationEmail } from '@api/lib/email.service';
+import {
+  createReferralSchema,
+  listReferralsQuerySchema,
+  idParamSchema,
+} from './referrals.validation';
+import { z } from 'zod';
+
+const declineBodySchema = z.object({ declinedReason: z.string().max(2000).optional() });
 
 const router = Router();
 router.use(authenticate);
@@ -20,23 +30,27 @@ const DOCTOR_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 router.post(
   '/',
   DOCTOR_ROLES,
+  validateRequest({ body: createReferralSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { toClinicId, patientId, reason, urgency, encounterId, sharedData, notes } = req.body;
 
-    if (!toClinicId || !patientId || !reason || !urgency) {
-      return res.status(400).json({ error: 'ValidationError', message: 'toClinicId, patientId, reason, urgency are required' });
-    }
-
     // Verify patient belongs to the referring clinic and has data_sharing consent
-    const patient = await PatientModel.findOne({ _id: patientId, clinicId: req.user!.clinicId, isActive: true });
+    const patient = await PatientModel.findOne({
+      _id: patientId,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     if (!(patient as any).dataSharingConsent) {
-      return res.status(403).json({ error: 'ConsentRequired', message: 'Patient has not given data sharing consent' });
+      return res
+        .status(403)
+        .json({ error: 'ConsentRequired', message: 'Patient has not given data sharing consent' });
     }
 
     const toClinic = await ClinicModel.findById(toClinicId);
-    if (!toClinic) return res.status(404).json({ error: 'NotFound', message: 'Target clinic not found' });
+    if (!toClinic)
+      return res.status(404).json({ error: 'NotFound', message: 'Target clinic not found' });
 
     const referral = await ReferralModel.create({
       fromClinicId: req.user!.clinicId,
@@ -46,7 +60,12 @@ router.post(
       reason,
       urgency,
       encounterId: encounterId || undefined,
-      sharedData: sharedData ?? { demographics: true, encounters: false, labResults: false, prescriptions: false },
+      sharedData: sharedData ?? {
+        demographics: true,
+        encounters: false,
+        labResults: false,
+        prescriptions: false,
+      },
       notes,
     });
 
@@ -72,42 +91,100 @@ router.post(
     });
 
     return res.status(201).json({ status: 'success', data: referral });
-  }),
+  })
 );
 
 // GET /referrals/outgoing — referrals sent by this clinic
 router.get(
   '/outgoing',
+  validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const referrals = await ReferralModel.find({ fromClinicId: req.user!.clinicId })
-      .sort({ createdAt: -1 })
-      .populate('patientId', 'firstName lastName systemId')
-      .populate('toClinicId', 'name')
-      .lean();
-    return res.json({ status: 'success', data: referrals });
-  }),
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const filter = { fromClinicId: req.user!.clinicId };
+    const [data, total] = await Promise.all([
+      ReferralModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('patientId', 'firstName lastName systemId')
+        .populate('toClinicId', 'name')
+        .lean(),
+      ReferralModel.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  })
 );
 
 // GET /referrals/incoming — referrals received by this clinic
 router.get(
   '/incoming',
+  validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const referrals = await ReferralModel.find({ toClinicId: req.user!.clinicId })
-      .sort({ createdAt: -1 })
-      .populate('patientId', 'firstName lastName systemId')
-      .populate('fromClinicId', 'name')
-      .lean();
-    return res.json({ status: 'success', data: referrals });
-  }),
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const filter = { toClinicId: req.user!.clinicId };
+    const [data, total] = await Promise.all([
+      ReferralModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('patientId', 'firstName lastName systemId')
+        .populate('fromClinicId', 'name')
+        .lean(),
+      ReferralModel.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  })
 );
 
 // PUT /referrals/:id/accept
 router.put(
   '/:id/accept',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const referral = await ReferralModel.findOne({ _id: req.params.id, toClinicId: req.user!.clinicId, status: 'pending' });
-    if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Pending referral not found' });
+    const referral = await ReferralModel.findOne({
+      _id: req.params.id,
+      toClinicId: req.user!.clinicId,
+      status: 'pending',
+    });
+    if (!referral)
+      return res.status(404).json({ error: 'NotFound', message: 'Pending referral not found' });
 
     referral.status = 'accepted';
     referral.acceptedBy = new Types.ObjectId(req.user!.userId);
@@ -125,36 +202,44 @@ router.put(
     });
 
     return res.json({ status: 'success', data: referral });
-  }),
+  })
 );
 
 // PUT /referrals/:id/decline
 router.put(
   '/:id/decline',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema, body: declineBodySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { declinedReason } = req.body;
-    const referral = await ReferralModel.findOne({ _id: req.params.id, toClinicId: req.user!.clinicId, status: 'pending' });
-    if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Pending referral not found' });
+    const referral = await ReferralModel.findOne({
+      _id: req.params.id,
+      toClinicId: req.user!.clinicId,
+      status: 'pending',
+    });
+    if (!referral)
+      return res.status(404).json({ error: 'NotFound', message: 'Pending referral not found' });
 
     referral.status = 'declined';
     referral.declinedReason = declinedReason;
     await referral.save();
 
     return res.json({ status: 'success', data: referral });
-  }),
+  })
 );
 
 // GET /referrals/:id/patient-data — access shared patient data (accepted referrals only)
 router.get(
   '/:id/patient-data',
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const referral = await ReferralModel.findOne({
       _id: req.params.id,
       toClinicId: req.user!.clinicId,
       status: 'accepted',
     });
-    if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Accepted referral not found' });
+    if (!referral)
+      return res.status(404).json({ error: 'NotFound', message: 'Accepted referral not found' });
 
     const { sharedData, patientId } = referral;
     const result: Record<string, unknown> = {};
@@ -163,13 +248,19 @@ router.get(
       result.demographics = await PatientModel.findById(patientId).lean();
     }
     if (sharedData.encounters) {
-      result.encounters = await EncounterModel.find({ patientId, isActive: true }).sort({ createdAt: -1 }).lean();
+      result.encounters = await EncounterModel.find({ patientId, isActive: true })
+        .sort({ createdAt: -1 })
+        .lean();
     }
     if (sharedData.labResults) {
       result.labResults = await LabResultModel.find({ patientId }).sort({ orderedAt: -1 }).lean();
     }
     if (sharedData.prescriptions) {
-      const encounters = await EncounterModel.find({ patientId, isActive: true, prescriptions: { $exists: true, $ne: [] } }).lean();
+      const encounters = await EncounterModel.find({
+        patientId,
+        isActive: true,
+        prescriptions: { $exists: true, $ne: [] },
+      }).lean();
       result.prescriptions = encounters.flatMap((e: any) => e.prescriptions ?? []);
     }
 
@@ -186,13 +277,14 @@ router.get(
     });
 
     return res.json({ status: 'success', data: result });
-  }),
+  })
 );
 
 // PATCH /referrals/:id/outcome — record referral outcome
 router.patch(
   '/:id/outcome',
   DOCTOR_ROLES,
+  validateRequest({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { outcome, outcomeNotes } = req.body;
 
@@ -205,7 +297,8 @@ router.patch(
       toClinicId: req.user!.clinicId,
       status: 'accepted',
     });
-    if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Accepted referral not found' });
+    if (!referral)
+      return res.status(404).json({ error: 'NotFound', message: 'Accepted referral not found' });
 
     referral.outcome = outcome as any;
     referral.outcomeDate = new Date();
@@ -238,7 +331,7 @@ router.patch(
     });
 
     return res.json({ status: 'success', data: referral });
-  }),
+  })
 );
 
 // GET /referrals/analytics — referral analytics and metrics
@@ -289,7 +382,7 @@ router.get(
         })),
       },
     });
-  }),
+  })
 );
 
 export const referralRoutes = router;

@@ -19,7 +19,8 @@ export function checkSubscriptionLimit(resource: LimitKey) {
     if (subscription.status === 'suspended') {
       return res.status(402).json({
         error: 'AccountSuspended',
-        message: 'Your account has been suspended due to non-payment. Please update your billing information.',
+        message:
+          'Your account has been suspended due to non-payment. Please update your billing information.',
         upgradeUrl: '/settings?section=subscription',
       });
     }
@@ -32,12 +33,26 @@ export function checkSubscriptionLimit(resource: LimitKey) {
       periodEnd: { $gte: now },
     });
 
-    const current = usage ?? { patientCount: 0, encounterCount: 0, aiRequestCount: 0, doctorCount: 0, userCount: 0 };
+    const current = usage ?? {
+      patientCount: 0,
+      encounterCount: 0,
+      aiRequestCount: 0,
+      doctorCount: 0,
+      userCount: 0,
+    };
 
     const checks: Record<LimitKey, { count: number; limit: number; label: string }> = {
       patients: { count: current.patientCount, limit: limits.maxPatients, label: 'patient' },
-      encounters: { count: current.encounterCount, limit: limits.maxEncountersPerMonth, label: 'encounter' },
-      ai: { count: current.aiRequestCount, limit: limits.maxAiRequestsPerMonth, label: 'AI request' },
+      encounters: {
+        count: current.encounterCount,
+        limit: limits.maxEncountersPerMonth,
+        label: 'encounter',
+      },
+      ai: {
+        count: current.aiRequestCount,
+        limit: limits.maxAiRequestsPerMonth,
+        label: 'AI request',
+      },
       doctors: { count: current.doctorCount, limit: limits.maxDoctors, label: 'doctor' },
       users: { count: current.userCount, limit: limits.maxDoctors, label: 'user' },
     };
@@ -67,7 +82,11 @@ export function checkSubscriptionLimit(resource: LimitKey) {
     // Send warning notification at 80% usage
     if (limit !== Infinity && usagePercent >= 80 && usagePercent < 90) {
       try {
-        const admins = await UserModel.find({ clinicId, role: 'CLINIC_ADMIN', isActive: true }).lean();
+        const admins = await UserModel.find({
+          clinicId,
+          role: 'CLINIC_ADMIN',
+          isActive: true,
+        }).lean();
         for (const admin of admins) {
           await createNotification({
             userId: admin._id,
@@ -80,7 +99,10 @@ export function checkSubscriptionLimit(resource: LimitKey) {
           });
         }
       } catch (err) {
-        logger.error({ err, clinicId, resource }, 'Failed to send subscription warning notification');
+        logger.error(
+          { err, clinicId, resource },
+          'Failed to send subscription warning notification'
+        );
       }
     }
 

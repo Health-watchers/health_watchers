@@ -82,11 +82,19 @@ jest.mock('@api/middlewares/rate-limit.middleware', () => {
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
+import express from 'express';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import app from '@api/app';
+import { userRoutes } from '@api/modules/users/users.controller';
 import { UserModel } from '@api/modules/auth/models/user.model';
+
+// This suite exercises only the /users routes directly (rather than importing
+// the full app from '@api/app'), so it stays isolated from unrelated domain
+// modules (patients, payments, schedules, etc.) pulled in by the full app.
+const app = express();
+app.use(express.json());
+app.use('/api/v1/users', userRoutes);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +104,12 @@ function makeToken(): string {
   return jwt.sign(
     { userId: TEST_USER_ID, role: 'DOCTOR', clinicId: 'clinic123' },
     'test-access-secret',
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
+    {
+      expiresIn: '15m',
+      issuer: 'health-watchers-api',
+      audience: 'health-watchers-client',
+      jwtid: 'test-jti-1',
+    }
   );
 }
 
@@ -134,9 +147,7 @@ describe('POST /api/v1/users/me/password', () => {
 
   describe('Authentication required', () => {
     it('returns 401 when no Authorization header is provided', async () => {
-      const res = await request(app)
-        .post('/api/v1/users/me/password')
-        .send(VALID_BODY);
+      const res = await request(app).post('/api/v1/users/me/password').send(VALID_BODY);
 
       expect(res.status).toBe(401);
       expect(res.body.error).toBe('Unauthorized');
@@ -201,6 +212,26 @@ describe('POST /api/v1/users/me/password', () => {
         .post('/api/v1/users/me/password')
         .set('Authorization', `Bearer ${token}`)
         .send({ currentPassword: 'OldPass1!', newPassword: 'Ab1!' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('ValidationError');
+    });
+
+    it('returns 400 when newPassword is 8+ characters but lacks complexity (e.g. no uppercase/special char)', async () => {
+      const res = await request(app)
+        .post('/api/v1/users/me/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: 'OldPass1!', newPassword: 'lowercase1' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('ValidationError');
+    });
+
+    it('returns 400 when newPassword is a common password', async () => {
+      const res = await request(app)
+        .post('/api/v1/users/me/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currentPassword: 'OldPass1!', newPassword: 'Password123!' });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('ValidationError');

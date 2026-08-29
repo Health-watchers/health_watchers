@@ -15,7 +15,7 @@ export function Card({ padding = 'md', className, children, ...props }: CardProp
   return (
     <div
       className={[
-        'bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm',
+        'rounded-lg border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900',
         paddingMap[padding],
         className ?? '',
       ].join(' ')}

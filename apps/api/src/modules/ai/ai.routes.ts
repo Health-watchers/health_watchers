@@ -4,6 +4,7 @@ import {
   generateClinicalSummary,
   generateRawTextSummary,
   generatePatientInsights,
+  generatePatientHealthSummary,
   generateDifferentialDiagnosis,
   isAIServiceAvailable,
   AI_DISCLAIMER,
@@ -15,6 +16,7 @@ import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validate.middleware';
 import logger from '../../utils/logger';
 import { sendAISummaryNotification } from '@api/lib/email.service';
+import { cache } from '../../services/cache.service';
 import {
   differentialDiagnosisRequestSchema,
   DifferentialDiagnosisRequestDto,
@@ -24,7 +26,13 @@ import {
   DrugInteractionRequestDto,
   triageAssessmentSchema,
 } from './ai.validation';
-import { assessTriage, addToTriageQueue, getTriageQueue, updateTriageStatus } from './triage.service';
+import {
+  assessTriage,
+  addToTriageQueue,
+  getTriageQueue,
+  updateTriageStatus,
+} from './triage.service';
+import { populationHealthRoutes } from './population-health.controller';
 
 const router = Router();
 
@@ -124,7 +132,12 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         ]);
         if (doctor?.email && patient) {
           const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
-          sendAISummaryNotification(doctor.email, patientName, encounterId);
+          sendAISummaryNotification(
+            doctor.email,
+            patientName,
+            encounterId,
+            doctor?.preferences?.language
+          );
         }
       } catch {
         /* non-critical */
@@ -154,6 +167,161 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     });
   }
 });
+
+// POST /api/v1/ai/patient-summary/:patientId
+// Returns: { success: boolean, summary: { overview, activeConditions, currentMedications, recentLabResults, upcomingAppointments, riskFactors } }
+router.post(
+  '/patient-summary/:patientId',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      const { patientId } = req.params;
+      if (!isValidObjectId(patientId)) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'Valid patientId is required',
+        });
+      }
+
+      const clinicId = String(req.user!.clinicId);
+      const cacheKey = `ai:patient-summary:${clinicId}:${patientId}`;
+      const cached = await cache.get<{ summary: unknown; generatedAt: string }>(cacheKey);
+      if (cached) {
+        return res.json({ success: true, cached: true, patientId, ...cached });
+      }
+
+      const { EncounterModel } = await import('../encounters/encounter.model');
+      const { LabResultModel } = await import('../lab-results/lab-result.model');
+      const { AppointmentModel } = await import('../appointments/appointment.model');
+      const { MedicalHistoryModel } = await import('../patients/models/medical-history.model');
+      const { PatientModel } = await import('../patients/models/patient.model');
+
+      const [patient, recentEncounters, labResults, appointments, medicalHistory] =
+        await Promise.all([
+          PatientModel.findOne({
+            _id: patientId,
+            clinicId: req.user!.clinicId,
+            isActive: true,
+          }).lean(),
+          EncounterModel.find({ patientId, clinicId: req.user!.clinicId, isActive: true })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .select('chiefComplaint diagnosis notes createdAt')
+            .lean(),
+          LabResultModel.find({ patientId, clinicId: req.user!.clinicId, status: 'resulted' })
+            .sort({ resultedAt: -1, orderedAt: -1 })
+            .limit(5)
+            .select('testName testCode results orderedAt resultedAt')
+            .lean(),
+          AppointmentModel.find({ patientId, clinicId: req.user!.clinicId })
+            .sort({ scheduledAt: 1 })
+            .limit(5)
+            .select('scheduledAt type status doctorId')
+            .lean(),
+          MedicalHistoryModel.findOne({ patientId, clinicId: req.user!.clinicId }).lean(),
+        ]);
+
+      if (!patient) {
+        return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+      }
+
+      const summary = await generatePatientHealthSummary({
+        age: typeof (patient as any).age === 'number' ? (patient as any).age : null,
+        sex: (patient as any).sex ?? null,
+        allergies:
+          (patient as any).allergies
+            ?.filter((allergy: any) => allergy.isActive !== false)
+            .map((allergy: any) => ({
+              allergen: allergy.allergen,
+              severity: allergy.severity,
+              reaction: allergy.reaction,
+            })) ?? [],
+        currentMedications:
+          medicalHistory?.currentMedications?.map((medication) => ({
+            name: medication.name,
+            dose: medication.dose,
+            frequency: medication.frequency,
+          })) ?? [],
+        recentLabResults: labResults.map((lab) => ({
+          testName: lab.testName,
+          orderedAt: lab.resultedAt ?? lab.orderedAt,
+          results: (lab.results ?? []).map((result) => ({
+            parameter: result.parameter,
+            value: result.value,
+            unit: result.unit,
+            flag: result.flag,
+          })),
+        })),
+        upcomingAppointments: appointments.map((appointment) => ({
+          scheduledAt: appointment.scheduledAt,
+          type: appointment.type,
+          status: appointment.status,
+          clinician: String(appointment.doctorId),
+        })),
+        recentEncounters: recentEncounters.map((encounter) => ({
+          chiefComplaint: encounter.chiefComplaint,
+          diagnosis: encounter.diagnosis as any,
+          notes: encounter.notes,
+          createdAt: encounter.createdAt,
+        })) as any,
+        riskFactors: Array.from(
+          new Set(
+            [
+              ...((patient as any).riskFactors ?? []),
+              ...((patient as any).allergies?.map(
+                (allergy: any) => `Allergy: ${allergy.allergen}`
+              ) ?? []),
+              medicalHistory?.socialHistory?.smokingStatus
+                ? `Smoking status: ${medicalHistory.socialHistory.smokingStatus}`
+                : null,
+              medicalHistory?.socialHistory?.alcoholUse
+                ? `Alcohol use: ${medicalHistory.socialHistory.alcoholUse}`
+                : null,
+              medicalHistory?.socialHistory?.exerciseFrequency
+                ? `Exercise frequency: ${medicalHistory.socialHistory.exerciseFrequency}`
+                : null,
+            ].filter(Boolean) as string[]
+          )
+        ),
+      });
+
+      const generatedAt = new Date().toISOString();
+      const response = { summary, generatedAt };
+      await Promise.all([
+        cache.set(cacheKey, response, 60 * 60),
+        PatientModel.findByIdAndUpdate(patientId, { lastSummaryGeneratedAt: new Date() }),
+      ]);
+
+      logger.info({ patientId, duration: Date.now() - startTime }, 'Patient summary generated');
+      return res.json({ success: true, patientId, ...response });
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      logger.error({ err: error, duration }, 'AI patient-summary error');
+      if (
+        error instanceof Error &&
+        error.message.includes('Failed to generate patient health summary')
+      ) {
+        return res.status(503).json({
+          error: 'AIServiceError',
+          message: 'Failed to generate patient summary. Please try again later.',
+        });
+      }
+      return res.status(500).json({
+        error: 'InternalServerError',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
+      });
+    }
+  }
+);
 
 // POST /api/v1/ai/insights
 // Request body: { patientId: string }
@@ -199,13 +367,16 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
       encounters.map((e) => ({
         chiefComplaint: e.chiefComplaint,
         notes: e.notes,
-        diagnosis: e.diagnosis,
+        diagnosis: e.diagnosis as any,
         createdAt: e.createdAt,
-      })),
+      })) as any
     );
 
     const duration = Date.now() - startTime;
-    logger.info({ patientId, encounterCount: encounters.length, duration }, 'AI insights generated');
+    logger.info(
+      { patientId, encounterCount: encounters.length, duration },
+      'AI insights generated'
+    );
 
     return res.json({
       success: true,
@@ -254,7 +425,10 @@ router.post(
       const result = await checkDrugInteractions(medications);
 
       const duration = Date.now() - startTime;
-      logger.info({ medicationCount: medications.length, severity: result.severity, duration }, 'Drug interaction check completed');
+      logger.info(
+        { medicationCount: medications.length, severity: result.severity, duration },
+        'Drug interaction check completed'
+      );
 
       return res.json({ success: true, ...result });
     } catch (error: unknown) {
@@ -344,7 +518,9 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
 
     const { labResultId } = req.body;
     if (!labResultId || !isValidObjectId(labResultId)) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Valid labResultId is required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'Valid labResultId is required' });
     }
 
     const { LabResultModel } = await import('../lab-results/lab-result.model');
@@ -353,7 +529,9 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
       return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
     }
     if (!labResult.results || labResult.results.length === 0) {
-      return res.status(422).json({ error: 'NoResults', message: 'Lab result has no result entries to interpret' });
+      return res
+        .status(422)
+        .json({ error: 'NoResults', message: 'Lab result has no result entries to interpret' });
     }
 
     const criticalValues = labResult.results
@@ -496,7 +674,11 @@ router.post(
 
       const duration = Date.now() - startTime;
       logger.info(
-        { duration, symptomsCount: payload.symptoms.length, hasVitalSigns: Boolean(payload.vitalSigns) },
+        {
+          duration,
+          symptomsCount: payload.symptoms.length,
+          hasVitalSigns: Boolean(payload.vitalSigns),
+        },
         'Differential diagnosis generated'
       );
 
@@ -508,7 +690,10 @@ router.post(
       const duration = Date.now() - startTime;
       logger.error({ err: error, duration }, 'AI differential-diagnosis error');
 
-      if (error instanceof Error && error.message.includes('Failed to generate differential diagnosis')) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Failed to generate differential diagnosis')
+      ) {
         return res.status(503).json({
           error: 'AIServiceError',
           message: 'Failed to generate AI suggestions. Please try again later.',
@@ -546,31 +731,40 @@ router.post(
 
       const duration = Date.now() - startTime;
       logger.info(
-        { drug: payload.drugName, age: payload.patientAge, weight: payload.patientWeight, duration },
+        {
+          drug: payload.drugName,
+          age: payload.patientAge,
+          weight: payload.patientWeight,
+          duration,
+        },
         'Dosage calculation completed'
       );
 
       // Audit log — non-blocking
-      import('../audit/audit.service').then(({ auditLog }) =>
-        auditLog(
-          {
-            action: 'DOSAGE_CALCULATION',
-            userId: req.user!.userId,
-            clinicId: req.user!.clinicId,
-            resourceType: 'drug',
-            metadata: {
-              drugName: payload.drugName,
-              patientAge: payload.patientAge,
-              patientWeight: payload.patientWeight,
-              pediatricAdjustment: result.pediatricAdjustment,
-              renalAdjustment: result.renalAdjustment,
-              warningCount: result.warnings.length,
-              contraindicationCount: result.contraindications.length,
+      import('../audit/audit.service')
+        .then(({ auditLog }) =>
+          auditLog(
+            {
+              action: 'DOSAGE_CALCULATION',
+              userId: req.user!.userId,
+              clinicId: req.user!.clinicId,
+              resourceType: 'drug',
+              metadata: {
+                drugName: payload.drugName,
+                patientAge: payload.patientAge,
+                patientWeight: payload.patientWeight,
+                pediatricAdjustment: result.pediatricAdjustment,
+                renalAdjustment: result.renalAdjustment,
+                warningCount: result.warnings.length,
+                contraindicationCount: result.contraindications.length,
+              },
             },
-          },
-          req
+            req
+          )
         )
-      ).catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
 
       return res.json({ success: true, ...result });
     } catch (error: unknown) {
@@ -593,96 +787,116 @@ router.post(
 );
 
 // POST /api/v1/ai/triage
-router.post('/triage', authenticate, validateRequest(triageAssessmentSchema), async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured.',
+router.post(
+  '/triage',
+  authenticate,
+  validateRequest({ body: triageAssessmentSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured.',
+        });
+      }
+
+      const triageResult = await assessTriage(req.body);
+      const queueEntry = await addToTriageQueue(
+        req.user!.clinicId,
+        req.body.patientId,
+        req.body,
+        triageResult
+      );
+
+      return res.json({ success: true, ...triageResult, queueId: queueEntry._id });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Triage assessment error');
+      return res.status(500).json({
+        error: 'TriageError',
+        message: error instanceof Error ? error.message : 'Failed to assess triage',
       });
     }
-
-    const triageResult = await assessTriage(req.body);
-    const queueEntry = await addToTriageQueue(
-      req.user!.clinicId,
-      req.body.patientId,
-      req.body,
-      triageResult
-    );
-
-    return res.json({ success: true, ...triageResult, queueId: queueEntry._id });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Triage assessment error');
-    return res.status(500).json({
-      error: 'TriageError',
-      message: error instanceof Error ? error.message : 'Failed to assess triage',
-    });
   }
-});
+);
 
 // GET /api/v1/ai/triage/queue
-router.get('/triage/queue', authenticate, requireRoles(['CLINIC_ADMIN', 'NURSE']), async (req: Request, res: Response) => {
-  try {
-    const queue = await getTriageQueue(req.user!.clinicId);
-    return res.json({ success: true, queue });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Triage queue fetch error');
-    return res.status(500).json({ error: 'InternalServerError' });
+router.get(
+  '/triage/queue',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'NURSE'),
+  async (req: Request, res: Response) => {
+    try {
+      const queue = await getTriageQueue(req.user!.clinicId);
+      return res.json({ success: true, queue });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Triage queue fetch error');
+      return res.status(500).json({ error: 'InternalServerError' });
+    }
   }
-});
+);
 
 // PUT /api/v1/ai/triage/:id/status
-router.put('/triage/:id/status', authenticate, requireRoles(['CLINIC_ADMIN', 'NURSE']), async (req: Request, res: Response) => {
-  try {
-    const { status } = req.body;
-    if (!['pending', 'seen', 'discharged'].includes(status)) {
-      return res.status(400).json({ error: 'InvalidStatus' });
-    }
+router.put(
+  '/triage/:id/status',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'NURSE'),
+  async (req: Request, res: Response) => {
+    try {
+      const { status } = req.body;
+      if (!['pending', 'seen', 'discharged'].includes(status)) {
+        return res.status(400).json({ error: 'InvalidStatus' });
+      }
 
-    const updated = await updateTriageStatus(req.params.id, status);
-    return res.json({ success: true, data: updated });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Triage status update error');
-    return res.status(500).json({ error: 'InternalServerError' });
+      const updated = await updateTriageStatus(req.params.id, status);
+      return res.json({ success: true, data: updated });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Triage status update error');
+      return res.status(500).json({ error: 'InternalServerError' });
+    }
   }
-});
+);
 
 // POST /api/v1/ai/transcribe
-router.post('/transcribe', authenticate, requireRoles('DOCTOR', 'NURSE'), async (req: Request, res: Response) => {
-  try {
-    if (!isAIServiceAvailable()) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is not configured. Please contact your administrator.',
+router.post(
+  '/transcribe',
+  authenticate,
+  requireRoles('DOCTOR', 'NURSE'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      const { text } = req.body;
+
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'text field is required and must be a non-empty string',
+        });
+      }
+
+      const { transcribeAndCorrect } = await import('./ai.service');
+      const result = await transcribeAndCorrect(text);
+
+      return res.json({
+        status: 'success',
+        data: result,
       });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Transcription error');
+      if (error instanceof Error && error.message.includes('GEMINI')) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is temporarily unavailable',
+        });
+      }
+      return res.status(500).json({ error: 'InternalServerError' });
     }
-
-    const { text } = req.body;
-
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'text field is required and must be a non-empty string',
-      });
-    }
-
-    const { transcribeAndCorrect } = await import('./ai.service');
-    const result = await transcribeAndCorrect(text);
-
-    return res.json({
-      status: 'success',
-      data: result,
-    });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Transcription error');
-    if (error instanceof Error && error.message.includes('GEMINI')) {
-      return res.status(503).json({
-        error: 'AIUnavailable',
-        message: 'AI service is temporarily unavailable',
-      });
-    }
-    return res.status(500).json({ error: 'InternalServerError' });
   }
-});
+);
 
 export default router;

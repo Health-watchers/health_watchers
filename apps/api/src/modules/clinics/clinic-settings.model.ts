@@ -43,13 +43,26 @@ export interface IClinicSettings {
   branding: {
     clinicName: string;
     logoUrl?: string;
+    logoStorageKey?: string;
     primaryColor?: string;
+    address?: string;
+    phone?: string;
+    taxId?: string;
+    headerText?: string;
+    footerText?: string;
+    signatureName?: string;
+    signatureTitle?: string;
   };
   balanceAlerts: {
     lowBalanceWarningXlm: number;
     criticalBalanceXlm: number;
     largeTransactionXlm: number;
     alertsEnabled: boolean;
+  };
+  feeOptimization: {
+    enabled: boolean;
+    defaultStrategy: 'auto' | 'slow' | 'standard' | 'fast';
+    highValueThresholdXlm: number;
   };
 }
 
@@ -76,7 +89,17 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
     branding: {
       clinicName: { type: String, default: '' },
       logoUrl: { type: String },
-      primaryColor: { type: String },
+      logoStorageKey: { type: String },
+      primaryColor: { type: String, default: '#2563eb' },
+      address: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      taxId: { type: String, default: '' },
+      headerText: { type: String, default: '' },
+      footerText: { type: String, default: '' },
+      signatureUrl: { type: String },
+      signatureStorageKey: { type: String },
+      signatureName: { type: String, default: '' },
+      signatureTitle: { type: String, default: '' },
     },
     balanceAlerts: {
       lowBalanceWarningXlm: { type: Number, default: 100 },
@@ -84,9 +107,21 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
       largeTransactionXlm: { type: Number, default: 1000 },
       alertsEnabled: { type: Boolean, default: true },
     },
+    feeOptimization: {
+      enabled: { type: Boolean, default: true },
+      defaultStrategy: {
+        type: String,
+        enum: ['auto', 'slow', 'standard', 'fast'],
+        default: 'auto',
+      },
+      highValueThresholdXlm: { type: Number, default: 1000 },
+    },
   },
   { timestamps: true, versionKey: false }
 );
 
-export const ClinicSettingsModel =
-  models.ClinicSettings || model<IClinicSettings>('ClinicSettings', clinicSettingsSchema);
+export const ClinicSettingsModel = (models.ClinicSettings ||
+  model<IClinicSettings>(
+    'ClinicSettings',
+    clinicSettingsSchema
+  )) as import('mongoose').Model<IClinicSettings>;

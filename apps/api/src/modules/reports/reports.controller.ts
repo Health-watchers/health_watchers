@@ -2,7 +2,12 @@ import { Router, Request, Response } from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
-import { reportQuerySchema, exportQuerySchema, ReportQuery, ExportQuery } from './reports.validation';
+import {
+  reportQuerySchema,
+  exportQuerySchema,
+  ReportQuery,
+  ExportQuery,
+} from './reports.validation';
 import { PatientModel } from '../patients/models/patient.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
@@ -17,44 +22,68 @@ router.get(
   async (req: Request<{}, {}, {}, ReportQuery>, res: Response) => {
     const clinicId = req.user!.clinicId;
     const { from, to, period } = req.query;
-    
-    const dateFilter: any = { clinicId };
+
+    // #1070 — Build date range once and reuse across all pipelines
+    const dateMatch: any = { clinicId };
     if (from || to) {
-      dateFilter.createdAt = {};
-      if (from) dateFilter.createdAt.$gte = new Date(from);
-      if (to) dateFilter.createdAt.$lte = new Date(to);
+      dateMatch.createdAt = {};
+      if (from) dateMatch.createdAt.$gte = new Date(from);
+      if (to) dateMatch.createdAt.$lte = new Date(to);
     }
 
+    // #1070 — Run all three aggregations in parallel; $match is the first stage
+    //         in every pipeline so MongoDB can use the clinicId compound indexes.
     const [patients, encounters, payments] = await Promise.all([
+      // Patient pipeline — single $match → $facet (avoids two separate $match stages)
       PatientModel.aggregate([
-        { $match: dateFilter },
+        { $match: dateMatch },
         {
           $facet: {
-            new: [{ $match: { createdAt: dateFilter.createdAt } }, { $count: 'count' }],
             total: [{ $count: 'count' }],
             active: [{ $match: { isActive: true } }, { $count: 'count' }],
+            // "new" patients are already filtered by dateMatch so no extra $match needed
+            new: [{ $count: 'count' }],
           },
         },
-      ]),
+      ]).option({ hint: 'clinicId_1_createdAt_-1' }),
+      // Encounter pipeline
       EncounterModel.aggregate([
-        { $match: dateFilter },
+        { $match: dateMatch },
         {
           $facet: {
             total: [{ $count: 'count' }],
-            completed: [{ $match: { status: 'closed' } }, { $count: 'count' }],
-            cancelled: [{ $match: { status: 'cancelled' } }, { $count: 'count' }],
+            // $cond in a $group avoids separate $match stages for each status bucket
+            byStatus: [
+              {
+                $group: {
+                  _id: null,
+                  completed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } },
+                  cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+                },
+              },
+            ],
           },
         },
       ]),
+      // Payment pipeline — $match first on indexed clinicId, then $facet
       PaymentRecordModel.aggregate([
-        { $match: dateFilter },
+        { $match: dateMatch },
         {
           $facet: {
-            total: [{ $count: 'count' }],
-            confirmed: [{ $match: { status: 'confirmed' } }, { $count: 'count' }],
-            pending: [{ $match: { status: 'pending' } }, { $count: 'count' }],
+            summary: [
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: 1 },
+                  confirmed: { $sum: { $cond: [{ $eq: ['$status', 'confirmed'] }, 1, 0] } },
+                  pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+                },
+              },
+            ],
             totalXLM: [
-              { $match: { assetCode: 'XLM', status: 'confirmed' } },
+              {
+                $match: { assetCode: 'XLM', status: 'confirmed' },
+              },
               { $group: { _id: null, sum: { $sum: { $toDouble: '$amount' } } } },
             ],
           },
@@ -62,10 +91,13 @@ router.get(
       ]),
     ]);
 
+    // AI summaries count — plain countDocuments with indexed clinicId field
     const aiSummaries = await EncounterModel.countDocuments({
       clinicId,
       aiSummary: { $exists: true, $ne: null },
     });
+
+    const encByStatus = encounters[0]?.byStatus?.[0] ?? {};
 
     res.json({
       status: 'success',
@@ -78,13 +110,13 @@ router.get(
         },
         encounters: {
           total: encounters[0]?.total[0]?.count || 0,
-          completed: encounters[0]?.completed[0]?.count || 0,
-          cancelled: encounters[0]?.cancelled[0]?.count || 0,
+          completed: encByStatus.completed || 0,
+          cancelled: encByStatus.cancelled || 0,
         },
         payments: {
-          total: payments[0]?.total[0]?.count || 0,
-          confirmed: payments[0]?.confirmed[0]?.count || 0,
-          pending: payments[0]?.pending[0]?.count || 0,
+          total: payments[0]?.summary?.[0]?.total || 0,
+          confirmed: payments[0]?.summary?.[0]?.confirmed || 0,
+          pending: payments[0]?.summary?.[0]?.pending || 0,
           totalXLM: payments[0]?.totalXLM[0]?.sum?.toFixed(2) || '0.00',
         },
         aiSummaries: { generated: aiSummaries },
@@ -100,22 +132,22 @@ router.get(
   async (req: Request<{}, {}, {}, ReportQuery>, res: Response) => {
     const clinicId = req.user!.clinicId;
 
-    const newByMonth = await PatientModel.aggregate([
-      { $match: { clinicId } },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: -1 } },
-      { $limit: 12 },
-    ]);
-
+    // #1070 — $match first so MongoDB uses the clinicId_1_createdAt_-1 index.
+    //         Both sub-pipelines in $facet inherit the already-filtered document set.
     const demographics = await PatientModel.aggregate([
       { $match: { clinicId } },
       {
         $facet: {
+          newByMonth: [
+            {
+              $group: {
+                _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { _id: -1 } },
+            { $limit: 12 },
+          ],
           bySex: [{ $group: { _id: '$sex', count: { $sum: 1 } } }],
           byAge: [
             {
@@ -138,13 +170,15 @@ router.get(
           ],
         },
       },
-    ]);
+    ]).option({ hint: 'clinicId_1_createdAt_-1' });
+
+    const result = demographics[0] ?? { newByMonth: [], bySex: [], byAge: [] };
 
     res.json({
       status: 'success',
       data: {
-        newByMonth: newByMonth.map((m) => ({ month: m._id, count: m.count })),
-        demographics: demographics[0],
+        newByMonth: (result.newByMonth ?? []).map((m: any) => ({ month: m._id, count: m.count })),
+        demographics: { bySex: result.bySex ?? [], byAge: result.byAge ?? [] },
       },
     });
   }
@@ -157,40 +191,50 @@ router.get(
   async (req: Request<{}, {}, {}, ReportQuery>, res: Response) => {
     const clinicId = req.user!.clinicId;
 
-    const byDoctor = await EncounterModel.aggregate([
-      { $match: { clinicId } },
-      { $group: { _id: '$attendingDoctorId', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 },
-    ]);
-
-    const topComplaints = await EncounterModel.aggregate([
-      { $match: { clinicId, chiefComplaint: { $exists: true } } },
-      { $group: { _id: '$chiefComplaint', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 },
-    ]);
-
-    const completionRate = await EncounterModel.aggregate([
+    // #1070 — Single $match → $facet replaces three separate aggregation round-trips.
+    const [report] = await EncounterModel.aggregate([
       { $match: { clinicId } },
       {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          completed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } },
+        $facet: {
+          byDoctor: [
+            { $group: { _id: '$attendingDoctorId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+          ],
+          topComplaints: [
+            { $match: { chiefComplaint: { $exists: true } } },
+            { $group: { _id: '$chiefComplaint', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+          ],
+          completionRate: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                completed: { $sum: { $cond: [{ $eq: ['$status', 'closed'] }, 1, 0] } },
+              },
+            },
+          ],
         },
       },
     ]);
 
+    const completionRow = report?.completionRate?.[0];
+    const completionRate =
+      completionRow?.total > 0
+        ? ((completionRow.completed / completionRow.total) * 100).toFixed(1)
+        : '0';
+
     res.json({
       status: 'success',
       data: {
-        byDoctor: byDoctor.map((d) => ({ doctorId: d._id, count: d.count })),
-        topComplaints: topComplaints.map((c) => ({ complaint: c._id, count: c.count })),
-        completionRate:
-          completionRate[0]?.total > 0
-            ? ((completionRate[0].completed / completionRate[0].total) * 100).toFixed(1)
-            : '0',
+        byDoctor: (report?.byDoctor ?? []).map((d: any) => ({ doctorId: d._id, count: d.count })),
+        topComplaints: (report?.topComplaints ?? []).map((c: any) => ({
+          complaint: c._id,
+          count: c.count,
+        })),
+        completionRate,
       },
     });
   }
@@ -203,50 +247,63 @@ router.get(
   async (req: Request<{}, {}, {}, ReportQuery>, res: Response) => {
     const clinicId = req.user!.clinicId;
 
-    const byMonth = await PaymentRecordModel.aggregate([
+    // #1070 — Single $match → $facet: three separate aggregation round-trips → one.
+    const [report] = await PaymentRecordModel.aggregate([
       { $match: { clinicId } },
       {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-          count: { $sum: 1 },
-          total: { $sum: { $toDouble: '$amount' } },
+        $facet: {
+          byMonth: [
+            {
+              $group: {
+                _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+                count: { $sum: 1 },
+                total: { $sum: { $toDouble: '$amount' } },
+              },
+            },
+            { $sort: { _id: -1 } },
+            { $limit: 12 },
+          ],
+          successRate: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                confirmed: { $sum: { $cond: [{ $eq: ['$status', 'confirmed'] }, 1, 0] } },
+              },
+            },
+          ],
+          byAsset: [
+            { $match: { status: 'confirmed' } },
+            {
+              $group: {
+                _id: '$assetCode',
+                count: { $sum: 1 },
+                total: { $sum: { $toDouble: '$amount' } },
+              },
+            },
+          ],
         },
       },
-      { $sort: { _id: -1 } },
-      { $limit: 12 },
     ]);
 
-    const successRate = await PaymentRecordModel.aggregate([
-      { $match: { clinicId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          confirmed: { $sum: { $cond: [{ $eq: ['$status', 'confirmed'] }, 1, 0] } },
-        },
-      },
-    ]);
-
-    const byAsset = await PaymentRecordModel.aggregate([
-      { $match: { clinicId, status: 'confirmed' } },
-      {
-        $group: {
-          _id: '$assetCode',
-          count: { $sum: 1 },
-          total: { $sum: { $toDouble: '$amount' } },
-        },
-      },
-    ]);
+    const successRow = report?.successRate?.[0];
+    const successRate =
+      successRow?.total > 0 ? ((successRow.confirmed / successRow.total) * 100).toFixed(1) : '0';
 
     res.json({
       status: 'success',
       data: {
-        byMonth: byMonth.map((m) => ({ month: m._id, count: m.count, total: m.total.toFixed(2) })),
-        successRate:
-          successRate[0]?.total > 0
-            ? ((successRate[0].confirmed / successRate[0].total) * 100).toFixed(1)
-            : '0',
-        byAsset: byAsset.map((a) => ({ asset: a._id, count: a.count, total: a.total.toFixed(2) })),
+        byMonth: (report?.byMonth ?? []).map((m: any) => ({
+          month: m._id,
+          count: m.count,
+          total: m.total.toFixed(2),
+        })),
+        successRate,
+        byAsset: (report?.byAsset ?? []).map((a: any) => ({
+          asset: a._id,
+          count: a.count,
+          total: a.total.toFixed(2),
+        })),
       },
     });
   }
@@ -310,29 +367,27 @@ router.get(
 
 // POST /api/v1/ai/benchmark-insights
 // Get AI-powered insights on clinic's benchmark position
-router.post(
-  '/benchmark-insights',
-  async (req: Request, res: Response) => {
-    try {
-      const { isAIServiceAvailable, stripPII } = await import('../ai/ai.service');
-      if (!isAIServiceAvailable()) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is not configured.',
-        });
-      }
+router.post('/benchmark-insights', async (req: Request, res: Response) => {
+  try {
+    const { isAIServiceAvailable, stripPII } = await import('../ai/ai.service');
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({
+        error: 'AIUnavailable',
+        message: 'AI service is not configured.',
+      });
+    }
 
-      const { getBenchmarkComparison } = await import('./benchmarking.service');
-      const benchmark = await getBenchmarkComparison(req.user!.clinicId);
+    const { getBenchmarkComparison } = await import('./benchmarking.service');
+    const benchmark = await getBenchmarkComparison(req.user!.clinicId);
 
-      const benchmarkSummary = benchmark.comparisons
-        .map(
-          (c) =>
-            `${c.metric}: clinic=${c.clinicValue}, p50=${c.percentiles.p50}, rank=${c.percentileRank}%`
-        )
-        .join('\n');
+    const benchmarkSummary = benchmark.comparisons
+      .map(
+        (c) =>
+          `${c.metric}: clinic=${c.clinicValue}, p50=${c.percentiles.p50}, rank=${c.percentileRank}%`
+      )
+      .join('\n');
 
-      const prompt = `You are a healthcare operations consultant. Analyze the following clinic's benchmark position and provide 2-3 actionable recommendations to improve performance.
+    const prompt = `You are a healthcare operations consultant. Analyze the following clinic's benchmark position and provide 2-3 actionable recommendations to improve performance.
 
 Clinic Category: ${benchmark.category}
 Benchmark Metrics:
@@ -340,27 +395,87 @@ ${benchmarkSummary}
 
 Provide concise, actionable recommendations:`;
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('@health-watchers/config');
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-      const result = await model.generateContent(prompt);
-      const insights = result.response.text();
+    const result = await model.generateContent(prompt);
+    const insights = result.response.text();
 
-      return res.json({
-        success: true,
-        clinicId: req.user!.clinicId,
-        category: benchmark.category,
-        insights,
-        disclaimer:
-          'AI-generated insights for operational guidance only. Not a substitute for professional consulting.',
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      return res.status(500).json({ error: 'InsightGenerationError', message: msg });
-    }
+    return res.json({
+      success: true,
+      clinicId: req.user!.clinicId,
+      category: benchmark.category,
+      insights,
+      disclaimer:
+        'AI-generated insights for operational guidance only. Not a substitute for professional consulting.',
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'InsightGenerationError', message: msg });
   }
-);
+});
+
+// GET /reports/outcomes — outcome analytics
+router.get('/outcomes', async (req: Request, res: Response, next) => {
+  try {
+    const clinicId = req.user!.clinicId;
+    const { from, to } = req.query as { from?: string; to?: string };
+
+    const dateFilter: Record<string, unknown> = { clinicId };
+    if (from || to) {
+      const range: Record<string, Date> = {};
+      if (from) range.$gte = new Date(from);
+      if (to) range.$lte = new Date(to);
+      dateFilter.createdAt = range;
+    }
+
+    const [outcomeDistribution, followUpStats, avgResolution] = await Promise.all([
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: { $exists: true, $ne: null } } },
+        { $group: { _id: '$outcome', count: { $sum: 1 } } },
+        { $project: { outcome: '$_id', count: 1, _id: 0 } },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, followUpRequired: true } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            completed: { $sum: { $cond: ['$followUpCompleted', 1, 0] } },
+          },
+        },
+      ]),
+      EncounterModel.aggregate([
+        { $match: { ...dateFilter, outcome: 'resolved', followUpDate: { $exists: true } } },
+        {
+          $group: {
+            _id: null,
+            avgDays: {
+              $avg: { $divide: [{ $subtract: ['$followUpDate', '$createdAt'] }, 86400000] },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const followUpRow = followUpStats[0];
+    const followUpComplianceRate =
+      followUpRow && followUpRow.total > 0
+        ? Math.round((followUpRow.completed / followUpRow.total) * 100)
+        : null;
+
+    const avgDaysToResolution =
+      avgResolution[0]?.avgDays != null ? Math.round(avgResolution[0].avgDays * 10) / 10 : null;
+
+    return res.json({
+      status: 'success',
+      data: { outcomeDistribution, followUpComplianceRate, avgDaysToResolution },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export const reportRoutes = router;

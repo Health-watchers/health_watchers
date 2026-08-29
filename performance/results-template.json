@@ -1,0 +1,26 @@
+{
+  "testName": "Load Test - Scalability",
+  "environment": "staging",
+  "baselineVersion": "1.0.0",
+  "thresholds": {
+    "http_req_duration": "p(95)<500, p(99)<2000",
+    "http_req_failed": "rate<0.01"
+  },
+  "results": {
+    "totalRequests": 0,
+    "failedRequests": 0,
+    "errorRate": 0,
+    "p95LatencyMs": 0,
+    "p99LatencyMs": 0,
+    "maxLatencyMs": 0,
+    "avgLatencyMs": 0,
+    "bottlenecks": [],
+    "recommendations": []
+  },
+  "runMetadata": {
+    "timestamp": "",
+    "branch": "",
+    "commit": "",
+    "runUrl": ""
+  }
+}

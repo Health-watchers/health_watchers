@@ -4,7 +4,7 @@ import Link from 'next/link';
 export default function PatientNotFound() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
-      <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 shadow-lg text-center">
+      <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-lg">
         <div className="flex justify-center text-5xl" aria-hidden="true">
           🔍
         </div>

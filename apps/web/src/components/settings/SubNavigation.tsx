@@ -1,6 +1,13 @@
 'use client';
 
-type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions';
+type Section =
+  | 'profile'
+  | 'security'
+  | 'preferences'
+  | 'subscription'
+  | 'sessions'
+  | 'api-keys'
+  | 'webhooks';
 
 interface SubNavigationProps {
   active: Section;
@@ -13,6 +20,8 @@ const items: { id: Section; label: string }[] = [
   { id: 'preferences', label: 'Preferences' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'subscription', label: 'Subscription' },
+  { id: 'api-keys', label: 'API Keys' },
+  { id: 'webhooks', label: 'Webhooks' },
 ];
 
 export function SubNavigation({ active, onChange }: SubNavigationProps) {
@@ -30,7 +39,7 @@ export function SubNavigation({ active, onChange }: SubNavigationProps) {
                 className={[
                   'w-full rounded-r-md px-4 py-2 text-left text-sm transition-colors',
                   isActive
-                    ? 'border-primary-600 text-primary-700 bg-primary-50 border-l-2 font-semibold'
+                    ? 'border-l-2 border-primary-600 bg-primary-50 font-semibold text-primary-700'
                     : 'text-secondary-700 border-l-2 border-transparent hover:bg-neutral-100',
                 ].join(' ')}
               >

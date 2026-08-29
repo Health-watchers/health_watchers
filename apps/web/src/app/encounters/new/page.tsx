@@ -159,7 +159,14 @@ export default function NewEncounterPage() {
   function addPrescriptionRow() {
     setPrescriptions((prev) => [
       ...prev,
-      { id: nextPrescriptionId.current++, drugName: '', dosage: '', frequency: '', route: 'oral', duration: '' },
+      {
+        id: nextPrescriptionId.current++,
+        drugName: '',
+        dosage: '',
+        frequency: '',
+        route: 'oral',
+        duration: '',
+      },
     ]);
   }
 
@@ -444,13 +451,13 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-patient">
           <h2
             id="section-patient"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500"
           >
             Patient <span className="text-danger-500">*</span>
           </h2>
 
           {selectedPatient ? (
-            <div className="border-primary-200 bg-primary-50 flex items-center justify-between rounded-lg border px-4 py-3">
+            <div className="border-primary-200 flex items-center justify-between rounded-lg border bg-primary-50 px-4 py-3">
               <div>
                 <p className="font-medium text-neutral-900">
                   {selectedPatient.firstName} {selectedPatient.lastName}
@@ -465,7 +472,7 @@ export default function NewEncounterPage() {
                   setSelectedPatient(null);
                   setPatientQuery('');
                 }}
-                className="text-primary-600 focus-visible:ring-primary-500 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
+                className="rounded text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
                 Change
               </button>
@@ -505,7 +512,7 @@ export default function NewEncounterPage() {
                       key={p._id}
                       role="option"
                       aria-selected={false}
-                      className="hover:bg-primary-50 focus:bg-primary-50 cursor-pointer px-4 py-2 text-sm outline-none"
+                      className="cursor-pointer px-4 py-2 text-sm outline-none hover:bg-primary-50 focus:bg-primary-50"
                       tabIndex={0}
                       onClick={() => {
                         setSelectedPatient(p);
@@ -540,7 +547,7 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-complaint">
           <h2
             id="section-complaint"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500"
           >
             Chief Complaint <span className="text-danger-500">*</span>
           </h2>
@@ -554,7 +561,7 @@ export default function NewEncounterPage() {
               placeholder="Describe the primary reason for this visit…"
               error={errors.chiefComplaint}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
+            <span className="absolute bottom-2 right-3 text-xs text-neutral-400" aria-live="polite">
               {chiefComplaint.length}/500
             </span>
           </div>
@@ -578,7 +585,7 @@ export default function NewEncounterPage() {
             <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white uppercase">
+                  <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white">
                     Differential Diagnosis AI
                   </span>
                   <Badge
@@ -612,7 +619,7 @@ export default function NewEncounterPage() {
                             {diff.icdCode}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
                           {diff.reasoning}
                         </p>
                         {diff.recommendedTests?.length > 0 && (
@@ -645,7 +652,9 @@ export default function NewEncounterPage() {
                           }
                           disabled={diagnoses.some((d) => d.code === diff.icdCode)}
                         >
-                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                          {diagnoses.some((d) => d.code === diff.icdCode)
+                            ? 'Added'
+                            : 'Add Diagnosis'}
                         </Button>
                       </div>
                     </div>
@@ -666,11 +675,11 @@ export default function NewEncounterPage() {
             aria-expanded={vitalsOpen}
             aria-controls="vitals-panel"
             onClick={() => setVitalsOpen((v) => !v)}
-            className="focus-visible:ring-primary-500 flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase hover:bg-neutral-100 focus:outline-none focus-visible:ring-2"
+            className="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-neutral-500 hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             <span>
               Vital Signs{' '}
-              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+              <span className="font-normal normal-case text-neutral-400">(optional)</span>
             </span>
             <span aria-hidden="true">{vitalsOpen ? '▲' : '▼'}</span>
           </button>
@@ -712,7 +721,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setTempUnit((u) => (u === 'C' ? 'F' : 'C'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   aria-label={`Switch to °${tempUnit === 'C' ? 'F' : 'C'}`}
                 >
                   °{tempUnit === 'C' ? 'F' : 'C'}
@@ -734,7 +743,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setWeightUnit((u) => (u === 'kg' ? 'lbs' : 'kg'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   aria-label={`Switch to ${weightUnit === 'kg' ? 'lbs' : 'kg'}`}
                 >
                   {weightUnit === 'kg' ? 'lbs' : 'kg'}
@@ -756,7 +765,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setHeightUnit((u) => (u === 'cm' ? 'in' : 'cm'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   aria-label={`Switch to ${heightUnit === 'cm' ? 'inches' : 'cm'}`}
                 >
                   {heightUnit === 'cm' ? 'in' : 'cm'}
@@ -781,7 +790,7 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-notes">
           <h2
             id="section-notes"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500"
           >
             Clinical Notes
           </h2>
@@ -795,7 +804,7 @@ export default function NewEncounterPage() {
               placeholder="Clinical observations, history, examination findings…"
               error={errors.notes}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
+            <span className="absolute bottom-2 right-3 text-xs text-neutral-400" aria-live="polite">
               {notes.length}/10,000
             </span>
           </div>
@@ -805,10 +814,10 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-dx">
           <h2
             id="section-dx"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500"
           >
             Diagnosis (ICD-10){' '}
-            <span className="font-normal text-neutral-400 normal-case">— up to 10</span>
+            <span className="font-normal normal-case text-neutral-400">— up to 10</span>
           </h2>
 
           {diagnoses.length > 0 && (
@@ -819,7 +828,7 @@ export default function NewEncounterPage() {
                   className="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm"
                 >
                   <span>
-                    <span className="text-primary-700 font-mono font-medium">{d.code}</span>
+                    <span className="font-mono font-medium text-primary-700">{d.code}</span>
                     <span className="ml-2 text-neutral-700">{d.description}</span>
                     {i === 0 && <span className="ml-2 text-xs text-neutral-400">(primary)</span>}
                   </span>
@@ -827,7 +836,7 @@ export default function NewEncounterPage() {
                     type="button"
                     onClick={() => removeDiagnosis(d.code)}
                     aria-label={`Remove ${d.code}`}
-                    className="hover:text-danger-500 focus-visible:ring-primary-500 ml-3 rounded text-neutral-400 focus:outline-none focus-visible:ring-2"
+                    className="hover:text-danger-500 ml-3 rounded text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
                     ✕
                   </button>
@@ -860,12 +869,12 @@ export default function NewEncounterPage() {
                       key={d.code}
                       role="option"
                       aria-selected={diagnoses.some((x) => x.code === d.code)}
-                      className="hover:bg-primary-50 focus:bg-primary-50 cursor-pointer px-4 py-2 text-sm outline-none"
+                      className="cursor-pointer px-4 py-2 text-sm outline-none hover:bg-primary-50 focus:bg-primary-50"
                       tabIndex={0}
                       onClick={() => addDiagnosis(d)}
                       onKeyDown={(e) => e.key === 'Enter' && addDiagnosis(d)}
                     >
-                      <span className="text-primary-700 font-mono font-medium">{d.code}</span>
+                      <span className="font-mono font-medium text-primary-700">{d.code}</span>
                       <span className="ml-2 text-neutral-600">{d.description}</span>
                     </li>
                   ))}
@@ -880,10 +889,10 @@ export default function NewEncounterPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2
               id="section-rx"
-              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+              className="text-sm font-semibold uppercase tracking-wide text-neutral-500"
             >
               Prescriptions{' '}
-              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+              <span className="font-normal normal-case text-neutral-400">(optional)</span>
             </h2>
             <Button size="sm" variant="outline" onClick={addPrescriptionRow}>
               + Add Medication
@@ -898,10 +907,7 @@ export default function NewEncounterPage() {
 
           <div className="space-y-3">
             {prescriptions.map((rx) => (
-              <div
-                key={rx.id}
-                className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"
-              >
+              <div key={rx.id} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-xs font-medium text-neutral-500">Medication</span>
                   <button
@@ -931,7 +937,7 @@ export default function NewEncounterPage() {
                         type="button"
                         onClick={() => openDosageCalculator(rx.id)}
                         title="AI Dosage Calculator"
-                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 whitespace-nowrap"
+                        className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         <span aria-hidden="true">✨</span> Calculate Dose
                       </button>
@@ -963,9 +969,7 @@ export default function NewEncounterPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
-                      Route
-                    </label>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">Route</label>
                     <select
                       value={rx.route}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'route', e.target.value)}
@@ -1000,7 +1004,7 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-followup">
           <h2
             id="section-followup"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500"
           >
             Follow-up Date
           </h2>
@@ -1034,7 +1038,7 @@ export default function NewEncounterPage() {
           </Button>
           <Link
             href={patientId ? `/patients/${patientId}` : '/encounters'}
-            className="focus-visible:ring-primary-500 ml-auto rounded text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus-visible:ring-2"
+            className="ml-auto rounded text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             onClick={(e) => {
               if (!confirm('Discard this encounter?')) e.preventDefault();
             }}
@@ -1056,7 +1060,9 @@ export default function NewEncounterPage() {
         onApply={applyDosageResult}
         patientWeight={weight ? toKg(weight) : undefined}
         patientAge={fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined}
-        patientSex={fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined}
+        patientSex={
+          fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined
+        }
       />
     </main>
   );

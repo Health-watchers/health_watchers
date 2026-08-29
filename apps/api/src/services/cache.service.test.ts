@@ -13,6 +13,7 @@ jest.mock('ioredis', () => {
     set = jest.fn();
     del = jest.fn();
     keys = jest.fn();
+    scan = jest.fn();
     ping = jest.fn();
     constructor() {
       MockRedis.last = this;
@@ -36,6 +37,7 @@ type RedisMockType = {
     set: jest.Mock;
     del: jest.Mock;
     keys: jest.Mock;
+    scan: jest.Mock;
     ping: jest.Mock;
   } | null;
 };
@@ -127,12 +129,13 @@ describe('cache.service — enabled (REDIS_URL set)', () => {
   it('delPattern deletes matching keys and no-ops when there are none', async () => {
     const { cache } = await import('./cache.service');
 
-    redis.last!.keys.mockResolvedValue(['a:1', 'a:2']);
+    // SCAN returns [nextCursor, keys]; a '0' cursor ends the iteration
+    redis.last!.scan.mockResolvedValue(['0', ['a:1', 'a:2']]);
     await cache.delPattern('a:*');
-    expect(redis.last!.keys).toHaveBeenCalledWith('a:*');
+    expect(redis.last!.scan).toHaveBeenCalledWith('0', 'MATCH', 'a:*', 'COUNT', 100);
     expect(redis.last!.del).toHaveBeenCalledWith('a:1', 'a:2');
 
-    redis.last!.keys.mockResolvedValue([]);
+    redis.last!.scan.mockResolvedValue(['0', []]);
     redis.last!.del.mockClear();
     await cache.delPattern('empty:*');
     expect(redis.last!.del).not.toHaveBeenCalled();

@@ -8,6 +8,9 @@ export interface TokenPayload {
   role: string;
   clinicId: string;
   patientId?: string;
+  /** True for platform administrators; preserved across clinic switches so a
+   *  SUPER_ADMIN scoped to a clinic is still recognised as a super admin. */
+  isSuperAdmin?: boolean;
 }
 
 export interface AccessTokenPayload extends TokenPayload {
@@ -74,6 +77,7 @@ export function signTempToken(userId: string): string {
 export function verifyAccessToken(token: string): (TokenPayload & { jti?: string }) | null {
   try {
     const decoded = jwt.verify(token, config.jwt.accessTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -82,6 +86,7 @@ export function verifyAccessToken(token: string): (TokenPayload & { jti?: string
       role: decoded.role,
       clinicId: decoded.clinicId,
       patientId: decoded.patientId,
+      isSuperAdmin: decoded.isSuperAdmin,
       jti: decoded.jti,
     };
   } catch {
@@ -94,19 +99,14 @@ export function verifyAccessToken(token: string): (TokenPayload & { jti?: string
  * Use this in the authenticate middleware.
  */
 export async function verifyAccessTokenAsync(
-  token: string,
+  token: string
 ): Promise<(TokenPayload & { jti?: string }) | null> {
   const payload = verifyAccessToken(token);
   if (!payload) return null;
 
   if (payload.jti) {
     if (await isDenylisted(payload.jti)) return null;
-    if (
-      await isInvalidatedForUser(
-        payload.userId,
-        (jwt.decode(token) as JwtPayload)?.iat ?? 0,
-      )
-    )
+    if (await isInvalidatedForUser(payload.userId, (jwt.decode(token) as JwtPayload)?.iat ?? 0))
       return null;
   }
 
@@ -121,6 +121,7 @@ export interface RefreshTokenPayload extends TokenPayload {
 export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
   try {
     const decoded = jwt.verify(token, config.jwt.refreshTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -140,6 +141,7 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
 export function verifyTempToken(token: string): string | null {
   try {
     const decoded = jwt.verify(token, config.jwt.tempTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as { userId: string };

@@ -8,7 +8,11 @@ export const differentialDiagnosisRequestSchema = z.object({
   vitalSigns: z
     .object({
       heartRate: z.number().int().positive().max(250).optional(),
-      bloodPressure: z.string().trim().regex(bloodPressurePattern, 'bloodPressure must be e.g. 120/80').optional(),
+      bloodPressure: z
+        .string()
+        .trim()
+        .regex(bloodPressurePattern, 'bloodPressure must be e.g. 120/80')
+        .optional(),
       oxygenSaturation: z.number().min(0).max(100).optional(),
       temperature: z.number().min(30).max(45).optional(),
     })
@@ -29,7 +33,9 @@ export const dosageCalculatorRequestSchema = z.object({
   patientAge: z.number().int().min(0).max(130),
   patientSex: z.enum(['M', 'F']),
   indication: z.string().trim().min(2).max(500),
-  renalFunction: z.enum(['normal', 'mild_impairment', 'moderate_impairment', 'severe_impairment']).optional(),
+  renalFunction: z
+    .enum(['normal', 'mild_impairment', 'moderate_impairment', 'severe_impairment'])
+    .optional(),
   hepaticFunction: z.enum(['normal', 'impaired']).optional(),
 });
 

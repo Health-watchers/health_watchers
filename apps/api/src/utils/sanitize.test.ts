@@ -1,73 +1,196 @@
-/**
- * Unit tests for sanitize.ts
- */
 import { sanitizeText, sanitizeHtml } from './sanitize';
 
 describe('sanitizeText', () => {
-  it('strips all HTML tags', () => {
-    expect(sanitizeText('<b>bold</b> and <i>italic</i>')).toBe('bold and italic');
+  it('strips all HTML tags leaving plain text', () => {
+    expect(sanitizeText('<b>hello</b>')).toBe('hello');
+    expect(sanitizeText('<script>alert(1)</script>')).toBe('alert(1)');
+    expect(sanitizeText('plain text')).toBe('plain text');
   });
 
-  it('strips nested inline tags', () => {
-    expect(sanitizeText('<p>Hello <strong>World</strong></p>')).toBe('Hello World');
+  it('strips self-closing tags', () => {
+    expect(sanitizeText('<img src="x" />')).toBe('');
   });
 
-  it('returns plain text unchanged', () => {
-    expect(sanitizeText('No markup here')).toBe('No markup here');
-  });
-
-  it('returns empty string for empty input', () => {
-    expect(sanitizeText('')).toBe('');
+  it('returns empty string for tag-only input', () => {
+    expect(sanitizeText('<div></div>')).toBe('');
   });
 });
 
-describe('sanitizeHtml', () => {
-  it('removes script blocks entirely, including contents', () => {
-    const input = '<p>Hello</p><script>alert("xss")</script>';
-    expect(sanitizeHtml(input)).toContain('<p>');
-    expect(sanitizeHtml(input)).not.toContain('alert');
-    expect(sanitizeHtml(input)).not.toContain('<script');
+describe('sanitizeHtml — XSS vector tests', () => {
+  // ── Script injection ──────────────────────────────────────────────────────
+
+  it('removes <script> tags and their content', () => {
+    expect(sanitizeHtml('<script>alert(1)</script>')).not.toContain('alert');
+    expect(sanitizeHtml('<SCRIPT>alert(1)</SCRIPT>')).not.toContain('alert');
   });
 
-  it('removes style blocks entirely, including contents', () => {
-    const input = '<style>body{display:none}</style><p>Ok</p>';
-    const out = sanitizeHtml(input);
-    expect(out).toContain('<p>');
-    expect(out).not.toContain('display:none');
+  it('removes script with extra whitespace in tag', () => {
+    expect(sanitizeHtml('<script  >alert(1)</  script>')).not.toContain('alert');
   });
 
-  it('strips disallowed tags but keeps inner text', () => {
-    const out = sanitizeHtml('<p>Keep</p><div>Drop</div><span>Also</span>');
-    expect(out).toContain('<p>Keep</p>');
-    expect(out).not.toContain('<div>');
-    expect(out).not.toContain('<span>');
-    expect(out).toContain('Drop');
-    expect(out).toContain('Also');
+  it('removes script with type attribute', () => {
+    expect(sanitizeHtml('<script type="text/javascript">alert(1)</script>')).not.toContain('alert');
   });
 
-  it('keeps allowed formatting tags', () => {
-    const out = sanitizeHtml('<p><strong>bold</strong> <em>em</em> <u>under</u></p>');
-    expect(out).toContain('<strong>');
-    expect(out).toContain('<em>');
-    expect(out).toContain('<u>');
-  });
+  // ── Event handler attributes ──────────────────────────────────────────────
 
-  it('keeps only the allowed "class" attribute', () => {
-    const out = sanitizeHtml('<p class="x">ok</p><p onclick="alert(1)" id="y" class="z">a</p>');
-    expect(out).toContain('class="x"');
-    expect(out).toContain('class="z"');
+  it('strips onclick on an otherwise allowed tag', () => {
+    const out = sanitizeHtml('<p onclick="alert(1)">text</p>');
     expect(out).not.toContain('onclick');
-    expect(out).not.toContain('id="');
+    expect(out).toContain('text');
   });
 
-  it('blocks javascript: URIs in attribute values', () => {
-    const out = sanitizeHtml('<a href="javascript:alert(1)">x</a>');
+  it('strips onerror on disallowed img tag', () => {
+    const out = sanitizeHtml('<img src="x" onerror="alert(1)">');
+    expect(out).not.toContain('onerror');
+    expect(out).not.toContain('img');
+  });
+
+  it('strips onmouseover with unquoted value', () => {
+    const out = sanitizeHtml('<p onmouseover=alert(1)>text</p>');
+    expect(out).not.toContain('onmouseover');
+  });
+
+  it('strips on* attributes with single quotes', () => {
+    const out = sanitizeHtml("<p onload='alert(1)'>text</p>");
+    expect(out).not.toContain('onload');
+  });
+
+  it('strips onfocus on a disallowed input tag', () => {
+    const out = sanitizeHtml('<input onfocus="alert(1)" autofocus>');
+    expect(out).not.toContain('onfocus');
+  });
+
+  // ── javascript: URL scheme ────────────────────────────────────────────────
+
+  it('strips javascript: href on disallowed <a> tag', () => {
+    const out = sanitizeHtml('<a href="javascript:alert(1)">click</a>');
     expect(out).not.toContain('javascript:');
   });
 
-  it('self-closing void-like tags on allowed list are handled', () => {
-    const out = sanitizeHtml('<br><hr>');
-    expect(out).toContain('<br>');
-    expect(out).toContain('<hr>');
+  it('strips javascript: with leading whitespace', () => {
+    const out = sanitizeHtml('<p class=" javascript:alert(1)">text</p>');
+    // class attribute with javascript: value should be stripped
+    expect(out).not.toContain('javascript:');
+  });
+
+  // ── vbscript: and data: URL schemes ──────────────────────────────────────
+
+  it('strips vbscript: scheme', () => {
+    const out = sanitizeHtml('<p class="vbscript:msgbox(1)">text</p>');
+    expect(out).not.toContain('vbscript:');
+  });
+
+  it('strips data: scheme in class attribute', () => {
+    const out = sanitizeHtml('<p class="data:text/html,<script>alert(1)</script>">text</p>');
+    expect(out).not.toContain('data:');
+  });
+
+  // ── Dangerous tags ────────────────────────────────────────────────────────
+
+  it('removes <iframe> tags', () => {
+    const out = sanitizeHtml('<iframe src="https://evil.com"></iframe>');
+    expect(out).not.toContain('iframe');
+  });
+
+  it('removes <svg> tags (which can carry onload)', () => {
+    const out = sanitizeHtml('<svg onload="alert(1)"></svg>');
+    expect(out).not.toContain('svg');
+    expect(out).not.toContain('onload');
+  });
+
+  it('removes <object> and <embed> tags', () => {
+    expect(sanitizeHtml('<object data="x.swf"></object>')).not.toContain('object');
+    expect(sanitizeHtml('<embed src="x.swf">')).not.toContain('embed');
+  });
+
+  it('removes <form> tags', () => {
+    const out = sanitizeHtml('<form action="https://evil.com"><input name="x"></form>');
+    expect(out).not.toContain('form');
+  });
+
+  it('removes <base> tag (which can redirect all links)', () => {
+    const out = sanitizeHtml('<base href="https://evil.com">');
+    expect(out).not.toContain('base');
+  });
+
+  it('removes <meta> tags', () => {
+    const out = sanitizeHtml('<meta http-equiv="refresh" content="0;url=https://evil.com">');
+    expect(out).not.toContain('meta');
+  });
+
+  // ── Disallowed tags stripped but content kept ─────────────────────────────
+
+  it('strips disallowed <div> but keeps inner text', () => {
+    expect(sanitizeHtml('<div>hello</div>')).toBe('hello');
+  });
+
+  it('strips <span> but keeps text', () => {
+    expect(sanitizeHtml('<span>world</span>')).toBe('world');
+  });
+
+  // ── Allowed tags and attributes preserved ─────────────────────────────────
+
+  it('keeps allowed structural tags', () => {
+    const out = sanitizeHtml('<p>text</p><strong>bold</strong><em>italic</em>');
+    expect(out).toContain('<p>text</p>');
+    expect(out).toContain('<strong>bold</strong>');
+    expect(out).toContain('<em>italic</em>');
+  });
+
+  it('keeps class attribute on allowed tags', () => {
+    const out = sanitizeHtml('<p class="note">text</p>');
+    expect(out).toContain('class="note"');
+  });
+
+  it('preserves list structure', () => {
+    const out = sanitizeHtml('<ul><li>item</li></ul>');
+    expect(out).toContain('<ul>');
+    expect(out).toContain('<li>item</li>');
+  });
+
+  // ── Polyglot / obfuscation vectors ────────────────────────────────────────
+
+  it('handles mixed-case event handler', () => {
+    const out = sanitizeHtml('<p OnClick="alert(1)">text</p>');
+    expect(out).not.toContain('OnClick');
+    expect(out).not.toContain('onclick');
+  });
+
+  it('strips unknown disallowed attribute without quotes', () => {
+    const out = sanitizeHtml('<p id=main>text</p>');
+    // id is not in ALLOWED_ATTRS — must be stripped
+    expect(out).not.toContain('id=');
+    expect(out).toContain('text');
+  });
+
+  it('handles multiple XSS vectors in one string', () => {
+    const dirty = '<script>evil()</script><p onclick="bad()">hello</p><img src=x onerror=alert(1)>';
+    const out = sanitizeHtml(dirty);
+    expect(out).not.toContain('evil');
+    expect(out).not.toContain('onclick');
+    expect(out).not.toContain('onerror');
+    expect(out).not.toContain('img');
+    expect(out).toContain('hello');
+  });
+
+  // ── Nested-tag mutation XSS (tag fragments that could reconstruct a
+  //    dangerous tag once an inner tag is stripped) ──────────────────────────
+
+  it('does not reconstruct <script> from a tag split by an allowed inner tag', () => {
+    const out = sanitizeHtml('<scr<em>ipt>alert(1)</scr</em>ipt>');
+    expect(out).not.toMatch(/<script/i);
+    expect(out).not.toContain('<em>ipt>'); // fragment must not survive as markup either
+  });
+
+  it('does not reconstruct <script> from a tag split by a disallowed inner tag', () => {
+    const out = sanitizeHtml('<scr<div>ipt>alert(1)</scr</div>ipt>');
+    expect(out).not.toMatch(/<script/i);
+    expect(out).not.toContain('<div>');
+  });
+
+  it('does not leave a reconstructed bare <script> tag after removing an inner nested <script>', () => {
+    const out = sanitizeHtml('<scr<script>ipt>alert(1)</scr</script>ipt>');
+    expect(out).not.toMatch(/<script/i);
   });
 });

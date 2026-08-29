@@ -6,7 +6,7 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import { UserModel } from '../auth/models/user.model';
 import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { asyncHandler } from '@api/middlewares/async.handler';
-import { sendEmail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import logger from '@api/utils/logger';
 import { AppRole } from '@api/types/express';
 
@@ -14,12 +14,14 @@ const router = Router();
 
 // Role hierarchy for validation
 const ROLE_HIERARCHY: Record<AppRole, number> = {
-  'READ_ONLY': 1,
-  'ASSISTANT': 2,
-  'NURSE': 3,
-  'DOCTOR': 4,
-  'CLINIC_ADMIN': 5,
-  'SUPER_ADMIN': 6,
+  READ_ONLY: 1,
+  PATIENT: 1,
+  ASSISTANT: 2,
+  NURSE: 3,
+  DOCTOR: 4,
+  CLINIC_ADMIN: 5,
+  ADMIN: 5,
+  SUPER_ADMIN: 6,
 };
 
 // Roles that CLINIC_ADMIN can create
@@ -40,13 +42,17 @@ const createUserSchema = z.object({
 
 const updateUserSchema = z.object({
   fullName: z.string().min(1).max(100).optional(),
-  role: z.enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY']).optional(),
+  role: z
+    .enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'])
+    .optional(),
 });
 
 const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  role: z.enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY']).optional(),
+  role: z
+    .enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'])
+    .optional(),
   isActive: z.enum(['true', 'false']).optional(),
   clinicId: z.string().optional(),
 });
@@ -104,7 +110,7 @@ router.post(
 
     // Send welcome email with temporary password
     try {
-      await sendEmail({
+      await sendMail({
         to: email,
         subject: 'Welcome to Health Watchers - Account Created',
         text: `Hello ${fullName},\n\nYour Health Watchers account has been created.\n\nEmail: ${email}\nTemporary Password: ${temporaryPassword}\n\nPlease log in and change your password immediately.\n\nBest regards,\nHealth Watchers Team`,
@@ -118,7 +124,10 @@ router.post(
           <p>Best regards,<br>Health Watchers Team</p>
         `,
       });
-      logger.info({ userId: user._id, email, createdBy: requestingUser.userId }, 'User created and welcome email sent');
+      logger.info(
+        { userId: user._id, email, createdBy: requestingUser.userId },
+        'User created and welcome email sent'
+      );
     } catch (emailError) {
       logger.error({ error: emailError, userId: user._id }, 'Failed to send welcome email');
       // Don't fail the request if email fails
@@ -136,7 +145,7 @@ router.post(
         createdAt: user.createdAt,
       },
     });
-  }),
+  })
 );
 
 // GET /users — List Users
@@ -189,7 +198,7 @@ router.get(
       })),
       meta: { total, page, limit, pages: Math.ceil(total / limit) },
     });
-  }),
+  })
 );
 
 // GET /users/:id — Get User
@@ -210,7 +219,10 @@ router.get(
     }
 
     // CLINIC_ADMIN can only view users in their clinic
-    if (requestingUser.role === 'CLINIC_ADMIN' && user.clinicId.toString() !== requestingUser.clinicId) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      user.clinicId.toString() !== requestingUser.clinicId
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only view users in your clinic',
@@ -233,7 +245,7 @@ router.get(
         updatedAt: user.updatedAt,
       },
     });
-  }),
+  })
 );
 
 // PUT /users/:id — Update User
@@ -253,7 +265,10 @@ router.put(
     }
 
     // CLINIC_ADMIN can only update users in their clinic
-    if (requestingUser.role === 'CLINIC_ADMIN' && user.clinicId.toString() !== requestingUser.clinicId) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      user.clinicId.toString() !== requestingUser.clinicId
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only update users in your clinic',
@@ -271,7 +286,7 @@ router.put(
       }
 
       // Cannot escalate a user to a role higher than your own
-      if (ROLE_HIERARCHY[role] > ROLE_HIERARCHY[requestingUser.role]) {
+      if (ROLE_HIERARCHY[role as AppRole] > ROLE_HIERARCHY[requestingUser.role as AppRole]) {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Cannot assign a role higher than your own',
@@ -293,7 +308,10 @@ router.put(
 
     await user.save();
 
-    logger.info({ userId: id, updatedBy: requestingUser.userId, changes: req.body }, 'User updated');
+    logger.info(
+      { userId: id, updatedBy: requestingUser.userId, changes: req.body },
+      'User updated'
+    );
 
     return res.json({
       status: 'success',
@@ -307,7 +325,7 @@ router.put(
         updatedAt: user.updatedAt,
       },
     });
-  }),
+  })
 );
 
 // DELETE /users/:id — Deactivate User (Soft Delete)
@@ -333,7 +351,10 @@ router.delete(
     }
 
     // CLINIC_ADMIN can only deactivate users in their clinic
-    if (requestingUser.role === 'CLINIC_ADMIN' && user.clinicId.toString() !== requestingUser.clinicId) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      user.clinicId.toString() !== requestingUser.clinicId
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only deactivate users in your clinic',
@@ -341,7 +362,10 @@ router.delete(
     }
 
     // CLINIC_ADMIN cannot deactivate SUPER_ADMIN or other CLINIC_ADMIN
-    if (requestingUser.role === 'CLINIC_ADMIN' && ['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(user.role)) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      ['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(user.role)
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: `CLINIC_ADMIN cannot deactivate ${user.role} accounts`,
@@ -355,7 +379,10 @@ router.delete(
     // Invalidate all active tokens for the user
     await RefreshTokenModel.deleteMany({ userId: id });
 
-    logger.info({ userId: id, deactivatedBy: requestingUser.userId }, 'User deactivated and tokens invalidated');
+    logger.info(
+      { userId: id, deactivatedBy: requestingUser.userId },
+      'User deactivated and tokens invalidated'
+    );
 
     return res.json({
       status: 'success',
@@ -365,7 +392,7 @@ router.delete(
         isActive: user.isActive,
       },
     });
-  }),
+  })
 );
 
 // POST /users/:id/reset-password — Admin Password Reset
@@ -383,7 +410,10 @@ router.post(
     }
 
     // CLINIC_ADMIN can only reset passwords for users in their clinic
-    if (requestingUser.role === 'CLINIC_ADMIN' && user.clinicId.toString() !== requestingUser.clinicId) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      user.clinicId.toString() !== requestingUser.clinicId
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only reset passwords for users in your clinic',
@@ -391,7 +421,10 @@ router.post(
     }
 
     // CLINIC_ADMIN cannot reset SUPER_ADMIN or CLINIC_ADMIN passwords
-    if (requestingUser.role === 'CLINIC_ADMIN' && ['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(user.role)) {
+    if (
+      requestingUser.role === 'CLINIC_ADMIN' &&
+      ['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(user.role)
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: `CLINIC_ADMIN cannot reset ${user.role} passwords`,
@@ -408,7 +441,7 @@ router.post(
 
     // Send password reset email
     try {
-      await sendEmail({
+      await sendMail({
         to: user.email,
         subject: 'Health Watchers - Password Reset by Administrator',
         text: `Hello ${user.fullName},\n\nYour password has been reset by an administrator.\n\nTemporary Password: ${temporaryPassword}\n\nPlease log in and change your password immediately.\n\nBest regards,\nHealth Watchers Team`,
@@ -429,9 +462,10 @@ router.post(
 
     return res.json({
       status: 'success',
-      message: 'Password reset successfully. User will be required to change password on next login.',
+      message:
+        'Password reset successfully. User will be required to change password on next login.',
     });
-  }),
+  })
 );
 
 export const userManagementRoutes = router;

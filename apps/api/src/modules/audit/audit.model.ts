@@ -31,7 +31,22 @@ export type AuditAction =
   | 'PAYMENT_EXPORT'
   | 'DOSAGE_CALCULATION'
   | 'CRITICAL_LAB_RESULT'
-  | 'CRITICAL_LAB_ACKNOWLEDGED';
+  | 'CRITICAL_LAB_ACKNOWLEDGED'
+  | 'CLINIC_SWITCH'
+  | 'DATA_EXPORT_REQUEST'
+  | 'DATA_EXPORT_FULFILLED'
+  | 'CONSENT_VERSION_ACCEPTED'
+  | 'MUTATION_CREATE'
+  | 'MUTATION_UPDATE'
+  | 'MUTATION_DELETE'
+  | 'API_KEY_CREATE'
+  | 'API_KEY_ROTATE'
+  | 'API_KEY_REVOKE'
+  | 'API_KEY_UPDATE'
+  | 'COMMUNICATION_LOG_CREATED'
+  | 'COMMUNICATION_LOG_VIEWED'
+  | 'ACCOUNT_LOCKED'
+  | 'ACCOUNT_UNLOCKED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -86,6 +101,21 @@ const auditLogSchema = new Schema<AuditLog>(
         'DOSAGE_CALCULATION',
         'CRITICAL_LAB_RESULT',
         'CRITICAL_LAB_ACKNOWLEDGED',
+        'CLINIC_SWITCH',
+        'DATA_EXPORT_REQUEST',
+        'DATA_EXPORT_FULFILLED',
+        'CONSENT_VERSION_ACCEPTED',
+        'MUTATION_CREATE',
+        'MUTATION_UPDATE',
+        'MUTATION_DELETE',
+        'API_KEY_CREATE',
+        'API_KEY_ROTATE',
+        'API_KEY_REVOKE',
+        'API_KEY_UPDATE',
+        'COMMUNICATION_LOG_CREATED',
+        'COMMUNICATION_LOG_VIEWED',
+        'ACCOUNT_LOCKED',
+        'ACCOUNT_UNLOCKED',
       ],
       index: true,
     },
@@ -102,7 +132,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  },
+  }
 );
 
 // Prevent updates and deletes - immutable logs
@@ -127,5 +157,17 @@ auditLogSchema.index({ timestamp: -1 });
 auditLogSchema.index({ userId: 1, timestamp: -1 });
 auditLogSchema.index({ clinicId: 1, timestamp: -1 });
 auditLogSchema.index({ action: 1, timestamp: -1 });
+auditLogSchema.index({ outcome: 1, timestamp: -1 });
+auditLogSchema.index({ resourceType: 1, timestamp: -1 });
+auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
+// Full-text search across action field (metadata is Mixed so not indexable as text)
+auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
+// Retention policy: the 6-year HIPAA-mandated TTL index (`audit_logs_ttl_6yr`) on `timestamp`
+// is created by migration `20260425_audit_logs_ttl.ts`, which is the single source of truth.
+// A second TTL index was previously defined here with a 2-year default (overridable down to
+// 90 days via AUDIT_LOG_RETENTION_DAYS) — since both indexed the same `{ timestamp: 1 }` key,
+// whichever won created a real risk of purging PHI audit logs years before the HIPAA-required
+// retention period. Do not add another TTL index on `timestamp` here; change the migration
+// instead if retention needs differ.
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);

@@ -1,0 +1,15 @@
+{{- if and .Values.stellarService.enabled .Values.stellarService.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stellar-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stellar-service
+spec:
+  minAvailable: {{ .Values.stellarService.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: stellar-service
+{{- end }}

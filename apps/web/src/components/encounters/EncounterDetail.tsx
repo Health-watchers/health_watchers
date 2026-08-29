@@ -1,13 +1,49 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { fetchWithAuth } from '@/lib/auth';
+import { API_V1 } from '@/lib/api';
+import { Toast } from '@/components/ui';
 import AiSummaryCard from './AiSummaryCard';
 import { SoapNotesView } from './SoapNotesView';
+import { SoapNotesEditor } from './SoapNotesEditor';
+import { VersionHistory } from './VersionHistory';
+import { CosignatureWorkflow } from './CosignatureWorkflow';
 import type { EncounterRecord } from './EncounterTable';
 import { usePreAuths } from '@/lib/queries/usePreAuth';
 import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
 
+interface SoapNotes {
+  subjective?: string;
+  objective?: string;
+  assessment?: string;
+  plan?: string;
+}
+
+interface EncounterVersion {
+  id: string;
+  author: string;
+  updatedAt: string;
+  summary: string;
+}
+
+interface EncounterDocument {
+  id: string;
+  title: string;
+  type: string;
+  url: string;
+}
+
+interface EncounterDetailData extends Omit<EncounterRecord, 'status'> {
+  status: string;
+  soapNotes?: SoapNotes;
+  versionHistory?: EncounterVersion[];
+  documents?: EncounterDocument[];
+  cosignatureStatus?: string;
+}
+
 interface EncounterDetailProps {
-  encounter: EncounterRecord;
+  encounter: EncounterDetailData;
   onBack: () => void;
   onEdit?: (encounterId: string) => void;
 }
@@ -15,7 +51,7 @@ interface EncounterDetailProps {
 function InfoCard({ title, value, unit }: { title: string; value: string; unit?: string }) {
   return (
     <div className="rounded-lg border border-gray-100 bg-white p-3">
-      <p className="text-xs tracking-wide text-gray-500 uppercase">{title}</p>
+      <p className="text-xs uppercase tracking-wide text-gray-500">{title}</p>
       <p className="mt-1 text-2xl font-semibold text-gray-900">
         {value}
         {unit ? <span className="ml-1 text-sm font-normal text-gray-500">{unit}</span> : null}
@@ -38,8 +74,45 @@ function formatDate(value?: string) {
 export default function EncounterDetail({ encounter, onBack, onEdit }: EncounterDetailProps) {
   const { data: preAuths = [] } = usePreAuths('pending');
   const encounterPreAuths = preAuths.filter((pa) => pa.encounterId === encounter.id);
+  const [soapNotes, setSoapNotes] = useState<SoapNotes>(encounter.soapNotes ?? {});
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    setSoapNotes(encounter.soapNotes ?? {});
+  }, [encounter.soapNotes]);
+
+  const saveSoapNotes = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetchWithAuth(`${API_V1}/encounters/${encodeURIComponent(encounter.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soapNotes }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Save failed (${res.status})`);
+      }
+
+      setToast({ message: 'SOAP notes saved successfully.', type: 'success' });
+      setIsEditing(false);
+    } catch (error) {
+      setToast({
+        message: error instanceof Error ? error.message : 'Unable to save SOAP notes.',
+        type: 'error',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button
@@ -48,7 +121,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           >
             ← Back to list
           </button>
-          <p className="text-xs tracking-wide text-gray-500 uppercase">
+          <p className="text-xs uppercase tracking-wide text-gray-500">
             Encounter Detail · {encounter.id}
           </p>
           <h2 className="text-3xl font-semibold text-gray-900">{encounter.patientName}</h2>
@@ -57,10 +130,24 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-700 uppercase">
-            {encounter.status}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+              encounter.cosignatureStatus === 'approved'
+                ? 'bg-green-50 text-green-700'
+                : encounter.cosignatureStatus === 'rejected'
+                  ? 'bg-red-50 text-red-700'
+                  : 'bg-yellow-50 text-yellow-700'
+            }`}
+          >
+            {encounter.cosignatureStatus ?? 'Pending'}
           </span>
+          <button
+            onClick={() => setIsEditing((prev) => !prev)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            {isEditing ? 'Cancel edit' : 'Edit SOAP'}
+          </button>
           <button
             onClick={() => onEdit?.(encounter.id)}
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -87,14 +174,14 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
       <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-4">
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
               Chief Complaint
             </h3>
             <p className="mt-2 text-gray-800">{encounter.chiefComplaint}</p>
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
               Diagnosis
             </h3>
             <ul className="mt-2 list-inside list-disc space-y-1 text-gray-800">
@@ -105,23 +192,38 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
               Treatment Plan
             </h3>
             <p className="mt-2 text-gray-800">{encounter.treatmentPlan}</p>
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
-              SOAP Notes
-            </h3>
-            <SoapNotesView soapNotes={(encounter as any).soapNotes} />
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
+                SOAP Notes
+              </h3>
+              {isEditing && (
+                <button
+                  onClick={saveSoapNotes}
+                  disabled={isSaving}
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSaving ? 'Saving…' : 'Save SOAP Notes'}
+                </button>
+              )}
+            </div>
+            {isEditing ? (
+              <SoapNotesEditor value={soapNotes} onChange={setSoapNotes} />
+            ) : (
+              <SoapNotesView soapNotes={soapNotes} />
+            )}
           </article>
         </div>
 
         <div className="space-y-4">
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
               Prescriptions
             </h3>
             <div className="mt-2 space-y-2">
@@ -137,25 +239,116 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600">
               Follow-up Date
             </h3>
             <p className="mt-2 text-gray-900">{formatDate(encounter.followUpDate)}</p>
           </article>
 
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">
+              Version history
+            </h3>
+            <VersionHistory
+              encounterId={encounter.id}
+              versions={encounter.versionHistory ?? []}
+              onVersionRestore={async (versionId) => {
+                await fetchWithAuth(
+                  `${API_V1}/encounters/${encodeURIComponent(encounter.id)}/versions/${encodeURIComponent(versionId)}/restore`,
+                  { method: 'POST' }
+                );
+              }}
+            />
+          </article>
+
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">
+              Associated documents
+            </h3>
+            {encounter.documents?.length ? (
+              <ul className="space-y-2">
+                {encounter.documents.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-sm font-medium text-blue-600 hover:underline"
+                        >
+                          {doc.title}
+                        </a>
+                        <p className="mt-1 text-xs text-gray-500">{doc.type}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="whitespace-nowrap rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 hover:bg-blue-200"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No documents linked yet.</p>
+            )}
+          </article>
+
+          <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">
+              Cosignature Workflow
+            </h3>
+            <CosignatureWorkflow
+              encounterId={encounter.id}
+              cosigners={
+                encounter.cosignatureStatus
+                  ? [
+                      {
+                        id: 'attending',
+                        name: encounter.doctor,
+                        title: 'Attending Physician',
+                        status: encounter.cosignatureStatus === 'approved' ? 'approved' : 'pending',
+                      },
+                    ]
+                  : []
+              }
+              onCosignRequested={() => {
+                setToast({ message: 'Cosign request sent', type: 'success' });
+              }}
+              onStatusChange={(status) => {
+                setToast({
+                  message: `Encounter ${status}`,
+                  type: status === 'approved' ? 'success' : 'error',
+                });
+              }}
+            />
+          </article>
+
           {encounterPreAuths.length > 0 && (
             <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">
                 Insurance Pre-Authorizations
               </h3>
               <ul className="space-y-2">
                 {encounterPreAuths.map((pa) => (
-                  <li key={pa._id} className="rounded-md border border-gray-200 bg-white p-3 space-y-1">
+                  <li
+                    key={pa._id}
+                    className="space-y-1 rounded-md border border-gray-200 bg-white p-3"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
                       <PreAuthStatusBadge status={pa.status} />
                     </div>
-                    <p className="text-xs text-gray-500">{pa.insuranceProvider} · {pa.estimatedAmount} XLM</p>
+                    <p className="text-xs text-gray-500">
+                      {pa.insuranceProvider} · {pa.estimatedAmount} XLM
+                    </p>
                     {pa.preAuthNumber && (
                       <p className="text-xs text-gray-500">Pre-auth #: {pa.preAuthNumber}</p>
                     )}

@@ -39,9 +39,18 @@ router.post(
     }
 
     const {
-      vaccineName, vaccineCode, manufacturer, lotNumber,
-      administeredDate, expiryDate, doseNumber, seriesComplete,
-      site, route, adverseReaction, notes,
+      vaccineName,
+      vaccineCode,
+      manufacturer,
+      lotNumber,
+      administeredDate,
+      expiryDate,
+      doseNumber,
+      seriesComplete,
+      site,
+      route,
+      adverseReaction,
+      notes,
     } = req.body;
 
     const immunization = await ImmunizationModel.create({
@@ -86,11 +95,11 @@ router.post(
           hasAdverseReaction: !!adverseReaction,
         },
       },
-      req,
+      req
     );
 
     return res.status(201).json({ status: 'success', data: immunization });
-  }),
+  })
 );
 
 // GET /api/v1/patients/:id/immunizations — List immunizations
@@ -121,7 +130,7 @@ router.get(
       filter,
       Number(page) || 1,
       Number(limit) || 20,
-      { administeredDate: -1 },
+      { administeredDate: -1 }
     );
 
     await ImmunizationModel.populate(result.data, {
@@ -130,7 +139,7 @@ router.get(
     });
 
     return res.json({ status: 'success', data: result.data, meta: result.meta });
-  }),
+  })
 );
 
 // GET /api/v1/patients/:id/immunizations/due — Get due vaccines
@@ -158,7 +167,7 @@ router.get(
 
     const dueVaccines = calculateDueVaccines(
       String(patient.dateOfBirth),
-      administered.map((i) => ({ vaccineCode: i.vaccineCode, doseNumber: i.doseNumber })),
+      administered.map((i) => ({ vaccineCode: i.vaccineCode, doseNumber: i.doseNumber }))
     );
 
     const overdueCount = dueVaccines.filter((v) => v.status === 'overdue').length;
@@ -173,7 +182,7 @@ router.get(
         vaccines: dueVaccines,
       },
     });
-  }),
+  })
 );
 
 // GET /api/v1/patients/:id/immunizations/certificate — Download PDF certificate
@@ -204,9 +213,10 @@ router.get(
         clinicId,
         metadata: { patientId, filename },
       },
-      req,
+      req
     );
-  }),
+    return;
+  })
 );
 
 // GET /api/v1/patients/:id/immunizations/:immunizationId — Get single record
@@ -228,7 +238,7 @@ router.get(
     }
 
     return res.json({ status: 'success', data: immunization });
-  }),
+  })
 );
 
 // PUT /api/v1/patients/:id/immunizations/:immunizationId — Update record
@@ -253,7 +263,7 @@ router.put(
     const immunization = await ImmunizationModel.findOneAndUpdate(
       { _id: immunizationId, patientId, clinicId, isActive: true },
       update,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     ).populate('administeredBy', 'firstName lastName');
 
     if (!immunization) {
@@ -269,11 +279,11 @@ router.put(
         clinicId,
         metadata: { patientId, updatedFields: Object.keys(req.body) },
       },
-      req,
+      req
     );
 
     return res.json({ status: 'success', data: immunization });
-  }),
+  })
 );
 
 // DELETE /api/v1/patients/:id/immunizations/:immunizationId — Soft delete
@@ -287,7 +297,7 @@ router.delete(
     const immunization = await ImmunizationModel.findOneAndUpdate(
       { _id: immunizationId, patientId, clinicId, isActive: true },
       { isActive: false },
-      { new: true },
+      { new: true }
     );
 
     if (!immunization) {
@@ -303,11 +313,11 @@ router.delete(
         clinicId,
         metadata: { patientId },
       },
-      req,
+      req
     );
 
     return res.json({ status: 'success', data: { id: immunizationId, isActive: false } });
-  }),
+  })
 );
 
 // GET /api/v1/immunizations/cvx-codes — CVX code lookup table
@@ -318,7 +328,7 @@ cvxCodesRouter.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const codes = Object.entries(CVX_CODES).map(([code, name]) => ({ code, name }));
     return res.json({ status: 'success', data: codes });
-  }),
+  })
 );
 
 // GET /api/v1/immunizations/overdue — List overdue immunizations
@@ -339,7 +349,9 @@ router.get(
 
     const allOverdue = [];
     for (const patient of patients) {
-      const overdue = await immunizationComplianceService.findOverdueForPatient(patient._id.toString());
+      const overdue = await immunizationComplianceService.findOverdueForPatient(
+        patient._id.toString()
+      );
       allOverdue.push(...overdue);
     }
 
@@ -354,7 +366,7 @@ router.get(
       data: paginatedOverdue,
       pagination: { limit, offset, total: allOverdue.length },
     });
-  }),
+  })
 );
 
 export const immunizationRoutes = router;

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
@@ -89,7 +90,7 @@ export default function EncountersPage() {
   };
 
   const hasActiveFilters = Object.entries(appliedFilters).some(
-    ([k, v]) => k !== 'sort' && v !== '',
+    ([k, v]) => k !== 'sort' && v !== ''
   );
 
   if (isLoading) return <TableSkeleton columns={5} rows={8} />;
@@ -127,7 +128,9 @@ export default function EncountersPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {/* Full-text search */}
           <div className="xl:col-span-2">
-            <label htmlFor="search-q" className="sr-only">Search encounters</label>
+            <label htmlFor="search-q" className="sr-only">
+              Search encounters
+            </label>
             <div className="relative">
               <svg
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
@@ -154,7 +157,9 @@ export default function EncountersPage() {
 
           {/* Status filter */}
           <div>
-            <label htmlFor="filter-status" className="sr-only">Filter by status</label>
+            <label htmlFor="filter-status" className="sr-only">
+              Filter by status
+            </label>
             <select
               id="filter-status"
               value={filters.status}
@@ -171,7 +176,9 @@ export default function EncountersPage() {
 
           {/* Diagnosis code filter */}
           <div>
-            <label htmlFor="filter-diagnosis" className="sr-only">Filter by ICD-10 code</label>
+            <label htmlFor="filter-diagnosis" className="sr-only">
+              Filter by ICD-10 code
+            </label>
             <input
               id="filter-diagnosis"
               type="text"
@@ -184,7 +191,10 @@ export default function EncountersPage() {
 
           {/* Date from */}
           <div>
-            <label htmlFor="filter-date-from" className="block text-xs font-medium text-gray-500 mb-1">
+            <label
+              htmlFor="filter-date-from"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
               From
             </label>
             <input
@@ -198,7 +208,10 @@ export default function EncountersPage() {
 
           {/* Date to */}
           <div>
-            <label htmlFor="filter-date-to" className="block text-xs font-medium text-gray-500 mb-1">
+            <label
+              htmlFor="filter-date-to"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
               To
             </label>
             <input
@@ -212,7 +225,9 @@ export default function EncountersPage() {
 
           {/* Sort */}
           <div>
-            <label htmlFor="filter-sort" className="sr-only">Sort by</label>
+            <label htmlFor="filter-sort" className="sr-only">
+              Sort by
+            </label>
             <select
               id="filter-sort"
               value={filters.sort}
@@ -270,7 +285,15 @@ export default function EncountersPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Patient', 'Chief Complaint', 'Diagnosis', 'Status', 'Doctor', 'Date'].map((h) => (
+                  {[
+                    'Patient',
+                    'Chief Complaint',
+                    'Diagnosis',
+                    'Status',
+                    'Doctor',
+                    'Date',
+                    'Actions',
+                  ].map((h) => (
                     <th
                       key={h}
                       scope="col"
@@ -298,7 +321,9 @@ export default function EncountersPage() {
                         <span className="font-mono text-xs text-gray-600">{e.patientId}</span>
                       )}
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">{e.chiefComplaint}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">
+                      {e.chiefComplaint}
+                    </td>
                     <td className="px-4 py-3">
                       {e.diagnosis && e.diagnosis.length > 0 ? (
                         <span className="font-mono text-xs text-gray-600">
@@ -315,9 +340,16 @@ export default function EncountersPage() {
                         {e.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.attendingDoctorId}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                      {e.attendingDoctorId}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
                       {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
+                        View details
+                      </Link>
                     </td>
                   </tr>
                 ))}

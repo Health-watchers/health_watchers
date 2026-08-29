@@ -42,6 +42,7 @@ function signAccessToken(payload: TokenPayload): string {
 function verifyAccessToken(token: string): TokenPayload | null {
   try {
     const decoded = jwt.verify(token, mockConfig.jwt.accessTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -148,13 +149,13 @@ const otherServiceToken = jwt.sign(
     expiresIn: '15m',
     issuer: 'other-service-api',
     audience: 'other-service-client',
-  },
+  }
 );
 const resultOtherService = verifyAccessToken(otherServiceToken);
 assertEqual(
   resultOtherService,
   null,
-  'Token from other service (same secret, different iss/aud) is REJECTED',
+  'Token from other service (same secret, different iss/aud) is REJECTED'
 );
 
 // Test 8: Token with no claims at all

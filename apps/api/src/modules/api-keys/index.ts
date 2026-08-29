@@ -4,7 +4,13 @@
  */
 
 // Models
-export { ApiKeyModel, IApiKey, generateApiKey, hashApiKey, getKeyPrefix } from './models/api-key.model';
+export {
+  ApiKeyModel,
+  IApiKey,
+  generateApiKey,
+  hashApiKey,
+  getKeyPrefix,
+} from './models/api-key.model';
 export { ApiKeyUsageModel, IApiKeyUsage } from './models/api-key-usage.model';
 
 // Middleware

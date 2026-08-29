@@ -36,16 +36,41 @@
 }
 
 @layer base {
+  html {
+    color-scheme: light dark;
+  }
+
   body {
     background-color: var(--color-neutral-50);
     color: var(--color-neutral-900);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition:
+      background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark body {
     background-color: var(--color-neutral-900);
     color: var(--color-neutral-50);
+  }
+
+  * {
+    @apply transition-colors duration-300;
+  }
+
+  html.dark * {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .theme-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .dark-mode-icon {
+    @apply transform transition-transform duration-300;
   }
 }
 
@@ -60,9 +85,29 @@
   height: 0;
   pointer-events: none;
 }
-.tiptap h2 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
-.tiptap h3 { font-size: 1.1rem;  font-weight: 600; margin: 0.5rem 0 0.25rem; }
-.tiptap ul  { list-style: disc;    padding-left: 1.25rem; }
-.tiptap ol  { list-style: decimal; padding-left: 1.25rem; }
-.tiptap li  { margin: 0.15rem 0; }
-.tiptap blockquote { border-left: 3px solid #d1d5db; padding-left: 0.75rem; color: #6b7280; }
+.tiptap h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.25rem;
+}
+.tiptap h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+}
+.tiptap ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.tiptap ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.tiptap li {
+  margin: 0.15rem 0;
+}
+.tiptap blockquote {
+  border-left: 3px solid #d1d5db;
+  padding-left: 0.75rem;
+  color: #6b7280;
+}

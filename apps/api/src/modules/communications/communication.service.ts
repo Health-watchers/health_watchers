@@ -1,6 +1,6 @@
 import { CommunicationLogModel, ICommunicationLog } from './communication-log.model';
 import { LogCommunicationInput, ListCommunicationsQuery } from './communication.validation';
-import { auditLog } from '../../services/audit.service';
+import { auditLog } from '../audit/audit.service';
 import { paginate } from '../../utils/paginate';
 import { PatientModel } from '../patients/models/patient.model';
 
@@ -24,7 +24,7 @@ export class CommunicationService {
   async logCommunication(
     patientId: string,
     params: LogCommunicationInput,
-    user: RequestUser,
+    user: RequestUser
   ): Promise<ICommunicationLog> {
     // Verify patient exists and belongs to clinic
     const patient = await PatientModel.findOne({
@@ -72,7 +72,7 @@ export class CommunicationService {
   async listCommunications(
     patientId: string,
     clinicId: string,
-    query: ListCommunicationsQuery,
+    query: ListCommunicationsQuery
   ): Promise<PaginatedResult<ICommunicationLog>> {
     // Verify patient exists and belongs to clinic
     const patient = await PatientModel.findOne({
@@ -99,13 +99,9 @@ export class CommunicationService {
     }
 
     // Paginate
-    const result = await paginate(
-      CommunicationLogModel,
-      filter,
-      query.page,
-      query.limit,
-      { sentAt: -1 },
-    );
+    const result = await paginate(CommunicationLogModel, filter, query.page, query.limit, {
+      sentAt: -1,
+    });
 
     // Audit log
     await auditLog({
@@ -122,11 +118,11 @@ export class CommunicationService {
     return {
       data: result.data,
       meta: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
-        hasNextPage: result.hasNextPage,
+        total: result.meta.total,
+        page: result.meta.page,
+        limit: result.meta.limit,
+        totalPages: result.meta.totalPages,
+        hasNextPage: result.meta.hasNextPage,
       },
     };
   }

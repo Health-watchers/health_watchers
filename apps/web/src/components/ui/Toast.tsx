@@ -10,11 +10,13 @@ interface ToastItem {
   id: string;
   message: string;
   variant: ToastVariant;
-import { useEffect } from 'react';
+}
+
+// ─── Controlled <Toast> (caller manages visibility via state) ──────────────────
 
 interface ToastProps {
   message: string;
-  type?: 'success' | 'error' | 'info';
+  type?: ToastVariant;
   onClose?: () => void;
   duration?: number;
 }
@@ -26,10 +28,10 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
     return () => clearTimeout(t);
   }, [onClose, duration]);
 
-  const colors = {
-    success: 'bg-green-600',
-    error: 'bg-red-600',
-    info: 'bg-neutral-800',
+  const colors: Record<ToastVariant, string> = {
+    success: 'bg-green-600 dark:bg-green-700',
+    error: 'bg-red-600 dark:bg-red-700',
+    info: 'bg-neutral-800 dark:bg-neutral-700',
   };
 
   return (
@@ -50,10 +52,9 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
       )}
     </div>
   );
-
 }
 
-// ─── Singleton Event Bus ──────────────────────────────────────────────────────
+// ─── Singleton event bus (for imperative toast.success(...) calls) ─────────────
 
 type Listener = (item: ToastItem) => void;
 const listeners: Set<Listener> = new Set();
@@ -64,29 +65,27 @@ function emit(variant: ToastVariant, message: string) {
   listeners.forEach((l) => l(item));
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
 export const toast = {
   success: (message: string) => emit('success', message),
-  error:   (message: string) => emit('error',   message),
-  info:    (message: string) => emit('info',     message),
+  error: (message: string) => emit('error', message),
+  info: (message: string) => emit('info', message),
 };
 
-// ─── Variant styles ───────────────────────────────────────────────────────────
+// ─── Variant styles (dark-mode aware) ──────────────────────────────────────────
 
 const variantStyles: Record<ToastVariant, string> = {
-  success: 'bg-green-50 border-green-600 text-green-800',
-  error:   'bg-red-50   border-red-500   text-red-800',
-  info:    'bg-blue-50  border-blue-500  text-blue-800',
+  success:
+    'bg-green-50 border-green-600 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300',
+  error:
+    'bg-red-50 border-red-500 text-red-800 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300',
+  info: 'bg-blue-50 border-blue-500 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300',
 };
 
 const icons: Record<ToastVariant, string> = {
   success: '✓',
-  error:   '✕',
-  info:    'ℹ',
+  error: '✕',
+  info: 'ℹ',
 };
-
-// ─── Single Toast Item ────────────────────────────────────────────────────────
 
 function ToastItemView({
   item,
@@ -122,7 +121,7 @@ function ToastItemView({
   );
 }
 
-// ─── Toaster (mount once in layout) ──────────────────────────────────────────
+// ─── Toaster (mount once in layout) ────────────────────────────────────────────
 
 export function Toaster() {
   const [items, setItems] = useState<ToastItem[]>([]);
@@ -134,7 +133,9 @@ export function Toaster() {
   useEffect(() => {
     const handler: Listener = (item) => setItems((prev) => [...prev, item]);
     listeners.add(handler);
-    return () => { listeners.delete(handler); };
+    return () => {
+      listeners.delete(handler);
+    };
   }, []);
 
   if (items.length === 0) return null;
@@ -151,10 +152,4 @@ export function Toaster() {
       ))}
     </div>
   );
-}
-
-// ─── Legacy compat ────────────────────────────────────────────────────────────
-
-export function Toast({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>;
 }

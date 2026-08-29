@@ -537,14 +537,12 @@ export function ageInMonths(dateOfBirth: string): number {
  */
 export function calculateDueVaccines(
   dateOfBirth: string,
-  administeredVaccines: Array<{ vaccineCode: string; doseNumber: number }>,
+  administeredVaccines: Array<{ vaccineCode: string; doseNumber: number }>
 ): DueVaccine[] {
   const patientAgeMonths = ageInMonths(dateOfBirth);
 
   // Build a set of already-administered vaccine+dose combinations
-  const administered = new Set(
-    administeredVaccines.map((v) => `${v.vaccineCode}:${v.doseNumber}`),
-  );
+  const administered = new Set(administeredVaccines.map((v) => `${v.vaccineCode}:${v.doseNumber}`));
 
   const dueVaccines: DueVaccine[] = [];
 

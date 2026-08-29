@@ -32,10 +32,10 @@ export interface Prescription {
 }
 
 export interface SoapNotes {
-  subjective?: string;  // Patient's reported symptoms (rich HTML)
-  objective?: string;   // Physical examination findings (rich HTML)
-  assessment?: string;  // Doctor's clinical assessment (rich HTML)
-  plan?: string;        // Treatment plan (rich HTML)
+  subjective?: string; // Patient's reported symptoms (rich HTML)
+  objective?: string; // Physical examination findings (rich HTML)
+  assessment?: string; // Doctor's clinical assessment (rich HTML)
+  plan?: string; // Treatment plan (rich HTML)
 }
 
 export interface CPTCode {
@@ -63,7 +63,6 @@ export interface Attachment {
   uploadedAt: Date;
   storageKey: string;
 }
-
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
@@ -71,6 +70,8 @@ export interface Encounter {
   encounteredBy?: Schema.Types.ObjectId;
   type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
   appointmentId?: Schema.Types.ObjectId;
+  /** The specific template version used when creating this encounter. */
+  templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
   status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
@@ -81,9 +82,26 @@ export interface Encounter {
   prescriptions?: Prescription[];
   followUpDate?: Date;
   aiSummary?: string;
+  patientFriendlySummary?: string;
+  patientNotes?: Array<{ note: string; createdAt: Date }>;
   isActive?: boolean;
   billing?: BillingInfo;
   attachments?: Attachment[];
+  requiresCoSignature?: boolean;
+  coSignatureStatus?: 'pending' | 'approved' | 'rejected';
+  coSignedBy?: Schema.Types.ObjectId;
+  coSignedAt?: Date;
+  coSignatureNotes?: string;
+  closedAt?: Date;
+  // Outcome tracking fields
+  outcome?: 'resolved' | 'improved' | 'unchanged' | 'deteriorated' | 'referred' | 'deceased';
+  outcomeNotes?: string;
+  followUpRequired?: boolean;
+  followUpCompleted?: boolean;
+  followUpEncounterId?: Schema.Types.ObjectId;
+  patientAdherence?: 'full' | 'partial' | 'none' | 'unknown';
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -110,16 +128,20 @@ const diagnosisSchema = new Schema<Diagnosis>(
 
 const prescriptionSchema = new Schema<Prescription>(
   {
-    drugName:        { type: String, required: true },
-    genericName:     { type: String },
-    dosage:          { type: String, required: true },
-    frequency:       { type: String, required: true },
-    duration:        { type: String, required: true },
-    route:           { type: String, enum: ['oral', 'topical', 'injection', 'inhaled', 'other'], required: true },
-    instructions:    { type: String },
-    prescribedBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    prescribedAt:    { type: Date, default: Date.now },
-    refillsAllowed:  { type: Number, default: 0 },
+    drugName: { type: String, required: true },
+    genericName: { type: String },
+    dosage: { type: String, required: true },
+    frequency: { type: String, required: true },
+    duration: { type: String, required: true },
+    route: {
+      type: String,
+      enum: ['oral', 'topical', 'injection', 'inhaled', 'other'],
+      required: true,
+    },
+    instructions: { type: String },
+    prescribedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    prescribedAt: { type: Date, default: Date.now },
+    refillsAllowed: { type: Number, default: 0 },
     allergyOverride: {
       type: new Schema({ allergyId: String, reason: String }, { _id: false }),
       default: undefined,
@@ -131,9 +153,9 @@ const prescriptionSchema = new Schema<Prescription>(
 const soapNotesSchema = new Schema<SoapNotes>(
   {
     subjective: { type: String },
-    objective:  { type: String },
+    objective: { type: String },
     assessment: { type: String },
-    plan:       { type: String },
+    plan: { type: String },
   },
   { _id: false }
 );
@@ -151,11 +173,11 @@ const cptCodeSchema = new Schema<CPTCode>(
 const billingInfoSchema = new Schema<BillingInfo>(
   {
     cptCodes: { type: [cptCodeSchema], default: [] },
-    billingStatus: { 
-      type: String, 
-      enum: ['unbilled', 'billed', 'paid', 'denied'], 
+    billingStatus: {
+      type: String,
+      enum: ['unbilled', 'billed', 'paid', 'denied'],
       default: 'unbilled',
-      index: true 
+      index: true,
     },
     insuranceClaimId: { type: String },
     totalFee: { type: String, required: true, default: '0.00' },
@@ -177,44 +199,75 @@ const attachmentSchema = new Schema<Attachment>(
   },
   { _id: true }
 );
-
 const encounterSchema = new Schema<Encounter>(
   {
-    patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
-    clinicId:          { type: Schema.Types.ObjectId, ref: 'Clinic',   required: true, index: true },
-    attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
-    encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
-    type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
-    appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
-    chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
-    notes:             { type: String },
-    soapNotes:         { type: soapNotesSchema },
-    treatmentPlan:     { type: String },
-    diagnosis:         { type: [diagnosisSchema], default: undefined },
-    vitalSigns:        { type: vitalSignsSchema },
-    prescriptions:     { type: [prescriptionSchema], default: undefined },
-    followUpDate:      { type: Date },
-    aiSummary:         { type: String },
-    isActive:          { type: Boolean, default: true, index: true },
-    billing:           { type: billingInfoSchema },
-    attachments:       { type: [attachmentSchema], default: [] },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    encounteredBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    type: {
+      type: String,
+      enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'],
+      default: 'consultation',
+    },
+    appointmentId: { type: Schema.Types.ObjectId, ref: 'Appointment' },
+    templateVersionId: { type: Schema.Types.ObjectId, ref: 'EncounterTemplate' },
+    chiefComplaint: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'],
+      default: 'open',
+      index: true,
+    },
+    notes: { type: String },
+    soapNotes: { type: soapNotesSchema },
+    treatmentPlan: { type: String },
+    diagnosis: { type: [diagnosisSchema], default: undefined },
+    vitalSigns: { type: vitalSignsSchema },
+    prescriptions: { type: [prescriptionSchema], default: undefined },
+    followUpDate: { type: Date },
+    aiSummary: { type: String },
+    patientFriendlySummary: { type: String },
+    patientNotes: {
+      type: [
+        new Schema(
+          { note: { type: String, required: true }, createdAt: { type: Date, default: Date.now } },
+          { _id: true }
+        ),
+      ],
+      default: [],
+    },
+    isActive: { type: Boolean, default: true, index: true },
+    billing: { type: billingInfoSchema },
+    attachments: { type: [attachmentSchema], default: [] },
+    // Outcome tracking fields
+    outcome: {
+      type: String,
+      enum: ['resolved', 'improved', 'unchanged', 'deteriorated', 'referred', 'deceased'],
+    },
+    outcomeNotes: { type: String, maxlength: 2000 },
+    followUpRequired: { type: Boolean, default: false },
+    followUpCompleted: { type: Boolean, default: false },
+    followUpEncounterId: { type: Schema.Types.ObjectId, ref: 'Encounter' },
+    patientAdherence: { type: String, enum: ['full', 'partial', 'none', 'unknown'] },
   },
   { timestamps: true, versionKey: false }
 );
 
 // Compound index for paginated clinic-scoped queries
 encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
-encounterSchema.index({ clinicId: 1, createdAt: -1 });           // List encounters for clinic
-encounterSchema.index({ patientId: 1, createdAt: -1 });          // Patient encounter history
+encounterSchema.index({ clinicId: 1, createdAt: -1 }); // List encounters for clinic
+encounterSchema.index({ patientId: 1, createdAt: -1 }); // Patient encounter history
 encounterSchema.index({ clinicId: 1, patientId: 1, status: 1 }); // Filter by status
-encounterSchema.index({ encounteredBy: 1, createdAt: -1 });      // Doctor's encounters
+encounterSchema.index({ encounteredBy: 1, createdAt: -1 }); // Doctor's encounters
 // Compound index for search/filter performance (issue #394)
 encounterSchema.index({ clinicId: 1, createdAt: -1, status: 1 });
-encounterSchema.index({ clinicId: 1, status: 1, createdAt: -1 });             // Status-first filter + date sort
+encounterSchema.index({ clinicId: 1, status: 1, createdAt: -1 }); // Status-first filter + date sort
 encounterSchema.index({ clinicId: 1, attendingDoctorId: 1, createdAt: -1 }); // Doctor-scoped queries
 // Targeted text index on searchable fields (replaces wildcard $** index)
 encounterSchema.index({ chiefComplaint: 'text', notes: 'text' }, { name: 'encounter_text_search' });
+// Compound index for follow-up queue queries
+encounterSchema.index({ clinicId: 1, followUpRequired: 1, followUpDate: 1, followUpCompleted: 1 });
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
@@ -256,4 +309,5 @@ encounterSchema.pre('findOneAndUpdate', function () {
   }
 });
 
-export const EncounterModel = models.Encounter || model<Encounter>('Encounter', encounterSchema);
+export const EncounterModel = (models.Encounter ||
+  model<Encounter>('Encounter', encounterSchema)) as import('mongoose').Model<Encounter>;

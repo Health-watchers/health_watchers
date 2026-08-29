@@ -1,19 +1,29 @@
-import { ClinicModel } from '../clinics/clinic.model';
-import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
-import { BalanceSnapshotModel } from './models/balance-snapshot.model';
-import { PaymentRecordModel } from './models/payment-record.model';
-import { UserModel } from '../auth/models/user.model';
-import { createNotification } from '../notifications/notification.service';
+import { ClinicModel } from '../../clinics/clinic.model';
+import { ClinicSettingsModel } from '../../clinics/clinic-settings.model';
+import { BalanceSnapshotModel } from '../models/balance-snapshot.model';
+import { PaymentRecordModel } from '../models/payment-record.model';
+import { UserModel } from '../../auth/models/user.model';
+import { createNotification } from '../../notifications/notification.service';
 import {
   sendLowBalanceWarningEmail,
   sendCriticalBalanceEmail,
   sendLargeTransactionEmail,
   sendUnrecognizedTransactionEmail,
 } from '@api/lib/email.service';
-import { stellarClient } from './services/stellar-client';
+import { stellarClient } from './stellar-client';
+import { emitToClinic } from '@api/realtime/socket';
+import { clinicXlmBalanceGauge } from '@api/services/metrics.service';
 import logger from '@api/utils/logger';
 
 const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+
+// Configurable thresholds: env vars override database settings when present
+const ENV_LOW_THRESHOLD = process.env.BALANCE_LOW_THRESHOLD
+  ? parseFloat(process.env.BALANCE_LOW_THRESHOLD)
+  : null;
+const ENV_CRITICAL_THRESHOLD = process.env.BALANCE_CRITICAL_THRESHOLD
+  ? parseFloat(process.env.BALANCE_CRITICAL_THRESHOLD)
+  : null;
 
 let monitoringJobInterval: NodeJS.Timeout | null = null;
 
@@ -44,14 +54,21 @@ async function getClinicAdmin(clinicId: string) {
  */
 async function checkClinic(clinicId: string, publicKey: string, clinicName: string): Promise<void> {
   const settings = await ClinicSettingsModel.findOne({ clinicId }).lean();
-  const alerts = settings?.balanceAlerts ?? {
+  const dbAlerts = settings?.balanceAlerts ?? {
     lowBalanceWarningXlm: 100,
     criticalBalanceXlm: 10,
     largeTransactionXlm: 1000,
     alertsEnabled: true,
   };
 
-  if (!alerts.alertsEnabled) return;
+  if (!dbAlerts.alertsEnabled) return;
+
+  // Env var thresholds take precedence over database settings
+  const alerts = {
+    ...dbAlerts,
+    lowBalanceWarningXlm: ENV_LOW_THRESHOLD ?? dbAlerts.lowBalanceWarningXlm,
+    criticalBalanceXlm: ENV_CRITICAL_THRESHOLD ?? dbAlerts.criticalBalanceXlm,
+  };
 
   let balanceData: { balance: string; usdcBalance: string | null; transactions: unknown[] };
   try {
@@ -62,6 +79,10 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
   }
 
   const xlmBalance = parseFloat(balanceData.balance);
+
+  // Update Prometheus gauge for this clinic's XLM balance
+  clinicXlmBalanceGauge.set({ clinicId }, xlmBalance);
+
   const admin = await getClinicAdmin(clinicId);
 
   // ── Daily balance snapshot ────────────────────────────────────────────────
@@ -75,6 +96,12 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
 
   // ── Balance threshold alerts ──────────────────────────────────────────────
   if (xlmBalance < alerts.criticalBalanceXlm) {
+    const notifPayload = {
+      type: 'balance_critical' as const,
+      xlmBalance: balanceData.balance,
+      threshold: alerts.criticalBalanceXlm,
+      clinicId,
+    };
     await createNotification({
       userId: admin._id,
       clinicId,
@@ -84,6 +111,7 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
       link: '/wallet',
       metadata: { xlmBalance: balanceData.balance, threshold: alerts.criticalBalanceXlm },
     });
+    emitToClinic(clinicId, 'balance:critical', notifPayload);
     sendCriticalBalanceEmail(
       admin.email,
       clinicName,
@@ -91,6 +119,12 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
       alerts.criticalBalanceXlm
     );
   } else if (xlmBalance < alerts.lowBalanceWarningXlm) {
+    const notifPayload = {
+      type: 'balance_low_warning' as const,
+      xlmBalance: balanceData.balance,
+      threshold: alerts.lowBalanceWarningXlm,
+      clinicId,
+    };
     await createNotification({
       userId: admin._id,
       clinicId,
@@ -100,6 +134,7 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
       link: '/wallet',
       metadata: { xlmBalance: balanceData.balance, threshold: alerts.lowBalanceWarningXlm },
     });
+    emitToClinic(clinicId, 'balance:low_warning', notifPayload);
     sendLowBalanceWarningEmail(
       admin.email,
       clinicName,
@@ -131,7 +166,12 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
         title: 'Large Transaction Detected',
         message: `A large ${direction} transaction of ${tx.amount} XLM was detected.`,
         link: '/wallet',
-        metadata: { txHash: tx.hash, amount: tx.amount, direction, threshold: alerts.largeTransactionXlm },
+        metadata: {
+          txHash: tx.hash,
+          amount: tx.amount,
+          direction,
+          threshold: alerts.largeTransactionXlm,
+        },
       });
       sendLargeTransactionEmail(
         admin.email,
@@ -156,13 +196,7 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
           link: '/wallet',
           metadata: { txHash: tx.hash, amount: tx.amount, from: tx.from },
         });
-        sendUnrecognizedTransactionEmail(
-          admin.email,
-          clinicName,
-          tx.amount,
-          tx.hash,
-          tx.from
-        );
+        sendUnrecognizedTransactionEmail(admin.email, clinicName, tx.amount, tx.hash, tx.from);
       }
     }
   }
@@ -202,9 +236,7 @@ export function startBalanceMonitoringJob(): void {
   );
 
   monitoringJobInterval = setInterval(() => {
-    runBalanceMonitoring().catch((err) =>
-      logger.error({ err }, 'Balance monitoring job failed')
-    );
+    runBalanceMonitoring().catch((err) => logger.error({ err }, 'Balance monitoring job failed'));
   }, CHECK_INTERVAL_MS);
 }
 

@@ -10,18 +10,10 @@ const CACHE_STRATEGIES = {
   API: 'api-cache-v1',
 };
 
-const STATIC_ASSETS = [
-  '/',
-  '/dashboard',
-  '/offline',
-  '/manifest.json',
-];
+const STATIC_ASSETS = ['/', '/dashboard', '/offline', '/manifest.json'];
 
 // Clinical data endpoints that should be cached for offline access
-const CLINICAL_ENDPOINTS = [
-  '/api/v1/patients',
-  '/api/v1/encounters',
-];
+const CLINICAL_ENDPOINTS = ['/api/v1/patients', '/api/v1/encounters'];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -139,10 +131,10 @@ async function networkFirst(request, cacheName) {
     if (cached) {
       return cached;
     }
-    return new Response(
-      JSON.stringify({ success: false, error: 'Offline' }),
-      { headers: { 'Content-Type': 'application/json' }, status: 503 }
-    );
+    return new Response(JSON.stringify({ success: false, error: 'Offline' }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 503,
+    });
   }
 }
 
@@ -171,8 +163,15 @@ self.addEventListener('sync', (event) => {
 
 async function syncPendingForms() {
   try {
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'SYNC_START' });
+      });
+    });
+
     const db = await openIndexedDB();
     const pendingForms = await getAllPendingForms(db);
+    let syncedCount = 0;
 
     for (const form of pendingForms) {
       try {
@@ -184,7 +183,7 @@ async function syncPendingForms() {
 
         if (response.ok) {
           await deletePendingForm(db, form.id);
-          // Notify client of successful sync
+          syncedCount++;
           self.clients.matchAll().then((clients) => {
             clients.forEach((client) => {
               client.postMessage({
@@ -198,8 +197,23 @@ async function syncPendingForms() {
         console.error('Failed to sync form:', err);
       }
     }
+
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'SYNC_END',
+          syncedCount,
+          totalForms: pendingForms.length,
+        });
+      });
+    });
   } catch (err) {
     console.error('Background sync error:', err);
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({ type: 'SYNC_END', error: true });
+      });
+    });
   }
 }
 

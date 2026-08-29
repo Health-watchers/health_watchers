@@ -41,7 +41,10 @@ function ipAllowlistGuard(req: Request, res: Response): boolean {
   const allowedIps = process.env.METRICS_ALLOWED_IPS;
   if (!allowedIps) return true; // not configured — skip this guard
 
-  const allowed = allowedIps.split(',').map((ip) => ip.trim()).filter(Boolean);
+  const allowed = allowedIps
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
   const clientIp =
     (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
     req.socket.remoteAddress ??
@@ -82,7 +85,9 @@ router.get('/', async (req: Request, res: Response) => {
     return res.send(metrics);
   } catch (err) {
     logger.error({ err }, '[metrics] failed to collect metrics');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to collect metrics' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to collect metrics' });
   }
 });
 

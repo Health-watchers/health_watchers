@@ -87,21 +87,25 @@ router.put('/rules/:ruleId', async (req: Request, res: Response) => {
 });
 
 /**
- * DELETE /cds/rules/:ruleId - Delete a CDS rule
+ * DELETE /cds/rules/:ruleId - Deactivate a CDS rule (soft delete)
  */
 router.delete('/rules/:ruleId', async (req: Request, res: Response) => {
   try {
     const { ruleId } = req.params;
 
-    const result = await CDSRuleModel.deleteOne({ ruleId });
-    if (result.deletedCount === 0) {
+    const rule = await CDSRuleModel.findOneAndUpdate(
+      { ruleId },
+      { isActive: false },
+      { new: true }
+    );
+    if (!rule) {
       return res.status(404).json({ error: 'Rule not found' });
     }
 
-    logger.info({ ruleId }, 'CDS rule deleted');
-    return res.json({ success: true });
+    logger.info({ ruleId }, 'CDS rule deactivated');
+    return res.json({ success: true, data: rule });
   } catch (error: any) {
-    logger.error({ error }, 'Error deleting CDS rule');
+    logger.error({ error }, 'Error deactivating CDS rule');
     return res.status(500).json({ error: error.message });
   }
 });

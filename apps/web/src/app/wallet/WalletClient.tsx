@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import dynamic from 'next/dynamic';
 import { queryKeys } from '@/lib/queryKeys';
 import { getStellarExplorerUrl } from '@/lib/stellar';
+import { webConfig } from '@/lib/config';
 import {
   PageWrapper,
   PageHeader,
@@ -21,9 +22,14 @@ import {
   StellarAddressDisplay,
 } from '@/components/ui';
 
-const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
-const IS_TESTNET = NETWORK === 'testnet';
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const BalanceTrendChart = dynamic(
+  () => import('@/components/charts/BalanceTrendChart').then((mod) => mod.BalanceTrendChart),
+  { ssr: false }
+);
+
+const NETWORK = webConfig.stellar.network;
+const IS_TESTNET = webConfig.stellar.isTestnet;
+const API = webConfig.api.url;
 
 function FederationAddressCard({ address }: { address: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,10 +56,15 @@ function FederationAddressCard({ address }: { address: string }) {
         <Badge variant="default">Stellar</Badge>
       </CardHeader>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <canvas ref={canvasRef} aria-label={`QR code for ${address}`} className="rounded border border-neutral-100" />
+        <canvas
+          ref={canvasRef}
+          aria-label={`QR code for ${address}`}
+          className="rounded border border-neutral-100"
+        />
         <div className="flex flex-col gap-2">
           <p className="text-sm text-neutral-500">
-            Patients can send payments using this human-readable address instead of the full public key.
+            Patients can send payments using this human-readable address instead of the full public
+            key.
           </p>
           <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 font-mono text-sm font-medium text-neutral-800">
             {address}
@@ -137,12 +148,14 @@ function useBalanceAlerts() {
       const res = await fetch(`${API}/api/v1/settings`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load settings');
       const body = await res.json();
-      return body.data?.balanceAlerts ?? {
-        lowBalanceWarningXlm: 100,
-        criticalBalanceXlm: 10,
-        largeTransactionXlm: 1000,
-        alertsEnabled: true,
-      };
+      return (
+        body.data?.balanceAlerts ?? {
+          lowBalanceWarningXlm: 100,
+          criticalBalanceXlm: 10,
+          largeTransactionXlm: 1000,
+          alertsEnabled: true,
+        }
+      );
     },
   });
 }
@@ -262,39 +275,7 @@ function ConfirmPaymentModal({
   );
 }
 
-function BalanceTrendChart({ snapshots }: { snapshots: BalanceSnapshot[] }) {
-  if (!snapshots || snapshots.length === 0) {
-    return (
-      <p className="py-4 text-center text-sm text-neutral-500">
-        No balance history yet. Data will appear after the first monitoring cycle.
-      </p>
-    );
-  }
-
-  const chartData = snapshots.map((s) => ({
-    date: new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    xlm: parseFloat(s.xlmBalance),
-  }));
-
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} width={50} />
-        <Tooltip formatter={(v: number) => [`${v.toFixed(2)} XLM`, 'Balance']} />
-        <Line
-          type="monotone"
-          dataKey="xlm"
-          stroke="#2563eb"
-          strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4 }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
+// BalanceTrendChart is now dynamically imported from @/components/charts/BalanceTrendChart
 
 function AlertThresholdSettings({
   settings,
@@ -366,7 +347,11 @@ function AlertThresholdSettings({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" loading={saving} disabled={!form.alertsEnabled && !settings.alertsEnabled}>
+        <Button
+          type="submit"
+          loading={saving}
+          disabled={!form.alertsEnabled && !settings.alertsEnabled}
+        >
           Save Alert Settings
         </Button>
       </div>
@@ -521,7 +506,7 @@ export default function WalletClient() {
               </div>
 
               <div className="flex items-end gap-2">
-                <span className="text-4xl font-bold text-neutral-900 tabular-nums">
+                <span className="text-4xl font-bold tabular-nums text-neutral-900">
                   {parseFloat(wallet.balance).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 7,
@@ -532,7 +517,7 @@ export default function WalletClient() {
 
               {wallet.usdcBalance !== null && wallet.usdcBalance !== undefined ? (
                 <div className="flex items-end gap-2">
-                  <span className="text-2xl font-semibold text-neutral-700 tabular-nums">
+                  <span className="text-2xl font-semibold tabular-nums text-neutral-700">
                     {parseFloat(wallet.usdcBalance).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
@@ -583,9 +568,7 @@ export default function WalletClient() {
           </Card>
 
           {/* Federation Address */}
-          {wallet.federationAddress && (
-            <FederationAddressCard address={wallet.federationAddress} />
-          )}
+          {wallet.federationAddress && <FederationAddressCard address={wallet.federationAddress} />}
 
           {/* Send Payment Form */}
           {showSendForm && !pendingPayment && (
@@ -619,19 +602,19 @@ export default function WalletClient() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-neutral-100">
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Type
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Amount
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         From / To
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Date
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Tx
                       </th>
                     </tr>
@@ -652,7 +635,7 @@ export default function WalletClient() {
                           <td className="px-6 py-3">
                             <StellarAddressDisplay value={isIncoming ? tx.from : tx.to} />
                           </td>
-                          <td className="px-6 py-3 whitespace-nowrap text-neutral-500">
+                          <td className="whitespace-nowrap px-6 py-3 text-neutral-500">
                             {new Date(tx.createdAt).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-3">
@@ -660,7 +643,7 @@ export default function WalletClient() {
                               href={getStellarExplorerUrl(tx.hash, NETWORK)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-primary-500 font-mono text-xs hover:underline"
+                              className="font-mono text-xs text-primary-500 hover:underline"
                               aria-label={`View transaction ${tx.hash} on Stellar Explorer`}
                             >
                               {tx.hash.slice(0, 8)}…

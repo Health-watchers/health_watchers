@@ -17,6 +17,7 @@ export interface SubmitClaimInput {
 export interface ClaimVerificationInput {
   claimId: string;
   claimData: {
+    claimId: string;
     patientId: string;
     clinicId: string;
     procedureCodes: string[];

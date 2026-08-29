@@ -37,14 +37,19 @@ export class ImmunizationComplianceService {
    */
   private getAgeInMonths(birthDate: Date): number {
     const now = new Date();
-    const months = (now.getFullYear() - birthDate.getFullYear()) * 12 + (now.getMonth() - birthDate.getMonth());
+    const months =
+      (now.getFullYear() - birthDate.getFullYear()) * 12 + (now.getMonth() - birthDate.getMonth());
     return Math.max(0, months);
   }
 
   /**
    * Check if a patient is overdue for a vaccine
    */
-  private isOverdue(lastAdministeredDate: Date | null, ageInMonths: number, vaccineCode: string): boolean {
+  private isOverdue(
+    lastAdministeredDate: Date | null,
+    ageInMonths: number,
+    vaccineCode: string
+  ): boolean {
     const schedule = IMMUNIZATION_SCHEDULE[vaccineCode];
     if (!schedule || schedule.length === 0) return false;
 
@@ -90,7 +95,9 @@ export class ImmunizationComplianceService {
         const dueDate = lastDate ? new Date(lastDate) : new Date(patient.dateOfBirth);
         dueDate.setMonth(dueDate.getMonth() + nextDueAge);
 
-        const daysOverdue = Math.floor((new Date().getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        const daysOverdue = Math.floor(
+          (new Date().getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
 
         overdue.push({
           patientId,
@@ -99,7 +106,7 @@ export class ImmunizationComplianceService {
           vaccineCode,
           dueDate,
           daysOverdue: Math.max(0, daysOverdue),
-          attendingDoctorId: patient.attendingDoctorId?.toString() || '',
+          attendingDoctorId: (patient as any).attendingDoctorId?.toString() || '',
         });
       }
     }

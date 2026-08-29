@@ -33,3 +33,13 @@ frame-ancestors 'none'
 ## Body Size Limit
 
 `express.json()` is configured with a size limit (default `50kb`, overridable via `MAX_REQUEST_BODY_SIZE`) to prevent payload-based DoS attacks. AI routes use a separate higher limit (`500kb`, overridable via `AI_REQUEST_BODY_SIZE`) to accommodate summarization payloads.
+
+## Automated Testing
+
+- API coverage: [apps/api/src/__tests__/security-headers.test.ts](../src/__tests__/security-headers.test.ts)
+- Frontend E2E coverage: [apps/web/e2e/security-headers.spec.ts](../../web/e2e/security-headers.spec.ts)
+- CI runs the API header check explicitly as part of the API test job.
+
+## Prometheus Metric
+
+The API exposes `security_header_violations_total` for responses that are missing a required security header. The metric is labeled by header name and normalized route path.

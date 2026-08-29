@@ -15,7 +15,7 @@ const resetPasswordSchema = z
   .object({
     password: z
       .string()
-      .min(12, 'At least 12 characters')
+      .min(8, 'At least 8 characters')
       .regex(/[A-Z]/, 'One uppercase letter required')
       .regex(/[a-z]/, 'One lowercase letter required')
       .regex(/[0-9]/, 'One digit required')
@@ -49,17 +49,27 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <Card padding="lg" className="w-full max-w-[400px]">
-        <p role="alert" className="bg-danger-50 text-danger-700 mb-4 rounded-md px-3 py-2 text-sm">
-          Invalid or missing reset token.
-        </p>
-        <Link
-          href="/forgot-password"
-          className="text-primary-600 text-sm hover:underline focus:underline focus:outline-none"
-        >
-          Request a new reset link
-        </Link>
-      </Card>
+      <div className="w-full max-w-md">
+        <Card padding="lg" className="rounded-2xl shadow-lg">
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <div className="bg-danger-100 flex h-12 w-12 items-center justify-center rounded-lg">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">
+              Invalid Link
+            </h1>
+          </div>
+          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+            This password reset link is invalid or has expired.
+          </p>
+          <Link
+            href="/forgot-password"
+            className="mt-6 block rounded-lg bg-primary-600 px-4 py-2 text-center font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:bg-primary-500"
+          >
+            Request a new reset link
+          </Link>
+        </Card>
+      </div>
     );
   }
 
@@ -85,40 +95,69 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <Card padding="lg" className="w-full max-w-[400px]">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-800">Set new password</h1>
-        <p className="mt-1 text-sm text-neutral-500">Choose a strong password for your account.</p>
-      </div>
-
-      {serverError && (
-        <p role="alert" className="bg-danger-50 text-danger-700 mb-4 rounded-md px-3 py-2 text-sm">
-          {serverError}
-        </p>
-      )}
-
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-        <div>
-          <PasswordInput
-            label="New password"
-            autoComplete="new-password"
-            error={errors.password?.message}
-            {...register('password')}
-          />
-          <PasswordStrengthIndicator password={passwordValue} />
+    <div className="w-full max-w-md">
+      <Card padding="lg" className="rounded-2xl shadow-lg">
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary-100">
+            <span className="text-2xl">🔑</span>
+          </div>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">
+            Set New Password
+          </h1>
+          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+            Create a strong password to secure your account
+          </p>
         </div>
 
-        <PasswordInput
-          label="Confirm password"
-          autoComplete="new-password"
-          error={errors.confirmPassword?.message}
-          {...register('confirmPassword')}
-        />
+        {serverError && (
+          <div
+            role="alert"
+            className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 mb-4 rounded-lg border px-4 py-3 text-sm"
+          >
+            <p className="font-medium">Error</p>
+            <p className="mt-1">{serverError}</p>
+          </div>
+        )}
 
-        <Button type="submit" variant="primary" size="md" loading={isSubmitting} className="w-full">
-          Reset password
-        </Button>
-      </form>
-    </Card>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+          <div className="space-y-2">
+            <PasswordInput
+              label="New Password"
+              autoComplete="new-password"
+              error={errors.password?.message}
+              {...register('password')}
+            />
+            <PasswordStrengthIndicator password={passwordValue} />
+          </div>
+
+          <PasswordInput
+            label="Confirm Password"
+            autoComplete="new-password"
+            error={errors.confirmPassword?.message}
+            {...register('confirmPassword')}
+          />
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            loading={isSubmitting}
+            className="w-full"
+          >
+            Update Password
+          </Button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-neutral-600 dark:text-neutral-400">
+          Remember your password?{' '}
+          <Link
+            href="/login"
+            className="dark:text-primary-400 dark:hover:text-primary-300 font-medium text-primary-600 hover:text-primary-700"
+          >
+            Sign in
+          </Link>
+        </p>
+      </Card>
+    </div>
   );
 }

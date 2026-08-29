@@ -78,19 +78,21 @@ export function SlideOver({
         tabIndex={-1}
         aria-labelledby={title ? 'slide-over-title' : undefined}
       >
-        <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4 dark:border-neutral-700">
           <div>
             {title && (
               <h2 id="slide-over-title" className="text-lg font-semibold text-neutral-900">
                 {title}
               </h2>
             )}
-            {subtitle && <p className="text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
+            {subtitle && (
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>
+            )}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="focus:ring-primary-500 rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:ring-2 focus:outline-none"
+            className="rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             <svg
               className="h-5 w-5"

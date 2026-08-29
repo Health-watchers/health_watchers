@@ -4,7 +4,11 @@ import { sanitizeText } from '@api/utils/sanitize';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
+// Insurance PHI fields that must be encrypted at rest
+const INSURANCE_PHI_FIELDS = ['policyNumber', 'groupNumber'] as const;
+
 export interface IAllergy {
+  _id?: Schema.Types.ObjectId;
   allergen: string;
   allergenType: 'drug' | 'food' | 'environmental' | 'other';
   reaction: string;
@@ -16,6 +20,7 @@ export interface IAllergy {
 }
 
 export interface IEmergencyContact {
+  _id?: Schema.Types.ObjectId;
   name: string;
   relationship: string;
   phone: string;
@@ -24,9 +29,32 @@ export interface IEmergencyContact {
   isPrimary: boolean;
 }
 
+export type CoverageType =
+  | 'HMO'
+  | 'PPO'
+  | 'EPO'
+  | 'POS'
+  | 'HDHP'
+  | 'Medicare'
+  | 'Medicaid'
+  | 'other';
+
+export interface IInsurance {
+  _id?: Schema.Types.ObjectId;
+  provider: string;
+  /** Encrypted PHI */
+  policyNumber: string;
+  /** Encrypted PHI */
+  groupNumber?: string;
+  coverageType: CoverageType;
+  effectiveDate?: string;
+  expirationDate?: string;
+  isPrimary: boolean;
+}
+
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export interface Patient {
+export interface PatientDocument {
   systemId: string;
   firstName: string;
   lastName: string;
@@ -39,14 +67,24 @@ export interface Patient {
   isActive: boolean;
   allergies: IAllergy[];
   emergencyContacts?: IEmergencyContact[];
+  insurance?: IInsurance[];
   riskScore?: number;
   riskLevel?: RiskLevel;
   riskFactors?: string[];
+  riskFactorWeights?: Record<string, number>;
   lastRiskCalculatedAt?: Date;
+  lastSummaryGeneratedAt?: Date;
   nextRiskReviewDate?: Date;
   photoUrl?: string;
   thumbnailUrl?: string;
+  isDuplicate?: boolean;
+  mergedInto?: Schema.Types.ObjectId;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
+
+/** @deprecated Use PatientDocument for persistence-layer values. */
+export type Patient = PatientDocument;
 
 const allergySchema = new Schema<IAllergy>(
   {
@@ -82,7 +120,24 @@ const emergencyContactSchema = new Schema<IEmergencyContact>(
   { _id: true }
 );
 
-const patientSchema = new Schema<Patient>(
+const insuranceSchema = new Schema<IInsurance>(
+  {
+    provider: { type: String, required: true, trim: true },
+    policyNumber: { type: String, required: true },
+    groupNumber: { type: String },
+    coverageType: {
+      type: String,
+      enum: ['HMO', 'PPO', 'EPO', 'POS', 'HDHP', 'Medicare', 'Medicaid', 'other'],
+      required: true,
+    },
+    effectiveDate: { type: String },
+    expirationDate: { type: String },
+    isPrimary: { type: Boolean, default: false },
+  },
+  { _id: true }
+);
+
+const patientSchema = new Schema<PatientDocument>(
   {
     systemId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true, trim: true },
@@ -96,15 +151,42 @@ const patientSchema = new Schema<Patient>(
     isActive: { type: Boolean, default: true, index: true },
     allergies: { type: [allergySchema], default: [] },
     emergencyContacts: { type: [emergencyContactSchema], default: [] },
+    insurance: { type: [insuranceSchema], default: [] },
     riskScore: { type: Number, min: 0, max: 100 },
     riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
     riskFactors: { type: [String], default: undefined },
+    riskFactorWeights: { type: Map, of: Number, default: undefined },
     lastRiskCalculatedAt: { type: Date },
+    lastSummaryGeneratedAt: { type: Date },
     nextRiskReviewDate: { type: Date },
     photoUrl: { type: String },
     thumbnailUrl: { type: String },
   },
   { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+);
+
+// Dashboard aggregation: filter by clinic + date range, sorted by createdAt
+patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
+// #1069 — Patient list query: clinicId + isActive filter used with query hint
+patientSchema.index({ clinicId: 1, isActive: 1 }, { name: 'clinicId_1_isActive_1' });
+patientSchema.index(
+  { firstName: 'text', lastName: 'text', searchName: 'text', systemId: 'text' },
+  {
+    name: 'patients_text_search',
+    weights: { searchName: 10, lastName: 5, firstName: 5, systemId: 3 },
+  }
+);
+patientSchema.index(
+  { clinicId: 1, isActive: 1, searchName: 1 },
+  { name: 'patients_clinicId_isActive_searchName' }
+);
+patientSchema.index(
+  { clinicId: 1, lastName: 1, firstName: 1 },
+  { name: 'patients_clinicId_lastName_firstName' }
+);
+patientSchema.index(
+  { clinicId: 1, riskLevel: 1, nextRiskReviewDate: 1 },
+  { name: 'patients_clinicId_riskLevel_nextRiskReviewDate' }
 );
 
 patientSchema.pre('save', function () {
@@ -113,10 +195,19 @@ patientSchema.pre('save', function () {
     const val = this[field] as string | undefined;
     if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
   }
+  // Encrypt PHI fields within each insurance entry
+  if (this.insurance) {
+    for (const ins of this.insurance) {
+      for (const field of INSURANCE_PHI_FIELDS) {
+        const val = ins[field] as string | undefined;
+        if (val) (ins as unknown as Record<string, unknown>)[field] = encrypt(val);
+      }
+    }
+  }
 });
 
 patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any> | null;
+  const update = this.getUpdate() as Record<string, unknown> | null;
   if (!update) return;
   const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
   for (const field of PHI_FIELDS) {
@@ -132,22 +223,36 @@ function decryptDoc(doc: unknown) {
     const val = d[field] as string | undefined;
     if (val) d[field] = decrypt(val);
   }
+  // Decrypt PHI fields within each insurance entry
+  if (Array.isArray(d.insurance)) {
+    for (const ins of d.insurance as Record<string, unknown>[]) {
+      for (const field of INSURANCE_PHI_FIELDS) {
+        const val = ins[field] as string | undefined;
+        if (val) ins[field] = decrypt(val);
+      }
+    }
+  }
 }
 
-function encryptUpdatePayload(update: Record<string, any>) {
-  const target = update.$set ?? update;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function encryptUpdatePayload(update: Record<string, unknown>) {
+  const target = isRecord(update.$set) ? update.$set : update;
   for (const field of PHI_FIELDS) {
-    if (target[field]) target[field] = encrypt(target[field]);
+    const value = target[field];
+    if (typeof value === 'string') target[field] = encrypt(value);
   }
 }
 
 patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any>;
+  const update = this.getUpdate() as Record<string, unknown>;
   if (update) encryptUpdatePayload(update);
 });
 
 patientSchema.pre('updateMany', function () {
-  const update = this.getUpdate() as Record<string, any>;
+  const update = this.getUpdate() as Record<string, unknown>;
   if (update) encryptUpdatePayload(update);
 });
 
@@ -171,8 +276,8 @@ patientSchema.virtual('age').get(function () {
 });
 
 patientSchema.virtual('ageGroup').get(function () {
-  const age = (this as any).age;
-  if (age === null) return null;
+  const age = this.get('age') as number | null | undefined;
+  if (age == null) return null;
   if (age < 1) return 'infant';
   if (age < 3) return 'toddler';
   if (age < 12) return 'child';
@@ -181,4 +286,5 @@ patientSchema.virtual('ageGroup').get(function () {
   return 'elderly';
 });
 
-export const PatientModel = models.Patient || model<Patient>('Patient', patientSchema);
+export const PatientModel = (models.Patient ||
+  model<PatientDocument>('Patient', patientSchema)) as import('mongoose').Model<PatientDocument>;

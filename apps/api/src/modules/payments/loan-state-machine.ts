@@ -35,12 +35,12 @@ export class InvalidTransitionError extends Error {
 
 // Adjacency map of valid transitions
 const VALID_TRANSITIONS: Record<LoanStatus, ReadonlySet<LoanStatus>> = {
-  pending:    new Set<LoanStatus>(['active', 'cancelled']),
-  active:     new Set<LoanStatus>(['repaid', 'liquidated', 'defaulted']),
-  repaid:     new Set<LoanStatus>(),
+  pending: new Set<LoanStatus>(['active', 'cancelled']),
+  active: new Set<LoanStatus>(['repaid', 'liquidated', 'defaulted']),
+  repaid: new Set<LoanStatus>(),
   liquidated: new Set<LoanStatus>(),
-  defaulted:  new Set<LoanStatus>(),
-  cancelled:  new Set<LoanStatus>(),
+  defaulted: new Set<LoanStatus>(),
+  cancelled: new Set<LoanStatus>(),
 };
 
 export class LoanStateMachine {

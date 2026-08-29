@@ -244,7 +244,7 @@ export function getBackupVerificationStatus(): {
 
   return {
     lastVerified,
-    status: statusValue === 1 ? 'success' : 'failure',
+    status: (statusValue as any) === 1 ? 'success' : 'failure',
     isStale: daysSinceVerification > 8,
     daysSinceVerification,
   };

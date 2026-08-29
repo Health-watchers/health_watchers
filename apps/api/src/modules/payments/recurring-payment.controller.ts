@@ -21,8 +21,8 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  requireRoles(['CLINIC_ADMIN']),
-  validateRequest(createRecurringPaymentSchema),
+  requireRoles('CLINIC_ADMIN'),
+  validateRequest({ body: createRecurringPaymentSchema }),
   async (req: Request, res: Response) => {
     try {
       const payment = await createRecurringPayment(req.user!.clinicId, req.body);
@@ -50,44 +50,59 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 // PUT /api/v1/payments/recurring/:id/pause
-router.put('/:id/pause', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const payment = await pauseRecurringPayment(req.params.id);
-    return res.json({ success: true, data: payment });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Pause recurring payment error');
-    return res.status(500).json({ error: 'InternalServerError' });
+router.put(
+  '/:id/pause',
+  authenticate,
+  requireRoles('CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const payment = await pauseRecurringPayment(req.params.id);
+      return res.json({ success: true, data: payment });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Pause recurring payment error');
+      return res.status(500).json({ error: 'InternalServerError' });
+    }
   }
-});
+);
 
 // PUT /api/v1/payments/recurring/:id/resume
-router.put('/:id/resume', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const payment = await resumeRecurringPayment(req.params.id);
-    return res.json({ success: true, data: payment });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Resume recurring payment error');
-    return res.status(500).json({ error: 'InternalServerError' });
+router.put(
+  '/:id/resume',
+  authenticate,
+  requireRoles('CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const payment = await resumeRecurringPayment(req.params.id);
+      return res.json({ success: true, data: payment });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Resume recurring payment error');
+      return res.status(500).json({ error: 'InternalServerError' });
+    }
   }
-});
+);
 
 // DELETE /api/v1/payments/recurring/:id
-router.delete('/:id', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const payment = await cancelRecurringPayment(req.params.id);
-    return res.json({ success: true, data: payment });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Cancel recurring payment error');
-    return res.status(500).json({ error: 'InternalServerError' });
+router.delete(
+  '/:id',
+  authenticate,
+  requireRoles('CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const payment = await cancelRecurringPayment(req.params.id);
+      return res.json({ success: true, data: payment });
+    } catch (error: unknown) {
+      logger.error({ err: error }, 'Cancel recurring payment error');
+      return res.status(500).json({ error: 'InternalServerError' });
+    }
   }
-});
+);
 
 // PUT /api/v1/payments/recurring/:id
 router.put(
   '/:id',
   authenticate,
-  requireRoles(['CLINIC_ADMIN']),
-  validateRequest(updateRecurringPaymentSchema),
+  requireRoles('CLINIC_ADMIN'),
+  validateRequest({ body: updateRecurringPaymentSchema }),
   async (req: Request, res: Response) => {
     try {
       const payment = await updateRecurringPayment(req.params.id, req.body);

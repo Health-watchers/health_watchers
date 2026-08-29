@@ -149,9 +149,7 @@ export default function DosageCalculatorModal({
               />
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-neutral-700">
-                  Sex *
-                </label>
+                <label className="mb-1 block text-sm font-medium text-neutral-700">Sex *</label>
                 <select
                   value={sex}
                   onChange={(e) => setSex(e.target.value as 'M' | 'F')}
@@ -231,19 +229,19 @@ export default function DosageCalculatorModal({
               <h3 className="mb-3 text-sm font-semibold text-blue-900">Recommended Dosage</h3>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div>
-                  <dt className="text-xs font-medium text-neutral-500 uppercase">Dose</dt>
+                  <dt className="text-xs font-medium uppercase text-neutral-500">Dose</dt>
                   <dd className="font-semibold text-neutral-900">{result.recommendedDose}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-neutral-500 uppercase">Frequency</dt>
+                  <dt className="text-xs font-medium uppercase text-neutral-500">Frequency</dt>
                   <dd className="font-semibold text-neutral-900">{result.frequency}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-neutral-500 uppercase">Route</dt>
+                  <dt className="text-xs font-medium uppercase text-neutral-500">Route</dt>
                   <dd className="font-semibold text-neutral-900">{result.route}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-neutral-500 uppercase">Max Daily Dose</dt>
+                  <dt className="text-xs font-medium uppercase text-neutral-500">Max Daily Dose</dt>
                   <dd className="font-semibold text-neutral-900">{result.maxDailyDose}</dd>
                 </div>
               </dl>
@@ -263,10 +261,7 @@ export default function DosageCalculatorModal({
 
             {/* Contraindications — red */}
             {result.contraindications.length > 0 && (
-              <div
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 p-4"
-              >
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
                 <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-red-800">
                   <span aria-hidden="true">⛔</span> Contraindications
                 </h3>
@@ -304,7 +299,10 @@ export default function DosageCalculatorModal({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => { setResult(null); setConfirmed(false); }}
+                onClick={() => {
+                  setResult(null);
+                  setConfirmed(false);
+                }}
               >
                 ← Recalculate
               </Button>

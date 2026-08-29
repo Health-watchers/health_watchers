@@ -1,6 +1,6 @@
-import { PaymentRecordModel } from './models/payment-record.model';
-import { XLMRateModel } from './models/xlm-rate.model';
-import logger from '../../utils/logger';
+import { PaymentRecordModel } from '../models/payment-record.model';
+import { XLMRateModel } from '../models/xlm-rate.model';
+import logger from '@api/utils/logger';
 
 export interface PaymentAnalytics {
   totalRevenue: {
@@ -29,6 +29,11 @@ export interface PaymentAnalytics {
   currencyDistribution: {
     xlm: { count: number; amount: string };
     usdc: { count: number; amount: string };
+  };
+  feeStrategyBreakdown: {
+    slow: number;
+    standard: number;
+    fast: number;
   };
 }
 
@@ -96,6 +101,7 @@ export async function getPaymentAnalytics(
   let failedCount = 0;
   const xlmPayments: any[] = [];
   const usdcPayments: any[] = [];
+  const feeStrategyBreakdown = { slow: 0, standard: 0, fast: 0 };
 
   for (const payment of payments) {
     const amount = parseFloat(payment.amount);
@@ -104,10 +110,20 @@ export async function getPaymentAnalytics(
     else if (payment.status === 'pending') pendingCount++;
     else if (payment.status === 'failed') failedCount++;
 
+    const strategy = (payment as any).feeStrategy as 'slow' | 'standard' | 'fast' | undefined;
+    if (strategy && strategy in feeStrategyBreakdown) {
+      feeStrategyBreakdown[strategy]++;
+    } else {
+      feeStrategyBreakdown.standard++;
+    }
+
     if (payment.assetCode === 'XLM') {
       totalXLM += amount;
       xlmPayments.push(payment);
-      const usdEquiv = await calculateUSDEquivalent(payment.amount, payment.createdAt);
+      const usdEquiv = await calculateUSDEquivalent(
+        payment.amount,
+        payment.createdAt ?? new Date()
+      );
       totalUSD += parseFloat(usdEquiv);
     } else if (payment.assetCode === 'USDC') {
       totalUSDC += amount;
@@ -157,6 +173,7 @@ export async function getPaymentAnalytics(
     },
     revenueByPeriod,
     currencyDistribution,
+    feeStrategyBreakdown,
   };
 }
 

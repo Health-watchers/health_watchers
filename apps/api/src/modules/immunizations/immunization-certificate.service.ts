@@ -15,7 +15,7 @@ interface CertificateOptions {
  * Returns a PassThrough stream that can be piped directly to the HTTP response.
  */
 export async function generateImmunizationCertificate(
-  options: CertificateOptions,
+  options: CertificateOptions
 ): Promise<PassThrough> {
   const { patientId, clinicId } = options;
 
@@ -57,13 +57,26 @@ export async function generateImmunizationCertificate(
     .stroke();
 
   // ── Header ────────────────────────────────────────────────────────────────
-  doc.fillColor('#1a5276').fontSize(22).font('Helvetica-Bold').text(clinic.name, { align: 'center' });
-  doc.fillColor('#555').fontSize(10).font('Helvetica').text(clinic.address || '', { align: 'center' });
+  doc
+    .fillColor('#1a5276')
+    .fontSize(22)
+    .font('Helvetica-Bold')
+    .text(clinic.name, { align: 'center' });
+  doc
+    .fillColor('#555')
+    .fontSize(10)
+    .font('Helvetica')
+    .text(clinic.address || '', { align: 'center' });
   doc.text(clinic.contactNumber || '', { align: 'center' });
   doc.moveDown(0.5);
 
   // Divider
-  doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(1).strokeColor('#1a5276').stroke();
+  doc
+    .moveTo(50, doc.y)
+    .lineTo(50 + pageWidth, doc.y)
+    .lineWidth(1)
+    .strokeColor('#1a5276')
+    .stroke();
   doc.moveDown(0.5);
 
   // ── Title ─────────────────────────────────────────────────────────────────
@@ -87,12 +100,21 @@ export async function generateImmunizationCertificate(
   doc.text(`Date of Birth:`, 50, infoY + 32);
   doc.text(patient.dateOfBirth ? String(patient.dateOfBirth) : 'N/A', 160, infoY + 32);
   doc.text(`Sex:`, 50, infoY + 48);
-  doc.text(patient.sex === 'M' ? 'Male' : patient.sex === 'F' ? 'Female' : 'Other', 160, infoY + 48);
+  doc.text(
+    patient.sex === 'M' ? 'Male' : patient.sex === 'F' ? 'Female' : 'Other',
+    160,
+    infoY + 48
+  );
 
   doc.moveDown(4);
 
   // Divider
-  doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).lineWidth(0.5).strokeColor('#aaa').stroke();
+  doc
+    .moveTo(50, doc.y)
+    .lineTo(50 + pageWidth, doc.y)
+    .lineWidth(0.5)
+    .strokeColor('#aaa')
+    .stroke();
   doc.moveDown(0.5);
 
   // ── Immunization Table ────────────────────────────────────────────────────
@@ -100,7 +122,11 @@ export async function generateImmunizationCertificate(
   doc.moveDown(0.5);
 
   if (immunizations.length === 0) {
-    doc.font('Helvetica').fontSize(10).fillColor('#666').text('No immunizations recorded.', { italics: true });
+    doc
+      .font('Helvetica')
+      .fontSize(10)
+      .fillColor('#666')
+      .text('No immunizations recorded.', { italic: true } as any);
   } else {
     // Table header
     const colX = { date: 50, vaccine: 130, dose: 290, lot: 340, site: 400, admin: 460 };
@@ -131,7 +157,10 @@ export async function generateImmunizationCertificate(
       const isEven = idx % 2 === 0;
 
       if (isEven) {
-        doc.rect(50, rowY - 2, pageWidth, 16).fillColor('#eaf0fb').fill();
+        doc
+          .rect(50, rowY - 2, pageWidth, 16)
+          .fillColor('#eaf0fb')
+          .fill();
       }
 
       const adminBy = imm.administeredBy as any;
@@ -149,12 +178,9 @@ export async function generateImmunizationCertificate(
 
       doc.fillColor('#000').fontSize(8).font('Helvetica');
       doc.text(administeredDate, colX.date, rowY, { width: 75 });
-      doc.text(
-        `${imm.vaccineName}${imm.seriesComplete ? ' ✓' : ''}`,
-        colX.vaccine,
-        rowY,
-        { width: 155 },
-      );
+      doc.text(`${imm.vaccineName}${imm.seriesComplete ? ' ✓' : ''}`, colX.vaccine, rowY, {
+        width: 155,
+      });
       doc.text(`${imm.doseNumber}`, colX.dose, rowY, { width: 45 });
       doc.text(imm.lotNumber ?? 'N/A', colX.lot, rowY, { width: 55 });
       doc.text(imm.site ?? 'N/A', colX.site, rowY, { width: 55 });
@@ -170,7 +196,7 @@ export async function generateImmunizationCertificate(
             `  ⚠ Adverse reaction: ${imm.adverseReaction.description} (${imm.adverseReaction.severity})`,
             colX.date,
             doc.y,
-            { width: pageWidth },
+            { width: pageWidth }
           );
         doc.fillColor('#000');
       }
@@ -197,7 +223,7 @@ export async function generateImmunizationCertificate(
     .text(
       `This certificate was generated on ${new Date().toLocaleString()} by ${clinic.name}. ` +
         'This document is confidential and intended solely for the named patient.',
-      { align: 'center' },
+      { align: 'center' }
     );
 
   // Page numbers
@@ -214,7 +240,7 @@ export async function generateImmunizationCertificate(
 
   logger.info(
     { patientId, immunizationCount: immunizations.length },
-    'Immunization certificate generated',
+    'Immunization certificate generated'
   );
 
   return stream;

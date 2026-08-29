@@ -66,7 +66,7 @@ export default function PortalConsentPage() {
                 className={`relative mt-0.5 h-6 w-11 flex-shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${c.granted ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${c.granted ? 'translate-x-5' : 'translate-x-0'}`}
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${c.granted ? 'translate-x-5' : 'translate-x-0'}`}
                 />
                 <span className="sr-only">{c.granted ? 'Granted' : 'Withdrawn'}</span>
               </button>

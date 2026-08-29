@@ -1,6 +1,5 @@
 #!/bin/sh
 # Run actionlint on staged workflow files
-# `|| true` guards against grep exiting 1 when nothing matches — the hook runs under `sh -e`
 STAGED_WORKFLOWS=$(git diff --cached --name-only | grep '^\.github/workflows/.*\.yml$' || true)
 if [ -n "$STAGED_WORKFLOWS" ]; then
   if command -v actionlint >/dev/null 2>&1; then

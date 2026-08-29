@@ -51,17 +51,17 @@ export function EscrowPaymentForm({ encounterId, patientId, onSuccess }: EscrowP
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-md">
+    <form onSubmit={handleSubmit} className="max-w-md space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-4">Create Escrow Payment</h3>
-        <p className="text-sm text-gray-600 mb-6">
+        <h3 className="mb-4 text-lg font-semibold">Create Escrow Payment</h3>
+        <p className="mb-6 text-sm text-gray-600">
           Funds will be held in escrow and can only be claimed by the clinic after the service date.
         </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          <DollarSign className="inline w-4 h-4 mr-1" />
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          <DollarSign className="mr-1 inline h-4 w-4" />
           Amount (XLM)
         </label>
         <input
@@ -70,48 +70,46 @@ export function EscrowPaymentForm({ encounterId, patientId, onSuccess }: EscrowP
           min="0"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px]"
+          className="min-h-[44px] w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
           placeholder="100.00"
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          <Calendar className="inline w-4 h-4 mr-1" />
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          <Calendar className="mr-1 inline h-4 w-4" />
           Claimable After (Service Date)
         </label>
         <input
           type="datetime-local"
           value={claimableAfter}
           onChange={(e) => setClaimableAfter(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px]"
+          className="min-h-[44px] w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
           required
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Clinic can claim funds after this date
-        </p>
+        <p className="mt-1 text-xs text-gray-500">Clinic can claim funds after this date</p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          <Clock className="inline w-4 h-4 mr-1" />
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          <Clock className="mr-1 inline h-4 w-4" />
           Claimable Until (Expiry Date)
         </label>
         <input
           type="datetime-local"
           value={claimableUntil}
           onChange={(e) => setClaimableUntil(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px]"
+          className="min-h-[44px] w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
           required
         />
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="mt-1 text-xs text-gray-500">
           Funds return to patient after this date if not claimed
         </p>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
@@ -119,7 +117,7 @@ export function EscrowPaymentForm({ encounterId, patientId, onSuccess }: EscrowP
       <button
         type="submit"
         disabled={loading}
-        className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+        className="min-h-[44px] w-full rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
       >
         {loading ? 'Creating Escrow...' : 'Create Escrow Payment'}
       </button>

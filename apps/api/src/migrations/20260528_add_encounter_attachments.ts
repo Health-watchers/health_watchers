@@ -12,10 +12,12 @@ export async function up(db: Db): Promise<void> {
   );
 
   // Create index for attachment queries
-  await db.collection('encounters').createIndex(
-    { 'attachments.fileId': 1 },
-    { background: true, name: 'attachments_fileId_1', sparse: true }
-  );
+  await db
+    .collection('encounters')
+    .createIndex(
+      { 'attachments.fileId': 1 },
+      { background: true, name: 'attachments_fileId_1', sparse: true }
+    );
 }
 
 export async function down(db: Db): Promise<void> {
@@ -30,5 +32,8 @@ export async function down(db: Db): Promise<void> {
   );
 
   // Drop index
-  await db.collection('encounters').dropIndex('attachments_fileId_1').catch(() => {});
+  await db
+    .collection('encounters')
+    .dropIndex('attachments_fileId_1')
+    .catch(() => {});
 }

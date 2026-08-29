@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: certificates.cert-manager.io
+spec:
+  group: cert-manager.io
+  names:
+    kind: Certificate
+    plural: certificates
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - secretName
+            - issuerRef
+            properties:
+              secretName:
+                type: string
+              commonName:
+                type: string
+              dnsNames:
+                type: array
+                items:
+                  type: string
+              issuerRef:
+                type: object
+                required:
+                - name
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+              renewBefore:
+                type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: issuers.cert-manager.io
+spec:
+  group: cert-manager.io
+  names:
+    kind: Issuer
+    plural: issuers
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              acme:
+                type: object
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prod
+  namespace: health-watchers
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@healthwatchers.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: health-watchers-cert
+  namespace: health-watchers
+spec:
+  secretName: health-watchers-tls
+  commonName: api.healthwatchers.com
+  dnsNames:
+  - api.healthwatchers.com
+  - healthwatchers.com
+  - www.healthwatchers.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: Issuer
+  renewBefore: 720h
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-expiry-alerts
+  namespace: health-watchers
+spec:
+  groups:
+  - name: certificate.rules
+    interval: 30s
+    rules:
+    - alert: CertificateExpirySoon
+      expr: certmanager_certificate_expiration_timestamp_seconds - time() < 7*24*3600
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "Certificate expiring soon"
+        description: "Certificate {{ $labels.name }} expires in less than 7 days"
+    - alert: CertificateExpiryImmediate
+      expr: certmanager_certificate_expiration_timestamp_seconds - time() < 24*3600
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Certificate expiring immediately"
+        description: "Certificate {{ $labels.name }} expires in less than 24 hours"

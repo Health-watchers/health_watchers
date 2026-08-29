@@ -25,6 +25,64 @@ interface LabResult {
   notes?: string;
 }
 
+function exportLabResultsCSV(labResults: LabResult[], patientId: string) {
+  const rows = [
+    [
+      'Test',
+      'Code',
+      'Status',
+      'Ordered',
+      'Resulted',
+      'Parameter',
+      'Value',
+      'Unit',
+      'Reference',
+      'Flag',
+    ],
+  ];
+  for (const lab of labResults) {
+    if (lab.results?.length) {
+      for (const r of lab.results) {
+        rows.push([
+          lab.testName,
+          lab.testCode ?? '',
+          lab.status,
+          lab.orderedAt,
+          lab.resultedAt ?? '',
+          r.parameter,
+          r.value,
+          r.unit,
+          r.referenceRange,
+          r.flag ?? '',
+        ]);
+      }
+    } else {
+      rows.push([
+        lab.testName,
+        lab.testCode ?? '',
+        lab.status,
+        lab.orderedAt,
+        lab.resultedAt ?? '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+    }
+  }
+  const csv = rows
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lab-results-${patientId}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function flagVariant(flag?: string) {
   if (flag === 'HH' || flag === 'LL') return 'danger';
   if (flag === 'H' || flag === 'L') return 'warning';
@@ -47,17 +105,27 @@ interface OrderFormState {
 export default function LabResultsTab({ patientId }: { patientId: string }) {
   const queryClient = useQueryClient();
   const [showOrderForm, setShowOrderForm] = useState(false);
-  const [orderForm, setOrderForm] = useState<OrderFormState>({ testName: '', testCode: '', notes: '' });
+  const [orderForm, setOrderForm] = useState<OrderFormState>({
+    testName: '',
+    testCode: '',
+    notes: '',
+  });
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [aiInterpretations, setAiInterpretations] = useState<Record<string, string>>({});
   const [interpretingId, setInterpretingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'orderedAt' | 'testName'>('orderedAt');
 
-  const { data: labResults = [], isLoading, error } = useQuery<LabResult[]>({
+  const {
+    data: labResults = [],
+    isLoading,
+    error,
+  } = useQuery<LabResult[]>({
     queryKey: queryKeys.labResults.byPatient(patientId),
     queryFn: async () => {
-      const res = await fetch(`${API_V1}/patients/${patientId}/lab-results?sort=${sortBy}&order=desc`);
+      const res = await fetch(
+        `${API_V1}/patients/${patientId}/lab-results?sort=${sortBy}&order=desc`
+      );
       if (!res.ok) throw new Error('Failed to load lab results');
       const data = await res.json();
       return data.data ?? [];
@@ -101,7 +169,10 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
       if (!res.ok) throw new Error(body.message ?? 'AI unavailable');
       setAiInterpretations((prev) => ({ ...prev, [labResultId]: body.interpretation }));
     } catch {
-      setAiInterpretations((prev) => ({ ...prev, [labResultId]: 'AI interpretation unavailable.' }));
+      setAiInterpretations((prev) => ({
+        ...prev,
+        [labResultId]: 'AI interpretation unavailable.',
+      }));
     } finally {
       setInterpretingId(null);
     }
@@ -109,11 +180,11 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <p className="text-sm text-neutral-500">{labResults.length} result(s)</p>
           <select
-            className="text-xs border border-neutral-200 rounded px-2 py-1 text-neutral-600"
+            className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-600"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'orderedAt' | 'testName')}
             aria-label="Sort lab results by"
@@ -125,18 +196,27 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
         <Button size="sm" variant="primary" onClick={() => setShowOrderForm((v) => !v)}>
           {showOrderForm ? 'Cancel' : '+ Order Test'}
         </Button>
+        {labResults.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => exportLabResultsCSV(labResults, patientId)}
+          >
+            ↓ Export CSV
+          </Button>
+        )}
       </div>
 
       {/* Order form */}
       {showOrderForm && (
         <form
           onSubmit={handleOrder}
-          className="mb-6 rounded-lg border border-neutral-200 bg-neutral-50 p-4 space-y-3"
+          className="mb-6 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4"
           aria-label="Order new lab test"
         >
           <h3 className="text-sm font-semibold text-neutral-800">Order New Lab Test</h3>
           <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1" htmlFor="testName">
+            <label className="mb-1 block text-xs font-medium text-neutral-600" htmlFor="testName">
               Test Name <span aria-hidden="true">*</span>
             </label>
             <input
@@ -149,7 +229,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1" htmlFor="testCode">
+            <label className="mb-1 block text-xs font-medium text-neutral-600" htmlFor="testCode">
               LOINC Code (optional)
             </label>
             <input
@@ -161,7 +241,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1" htmlFor="labNotes">
+            <label className="mb-1 block text-xs font-medium text-neutral-600" htmlFor="labNotes">
               Notes (optional)
             </label>
             <textarea
@@ -172,7 +252,11 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
               onChange={(e) => setOrderForm((f) => ({ ...f, notes: e.target.value }))}
             />
           </div>
-          {orderError && <p className="text-xs text-red-600" role="alert">{orderError}</p>}
+          {orderError && (
+            <p className="text-xs text-red-600" role="alert">
+              {orderError}
+            </p>
+          )}
           <Button type="submit" size="sm" variant="primary" disabled={ordering}>
             {ordering ? 'Ordering…' : 'Order Test'}
           </Button>
@@ -188,7 +272,9 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
       ) : error ? (
         <ErrorMessage
           message={error instanceof Error ? error.message : 'Failed to load lab results'}
-          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.labResults.byPatient(patientId) })}
+          onRetry={() =>
+            queryClient.invalidateQueries({ queryKey: queryKeys.labResults.byPatient(patientId) })
+          }
         />
       ) : labResults.length === 0 ? (
         <EmptyState title="No lab results yet" icon="🧪" />
@@ -206,17 +292,23 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                     <p className="font-medium text-neutral-900">
                       {lab.testName}
                       {lab.testCode && (
-                        <span className="ml-2 text-xs text-neutral-500 font-mono">{lab.testCode}</span>
+                        <span className="ml-2 font-mono text-xs text-neutral-500">
+                          {lab.testCode}
+                        </span>
                       )}
                     </p>
-                    <p className="text-xs text-neutral-500 mt-0.5">
+                    <p className="mt-0.5 text-xs text-neutral-500">
                       Ordered: {new Date(lab.orderedAt).toLocaleDateString()}
-                      {lab.resultedAt && ` · Resulted: ${new Date(lab.resultedAt).toLocaleDateString()}`}
+                      {lab.resultedAt &&
+                        ` · Resulted: ${new Date(lab.resultedAt).toLocaleDateString()}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     {hasCritical && (
-                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700" role="alert">
+                      <span
+                        className="rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700"
+                        role="alert"
+                      >
                         ⚠ CRITICAL
                       </span>
                     )}
@@ -224,16 +316,17 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                   </div>
                 </div>
 
-                {lab.notes && (
-                  <p className="mt-2 text-sm text-neutral-600">{lab.notes}</p>
-                )}
+                {lab.notes && <p className="mt-2 text-sm text-neutral-600">{lab.notes}</p>}
 
                 {/* Results table */}
                 {lab.results && lab.results.length > 0 && (
                   <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-xs border-collapse" aria-label={`Results for ${lab.testName}`}>
+                    <table
+                      className="w-full border-collapse text-xs"
+                      aria-label={`Results for ${lab.testName}`}
+                    >
                       <thead>
-                        <tr className="bg-neutral-50 text-neutral-500 uppercase tracking-wide">
+                        <tr className="bg-neutral-50 uppercase tracking-wide text-neutral-500">
                           <th className="px-2 py-1 text-left font-semibold">Parameter</th>
                           <th className="px-2 py-1 text-left font-semibold">Value</th>
                           <th className="px-2 py-1 text-left font-semibold">Unit</th>
@@ -271,7 +364,9 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                         <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:underline">
                           AI Interpretation
                         </summary>
-                        <p className="mt-1 text-sm text-neutral-600">{aiInterpretations[lab._id]}</p>
+                        <p className="mt-1 text-sm text-neutral-600">
+                          {aiInterpretations[lab._id]}
+                        </p>
                       </details>
                     ) : (
                       <Button

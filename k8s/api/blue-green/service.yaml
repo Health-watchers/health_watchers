@@ -1,0 +1,33 @@
+# Load-balancer-facing Service for blue-green deployments of the api.
+#
+# The ingress (k8s/ingress.yaml) and monitoring targets continue to point at
+# the standard `api` Service/Deployment (k8s/api/service.yaml,
+# k8s/api/deployment.yaml) for normal rolling-update releases.
+#
+# To perform a blue-green release instead:
+#   1. Apply this directory: kubectl apply -f k8s/api/blue-green/
+#   2. Point the ingress `api` backend paths at `api-service` (instead of
+#      `api`) so traffic flows through the slot switch below.
+#   3. Run ops/blue-green-deployment.sh api <new-image> health-watchers
+#      to roll the inactive slot and cut traffic over with zero downtime.
+#   4. Run ops/rollback-deployment.sh api health-watchers to revert.
+#
+# See docs/BLUE_GREEN_DEPLOYMENT.md for the full runbook.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+    version: blue
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP

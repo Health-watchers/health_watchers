@@ -1,0 +1,149 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: health-watchers-autoscaling-rules
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+spec:
+  groups:
+    - name: autoscaling.rules
+      interval: 30s
+      rules:
+        # Alert when CPU utilization is high (scaling threshold)
+        - alert: HighCPUUtilization
+          expr: |
+            (sum(rate(container_cpu_usage_seconds_total{pod=~"api-.*"}[5m])) by (pod)
+            / sum(container_spec_cpu_quota{pod=~"api-.*"}) by (pod)) * 100 > 70
+          for: 2m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High CPU utilization on API pod {{ $labels.pod }}"
+            description: "CPU utilization is {{ $value | humanize }}% (threshold: 70%)"
+
+        # Alert when memory utilization is high
+        - alert: HighMemoryUtilization
+          expr: |
+            (container_memory_working_set_bytes{pod=~"api-.*"}
+            / container_spec_memory_limit_bytes{pod=~"api-.*"}) * 100 > 80
+          for: 2m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High memory utilization on API pod {{ $labels.pod }}"
+            description: "Memory utilization is {{ $value | humanize }}% (threshold: 80%)"
+
+        # Alert when HPA is at max replicas
+        - alert: HPAAtMaxReplicas
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler="api-hpa"}
+            ==
+            kube_horizontalpodautoscaler_spec_max_replicas{horizontalpodautoscaler="api-hpa"}
+          for: 5m
+          labels:
+            severity: critical
+            component: api
+          annotations:
+            summary: "API HPA is at maximum replicas"
+            description: "API service is running at max replicas ({{ $value }}). Consider increasing maxReplicas."
+
+        # Alert when HPA scaling is failing
+        - alert: HPAScalingFailure
+          expr: |
+            kube_horizontalpodautoscaler_status_condition{condition="ScalingLimited",horizontalpodautoscaler="api-hpa",status="true"}
+          for: 10m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "API HPA scaling is limited"
+            description: "API HPA is hitting scaling limits. Check metrics and policies."
+
+        # Track scaling events
+        - alert: FrequentScalingEvents
+          expr: |
+            rate(kube_horizontalpodautoscaler_status_current_replicas[10m]) > 0.5
+          for: 15m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "Frequent scaling events detected on API"
+            description: "HPA is scaling more than expected. Review scaling policies and metrics."
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-autoscaling-dashboard
+  namespace: health-watchers
+  labels:
+    grafana_dashboard: "true"
+data:
+  autoscaling-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Auto-Scaling Metrics",
+        "tags": ["autoscaling", "kubernetes"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "API Pod Count",
+            "targets": [
+              {
+                "expr": "kube_deployment_status_replicas{deployment='api'}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "API CPU Utilization",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{pod=~'api-.*'}[5m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "API Memory Usage",
+            "targets": [
+              {
+                "expr": "container_memory_working_set_bytes{pod=~'api-.*'} / 1024 / 1024"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "HPA Status",
+            "targets": [
+              {
+                "expr": "kube_horizontalpodautoscaler_status_current_replicas"
+              }
+            ],
+            "type": "stat"
+          },
+          {
+            "title": "Request Rate",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job='api'}[5m])"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "title": "Response Time (p95)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+              }
+            ],
+            "type": "graph"
+          }
+        ]
+      }
+    }

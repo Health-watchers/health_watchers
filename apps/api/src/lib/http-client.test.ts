@@ -1,74 +1,132 @@
-/**
- * Unit tests for lib/http-client.ts
- *
- * global fetch is stubbed so no real network call is made.
- */
 import { fetchWithCorrelation } from './http-client';
+import { withRequestId } from '../utils/request-id';
+import { CORRELATION_HEADER } from '../middlewares/correlation.middleware';
 
-const ORIGINAL_FETCH = global.fetch;
+const fetchSpy = jest.spyOn(global, 'fetch');
 
-function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>) {
-  global.fetch = jest.fn(impl) as unknown as typeof fetch;
+function mockFetchOk(body: unknown = {}): void {
+  fetchSpy.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => body,
+  } as unknown as Response);
 }
 
-afterAll(() => {
-  global.fetch = ORIGINAL_FETCH;
-});
-
 describe('fetchWithCorrelation', () => {
-  it('forwards the correlation header from the active request id', async () => {
-    mockFetch(async (url, init) => new Response(null, { status: 200 }));
+  beforeEach(() => jest.clearAllMocks());
 
-    // Establish an active request id via async context.
-    const { withRequestId } = await import('@api/utils/request-id');
-    await withRequestId('corr-123', async () => {
-      await fetchWithCorrelation('https://api.example/stellar/accounts');
+  // ─── Header forwarding ───────────────────────────────────────────────────────
+
+  it('forwards the AsyncLocalStorage requestId as X-Request-ID', async () => {
+    mockFetchOk();
+    await withRequestId('async-req-id', async () => {
+      await fetchWithCorrelation('http://stellar-service/health');
+      const [, init] = fetchSpy.mock.calls[0];
+      expect((init?.headers as Record<string, string>)[CORRELATION_HEADER]).toBe('async-req-id');
+    });
+  });
+
+  it('uses an explicit requestId option over the stored one', async () => {
+    mockFetchOk();
+    await withRequestId('stored-id', async () => {
+      await fetchWithCorrelation('http://stellar-service/health', { requestId: 'explicit-id' });
+      const [, init] = fetchSpy.mock.calls[0];
+      expect((init?.headers as Record<string, string>)[CORRELATION_HEADER]).toBe('explicit-id');
+    });
+  });
+
+  it('omits X-Request-ID when no id is available', async () => {
+    mockFetchOk();
+    // called outside any withRequestId context — storage returns undefined
+    await fetchWithCorrelation('http://stellar-service/health');
+    const [, init] = fetchSpy.mock.calls[0];
+    expect((init?.headers as Record<string, string>)[CORRELATION_HEADER]).toBeUndefined();
+  });
+
+  // ─── Default headers ─────────────────────────────────────────────────────────
+
+  it('sets Content-Type: application/json by default', async () => {
+    mockFetchOk();
+    await fetchWithCorrelation('http://stellar-service/health');
+    const [, init] = fetchSpy.mock.calls[0];
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+  });
+
+  it('merges caller-supplied headers with defaults', async () => {
+    mockFetchOk();
+    await fetchWithCorrelation('http://stellar-service/health', {
+      headers: { Authorization: 'Bearer token-xyz' },
+    });
+    const [, init] = fetchSpy.mock.calls[0];
+    const headers = init?.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['Authorization']).toBe('Bearer token-xyz');
+  });
+
+  it('caller-supplied Content-Type overrides the default', async () => {
+    mockFetchOk();
+    await fetchWithCorrelation('http://stellar-service/health', {
+      headers: { 'Content-Type': 'text/plain' },
+    });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('text/plain');
+  });
+
+  // ─── URL / method / body passthrough ─────────────────────────────────────────
+
+  it('calls fetch with the provided URL', async () => {
+    mockFetchOk();
+    await fetchWithCorrelation('http://stellar-service/verify/abc123');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://stellar-service/verify/abc123',
+      expect.any(Object)
+    );
+  });
+
+  it('forwards the HTTP method', async () => {
+    mockFetchOk();
+    await fetchWithCorrelation('http://stellar-service/fund', { method: 'POST' });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.method).toBe('POST');
+  });
+
+  it('forwards the request body', async () => {
+    mockFetchOk();
+    const body = JSON.stringify({ publicKey: 'GABC' });
+    await fetchWithCorrelation('http://stellar-service/fund', { method: 'POST', body });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.body).toBe(body);
+  });
+
+  // ─── Return value / error handling ───────────────────────────────────────────
+
+  it('returns the Response object from fetch', async () => {
+    const fakeResponse = { ok: true, status: 200 } as unknown as Response;
+    fetchSpy.mockResolvedValueOnce(fakeResponse);
+    const result = await fetchWithCorrelation('http://stellar-service/health');
+    expect(result).toBe(fakeResponse);
+  });
+
+  it('propagates fetch errors', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('network failure'));
+    await expect(fetchWithCorrelation('http://stellar-service/health')).rejects.toThrow(
+      'network failure'
+    );
+  });
+
+  // ─── No leakage between calls ────────────────────────────────────────────────
+
+  it('does not leak requestId from one call to the next', async () => {
+    mockFetchOk();
+    mockFetchOk();
+
+    await withRequestId('first-call-id', async () => {
+      await fetchWithCorrelation('http://stellar-service/health');
     });
 
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(url).toBe('https://api.example/stellar/accounts');
-    expect((init.headers as Record<string, string>)['x-request-id']).toBe('corr-123');
-  });
-
-  it('explicit requestId takes precedence over the active context', async () => {
-    mockFetch(async () => new Response(null, { status: 200 }));
-    await import('@api/utils/request-id').then(async ({ withRequestId }) => {
-      await withRequestId('ctx-id', () =>
-        fetchWithCorrelation('https://api.example/x', { requestId: 'explicit-id' })
-      );
-    });
-
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect((init.headers as Record<string, string>)['x-request-id']).toBe('explicit-id');
-  });
-
-  it('sets a default JSON content-type header', async () => {
-    mockFetch(async () => new Response(null, { status: 200 }));
-    await fetchWithCorrelation('https://api.example/x');
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-  });
-
-  it('merges caller-supplied headers and passes through other options', async () => {
-    mockFetch(async () => new Response(null, { status: 200 }));
-    await fetchWithCorrelation('https://api.example/x', {
-      method: 'POST',
-      body: '{}',
-      headers: { Authorization: 'Bearer t' } as unknown as HeadersInit,
-    });
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer t');
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-    expect(init.method).toBe('POST');
-    expect(init.body).toBe('{}');
-  });
-
-  it('omits the correlation header when no request id is available', async () => {
-    mockFetch(async () => new Response(null, { status: 200 }));
-    // Clear any ambient context by running without withRequestId wrapper.
-    await fetchWithCorrelation('https://api.example/x');
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    const headers = init.headers as Record<string, string>;
-    expect(headers['x-request-id']).toBeUndefined();
+    // Second call is outside any context — no requestId header expected
+    await fetchWithCorrelation('http://stellar-service/health');
+    const [, secondInit] = fetchSpy.mock.calls[1];
+    expect((secondInit?.headers as Record<string, string>)[CORRELATION_HEADER]).toBeUndefined();
   });
 });

@@ -29,35 +29,41 @@ export interface ILabResult {
 
 const labResultEntrySchema = new Schema<LabResultEntry>(
   {
-    parameter:      { type: String, required: true },
-    value:          { type: String, required: true },
-    unit:           { type: String, required: true },
+    parameter: { type: String, required: true },
+    value: { type: String, required: true },
+    unit: { type: String, required: true },
     referenceRange: { type: String, required: true },
-    flag:           { type: String, enum: ['H', 'L', 'HH', 'LL', 'N'] },
+    flag: { type: String, enum: ['H', 'L', 'HH', 'LL', 'N'] },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const labResultSchema = new Schema<ILabResult>(
   {
-    patientId:              { type: Schema.Types.ObjectId, ref: 'Patient',   required: true, index: true },
-    encounterId:            { type: Schema.Types.ObjectId, ref: 'Encounter', index: true },
-    clinicId:               { type: Schema.Types.ObjectId, ref: 'Clinic',    required: true, index: true },
-    orderedBy:              { type: Schema.Types.ObjectId, ref: 'User',      required: true },
-    testName:               { type: String, required: true },
-    testCode:               { type: String },
-    status:                 { type: String, enum: ['ordered', 'pending', 'resulted', 'cancelled'], default: 'ordered', index: true },
-    orderedAt:              { type: Date, default: Date.now },
-    resultedAt:             { type: Date },
-    results:                { type: [labResultEntrySchema], default: undefined },
-    notes:                  { type: String },
-    attachmentUrl:          { type: String },
-    isCritical:             { type: Boolean, default: false, index: true },
-    criticalReason:         { type: String },
+    patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
+    encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter', index: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    orderedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    testName: { type: String, required: true },
+    testCode: { type: String },
+    status: {
+      type: String,
+      enum: ['ordered', 'pending', 'resulted', 'cancelled'],
+      default: 'ordered',
+      index: true,
+    },
+    orderedAt: { type: Date, default: Date.now },
+    resultedAt: { type: Date },
+    results: { type: [labResultEntrySchema], default: undefined },
+    notes: { type: String },
+    attachmentUrl: { type: String },
+    isCritical: { type: Boolean, default: false, index: true },
+    criticalReason: { type: String },
     criticalAcknowledgedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     criticalAcknowledgedAt: { type: Date },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, versionKey: false }
 );
 
-export const LabResultModel = models.LabResult || model<ILabResult>('LabResult', labResultSchema);
+export const LabResultModel = (models.LabResult ||
+  model<ILabResult>('LabResult', labResultSchema)) as import('mongoose').Model<ILabResult>;

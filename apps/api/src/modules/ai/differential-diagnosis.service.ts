@@ -35,7 +35,7 @@ export interface DifferentialDiagnosisResult {
 }
 
 export async function generateDifferentialDiagnosis(
-  input: DifferentialDiagnosisInput,
+  input: DifferentialDiagnosisInput
 ): Promise<DifferentialDiagnosisResult> {
   if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
 
@@ -47,15 +47,13 @@ export async function generateDifferentialDiagnosis(
     [
       `Chief Complaint: ${input.chiefComplaint}`,
       `Symptoms: ${input.symptoms.join(', ')}`,
-      input.vitalSigns
-        ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}`
-        : '',
+      input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
       input.patientAge ? `Patient Age: ${input.patientAge} years` : '',
       input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
       input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
     ]
       .filter(Boolean)
-      .join('\n'),
+      .join('\n')
   );
 
   const prompt = `You are a clinical decision support AI assisting a physician. Based on the anonymised patient presentation below, generate a differential diagnosis list.

@@ -10,10 +10,10 @@ module.exports = {
     extend: {
       // Minimum touch target sizes for accessibility
       minWidth: {
-        'touch': '44px',
+        touch: '44px',
       },
       minHeight: {
-        'touch': '44px',
+        touch: '44px',
       },
       // Mobile-first spacing
       spacing: {
@@ -24,7 +24,7 @@ module.exports = {
   },
   // Mobile-first responsive utilities
   plugins: [
-    function({ addUtilities }) {
+    function ({ addUtilities }) {
       const newUtilities = {
         '.touch-target': {
           minWidth: '44px',

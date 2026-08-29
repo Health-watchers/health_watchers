@@ -2,12 +2,11 @@ import mongoose, { Schema } from 'mongoose';
 
 const InvoiceCounterSchema = new Schema(
   { _id: String, year: Number, seq: Number },
-  { versionKey: false },
+  { versionKey: false }
 );
 
 export const InvoiceCounterModel =
-  mongoose.models.InvoiceCounter ||
-  mongoose.model('InvoiceCounter', InvoiceCounterSchema);
+  mongoose.models.InvoiceCounter || mongoose.model('InvoiceCounter', InvoiceCounterSchema);
 
 /** Returns next invoice number like INV-2024-00042 */
 export async function nextInvoiceNumber(clinicId: string): Promise<string> {
@@ -16,7 +15,7 @@ export async function nextInvoiceNumber(clinicId: string): Promise<string> {
   const counter = await InvoiceCounterModel.findOneAndUpdate(
     { _id: key, year },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true },
+    { new: true, upsert: true }
   );
   return `INV-${year}-${String(counter!.seq).padStart(5, '0')}`;
 }

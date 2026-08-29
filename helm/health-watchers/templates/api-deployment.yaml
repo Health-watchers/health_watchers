@@ -55,6 +55,14 @@ spec:
             periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
             timeoutSeconds: 5
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: {{ .Values.api.startupProbe.path }}
+              port: {{ .Values.api.service.port }}
+            initialDelaySeconds: {{ .Values.api.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.startupProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
           envFrom:
             - configMapRef:
                 name: health-watchers-config

@@ -9,8 +9,15 @@
 .env.staging
 .env.test.local
 .env.development.local
+.env.save
+.env.*.save
 # Keep .env.example tracked (it's a template)
 !.env.example
+!.env.cdn.example
+
+# Reject any file containing merge conflict markers (should never be committed)
+*.orig
+*.rej
 
 # =============================================================================
 # Dependencies
@@ -58,7 +65,47 @@ coverage/
 .nyc_output/
 .jest_cache/
 jest-results.json
+
+# Jest snapshot files (auto-generated, should not be committed)
+**/__snapshots__/
+
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
+
+# Playwright test artifacts
+playwright-report/
 test-results/
+blob-report/
+playwright/.cache/
+.playwright/
+
+# Stryker mutation testing output
+.stryker-tmp/
+stryker-report/
+# Scope to known generated-report directories only — do NOT use bare `reports/`
+# which would accidentally ignore apps/api/src/modules/reports/
+apps/api/reports/
+apps/api/stryker-reports/
+
+# Pact contract test artifacts
+pacts/*.json
+
+# k6 performance test results
+k6-results/
+performance/results/
+# Vitest
+.vitest-cache/
+vitest-results/
+
+# Vitest snapshots
+**/__vitest_snapshots__/
+
+# DevOps script report/log output (generated at run time, not source)
+backup-verification-report.json
+*-verification-report.json
+blue-green-deployment.log
+rollback-deployment.log
 
 # =============================================================================
 # TypeScript
@@ -116,3 +163,104 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
+
+# =============================================================================
+# Runtime / Debug artifacts
+# =============================================================================
+*.heapsnapshot
+*.cpuprofile
+*.trace
+chromium-trace/
+.clinic/
+clinic-*/
+0x-*/
+
+# =============================================================================
+# Generated API / documentation artifacts
+# =============================================================================
+apps/*/docs/api/
+.docusaurus/
+apps/docs/build/
+
+# =============================================================================
+# Local override files
+# =============================================================================
+*.local
+docker-compose.override.yml
+
+# =============================================================================
+# Security Scan Reports (generated artefacts — not source files)
+# =============================================================================
+gitleaks-report.json
+.gitleaks/
+snyk.sarif
+snyk-report.json
+trivy-*.sarif
+trivy-*.json
+audit.json
+audit-report.json
+licenses.csv
+security-reports/
+scan-results/
+
+# =============================================================================
+# Generated / compiled artefacts
+# =============================================================================
+# packages/types compiled output — source is packages/types/src/index.ts
+packages/types/index.js
+packages/types/index.js.map
+packages/types/index.d.ts
+packages/types/index.d.ts.map
+packages/types/index.ts
+
+# Temporary debug scripts at repo root
+verify-jwt-implementation.js
+
+# =============================================================================
+# Helm / Kubernetes generated artifacts
+# =============================================================================
+# Helm dependency charts (downloaded via helm dep update)
+helm/*/charts/
+helm/**/Chart.lock
+
+# kubeconfig files (never commit credentials)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# =============================================================================
+# CI/CD generated artifacts
+# =============================================================================
+# SBOM outputs
+sbom-*.json
+sbom-*.xml
+
+# Docker build cache
+.docker-cache/
+
+# GitHub Actions local run artifacts (act)
+.act/
+
+# =============================================================================
+# Additional exclusions — issues #1061-#1064 (feature branch cleanup)
+# =============================================================================
+
+# k6 test result artifacts
+k6-results.json
+k6-summary.json
+
+# Query optimisation profiling output
+query-profile-*.json
+slow-queries-*.json
+
+# Benchmark result snapshots (generated at CI run time, not source)
+benchmark-results/
+benchmark-*.json
+
+# Local migration lock files
+.migrate
+
+# Temporary REPL / debug files
+*.repl.ts
+*.debug.ts
+scratch.*

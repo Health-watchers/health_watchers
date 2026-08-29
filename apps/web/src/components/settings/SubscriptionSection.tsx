@@ -151,8 +151,16 @@ export function SubscriptionSection() {
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-neutral-700">Current Usage</h3>
           <UsageBar label="Patients" current={usage.patientCount} limit={limits.maxPatients} />
-          <UsageBar label="Encounters this month" current={usage.encounterCount} limit={limits.maxEncountersPerMonth} />
-          <UsageBar label="AI requests this month" current={usage.aiRequestCount} limit={limits.maxAiRequestsPerMonth} />
+          <UsageBar
+            label="Encounters this month"
+            current={usage.encounterCount}
+            limit={limits.maxEncountersPerMonth}
+          />
+          <UsageBar
+            label="AI requests this month"
+            current={usage.aiRequestCount}
+            limit={limits.maxAiRequestsPerMonth}
+          />
           <UsageBar label="Doctors" current={usage.doctorCount} limit={limits.maxDoctors} />
         </div>
       </section>
@@ -183,8 +191,12 @@ export function SubscriptionSection() {
                 <ul className="mb-5 space-y-1.5 text-sm text-neutral-600">
                   <li>👤 {formatLimit(TIER_LIMITS_MAP[tier].maxDoctors)} doctors</li>
                   <li>🏥 {formatLimit(TIER_LIMITS_MAP[tier].maxPatients)} patients</li>
-                  <li>📋 {formatLimit(TIER_LIMITS_MAP[tier].maxEncountersPerMonth)} encounters/mo</li>
-                  <li>🤖 {formatLimit(TIER_LIMITS_MAP[tier].maxAiRequestsPerMonth)} AI requests/mo</li>
+                  <li>
+                    📋 {formatLimit(TIER_LIMITS_MAP[tier].maxEncountersPerMonth)} encounters/mo
+                  </li>
+                  <li>
+                    🤖 {formatLimit(TIER_LIMITS_MAP[tier].maxAiRequestsPerMonth)} AI requests/mo
+                  </li>
                 </ul>
                 {!isCurrent && (
                   <button
@@ -249,6 +261,16 @@ export function SubscriptionSection() {
 // Static limits map for display (avoids needing to pass from API for the plan cards)
 const TIER_LIMITS_MAP: Record<Tier, TierLimits> = {
   free: { maxDoctors: 1, maxPatients: 100, maxEncountersPerMonth: 500, maxAiRequestsPerMonth: 0 },
-  basic: { maxDoctors: 5, maxPatients: 1000, maxEncountersPerMonth: Infinity, maxAiRequestsPerMonth: 100 },
-  premium: { maxDoctors: Infinity, maxPatients: Infinity, maxEncountersPerMonth: Infinity, maxAiRequestsPerMonth: Infinity },
+  basic: {
+    maxDoctors: 5,
+    maxPatients: 1000,
+    maxEncountersPerMonth: Infinity,
+    maxAiRequestsPerMonth: 100,
+  },
+  premium: {
+    maxDoctors: Infinity,
+    maxPatients: Infinity,
+    maxEncountersPerMonth: Infinity,
+    maxAiRequestsPerMonth: Infinity,
+  },
 };

@@ -30,6 +30,9 @@ export interface IClinic {
   onboardingCompleted: boolean;
   onboardingCompletedAt?: Date;
   paymentSplitConfig?: PaymentSplitConfig;
+  contactNumber?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const clinicSchema = new Schema<IClinic>(
@@ -66,4 +69,5 @@ const clinicSchema = new Schema<IClinic>(
   { timestamps: true, versionKey: false }
 );
 
-export const ClinicModel = models.Clinic || model<IClinic>('Clinic', clinicSchema);
+export const ClinicModel = (models.Clinic ||
+  model<IClinic>('Clinic', clinicSchema)) as import('mongoose').Model<IClinic>;

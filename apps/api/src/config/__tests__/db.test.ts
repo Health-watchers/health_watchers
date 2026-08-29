@@ -1,5 +1,5 @@
 /**
- * Tests for connectDB retry logic.
+ * Tests for connectDB retry logic, pool metrics, and monitoring lifecycle.
  * Mocks mongoose.connect to fail N times then succeed.
  */
 
@@ -12,6 +12,11 @@ jest.mock('mongoose', () => {
       ...actual.connection,
       readyState: 1,
       on: jest.fn(),
+      pool: {
+        totalConnectionCount: 5,
+        availableConnectionCount: 3,
+        waitQueueSize: 0,
+      },
     },
   };
 });
@@ -68,5 +73,66 @@ describe('connectDB retry logic', () => {
     await promise;
 
     expect(mockConnect).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('getDbStatus', () => {
+  it('returns connected when readyState is 1', async () => {
+    jest.resetModules();
+    const { getDbStatus } = await import('../../config/db');
+    expect(getDbStatus()).toBe('connected');
+  });
+});
+
+describe('getPoolMetrics', () => {
+  it('returns pool metrics with correct shape', async () => {
+    jest.resetModules();
+    const { getPoolMetrics } = await import('../../config/db');
+    const metrics = getPoolMetrics();
+
+    expect(metrics).toMatchObject({
+      status: expect.stringMatching(/^(connected|disconnected|connecting|disconnecting)$/),
+      totalConnections: expect.any(Number),
+      availableConnections: expect.any(Number),
+      waitQueueSize: expect.any(Number),
+      maxPoolSize: expect.any(Number),
+      minPoolSize: expect.any(Number),
+      utilization: expect.any(Number),
+    });
+  });
+
+  it('utilization is between 0 and 1 when pool is populated', async () => {
+    jest.resetModules();
+    const { getPoolMetrics } = await import('../../config/db');
+    const metrics = getPoolMetrics();
+    expect(metrics.utilization).toBeGreaterThanOrEqual(0);
+    expect(metrics.utilization).toBeLessThanOrEqual(1);
+  });
+
+  it('returns zero utilization when pool data is unavailable', async () => {
+    jest.resetModules();
+    // resetModules re-runs the mongoose mock factory, so re-import mongoose to
+    // get the same instance config/db will read, then drop its pool.
+    const freshMongoose = await import('mongoose');
+    (freshMongoose.default as any).connection.pool = undefined;
+    const { getPoolMetrics } = await import('../../config/db');
+    const metrics = getPoolMetrics();
+    expect(metrics.totalConnections).toBe(0);
+    expect(metrics.availableConnections).toBe(0);
+    expect(metrics.waitQueueSize).toBe(0);
+  });
+});
+
+describe('stopPoolMonitoring', () => {
+  it('can be called without error when monitoring is not active', async () => {
+    jest.resetModules();
+    const { stopPoolMonitoring } = await import('../../config/db');
+    expect(() => stopPoolMonitoring()).not.toThrow();
+  });
+
+  it('is exported as a function', async () => {
+    jest.resetModules();
+    const mod = await import('../../config/db');
+    expect(typeof mod.stopPoolMonitoring).toBe('function');
   });
 });
