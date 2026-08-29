@@ -53,7 +53,10 @@ import { icd10Routes } from '../../modules/icd10/icd10.controller';
 import { carePlanRoutes } from '../../modules/care-plans/care-plans.controller';
 import { referralRoutes } from '../../modules/referrals/referrals.controller';
 import { consentRoutes } from '../../modules/consent/consent.controller';
-import { immunizationRoutes, cvxCodesRouter } from '../../modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from '../../modules/immunizations/immunizations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
 import {
   healthLogRouter,
