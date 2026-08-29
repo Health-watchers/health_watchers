@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { API_URL } from '@/lib/api';
+import { downloadCsv } from '@/lib/utils';
 
 interface ImportError {
   row: number;
@@ -26,13 +27,7 @@ export default function PatientImport() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const downloadTemplate = () => {
-    const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'patients-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(CSV_TEMPLATE, 'patients-template.csv');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

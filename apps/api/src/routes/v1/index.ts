@@ -18,7 +18,8 @@
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
  * │                 │ /audit, /audit-logs, /notifications,             │
  * │                 │ /documents, /security/csp-report                 │
- * │ system          │ /metrics, /federation (well-known)               │
+ * │ infrastructure  │ /cdn, /replication                              │
+ * │ system          │ /metrics, /federation (well-known), /health      │
  * └─────────────────┴──────────────────────────────────────────────────┘
  */
 

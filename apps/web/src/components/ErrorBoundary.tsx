@@ -3,6 +3,7 @@
 import React, { Component, ReactNode } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { webConfig } from '@/lib/config';
 
 interface Props {
   children: ReactNode;
@@ -52,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.props.onError?.(error, errorInfo);
 
     // Log to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (webConfig.isDev()) {
       console.error('Error caught by boundary:', error, errorInfo);
     }
   }
@@ -100,7 +101,7 @@ export function ErrorFallback({
   errorInfo,
   errorId,
   onReset,
-  showDetails = process.env.NODE_ENV === 'development',
+  showDetails = webConfig.isDev(),
 }: ErrorFallbackProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
@@ -165,11 +166,11 @@ export function ErrorFallback({
             </a>
           </div>
 
-          {process.env.NEXT_PUBLIC_SUPPORT_EMAIL && (
+          {webConfig.app.supportEmail && (
             <p className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
               Need help?{' '}
               <a
-                href={`mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL}`}
+                href={`mailto:${webConfig.app.supportEmail}`}
                 className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
               >
                 Contact support

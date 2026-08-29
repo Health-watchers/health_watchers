@@ -13,6 +13,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
+import { webConfig } from './config';
 
 // ── Dynamic import helpers ────────────────────────────────────────────────────
 
