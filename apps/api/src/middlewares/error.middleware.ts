@@ -90,11 +90,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (err instanceof ZodError) {
     trackError('low', 'validation');
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
+    const details = err.errors.map((e) => ({ path: e.path.join('.'), message: e.message }));
+    const fieldList = details.map((d) => `"${d.path}"`).join(', ');
     res.status(400).json({
       error: 'ValidationError',
       code: ApiErrorCode.VALIDATION_ERROR,
-      message: 'Request validation failed',
-      details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
+      message: `Request validation failed. Please check the following field(s): ${fieldList}.`,
+      details,
       requestId: req.requestId,
     });
     return;
@@ -104,11 +106,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (err instanceof MongooseError.ValidationError) {
     trackError('low', 'validation');
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
+    const fieldList = details.map((d) => `"${d.path}"`).join(', ');
     logger.info({ ...ctx, details }, 'Mongoose validation error');
     res.status(400).json({
       error: 'ValidationError',
       code: ApiErrorCode.VALIDATION_ERROR,
-      message: err.message,
+      message: `One or more fields are invalid. Please check: ${fieldList}.`,
       details,
       requestId: req.requestId,
     });
@@ -122,7 +125,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(400).json({
       error: 'BadRequest',
       code: ApiErrorCode.BAD_REQUEST,
-      message: `Invalid value for field: ${err.path}`,
+      message: `"${err.path}" is not a valid ID. IDs must be 24-character hexadecimal strings.`,
       requestId: req.requestId,
     });
     return;
@@ -133,11 +136,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (mongoErr?.code === 11000) {
     trackError('low', 'conflict');
     const field = mongoErr.keyValue ? Object.keys(mongoErr.keyValue)[0] : 'field';
+    const value = mongoErr.keyValue?.[field];
+    const valueHint = value ? ` ("${value}")` : '';
     logger.warn({ ...ctx, field }, 'Duplicate key conflict');
     res.status(409).json({
       error: 'Conflict',
       code: ApiErrorCode.CONFLICT,
-      message: `Duplicate value for field: ${field}`,
+      message: `A record with this ${field}${valueHint} already exists. Please use a unique value.`,
       field,
       requestId: req.requestId,
     });
@@ -151,7 +156,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(401).json({
       error: 'TokenExpired',
       code: ApiErrorCode.TOKEN_EXPIRED,
-      message: 'Token has expired',
+      message: 'Your session has expired. Please log in again to continue.',
       requestId: req.requestId,
     });
     return;
@@ -164,7 +169,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     res.status(401).json({
       error: 'InvalidToken',
       code: ApiErrorCode.INVALID_TOKEN,
-      message: 'Invalid token',
+      message: 'The authentication token is invalid. Please log in again.',
       requestId: req.requestId,
     });
     return;
@@ -182,7 +187,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   res.status(500).json({
     error: 'InternalServerError',
     code: ApiErrorCode.INTERNAL_SERVER_ERROR,
-    message: 'An unexpected error occurred',
+    message:
+      'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.',
     requestId: req.requestId,
     ...(stack ? { stack } : {}),
   });

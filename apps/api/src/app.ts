@@ -60,6 +60,19 @@ import {
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
 import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
+import {
+  startFollowUpReminderJob,
+  stopFollowUpReminderJob,
+} from './modules/encounters/follow-up-reminder-job';
+import { warmCache, registerWarmup } from './services/cache.service';
+
+// ── #1071 Cache warm-up registrations ─────────────────────────────────────────
+// Register a loader for the first page of active patients per clinic.
+// warmCache() is called after DB connects in startServer(); until then only
+// the registry is populated (no DB access here at module load time).
+// Individual clinic registrations happen inside startServer() once the DB
+// pool is ready and the clinic list is available.
+
 import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
@@ -275,6 +288,46 @@ async function startServer() {
   startMfaGracePeriodJob();
   startFollowUpReminderJob();
   startRetryWorker();
+
+  // #1071 — Register per-clinic patient-list cache warmup entries now that the
+  // DB pool is ready, then warm all registered keys that are currently cold.
+  try {
+    const { PatientModel } = await import('./modules/patients/models/patient.model');
+    const { ClinicModel } = await import('./modules/clinics/clinic.model');
+    const activeClinics = await ClinicModel.find({ isActive: true }).select('_id').lean();
+    for (const clinic of activeClinics) {
+      const clinicId = String(clinic._id);
+      registerWarmup({
+        key: `patients:list:${clinicId}:page=1:limit=20`,
+        ttlSeconds: 60,
+        loader: async () => {
+          const { paginate } = await import('./utils/paginate');
+          const { toPatientResponse } = await import('./modules/patients/patients.transformer');
+          const result = await paginate(
+            PatientModel,
+            { clinicId, isActive: true },
+            1,
+            20,
+            { createdAt: -1 },
+            {
+              projection: {
+                systemId: 1, firstName: 1, lastName: 1, searchName: 1,
+                dateOfBirth: 1, sex: 1, contactNumber: 1, clinicId: 1,
+                isActive: 1, riskLevel: 1, riskScore: 1, createdAt: 1,
+              },
+              hint: 'clinicId_1_isActive_1',
+            }
+          );
+          return { data: result.data.map(toPatientResponse), pagination: result.meta };
+        },
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, '[cache] failed to register patient-list warmup entries');
+  }
+
+  // Warm the cache — fills only cold (missing) keys, safe to run every startup
+  warmCache().catch((err) => logger.warn({ err }, '[cache] startup warmup failed'));
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {

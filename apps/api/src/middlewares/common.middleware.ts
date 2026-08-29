@@ -1,7 +1,7 @@
 /**
  * common.middleware.ts
  *
- * Issue #929 — Extract Common Middleware
+ * Issue #929, #1053 — Extract Common Middleware
  *
  * Centralises middleware patterns that were previously duplicated across route
  * controllers.  Import from here instead of re-implementing in each module.
@@ -11,6 +11,10 @@
  *  - requireClinicMatch — assert that a resource's clinicId matches the caller
  *  - parsePaginationQuery — unified pagination + sort query parser
  *  - requireResourceOwner — generic ownership guard (userId or clinicId match)
+ *  - requireAuthentication — ensure user is authenticated
+ *  - requireAnyRole — require at least one of the specified roles
+ *  - conditionalMiddleware — apply middleware based on a condition
+ *  - composeMiddleware — compose multiple middleware into one
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -311,4 +315,148 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
     Object.assign(req.query, result.data as Record<string, string>);
     next();
   };
+}
+
+// ---------------------------------------------------------------------------
+// requireAuthentication — simplified auth check
+// ---------------------------------------------------------------------------
+
+/**
+ * Middleware that ensures the request has an authenticated user.
+ * Use this when you just need to verify authentication without role checks.
+ *
+ * Usage:
+ *   router.get('/profile', requireAuthentication, handler);
+ */
+export function requireAuthentication(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication required',
+    });
+    return;
+  }
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// requireAnyRole — flexible role checking
+// ---------------------------------------------------------------------------
+
+/**
+ * Middleware that requires the user to have at least one of the specified roles.
+ * More flexible than requireRoles which checks for exact role match.
+ *
+ * Usage:
+ *   router.post('/prescribe', requireAnyRole(['DOCTOR', 'NURSE']), handler);
+ */
+export function requireAnyRole(roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    if (!roles.includes(req.user.role)) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: `Access denied. Required roles: ${roles.join(', ')}`,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// conditionalMiddleware — apply middleware based on condition
+// ---------------------------------------------------------------------------
+
+/**
+ * Conditionally applies middleware based on a predicate function.
+ * Useful for applying middleware only in certain environments or conditions.
+ *
+ * Usage:
+ *   router.get('/data',
+ *     conditionalMiddleware(
+ *       () => process.env.NODE_ENV === 'production',
+ *       rateLimitMiddleware
+ *     ),
+ *     handler
+ *   );
+ */
+export function conditionalMiddleware(
+  predicate: (req: Request) => boolean,
+  middleware: (req: Request, res: Response, next: NextFunction) => void
+) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (predicate(req)) {
+      middleware(req, res, next);
+    } else {
+      next();
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// composeMiddleware — compose multiple middleware into one
+// ---------------------------------------------------------------------------
+
+/**
+ * Composes multiple middleware functions into a single middleware.
+ * Middleware are executed in order, and any middleware that doesn't call next()
+ * will stop the chain.
+ *
+ * Usage:
+ *   const authAndValidate = composeMiddleware(
+ *     authenticate,
+ *     requireRoles('DOCTOR'),
+ *     validateBody(schema)
+ *   );
+ *   router.post('/prescriptions', authAndValidate, handler);
+ */
+export function composeMiddleware(
+  ...middlewares: Array<(req: Request, res: Response, next: NextFunction) => void>
+) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    let index = 0;
+
+    const runNext = (): void => {
+      if (index >= middlewares.length) {
+        next();
+        return;
+      }
+
+      const middleware = middlewares[index++];
+      try {
+        middleware(req, res, runNext);
+      } catch (error) {
+        next(error);
+      }
+    };
+
+    runNext();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ensureRequestId — guarantee requestId exists
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensures that req.requestId exists, generating one if not present.
+ * Useful as a fallback for routes that may not have correlation middleware.
+ *
+ * Usage:
+ *   router.get('/health', ensureRequestId, handler);
+ */
+export function ensureRequestId(req: Request, res: Response, next: NextFunction): void {
+  if (!req.requestId) {
+    req.requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  next();
 }
