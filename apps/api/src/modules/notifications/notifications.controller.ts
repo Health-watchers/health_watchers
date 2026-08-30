@@ -33,7 +33,9 @@ router.get(
       status: 'success',
       data: notifications,
       pagination: {
-        page, limit, total,
+        page,
+        limit,
+        total,
         totalPages: Math.ceil(total / limit),
         hasNext: page < Math.ceil(total / limit),
         hasPrev: page > 1,

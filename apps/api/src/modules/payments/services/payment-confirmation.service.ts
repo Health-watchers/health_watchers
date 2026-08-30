@@ -97,7 +97,10 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
 
   // Create in-app notifications for clinic admins
   try {
-    const admins = await UserModel.find({ clinicId, role: { $in: ['CLINIC_ADMIN', 'SUPER_ADMIN'] } })
+    const admins = await UserModel.find({
+      clinicId,
+      role: { $in: ['CLINIC_ADMIN', 'SUPER_ADMIN'] },
+    })
       .select('_id')
       .lean();
     for (const admin of admins) {
@@ -108,7 +111,9 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
         title: 'Payment Confirmed',
         message: `Payment of ${updated.amount} ${updated.assetCode} confirmed on Stellar.`,
         metadata: { intentId, txHash, amount: updated.amount },
-      }).catch(() => {/* non-critical */});
+      }).catch(() => {
+        /* non-critical */
+      });
     }
   } catch {
     /* non-critical */
@@ -133,7 +138,9 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
           usdEquivalent,
           confirmedAt: updated.confirmedAt,
         },
-      }).catch(() => {/* non-critical */});
+      }).catch(() => {
+        /* non-critical */
+      });
     }
   } catch {
     /* non-critical */

@@ -36,7 +36,9 @@ export function buildEncounterWithVitals(overrides: Partial<Encounter> = {}): Pa
   });
 }
 
-export function buildEncounterWithDiagnosis(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+export function buildEncounterWithDiagnosis(
+  overrides: Partial<Encounter> = {}
+): Partial<Encounter> {
   return buildEncounter({
     diagnosis: [
       { code: 'J06.9', description: 'Acute upper respiratory infection', isPrimary: true },
@@ -54,7 +56,14 @@ export function buildEncounterWithDiagnosis(overrides: Partial<Encounter> = {}):
 export function buildEncounterWithBilling(overrides: Partial<Encounter> = {}): Partial<Encounter> {
   return buildEncounter({
     billing: {
-      cptCodes: [{ code: '99213', description: 'Office visit, established patient', units: 1, fee: '150.00' }],
+      cptCodes: [
+        {
+          code: '99213',
+          description: 'Office visit, established patient',
+          units: 1,
+          fee: '150.00',
+        },
+      ],
       billingStatus: 'unbilled',
       totalFee: '150.00',
     },
@@ -88,6 +97,9 @@ export function buildEmergencyEncounter(overrides: Partial<Encounter> = {}): Par
   });
 }
 
-export function buildEncounterBatch(count: number, overrides: Partial<Encounter> = {}): Partial<Encounter>[] {
+export function buildEncounterBatch(
+  count: number,
+  overrides: Partial<Encounter> = {}
+): Partial<Encounter>[] {
   return Array.from({ length: count }, () => buildEncounter(overrides));
 }

@@ -33,11 +33,11 @@ export function HealthLogTab({ patientId }: { patientId: string }) {
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-neutral-100 text-xs font-medium tracking-wide text-neutral-500 uppercase">
-              <th className="pr-4 pb-2">Date</th>
-              <th className="pr-4 pb-2">Metric</th>
-              <th className="pr-4 pb-2">Value</th>
-              <th className="pr-4 pb-2">Notes</th>
+            <tr className="border-b border-neutral-100 text-xs font-medium uppercase tracking-wide text-neutral-500">
+              <th className="pb-2 pr-4">Date</th>
+              <th className="pb-2 pr-4">Metric</th>
+              <th className="pb-2 pr-4">Value</th>
+              <th className="pb-2 pr-4">Notes</th>
               <th className="pb-2">Status</th>
             </tr>
           </thead>
@@ -47,7 +47,7 @@ export function HealthLogTab({ patientId }: { patientId: string }) {
                 <td className="py-2 pr-4 text-neutral-500">
                   {new Date(l.loggedAt).toLocaleString()}
                 </td>
-                <td className="py-2 pr-4 text-neutral-700 capitalize">
+                <td className="py-2 pr-4 capitalize text-neutral-700">
                   {l.metricType.replace('_', ' ')}
                 </td>
                 <td className="py-2 pr-4 font-medium text-neutral-900">

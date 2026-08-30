@@ -62,7 +62,7 @@ export function ActionItems({ items, loading }: ActionItemsProps) {
       {pending.map((item) => (
         <div
           key={item.id}
-          className={`flex gap-3 border-l-4 rounded-r-lg p-3 dark:border-neutral-700 ${getPriorityColor(item.priority)}`}
+          className={`flex gap-3 rounded-r-lg border-l-4 p-3 dark:border-neutral-700 ${getPriorityColor(item.priority)}`}
         >
           <input
             type="checkbox"
@@ -70,7 +70,7 @@ export function ActionItems({ items, loading }: ActionItemsProps) {
             className="mt-0.5 h-4 w-4 flex-shrink-0 accent-primary-600"
             aria-label={`Mark ${item.title} as complete`}
           />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-medium text-neutral-900 dark:text-neutral-50">{item.title}</p>
             <p className="text-xs text-neutral-600 dark:text-neutral-400">{item.description}</p>
             {item.dueDate && (

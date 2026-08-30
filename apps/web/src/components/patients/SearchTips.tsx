@@ -21,7 +21,9 @@ export function SearchTips() {
         <div className="absolute right-0 top-8 z-10 w-64 rounded-lg border border-neutral-200 bg-white p-4 shadow-lg dark:border-neutral-700 dark:bg-neutral-800">
           <h3 className="font-semibold text-neutral-900 dark:text-neutral-50">Search Tips</h3>
           <ul className="mt-2 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
-            <li>• <kbd>Ctrl+/</kbd> Focus search box</li>
+            <li>
+              • <kbd>Ctrl+/</kbd> Focus search box
+            </li>
             <li>• Search by name, ID, or condition</li>
             <li>• Use filters for complex queries</li>
             <li>• Results update in real-time</li>

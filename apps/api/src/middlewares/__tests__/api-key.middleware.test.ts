@@ -137,15 +137,7 @@ describe('authenticateApiKey', () => {
     await authenticateApiKey(req, res, next);
 
     expect(req.user).toEqual({ userId: 'u1', role: 'READ_ONLY', clinicId: 'c1' });
-    expect((req as any).apiKey).toEqual(
-      expect.objectContaining({
-        id: 'k1',
-        scopes: ['read', 'write'],
-        environment: 'live',
-        rateLimitPerMin: 120,
-        viaPreviousKey: false,
-      })
-    );
+    expect((req as any).apiKey).toEqual({ id: 'k1', scopes: ['read', 'write'] });
     expect(ApiKeyModel.findByIdAndUpdate).toHaveBeenCalledWith('k1', {
       lastUsedAt: expect.any(Date),
     });

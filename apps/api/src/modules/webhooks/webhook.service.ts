@@ -149,7 +149,7 @@ export async function enqueueWebhookDelivery(
   return delivery;
 }
 
-async function executeDelivery(delivery: DeliveryDoc, secret: string): Promise<void> {
+async function executeDelivery(delivery: IWebhookDelivery, signature: string): Promise<void> {
   const webhook = await WebhookModel.findById(delivery.webhookId);
   const maxAttempts = webhook?.retryConfig?.maxRetries ?? 3;
   const initialDelay = webhook?.retryConfig?.initialDelayMs ?? 1000;

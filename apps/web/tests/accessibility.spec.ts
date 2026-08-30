@@ -151,7 +151,9 @@ test.describe('WCAG 2.1 AA Accessibility — Authenticated Pages', () => {
       expect(modalContainsFocus).toBeTruthy();
 
       const closeButton = page
-        .locator('[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]')
+        .locator(
+          '[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]'
+        )
         .first();
       if (await closeButton.isVisible()) {
         await closeButton.click();

@@ -102,7 +102,7 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                   <th
                     key={col}
                     scope="col"
-                    className={`px-4 py-3 text-xs font-medium tracking-wide text-neutral-500 uppercase ${col === 'Actions' ? 'text-right' : 'text-left'}`}
+                    className={`px-4 py-3 text-xs font-medium uppercase tracking-wide text-neutral-500 ${col === 'Actions' ? 'text-right' : 'text-left'}`}
                   >
                     {col}
                   </th>
@@ -141,16 +141,12 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                       <span className="text-neutral-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs whitespace-nowrap text-neutral-500">
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-500">
                     {p.createdAt ? formatDate(p.createdAt) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setTimelineTarget(p)}
-                      >
+                      <Button size="sm" variant="secondary" onClick={() => setTimelineTarget(p)}>
                         Timeline
                       </Button>
 
@@ -165,21 +161,13 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                       )}
 
                       {canFileDispute(p.status) && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => setDisputeTarget(p)}
-                        >
+                        <Button size="sm" variant="secondary" onClick={() => setDisputeTarget(p)}>
                           File dispute
                         </Button>
                       )}
 
                       {p.status === 'pending' && (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => setConfirmTarget(p.id)}
-                        >
+                        <Button size="sm" variant="primary" onClick={() => setConfirmTarget(p.id)}>
                           Confirm
                         </Button>
                       )}
@@ -189,7 +177,7 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                           href={`https://stellar.expert/explorer/${network}/tx/${p.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary-500 hover:bg-primary-50 focus-visible:ring-primary-500 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2"
+                          className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-500 transition-colors hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                         >
                           View on Explorer
                           <svg

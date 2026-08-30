@@ -78,7 +78,7 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
       />
 
       {isError ? (
-        <div className="border-danger-200 bg-danger-50 text-danger-700 rounded-lg border p-4 text-sm dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400">
+        <div className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 rounded-lg border p-4 text-sm">
           {labels.apiError}
         </div>
       ) : (
@@ -112,7 +112,11 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
-              <HealthScoreCard score={isLoading ? 0 : (stats?.healthScore ?? 75)} trend="up" trendPercent={5} />
+              <HealthScoreCard
+                score={isLoading ? 0 : (stats?.healthScore ?? 75)}
+                trend="up"
+                trendPercent={5}
+              />
 
               <div className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-800">
                 <h3 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-50">

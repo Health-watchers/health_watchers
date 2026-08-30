@@ -25,9 +25,9 @@ jest.mock('../health-check.service', () => ({
     },
     summary: { total: 2, healthy: 2, degraded: 0, unhealthy: 0 },
   }),
-  getHealthHistory: jest.fn().mockReturnValue([
-    { timestamp: '2025-01-15T10:00:00.000Z', status: 'healthy', services: {} },
-  ]),
+  getHealthHistory: jest
+    .fn()
+    .mockReturnValue([{ timestamp: '2025-01-15T10:00:00.000Z', status: 'healthy', services: {} }]),
   getServiceDependencyMap: jest.fn().mockReturnValue({
     api: ['mongodb', 'redis'],
     payments: ['mongodb', 'redis', 'stellarHorizon'],

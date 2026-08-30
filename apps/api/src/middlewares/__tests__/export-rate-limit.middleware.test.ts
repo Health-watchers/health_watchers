@@ -51,9 +51,7 @@ describe('exportRateLimit', () => {
 
     expect(res.status).toHaveBeenCalledWith(429);
     expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'TooManyRequests' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'TooManyRequests' }));
   });
 
   it('tracks separate clinics independently', () => {

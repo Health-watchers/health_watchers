@@ -21,7 +21,11 @@ export class AuditEncryptionService {
 
     try {
       const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv(this.algorithm, Buffer.from(this.encryptionKey, 'hex'), iv);
+      const cipher = crypto.createCipheriv(
+        this.algorithm,
+        Buffer.from(this.encryptionKey, 'hex'),
+        iv
+      );
 
       const jsonData = JSON.stringify(data);
       let encrypted = cipher.update(jsonData, 'utf8', 'hex');
@@ -43,11 +47,7 @@ export class AuditEncryptionService {
   /**
    * Decrypt audit data
    */
-  decrypt(
-    encrypted: string,
-    iv: string,
-    authTag: string
-  ): Record<string, any> {
+  decrypt(encrypted: string, iv: string, authTag: string): Record<string, any> {
     if (!this.encryptionKey) {
       throw new Error('AUDIT_ENCRYPTION_KEY not configured');
     }

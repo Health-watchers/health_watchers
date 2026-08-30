@@ -170,7 +170,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
             id="language-select"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="focus-visible:ring-primary-500 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
           >
             <option value="en">English</option>
             <option value="fr">Français (French)</option>
@@ -193,9 +193,9 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
                 onClick={() => handleThemeChange(option)}
                 aria-pressed={theme === option}
                 className={[
-                  'focus-visible:ring-primary-500 flex-1 rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2',
+                  'flex-1 rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
                   theme === option
-                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                    ? 'dark:text-primary-400 border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30'
                     : 'border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
                 ].join(' ')}
               >
@@ -230,7 +230,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
               role="switch"
               checked={emailNotifications}
               onChange={(e) => handleEmailToggle(e.target.checked)}
-              className="accent-primary-500 h-4 w-4 cursor-pointer"
+              className="h-4 w-4 cursor-pointer accent-primary-500"
               aria-checked={emailNotifications}
             />
           </div>
@@ -248,7 +248,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
               role="switch"
               checked={inAppNotifications}
               onChange={(e) => handleInAppToggle(e.target.checked)}
-              className="accent-primary-500 h-4 w-4 cursor-pointer"
+              className="h-4 w-4 cursor-pointer accent-primary-500"
               aria-checked={inAppNotifications}
             />
           </div>
@@ -277,7 +277,7 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
                   role="switch"
                   checked={notifTypes[type]}
                   onChange={(e) => handleTypeToggle(type, e.target.checked)}
-                  className="accent-primary-500 h-4 w-4 cursor-pointer"
+                  className="h-4 w-4 cursor-pointer accent-primary-500"
                   aria-checked={notifTypes[type]}
                 />
               </div>

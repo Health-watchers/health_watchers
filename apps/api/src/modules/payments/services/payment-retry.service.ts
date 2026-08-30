@@ -43,10 +43,8 @@ export async function retryFailedPaymentConfirmations(): Promise<void> {
       // Verify basic fields match before re-confirming
       const amountMatch =
         parseFloat(tx.amount).toFixed(7) === parseFloat(payment.amount).toFixed(7);
-      const destMatch =
-        tx.to.toLowerCase() === payment.destination.toLowerCase();
-      const assetMatch =
-        tx.asset.split(':')[0].toUpperCase() === payment.assetCode.toUpperCase();
+      const destMatch = tx.to.toLowerCase() === payment.destination.toLowerCase();
+      const assetMatch = tx.asset.split(':')[0].toUpperCase() === payment.assetCode.toUpperCase();
 
       if (!amountMatch || !destMatch || !assetMatch) {
         logger.warn(

@@ -31,7 +31,7 @@ describe('registerGracefulShutdown', () => {
     const server = createServer();
     const stopJob = jest.fn();
     expect(() =>
-      registerGracefulShutdown(server, { stopJobs: [stopJob], timeoutMs: 100 }),
+      registerGracefulShutdown(server, { stopJobs: [stopJob], timeoutMs: 100 })
     ).not.toThrow();
     server.close();
   });

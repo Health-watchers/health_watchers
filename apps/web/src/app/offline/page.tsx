@@ -8,7 +8,7 @@ export default function OfflinePage() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      setTimeout(() => window.location.href = '/', 1000);
+      setTimeout(() => (window.location.href = '/'), 1000);
     };
 
     window.addEventListener('online', handleOnline);
@@ -30,7 +30,12 @@ export default function OfflinePage() {
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
           <h1 className="mb-2 text-2xl font-bold text-green-900 dark:text-green-100">
@@ -66,8 +71,8 @@ export default function OfflinePage() {
         </h1>
 
         <p className="mb-6 text-neutral-600 dark:text-neutral-400">
-          You've lost your internet connection, but your changes are safe and will sync automatically
-          when you're back online.
+          You've lost your internet connection, but your changes are safe and will sync
+          automatically when you're back online.
         </p>
 
         <div className="mb-8 space-y-4 rounded-lg border border-orange-200 bg-orange-50 p-4 text-left dark:border-orange-900/30 dark:bg-orange-900/10">
@@ -97,7 +102,7 @@ export default function OfflinePage() {
           </button>
 
           <p className="text-xs text-neutral-600 dark:text-neutral-400">
-            <span className="inline-block h-2 w-2 rounded-full bg-orange-500 animate-pulse align-middle mr-2"></span>
+            <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-orange-500 align-middle"></span>
             Monitoring connection... You'll be redirected when online
           </p>
         </div>

@@ -215,7 +215,7 @@ export function CDSRuleForm({ initialRule, onSubmit, onCancel, isLoading }: CDSR
         <button
           type="submit"
           disabled={isLoading}
-          className="bg-primary-600 hover:bg-primary-700 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
           {isLoading ? 'Saving…' : 'Save Rule'}
         </button>

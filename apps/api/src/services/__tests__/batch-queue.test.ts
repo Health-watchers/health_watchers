@@ -29,13 +29,18 @@ const mockQueue = {
   getFailedCount: jest.fn().mockResolvedValue(0),
 };
 
-jest.mock('bullmq', () => ({
-  Queue: jest.fn().mockImplementation(() => mockQueue),
-  Worker: jest.fn().mockImplementation(() => ({
-    on: jest.fn(),
-  })),
-  Job: jest.fn(),
-}));
+// bullmq is not installed in this workspace, so the mock must be virtual.
+jest.mock(
+  'bullmq',
+  () => ({
+    Queue: jest.fn().mockImplementation(() => mockQueue),
+    Worker: jest.fn().mockImplementation(() => ({
+      on: jest.fn(),
+    })),
+    Job: jest.fn(),
+  }),
+  { virtual: true }
+);
 
 jest.mock('ioredis', () =>
   jest.fn().mockImplementation(() => ({
@@ -83,7 +88,8 @@ describe('ETA computation (sliding window)', () => {
   it('calculates a positive ETA from two checkpoints', () => {
     // Simulate processing 500 records over 1 second → throughput = 500 rec/s
     const now = Date.now();
-    jest.spyOn(Date, 'now')
+    jest
+      .spyOn(Date, 'now')
       .mockReturnValueOnce(now)
       .mockReturnValueOnce(now + 1000);
 

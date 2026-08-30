@@ -23,13 +23,16 @@ export class CoSignatureService {
   ): boolean {
     const rules = clinicRules ?? DEFAULT_RULES;
     switch (userRole) {
-      case 'ASSISTANT': return rules.ASSISTANT;
+      case 'ASSISTANT':
+        return rules.ASSISTANT;
       case 'NURSE':
         if (rules.NURSE === 'always') return true;
         if (rules.NURSE === 'prescriptions_only') return hasPrescriptions;
         return false;
-      case 'DOCTOR': return rules.DOCTOR;
-      default: return false;
+      case 'DOCTOR':
+        return rules.DOCTOR;
+      default:
+        return false;
     }
   }
 
@@ -79,7 +82,9 @@ export class CoSignatureService {
       message: 'An encounter requires your co-signature.',
       link: `/encounters?cosign=${encounterId}`,
       metadata: payload,
-    }).catch(() => {/* non-fatal */});
+    }).catch(() => {
+      /* non-fatal */
+    });
 
     return encounter;
   }
@@ -88,8 +93,10 @@ export class CoSignatureService {
   static async approveCoSignature(encounterId: string, doctorId: string, notes?: string) {
     const encounter = await EncounterModel.findById(encounterId);
     if (!encounter) throw new Error('Encounter not found');
-    if (!(encounter as any).requiresCoSignature) throw new Error('This encounter does not require co-signature');
-    if ((encounter as any).coSignatureStatus !== 'pending') throw new Error('This encounter has already been co-signed');
+    if (!(encounter as any).requiresCoSignature)
+      throw new Error('This encounter does not require co-signature');
+    if ((encounter as any).coSignatureStatus !== 'pending')
+      throw new Error('This encounter has already been co-signed');
 
     encounter.coSignedBy = new Types.ObjectId(doctorId);
     encounter.coSignedAt = new Date();
@@ -98,7 +105,9 @@ export class CoSignatureService {
     encounter.status = 'closed';
     await encounter.save();
 
-    const requestingDoctorId = String((encounter as any).coSignatureRequestedBy ?? encounter.attendingDoctorId);
+    const requestingDoctorId = String(
+      (encounter as any).coSignatureRequestedBy ?? encounter.attendingDoctorId
+    );
     const clinicId = String(encounter.clinicId);
     const payload = { encounterId, coSignedBy: doctorId };
 
@@ -112,7 +121,9 @@ export class CoSignatureService {
       message: 'Your encounter has been co-signed.',
       link: `/encounters`,
       metadata: payload,
-    }).catch(() => {/* non-fatal */});
+    }).catch(() => {
+      /* non-fatal */
+    });
 
     return encounter;
   }
@@ -121,8 +132,10 @@ export class CoSignatureService {
   static async rejectCoSignature(encounterId: string, doctorId: string, notes: string) {
     const encounter = await EncounterModel.findById(encounterId);
     if (!encounter) throw new Error('Encounter not found');
-    if (!(encounter as any).requiresCoSignature) throw new Error('This encounter does not require co-signature');
-    if ((encounter as any).coSignatureStatus !== 'pending') throw new Error('This encounter has already been co-signed');
+    if (!(encounter as any).requiresCoSignature)
+      throw new Error('This encounter does not require co-signature');
+    if ((encounter as any).coSignatureStatus !== 'pending')
+      throw new Error('This encounter has already been co-signed');
     if (!notes) throw new Error('Rejection notes are required');
 
     encounter.coSignedBy = new Types.ObjectId(doctorId);
@@ -132,7 +145,9 @@ export class CoSignatureService {
     encounter.status = 'open';
     await encounter.save();
 
-    const requestingDoctorId = String((encounter as any).coSignatureRequestedBy ?? encounter.attendingDoctorId);
+    const requestingDoctorId = String(
+      (encounter as any).coSignatureRequestedBy ?? encounter.attendingDoctorId
+    );
     const clinicId = String(encounter.clinicId);
     const payload = { encounterId, rejectedBy: doctorId, notes };
 
@@ -146,7 +161,9 @@ export class CoSignatureService {
       message: `Your encounter was returned for revision: ${notes}`,
       link: `/encounters`,
       metadata: payload,
-    }).catch(() => {/* non-fatal */});
+    }).catch(() => {
+      /* non-fatal */
+    });
 
     return encounter;
   }

@@ -51,13 +51,7 @@ export function DrawerMenu({
 
   return (
     <>
-      {isOpen && (
-        <TouchableOpacity
-          style={styles.overlay}
-          onPress={onClose}
-          activeOpacity={0}
-        />
-      )}
+      {isOpen && <TouchableOpacity style={styles.overlay} onPress={onClose} activeOpacity={0} />}
       <Animated.View
         style={[
           styles.drawer,
@@ -69,7 +63,10 @@ export function DrawerMenu({
         <SafeAreaView style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{headerTitle}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
               <Text style={styles.closeButton}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -77,9 +74,7 @@ export function DrawerMenu({
           {userInfo && (
             <View style={styles.userInfo}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {userInfo.name.charAt(0).toUpperCase()}
-                </Text>
+                <Text style={styles.avatarText}>{userInfo.name.charAt(0).toUpperCase()}</Text>
               </View>
               <View style={styles.userDetails}>
                 <Text style={styles.userName}>{userInfo.name}</Text>

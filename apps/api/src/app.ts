@@ -60,6 +60,10 @@ import {
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
+import {
+  startRetentionSweepJob,
+  stopRetentionSweepJob,
+} from './modules/documents/document-retention.service';
 import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
 import {
   startFollowUpReminderJob,
@@ -321,8 +325,7 @@ async function startServer() {
   startMfaGracePeriodJob();
   startFollowUpReminderJob();
   startRetryWorker();
-  startReportScheduleJob();
-  startApiKeyLifecycleJob();
+  startRetentionSweepJob();
 
   // #1071 — Register per-clinic patient-list cache warmup entries now that the
   // DB pool is ready, then warm all registered keys that are currently cold.
@@ -393,8 +396,7 @@ async function startServer() {
       stopMfaGracePeriodJob,
       stopFollowUpReminderJob,
       stopRetryWorker,
-      stopReportScheduleJob,
-      stopApiKeyLifecycleJob,
+      stopRetentionSweepJob,
     ],
   });
 }

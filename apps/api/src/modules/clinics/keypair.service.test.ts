@@ -174,7 +174,9 @@ describe('rotateClinicKeypair', () => {
     mockKeypairFindByIdAndUpdate = jest.fn().mockResolvedValue({});
     mockKeypairFindByIdAndDelete = jest.fn().mockResolvedValue({});
     mockKeypairUpdateMany = jest.fn().mockResolvedValue({});
-    mockTransferBalance = jest.fn().mockResolvedValue({ transferred: true, amount: '10', hash: 'txhash' });
+    mockTransferBalance = jest
+      .fn()
+      .mockResolvedValue({ transferred: true, amount: '10', hash: 'txhash' });
     mockFundAccount = jest.fn().mockResolvedValue({ funded: true });
 
     deps = {
@@ -218,7 +220,7 @@ describe('rotateClinicKeypair', () => {
     await rotateClinicKeypair(CLINIC_ID, deps);
     expect(mockKeypairUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ clinicId: CLINIC_ID, isActive: true }),
-      { isActive: false },
+      { isActive: false }
     );
   });
 

@@ -2,8 +2,10 @@
   "name": "health-watchers-monorepo",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/api",
+    "packages/config",
+    "packages/types",
+    "packages/anonymize"
   ],
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

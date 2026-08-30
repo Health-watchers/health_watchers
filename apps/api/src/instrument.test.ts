@@ -3,9 +3,19 @@ jest.mock('@sentry/profiling-node', () => ({ nodeProfilingIntegration: jest.fn()
 
 // Mirror the scrubbing logic from instrument.ts
 const PHI_KEYS = [
-  'firstName', 'lastName', 'fullName', 'name',
-  'dateOfBirth', 'dob', 'phone', 'email', 'address',
-  'patientId', 'mrn', 'ssn', 'insuranceId',
+  'firstName',
+  'lastName',
+  'fullName',
+  'name',
+  'dateOfBirth',
+  'dob',
+  'phone',
+  'email',
+  'address',
+  'patientId',
+  'mrn',
+  'ssn',
+  'insuranceId',
 ];
 
 function redactKeys(obj: unknown): unknown {
@@ -17,7 +27,9 @@ function redactKeys(obj: unknown): unknown {
   return result;
 }
 
-function scrubPHI<T extends { request?: { data?: unknown }; extra?: Record<string, unknown> }>(event: T): T {
+function scrubPHI<T extends { request?: { data?: unknown }; extra?: Record<string, unknown> }>(
+  event: T
+): T {
   if (event.request?.data) event.request.data = redactKeys(event.request.data);
   if (event.extra) event.extra = redactKeys(event.extra) as Record<string, unknown>;
   return event;
@@ -33,7 +45,10 @@ describe('Sentry PHI scrubbing (beforeSend)', () => {
 
   it('redacts nested PHI fields', () => {
     const result = scrubPHI({ request: { data: { patient: { email: 'a@b.com', age: 30 } } } });
-    const patient = ((result.request!.data as Record<string, unknown>).patient) as Record<string, unknown>;
+    const patient = (result.request!.data as Record<string, unknown>).patient as Record<
+      string,
+      unknown
+    >;
     expect(patient.email).toBe('[Redacted]');
     expect(patient.age).toBe(30);
   });

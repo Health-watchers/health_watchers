@@ -44,7 +44,13 @@ describe('Database Transactions (ACID)', () => {
       await session.withTransaction(async () => {
         const patient = await PatientModel.create([buildPatient({ clinicId })], { session });
         await EncounterModel.create(
-          [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient[0]!._id as mongoose.Types.ObjectId })],
+          [
+            buildEncounter({
+              clinicId,
+              attendingDoctorId: doctorId,
+              patientId: patient[0]!._id as mongoose.Types.ObjectId,
+            }),
+          ],
           { session }
         );
       });
@@ -84,7 +90,9 @@ describe('Database Transactions (ACID)', () => {
 
       await expect(
         session.withTransaction(async () => {
-          await PaymentRecordModel.create([{ ...buildPayment(), intentId: payment.intentId }], { session });
+          await PaymentRecordModel.create([{ ...buildPayment(), intentId: payment.intentId }], {
+            session,
+          });
         })
       ).rejects.toThrow();
 
@@ -99,7 +107,9 @@ describe('Database Transactions (ACID)', () => {
       const patient = buildPatient({ clinicId });
       await PatientModel.create(patient);
 
-      await expect(PatientModel.create({ ...buildPatient({ clinicId }), systemId: patient.systemId })).rejects.toThrow();
+      await expect(
+        PatientModel.create({ ...buildPatient({ clinicId }), systemId: patient.systemId })
+      ).rejects.toThrow();
 
       const count = await PatientModel.countDocuments({ systemId: patient.systemId });
       expect(count).toBe(1);
@@ -151,11 +161,22 @@ describe('Database Transactions (ACID)', () => {
       await session.withTransaction(async () => {
         const [patient] = await PatientModel.create([buildPatient({ clinicId })], { session });
         const [encounter] = await EncounterModel.create(
-          [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient!._id as mongoose.Types.ObjectId })],
+          [
+            buildEncounter({
+              clinicId,
+              attendingDoctorId: doctorId,
+              patientId: patient!._id as mongoose.Types.ObjectId,
+            }),
+          ],
           { session }
         );
         await PaymentRecordModel.create(
-          [buildPayment({ clinicId: clinicStr, encounterId: (encounter!._id as mongoose.Types.ObjectId).toString() })],
+          [
+            buildPayment({
+              clinicId: clinicStr,
+              encounterId: (encounter!._id as mongoose.Types.ObjectId).toString(),
+            }),
+          ],
           { session }
         );
       });
@@ -180,7 +201,13 @@ describe('Database Transactions (ACID)', () => {
         session.withTransaction(async () => {
           const [patient] = await PatientModel.create([buildPatient({ clinicId })], { session });
           await EncounterModel.create(
-            [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient!._id as mongoose.Types.ObjectId })],
+            [
+              buildEncounter({
+                clinicId,
+                attendingDoctorId: doctorId,
+                patientId: patient!._id as mongoose.Types.ObjectId,
+              }),
+            ],
             { session }
           );
           await PaymentRecordModel.create(
