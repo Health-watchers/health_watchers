@@ -22,9 +22,7 @@ export async function up(db: Db): Promise<void> {
   // Create shard health check collection
   await db.createCollection('shard_health_checks');
 
-  await db
-    .collection('shard_health_checks')
-    .createIndex({ shardName: 1, timestamp: -1 });
+  await db.collection('shard_health_checks').createIndex({ shardName: 1, timestamp: -1 });
   await db
     .collection('shard_health_checks')
     .createIndex({ timestamp: 1 }, { expireAfterSeconds: 604800 }); // 7 days
@@ -35,9 +33,7 @@ export async function up(db: Db): Promise<void> {
   await db
     .collection('chunk_migrations')
     .createIndex({ collectionName: 1, status: 1, createdAt: -1 });
-  await db
-    .collection('chunk_migrations')
-    .createIndex({ sourceShardId: 1, destinationShardId: 1 });
+  await db.collection('chunk_migrations').createIndex({ sourceShardId: 1, destinationShardId: 1 });
 
   // Create indexes on existing collections to support sharding
   // These would be called after sharding is enabled

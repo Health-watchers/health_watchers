@@ -191,7 +191,11 @@ export class HardwareSecurityKeyService {
   /**
    * Check for cloning attacks (sign count regression)
    */
-  async detectKeyCloning(userId: string, credentialId: string, signCount: number): Promise<boolean> {
+  async detectKeyCloning(
+    userId: string,
+    credentialId: string,
+    signCount: number
+  ): Promise<boolean> {
     const user = await UserModel.findById(userId).select('hardwareSecurityKeys');
     const key = user?.hardwareSecurityKeys?.find((k: any) => k.credentialId === credentialId);
 

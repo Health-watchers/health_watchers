@@ -21,22 +21,22 @@ export function DuplicateDetectionWarning({ patients }: DuplicateDetectionWarnin
   if (duplicatePairs.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-warning-200 bg-warning-50 p-4 dark:border-warning-900 dark:bg-warning-900/30">
+    <div className="border-warning-200 bg-warning-50 dark:border-warning-900 dark:bg-warning-900/30 rounded-lg border p-4">
       <div className="flex gap-3">
         <span className="text-lg">⚠️</span>
         <div>
-          <h3 className="font-semibold text-warning-900 dark:text-warning-200">
+          <h3 className="text-warning-900 dark:text-warning-200 font-semibold">
             Potential Duplicate Patients
           </h3>
-          <p className="mt-1 text-sm text-warning-800 dark:text-warning-300">
-            {duplicatePairs.length} potential duplicate record{duplicatePairs.length !== 1 ? 's' : ''}{' '}
-            detected. Review and merge if needed.
+          <p className="text-warning-800 dark:text-warning-300 mt-1 text-sm">
+            {duplicatePairs.length} potential duplicate record
+            {duplicatePairs.length !== 1 ? 's' : ''} detected. Review and merge if needed.
           </p>
           <div className="mt-3 space-y-2">
             {duplicatePairs.slice(0, 3).map((pair, i) => (
-              <div key={i} className="text-xs text-warning-700 dark:text-warning-400">
-                {pair[0].firstName} {pair[0].lastName} ({pair[0].dateOfBirth}) ↔{' '}
-                {pair[1].firstName} {pair[1].lastName} ({pair[1].dateOfBirth}) —{' '}
+              <div key={i} className="text-warning-700 dark:text-warning-400 text-xs">
+                {pair[0].firstName} {pair[0].lastName} ({pair[0].dateOfBirth}) ↔ {pair[1].firstName}{' '}
+                {pair[1].lastName} ({pair[1].dateOfBirth}) —{' '}
                 <span className="font-medium">{Math.round(pair[0].matchScore * 100)}% match</span>
               </div>
             ))}
@@ -44,7 +44,7 @@ export function DuplicateDetectionWarning({ patients }: DuplicateDetectionWarnin
           {duplicatePairs.length > 3 && (
             <Link
               href="/patients/duplicates"
-              className="mt-2 inline-block text-xs font-medium text-warning-700 hover:underline dark:text-warning-300"
+              className="text-warning-700 dark:text-warning-300 mt-2 inline-block text-xs font-medium hover:underline"
             >
               View all {duplicatePairs.length} duplicates →
             </Link>
@@ -68,10 +68,7 @@ function findDuplicatePairs(patients: DuplicatePatient[]) {
   return pairs.sort((a, b) => b[0].matchScore - a[0].matchScore);
 }
 
-function calculateSimilarityScore(
-  p1: DuplicatePatient,
-  p2: DuplicatePatient
-): number {
+function calculateSimilarityScore(p1: DuplicatePatient, p2: DuplicatePatient): number {
   let score = 0;
   const maxScore = 3;
 

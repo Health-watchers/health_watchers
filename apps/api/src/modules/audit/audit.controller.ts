@@ -91,7 +91,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     filter.timestamp = range;
   }
 
- // Full-text search (requires text index on action + metadata)
+  // Full-text search (requires text index on action + metadata)
   if (req.query.q) {
     const searchTerm = String(req.query.q).slice(0, 200);
     filter.$text = { $search: searchTerm };

@@ -70,7 +70,7 @@ export class CdnConfigService {
 
     logger.info(
       { provider: this.config.provider, cdnConfigured: !!this.config.cdnUrl },
-      'CdnConfigService initialised',
+      'CdnConfigService initialised'
     );
   }
 
@@ -151,9 +151,7 @@ export class CdnConfigService {
       (this.metrics.avgResponseTimeMs * (this.metrics.totalRequests - 1) + responseTimeMs) /
       this.metrics.totalRequests;
     this.metrics.cacheHitRate =
-      this.metrics.totalRequests > 0
-        ? this.metrics.cachedRequests / this.metrics.totalRequests
-        : 0;
+      this.metrics.totalRequests > 0 ? this.metrics.cachedRequests / this.metrics.totalRequests : 0;
     this.metrics.measuredAt = new Date();
   }
 

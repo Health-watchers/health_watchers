@@ -55,12 +55,16 @@ export class MigrationManager {
       await this.db.createCollection(MIGRATION_RECORDS_COLLECTION).catch(() => {
         // Collection might already exist
       });
-      await this.db.collection(MIGRATION_RECORDS_COLLECTION).createIndex({ fileName: 1, executedAt: -1 });
+      await this.db
+        .collection(MIGRATION_RECORDS_COLLECTION)
+        .createIndex({ fileName: 1, executedAt: -1 });
 
       await this.db.createCollection(MIGRATION_CHECKPOINTS_COLLECTION).catch(() => {
         // Collection might already exist
       });
-      await this.db.collection(MIGRATION_CHECKPOINTS_COLLECTION).createIndex({ migrationName: 1, checkpointNumber: 1 });
+      await this.db
+        .collection(MIGRATION_CHECKPOINTS_COLLECTION)
+        .createIndex({ migrationName: 1, checkpointNumber: 1 });
 
       logger.info('[migration-manager] Collections initialized');
     } catch (err) {
@@ -77,9 +81,15 @@ export class MigrationManager {
         ...record,
         createdAt: new Date(),
       });
-      logger.info({ fileName: record.fileName, duration: record.duration }, '[migration-manager] Recorded migration');
+      logger.info(
+        { fileName: record.fileName, duration: record.duration },
+        '[migration-manager] Recorded migration'
+      );
     } catch (err) {
-      logger.error({ err, fileName: record.fileName }, '[migration-manager] Failed to record migration');
+      logger.error(
+        { err, fileName: record.fileName },
+        '[migration-manager] Failed to record migration'
+      );
       throw err;
     }
   }
@@ -139,7 +149,10 @@ export class MigrationManager {
     }
   }
 
-  async restoreFromCheckpoint(migrationName: string, checkpointNumber: number): Promise<Record<string, unknown> | null> {
+  async restoreFromCheckpoint(
+    migrationName: string,
+    checkpointNumber: number
+  ): Promise<Record<string, unknown> | null> {
     if (!this.db) throw new Error('Database not initialized');
 
     try {
@@ -174,7 +187,9 @@ export class MigrationManager {
           if (!result.valid) {
             docValid = false;
             if (result.issues) {
-              allIssues.push(`Doc ${(doc as Record<string, unknown>)._id}: ${result.issues.join(', ')}`);
+              allIssues.push(
+                `Doc ${(doc as Record<string, unknown>)._id}: ${result.issues.join(', ')}`
+              );
             }
           }
         }
@@ -182,7 +197,12 @@ export class MigrationManager {
       }
 
       logger.info(
-        { collectionName, docsChecked: docs.length, docsValid, invalidCount: docs.length - docsValid },
+        {
+          collectionName,
+          docsChecked: docs.length,
+          docsValid,
+          invalidCount: docs.length - docsValid,
+        },
         '[migration-manager] Data validation completed'
       );
 
@@ -206,7 +226,11 @@ export class MigrationManager {
     this.metrics.set(migrationName, metric);
   }
 
-  endMigrationTiming(migrationName: string, status: 'success' | 'failed', recordsAffected?: number): MigrationMetrics {
+  endMigrationTiming(
+    migrationName: string,
+    status: 'success' | 'failed',
+    recordsAffected?: number
+  ): MigrationMetrics {
     const metric = this.metrics.get(migrationName);
     if (!metric) {
       logger.warn({ migrationName }, '[migration-manager] No timing data found');
@@ -256,7 +280,11 @@ export class MigrationManager {
     }
   }
 
-  async checkMigrationCompatibility(db: Db, collectionName: string, schemaChanges: Record<string, unknown>): Promise<{
+  async checkMigrationCompatibility(
+    db: Db,
+    collectionName: string,
+    schemaChanges: Record<string, unknown>
+  ): Promise<{
     compatible: boolean;
     incompatibilities: string[];
   }> {
@@ -269,7 +297,9 @@ export class MigrationManager {
       for (const key in schemaChanges) {
         const value = schemaChanges[key];
         if (value === 'required' && sampleDocs.some((doc) => !(key in doc))) {
-          incompatibilities.push(`Field '${key}' marked as required but found in missing documents`);
+          incompatibilities.push(
+            `Field '${key}' marked as required but found in missing documents`
+          );
         }
       }
 

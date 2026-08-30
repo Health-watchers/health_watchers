@@ -144,7 +144,7 @@ describe('POST /api/v1/appointments/:id/check-in', () => {
   it('checks in a confirmed appointment and emits appointment:patient_arrived', async () => {
     mockFindOne.mockResolvedValue(baseAppointment);
     mockFindByIdAndUpdate.mockReturnValue(
-      leanResult({ ...baseAppointment, status: 'patient_arrived', checkedInAt: new Date() }),
+      leanResult({ ...baseAppointment, status: 'patient_arrived', checkedInAt: new Date() })
     );
 
     const res = await request(app).post(`/api/v1/appointments/${APPT_ID}/check-in`).send({});
@@ -156,12 +156,12 @@ describe('POST /api/v1/appointments/:id/check-in', () => {
     expect(mockEmitAppointmentUpdate).toHaveBeenCalledWith(
       APPT_ID,
       'appointment:patient_arrived',
-      expect.objectContaining({ appointment: expect.any(Object) }),
+      expect.objectContaining({ appointment: expect.any(Object) })
     );
     expect(mockEmitToClinic).toHaveBeenCalledWith(
       CLINIC_ID,
       'appointment:patient_arrived',
-      expect.objectContaining({ appointmentId: APPT_ID }),
+      expect.objectContaining({ appointmentId: APPT_ID })
     );
 
     // A status-update notification is created for the doctor
@@ -169,7 +169,7 @@ describe('POST /api/v1/appointments/:id/check-in', () => {
       expect.objectContaining({
         type: 'appointment_status_update',
         metadata: expect.objectContaining({ status: 'patient_arrived' }),
-      }),
+      })
     );
   });
 
@@ -208,15 +208,15 @@ describe('PUT /api/v1/appointments/:id status changes', () => {
     expect(mockEmitAppointmentUpdate).toHaveBeenCalledWith(
       APPT_ID,
       'appointment:confirmed',
-      expect.any(Object),
+      expect.any(Object)
     );
     expect(mockEmitToClinic).toHaveBeenCalledWith(
       CLINIC_ID,
       'appointment:confirmed',
-      expect.any(Object),
+      expect.any(Object)
     );
     expect(mockNotificationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'appointment_status_update' }),
+      expect.objectContaining({ type: 'appointment_status_update' })
     );
   });
 
@@ -236,7 +236,7 @@ describe('PUT /api/v1/appointments/:id status changes', () => {
     mockFindOne.mockResolvedValue({ ...baseAppointment });
     mockCountDocuments.mockResolvedValue(0);
     mockFindByIdAndUpdate.mockReturnValue(
-      leanResult({ ...baseAppointment, scheduledAt: new Date('2026-06-02T11:00:00Z') }),
+      leanResult({ ...baseAppointment, scheduledAt: new Date('2026-06-02T11:00:00Z') })
     );
 
     const res = await request(app)
@@ -250,7 +250,7 @@ describe('PUT /api/v1/appointments/:id status changes', () => {
       expect.objectContaining({
         oldScheduledAt: expect.any(String),
         newScheduledAt: expect.any(String),
-      }),
+      })
     );
   });
 });
@@ -270,12 +270,12 @@ describe('DELETE /api/v1/appointments/:id (cancel)', () => {
     expect(mockEmitAppointmentUpdate).toHaveBeenCalledWith(
       APPT_ID,
       'appointment:cancelled',
-      expect.objectContaining({ cancellationReason: 'Patient requested cancellation' }),
+      expect.objectContaining({ cancellationReason: 'Patient requested cancellation' })
     );
     expect(mockEmitToClinic).toHaveBeenCalledWith(
       CLINIC_ID,
       'appointment:cancelled',
-      expect.any(Object),
+      expect.any(Object)
     );
     // One notification each for patient and doctor
     expect(mockNotificationCreate).toHaveBeenCalledTimes(2);
@@ -304,23 +304,21 @@ describe('POST /api/v1/appointments (create)', () => {
       status: 'scheduled',
     });
 
-    const res = await request(app)
-      .post('/api/v1/appointments')
-      .send({
-        patientId: PATIENT_ID,
-        doctorId: DOCTOR_ID,
-        scheduledAt: '2026-07-01T09:00:00.000Z',
-        duration: 30,
-        type: 'consultation',
-        chiefComplaint: 'checkup',
-      });
+    const res = await request(app).post('/api/v1/appointments').send({
+      patientId: PATIENT_ID,
+      doctorId: DOCTOR_ID,
+      scheduledAt: '2026-07-01T09:00:00.000Z',
+      duration: 30,
+      type: 'consultation',
+      chiefComplaint: 'checkup',
+    });
 
     expect(res.status).toBe(201);
     // 'scheduled' is not in the event map, so no real-time status event fires
     expect(mockEmitAppointmentUpdate).not.toHaveBeenCalled();
     // A reminder notification is still created for the doctor
     expect(mockNotificationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'appointment_reminder' }),
+      expect.objectContaining({ type: 'appointment_reminder' })
     );
   });
 });

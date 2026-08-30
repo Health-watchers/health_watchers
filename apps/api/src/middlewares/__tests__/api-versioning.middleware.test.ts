@@ -58,7 +58,10 @@ describe('v1DeprecationWarning', () => {
     expect(res.set).toHaveBeenCalledWith('Deprecation', 'true');
     expect(res.set).toHaveBeenCalledWith('Sunset', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
     expect(res.set).toHaveBeenCalledWith('Link', '</api/v2>; rel="successor-version"');
-    expect(res.set).toHaveBeenCalledWith('Warning', expect.stringContaining('API v1 is deprecated'));
+    expect(res.set).toHaveBeenCalledWith(
+      'Warning',
+      expect.stringContaining('API v1 is deprecated')
+    );
     expect(next).toHaveBeenCalledTimes(1);
   });
 });

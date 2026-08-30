@@ -8,10 +8,7 @@ export interface ConflictData {
 
 export type ConflictStrategy = 'local' | 'remote' | 'merge' | 'manual';
 
-export async function detectConflict(
-  localData: any,
-  remoteData: any
-): Promise<boolean> {
+export async function detectConflict(localData: any, remoteData: any): Promise<boolean> {
   if (JSON.stringify(localData) === JSON.stringify(remoteData)) {
     return false;
   }
@@ -19,10 +16,7 @@ export async function detectConflict(
   return true;
 }
 
-export function resolveConflict(
-  conflict: ConflictData,
-  strategy: ConflictStrategy
-): any {
+export function resolveConflict(conflict: ConflictData, strategy: ConflictStrategy): any {
   switch (strategy) {
     case 'local':
       return conflict.local;
@@ -73,10 +67,7 @@ export async function getConflicts(): Promise<ConflictData[]> {
   return conflicts.filter((c: ConflictData) => !c.resolved);
 }
 
-export async function resolveConflictManual(
-  conflictId: string,
-  resolvedData: any
-): Promise<void> {
+export async function resolveConflictManual(conflictId: string, resolvedData: any): Promise<void> {
   const conflicts = JSON.parse(localStorage.getItem('_conflicts') || '[]');
   const index = conflicts.findIndex((c: ConflictData) => c.id === conflictId);
   if (index >= 0) {

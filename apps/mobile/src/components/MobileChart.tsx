@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, Dimensions } from 'react-native';
 import type { ChartDataPoint } from './types';
 
 interface MobileChartProps {
@@ -15,12 +9,7 @@ interface MobileChartProps {
   height?: number;
 }
 
-export function MobileChart({
-  title,
-  data,
-  type = 'bar',
-  height = 300,
-}: MobileChartProps) {
+export function MobileChart({ title, data, type = 'bar', height = 300 }: MobileChartProps) {
   const maxValue = Math.max(...data.map((d) => d.value));
 
   if (type === 'bar') {
@@ -84,12 +73,7 @@ function BarChart({ title, data, height, maxValue = 100 }: ChartProps) {
       <View style={styles.legend}>
         {data.map((dataPoint, index) => (
           <View key={index} style={styles.legendItem}>
-            <View
-              style={[
-                styles.legendColor,
-                { backgroundColor: dataPoint.color || '#2563eb' },
-              ]}
-            />
+            <View style={[styles.legendColor, { backgroundColor: dataPoint.color || '#2563eb' }]} />
             <Text style={styles.legendLabel}>
               {dataPoint.label}: {dataPoint.value}
             </Text>
@@ -119,15 +103,9 @@ function PieChart({ title, data }: ChartProps) {
 
             return (
               <View key={index} style={styles.pieLegendItem}>
-                <View
-                  style={[styles.pieLegendColor, { backgroundColor: color }]}
-                />
-                <Text style={styles.pieLegendLabel}>
-                  {dataPoint.label}
-                </Text>
-                <Text style={styles.pieLegendValue}>
-                  {percentage}%
-                </Text>
+                <View style={[styles.pieLegendColor, { backgroundColor: color }]} />
+                <Text style={styles.pieLegendLabel}>{dataPoint.label}</Text>
+                <Text style={styles.pieLegendValue}>{percentage}%</Text>
               </View>
             );
           })}
@@ -154,14 +132,7 @@ function PieChart({ title, data }: ChartProps) {
 }
 
 function getDefaultColor(index: number): string {
-  const colors = [
-    '#2563eb',
-    '#dc2626',
-    '#16a34a',
-    '#ea580c',
-    '#7c3aed',
-    '#0891b2',
-  ];
+  const colors = ['#2563eb', '#dc2626', '#16a34a', '#ea580c', '#7c3aed', '#0891b2'];
   return colors[index % colors.length];
 }
 

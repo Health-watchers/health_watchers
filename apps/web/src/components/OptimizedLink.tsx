@@ -46,7 +46,7 @@ export const OptimizedLink = ({
       }
       onMouseEnter?.(e);
     },
-    [prefetch, handlePrefetch, onMouseEnter],
+    [prefetch, handlePrefetch, onMouseEnter]
   );
 
   const handleTouchStart = useCallback(
@@ -56,7 +56,7 @@ export const OptimizedLink = ({
       }
       onTouchStart?.(e);
     },
-    [prefetch, handlePrefetch, onTouchStart],
+    [prefetch, handlePrefetch, onTouchStart]
   );
 
   return (

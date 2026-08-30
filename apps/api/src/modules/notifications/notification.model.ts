@@ -17,6 +17,7 @@ export const NOTIFICATION_TYPES = [
   'claimable_expiring',
   'subscription_warning',
   'follow_up_reminder',
+  'report_ready',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

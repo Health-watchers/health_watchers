@@ -75,7 +75,7 @@ function SimpleBarChart({
             <span className="w-24 shrink-0 truncate text-neutral-600">{item[labelKey]}</span>
             <div className="flex-1 rounded bg-neutral-100" aria-hidden="true">
               <div
-                className="bg-primary-500 h-5 rounded transition-all"
+                className="h-5 rounded bg-primary-500 transition-all"
                 style={{ width: `${(Number(item[valueKey]) / max) * 100}%` }}
               />
             </div>
@@ -257,7 +257,7 @@ export default function ReportsPage() {
             </h2>
             <button
               onClick={() => handleExport('patients')}
-              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
+              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
               aria-label="Export patients CSV"
             >
               Export CSV
@@ -284,7 +284,7 @@ export default function ReportsPage() {
             <h2 className="text-sm font-semibold text-neutral-900">Top Chief Complaints</h2>
             <button
               onClick={() => handleExport('encounters')}
-              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
+              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
               aria-label="Export encounters CSV"
             >
               Export CSV
@@ -311,7 +311,7 @@ export default function ReportsPage() {
             <h2 className="text-sm font-semibold text-neutral-900">Payment Volume by Month</h2>
             <button
               onClick={() => handleExport('payments')}
-              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
+              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
               aria-label="Export payments CSV"
             >
               Export CSV

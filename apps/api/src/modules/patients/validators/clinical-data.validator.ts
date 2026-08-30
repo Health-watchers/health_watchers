@@ -11,13 +11,15 @@ export interface MedicationValidationResult {
 }
 
 // Common medications database (simplified)
-const COMMON_MEDICATIONS = new Map<string, { dosageUnits: string[]; contraindications?: string[] }>([
-  ['aspirin', { dosageUnits: ['mg'], contraindications: ['warfarin', 'clopidogrel'] }],
-  ['metformin', { dosageUnits: ['mg'], contraindications: [] }],
-  ['lisinopril', { dosageUnits: ['mg'], contraindications: ['potassium-sparing diuretics'] }],
-  ['atorvastatin', { dosageUnits: ['mg'], contraindications: [] }],
-  ['amoxicillin', { dosageUnits: ['mg', 'ml'], contraindications: ['penicillin allergy'] }],
-]);
+const COMMON_MEDICATIONS = new Map<string, { dosageUnits: string[]; contraindications?: string[] }>(
+  [
+    ['aspirin', { dosageUnits: ['mg'], contraindications: ['warfarin', 'clopidogrel'] }],
+    ['metformin', { dosageUnits: ['mg'], contraindications: [] }],
+    ['lisinopril', { dosageUnits: ['mg'], contraindications: ['potassium-sparing diuretics'] }],
+    ['atorvastatin', { dosageUnits: ['mg'], contraindications: [] }],
+    ['amoxicillin', { dosageUnits: ['mg', 'ml'], contraindications: ['penicillin allergy'] }],
+  ]
+);
 
 // Lab value normal ranges
 const LAB_NORMAL_RANGES = new Map<string, { min: number; max: number; unit: string }>([
@@ -81,7 +83,9 @@ export class ClinicalDataValidator {
     if (!medication.unit) {
       errors.push('Dosage unit is required');
     } else if (medInfo && !medInfo.dosageUnits.includes(medication.unit)) {
-      errors.push(`Invalid unit for ${medication.name}. Expected: ${medInfo.dosageUnits.join(', ')}`);
+      errors.push(
+        `Invalid unit for ${medication.name}. Expected: ${medInfo.dosageUnits.join(', ')}`
+      );
     }
 
     // Check for contraindications
@@ -111,11 +115,7 @@ export class ClinicalDataValidator {
   /**
    * Validate lab result
    */
-  validateLabResult(
-    testName: string,
-    value: number,
-    unit: string
-  ): MedicationValidationResult {
+  validateLabResult(testName: string, value: number, unit: string): MedicationValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 

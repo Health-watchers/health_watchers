@@ -26,9 +26,7 @@ describe('NoSQL injection prevention', () => {
     });
 
     it('replaces $ keys with underscore in request body', async () => {
-      const res = await request(app)
-        .post('/test')
-        .send({ '$where': 'this.password.length > 0' });
+      const res = await request(app).post('/test').send({ $where: 'this.password.length > 0' });
 
       expect(res.status).toBe(200);
       expect(res.body.body).not.toHaveProperty('$where');
@@ -125,27 +123,21 @@ describe('NoSQL injection prevention', () => {
   // ── JavaScript injection ───────────────────────────────────────────────────────
   describe('JavaScript injection via $where', () => {
     it('strips $where with sleep-based timing attack', async () => {
-      const res = await request(app)
-        .post('/test')
-        .send({ $where: 'sleep(5000)' });
+      const res = await request(app).post('/test').send({ $where: 'sleep(5000)' });
 
       expect(res.status).toBe(200);
       expect(res.body.body).not.toHaveProperty('$where');
     });
 
     it('strips $where with property-access exfiltration', async () => {
-      const res = await request(app)
-        .post('/test')
-        .send({ $where: 'this.password.length > 0' });
+      const res = await request(app).post('/test').send({ $where: 'this.password.length > 0' });
 
       expect(res.status).toBe(200);
       expect(res.body.body).not.toHaveProperty('$where');
     });
 
     it('strips $where with function() style payload', async () => {
-      const res = await request(app)
-        .post('/test')
-        .send({ $where: 'function() { return true; }' });
+      const res = await request(app).post('/test').send({ $where: 'function() { return true; }' });
 
       expect(res.status).toBe(200);
       expect(res.body.body).not.toHaveProperty('$where');

@@ -169,7 +169,6 @@ function PopulationWidget({ data }: { data: DashboardData['patientPopulation'] }
   );
 }
 
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -234,21 +233,21 @@ export default function DashboardPage() {
             <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
               <Link
                 href="/patients/new"
-                className="focus-visible:ring-primary-500 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary-500 px-3 text-xs font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 active:bg-primary-700"
                 aria-label="Register a new patient"
               >
                 + New Patient
               </Link>
               <Link
                 href="/encounters"
-                className="focus-visible:ring-primary-500 inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                 aria-label="Log a new encounter"
               >
                 + Log Encounter
               </Link>
               <Link
                 href="/payments"
-                className="focus-visible:ring-primary-500 inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
                 aria-label="Initiate a payment"
               >
                 + Payment

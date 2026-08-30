@@ -38,7 +38,11 @@ describe('CONSENT_TEMPLATES', () => {
     ];
     for (const type of types) {
       expect(CONSENT_TEMPLATES[type]).toEqual(
-        expect.objectContaining({ version: expect.any(String), title: expect.any(String), text: expect.any(String) })
+        expect.objectContaining({
+          version: expect.any(String),
+          title: expect.any(String),
+          text: expect.any(String),
+        })
       );
     }
   });

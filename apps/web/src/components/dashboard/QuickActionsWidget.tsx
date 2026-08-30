@@ -55,13 +55,13 @@ const DEFAULT_ACTIONS: QuickAction[] = [
 export function QuickActionsWidget({ actions = DEFAULT_ACTIONS }: QuickActionsWidgetProps) {
   return (
     <section aria-label="Quick actions" className="space-y-3">
-      <h2 className="text-sm font-semibold text-gray-700 px-1">Quick Actions</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <h2 className="px-1 text-sm font-semibold text-gray-700">Quick Actions</h2>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {actions.map((action) => (
           <Link
             key={action.label}
             href={action.href}
-            className={`flex flex-col items-center justify-center gap-2 rounded-lg p-3 text-sm font-medium transition-colors border border-transparent ${action.color}`}
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent p-3 text-sm font-medium transition-colors ${action.color}`}
             title={action.label}
           >
             <span className="text-lg">{action.icon}</span>

@@ -77,7 +77,10 @@ describe('fetchWithCorrelation', () => {
   it('calls fetch with the provided URL', async () => {
     mockFetchOk();
     await fetchWithCorrelation('http://stellar-service/verify/abc123');
-    expect(fetchSpy).toHaveBeenCalledWith('http://stellar-service/verify/abc123', expect.any(Object));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://stellar-service/verify/abc123',
+      expect.any(Object)
+    );
   });
 
   it('forwards the HTTP method', async () => {
@@ -106,7 +109,9 @@ describe('fetchWithCorrelation', () => {
 
   it('propagates fetch errors', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('network failure'));
-    await expect(fetchWithCorrelation('http://stellar-service/health')).rejects.toThrow('network failure');
+    await expect(fetchWithCorrelation('http://stellar-service/health')).rejects.toThrow(
+      'network failure'
+    );
   });
 
   // ─── No leakage between calls ────────────────────────────────────────────────

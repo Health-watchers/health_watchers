@@ -1,0 +1,120 @@
+# Cloudflare zone configuration for Health Watchers (failover / alternative to
+# CloudFront). Apply via the cloudflare Terraform provider or the API. Values
+# marked ${...} come from the environment / secret store.
+#
+# zone: health-watchers.io   host: cdn.health-watchers.io / app.health-watchers.io
+
+zone:
+  name: health-watchers.io
+  plan: enterprise
+
+settings:
+  ssl: strict
+  min_tls_version: '1.2'
+  tls_1_3: 'on'
+  automatic_https_rewrites: 'on'
+  always_use_https: 'on'
+  http2: 'on'
+  http3: 'on'
+  zero_rtt: 'on'
+  brotli: 'on' # edge Brotli
+  early_hints: 'on'
+  websockets: 'on'
+  ip_geolocation: 'on'
+  security_level: 'medium'
+  challenge_ttl: 1800
+  browser_check: 'on'
+  # Polish = automatic image optimization (WebP/AVIF), Mirage = lazy/adaptive images
+  polish: 'lossy'
+  webp: 'on'
+  mirage: 'on'
+
+# ── Cache rules (new Rulesets engine) ─────────────────────────────────────
+cache_rules:
+  - description: 'Immutable build assets — cache everything, 1 year'
+    expression: '(http.request.uri.path matches "^/_next/static/") or (http.request.uri.path matches "\\.[0-9a-f]{8,}\\.(js|css|woff2?|ttf)$")'
+    action: set_cache_settings
+    settings:
+      cache: true
+      edge_ttl: { mode: 'override_origin', default: 31536000 }
+      browser_ttl: { mode: 'override_origin', default: 31536000 }
+      serve_stale: { disable_stale_while_updating: false }
+      respect_strong_etags: true
+
+  - description: 'Images — 30 days, resize allowed'
+    expression: '(http.request.uri.path matches "^/(images|_next/image)")'
+    action: set_cache_settings
+    settings:
+      cache: true
+      edge_ttl: { mode: 'override_origin', default: 2592000 }
+      browser_ttl: { mode: 'respect_origin' }
+
+  - description: 'Public marketing HTML — micro-cache + SWR'
+    expression: '(http.request.uri.path in {"/" "/about" "/pricing" "/contact"}) and not any(http.request.headers["cookie"][*] contains "hw_session")'
+    action: set_cache_settings
+    settings:
+      cache: true
+      edge_ttl: { mode: 'override_origin', default: 3600 }
+      browser_ttl: { mode: 'override_origin', default: 0 }
+      serve_stale: { disable_stale_while_updating: false }
+
+  - description: 'Reference API data — 5 min'
+    expression: '(http.request.uri.path matches "^/api/v1/(icd10|catalog)")'
+    action: set_cache_settings
+    settings:
+      cache: true
+      edge_ttl: { mode: 'override_origin', default: 300 }
+
+  - description: 'Never cache app shell or PHI API'
+    expression: '(http.request.uri.path matches "^/app/") or (http.request.uri.path matches "^/api/") '
+    action: set_cache_settings
+    settings:
+      cache: false
+
+# ── Transform rules ──────────────────────────────────────────────────────
+response_header_transform:
+  - description: 'immutable Cache-Control on hashed assets'
+    expression: '(http.request.uri.path matches "^/_next/static/")'
+    headers:
+      - { operation: set, name: 'Cache-Control', value: 'public, max-age=31536000, immutable' }
+  - description: 'stale-if-error on public HTML'
+    expression: '(http.request.uri.path in {"/" "/about" "/pricing"})'
+    headers:
+      - {
+          operation: set,
+          name: 'Cache-Control',
+          value: 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=86400',
+        }
+
+# ── Load balancer with origin failover ──────────────────────────────────
+load_balancer:
+  name: app.health-watchers.io
+  proxied: true
+  steering_policy: 'off' # strict primary → fallback
+  session_affinity: 'none'
+  default_pools: ['us-east-1']
+  fallback_pool: 'eu-west-1'
+  pools:
+    - name: us-east-1
+      origins:
+        - { name: alb-primary, address: '${ALB_PRIMARY_DNS}', enabled: true, weight: 1 }
+      monitor: https-health
+      notification_email: 'platform@health-watchers.io'
+    - name: eu-west-1
+      origins:
+        - { name: alb-dr, address: '${ALB_DR_DNS}', enabled: true, weight: 1 }
+      monitor: https-health
+  monitors:
+    - name: https-health
+      type: https
+      path: '/health'
+      expected_codes: '200'
+      interval: 15
+      retries: 2
+      timeout: 5
+      follow_redirects: false
+      header:
+        Host: ['app.health-watchers.io']
+
+# WAF / rate limiting is described in ops/cdn/waf-rules.json and rendered to a
+# Cloudflare ruleset by the same tooling.

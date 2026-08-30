@@ -200,7 +200,10 @@ class ExchangeRateManager {
 
     // 1. Return valid cache hit
     if (cached && cached.expiresAt > Date.now()) {
-      logger.debug({ from: fromUpper, to: toUpper, source: 'cache' }, 'Returning cached exchange rate');
+      logger.debug(
+        { from: fromUpper, to: toUpper, source: 'cache' },
+        'Returning cached exchange rate'
+      );
       return {
         from: cached.from,
         to: cached.to,
@@ -220,7 +223,13 @@ class ExchangeRateManager {
         'Fetched and cached exchange rate'
       );
 
-      return { from: entry.from, to: entry.to, rate: entry.rate, timestamp: entry.timestamp, source: 'coingecko' };
+      return {
+        from: entry.from,
+        to: entry.to,
+        rate: entry.rate,
+        timestamp: entry.timestamp,
+        source: 'coingecko',
+      };
     } catch (fetchError) {
       // 3. Fall back to hardcoded rates
       const fallbackRate = FALLBACK_RATES[fromUpper]?.[toUpper];
@@ -229,7 +238,13 @@ class ExchangeRateManager {
           { from: fromUpper, to: toUpper, rate: fallbackRate, source: 'fallback' },
           'Using hardcoded fallback exchange rate'
         );
-        return { from: fromUpper, to: toUpper, rate: fallbackRate, timestamp: Date.now(), source: 'fallback' };
+        return {
+          from: fromUpper,
+          to: toUpper,
+          rate: fallbackRate,
+          timestamp: Date.now(),
+          source: 'fallback',
+        };
       }
 
       logger.error(
@@ -268,7 +283,14 @@ class ExchangeRateManager {
     const converted = parseFloat((amount * exchangeRate.rate).toFixed(8));
 
     logger.info(
-      { amount, from: fromUpper, to: toUpper, rate: exchangeRate.rate, converted, source: exchangeRate.source },
+      {
+        amount,
+        from: fromUpper,
+        to: toUpper,
+        rate: exchangeRate.rate,
+        converted,
+        source: exchangeRate.source,
+      },
       'Currency converted'
     );
 
@@ -328,7 +350,10 @@ class ExchangeRateManager {
 
     const failed = results.filter((r) => r.status === 'rejected');
     if (failed.length) {
-      logger.warn({ failedCount: failed.length, totalCount: pairs.length }, 'Some rates failed to refresh');
+      logger.warn(
+        { failedCount: failed.length, totalCount: pairs.length },
+        'Some rates failed to refresh'
+      );
     } else {
       logger.info({ count: pairs.length }, 'All cached rates refreshed successfully');
     }

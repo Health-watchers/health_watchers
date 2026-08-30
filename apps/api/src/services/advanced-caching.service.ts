@@ -35,7 +35,12 @@ const COMPRESSION_THRESHOLD = 1024; // Compress values > 1KB
 export class AdvancedCachingService {
   private cache: Map<string, CacheEntry> = new Map();
   private stampedeLocks: Map<string, number> = new Map();
-  private compressionStats = { compressed: 0, uncompressed: 0, totalCompressed: 0, totalOriginal: 0 };
+  private compressionStats = {
+    compressed: 0,
+    uncompressed: 0,
+    totalCompressed: 0,
+    totalOriginal: 0,
+  };
 
   async get<T>(key: string): Promise<T | null> {
     const entry = this.cache.get(key);

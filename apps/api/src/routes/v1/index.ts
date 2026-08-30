@@ -10,10 +10,12 @@
  * │ clinical        │ /patients, /encounters, /appointments,           │
  * │                 │ /lab-results, /immunizations, /care-plans,       │
  * │                 │ /referrals, /medications, /schedules, /cds,      │
+ * │                 │ /interactions,                                        │
  * │                 │ /peer-reviews, /pre-auth, /icd10, /reports,     │
  * │                 │ /consent, /ai, /dashboard, /portal, /surveys     │
  * │ payments        │ /payments, /invoices, /subscriptions,            │
- * │                 │ /billing, /export                                │
+ * │                 │ /billing, /export, /exports/schedules,           │
+ * │                 │ HL7 v2 (patients/:id/hl7v2)                      │
  * │ admin           │ /clinics, /onboarding, /settings, /api-keys,    │
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
  * │                 │ /audit, /audit-logs, /notifications,             │
@@ -57,7 +59,9 @@ import {
   immunizationRoutes,
   cvxCodesRouter,
 } from '../../modules/immunizations/immunizations.controller';
+import { immunizationOpsRoutes } from '../../modules/immunizations/immunization-operations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
+import { analyticsRoutes } from '../../modules/reports/analytics/analytics.controller';
 import {
   healthLogRouter,
   patientHealthLogRouter,
@@ -66,7 +70,9 @@ import aiRoutes from '../../modules/ai/ai.routes';
 import dashboardRoutes from '../../modules/dashboard/dashboard.routes';
 import { portalRoutes } from '../../modules/portal/portal.controller';
 import scheduleRoutes from '../../modules/schedules/schedules.routes';
+import providerSchedulingRoutes from '../../modules/provider-scheduling/provider-scheduling.routes';
 import cdsRoutes from '../../modules/cds/cds.controller';
+import interactionRoutes from '../../modules/interactions/interaction.controller';
 import { preAuthRoutes } from '../../modules/pre-auth/pre-auth.controller';
 import peerReviewsRouter from '../../modules/peer-reviews/peer-reviews.router';
 
@@ -75,8 +81,11 @@ import paymentsRouter from '../../modules/payments/payments.routes';
 import { reimbursementRoutes } from '../../modules/payments/reimbursement.controller';
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
+import { billingRoutes } from '../../modules/billing/billing.routes';
 import exportRouter from '../../modules/export/export.routes';
 import batchExportRouter from '../../modules/export/batch-export.routes';
+import hl7v2ExportRouter from '../../modules/export/hl7-v2-export.routes';
+import exportScheduleRouter from '../../modules/export/export-schedule.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -87,6 +96,7 @@ import { webhookRoutes } from '../../modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from '../../modules/audit/audit-logs.controller';
 import { auditRoutes } from '../../modules/audit/audit.controller';
 import { documentRoutes } from '../../modules/documents/documents.controller';
+import { documentManagementRoutes } from '../../modules/documents/documents-management.controller';
 import { notificationRoutes } from '../../modules/notifications/notifications.controller';
 import { complianceRoutes } from '../../modules/compliance/compliance.controller';
 import { breachIncidentRoutes } from '../../modules/breach-incidents/breach-incidents.controller';
@@ -136,11 +146,17 @@ v1Router.use('/referrals', referralRoutes);
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', consentRoutes);
 v1Router.use('/immunizations/cvx', cvxCodesRouter);
+v1Router.use('/immunizations', immunizationOpsRoutes);
 v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
+// #1251 — Reporting & analytics engine (templates, custom query builder,
+// cohort analysis, scheduling, dashboard widgets)
+v1Router.use('/reports', reportGenerationLimiter, analyticsRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
 v1Router.use('/schedules', scheduleRoutes);
+v1Router.use('/provider-scheduling', providerSchedulingRoutes);
 v1Router.use('/cds', cdsRoutes);
+v1Router.use('/interactions', interactionRoutes);
 v1Router.use('/pre-auth', paymentLimiter, preAuthRoutes);
 v1Router.use('/peer-reviews', peerReviewsRouter);
 v1Router.use('/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
@@ -151,11 +167,16 @@ v1Router.use('/payments', paymentLimiter, paymentsRouter);
 v1Router.use('/payments', reimbursementRoutes);
 v1Router.use('/invoices', invoiceRoutes);
 v1Router.use('/subscriptions', subscriptionRoutes);
+v1Router.use('/billing', billingRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// HL7 v2 export routes (#1243) — /patients/:id/hl7v2 and sub-routes
+v1Router.use('/', hl7v2ExportRouter);
 // Batch export routes (#1072) — async job queue + SSE progress tracking
 v1Router.use('/exports', batchExportRouter);
+// Export scheduling & automation (#1243) — CRUD for recurring export schedules
+v1Router.use('/exports/schedules', exportScheduleRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
@@ -166,6 +187,7 @@ v1Router.use('/webhooks', webhookRoutes);
 v1Router.use('/audit-logs', auditLogRoutes);
 v1Router.use('/audit', auditRoutes);
 v1Router.use('/documents', documentRoutes);
+v1Router.use('/documents', documentManagementRoutes);
 v1Router.use('/notifications', notificationRoutes);
 v1Router.use('/compliance', complianceRoutes);
 v1Router.use('/admin/breach-incidents', breachIncidentRoutes);

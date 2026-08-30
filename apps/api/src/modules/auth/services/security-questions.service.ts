@@ -8,16 +8,16 @@ import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.model';
 
 export const PREDEFINED_QUESTIONS = [
-  "What is the name of your first pet?",
-  "In what city were you born?",
+  'What is the name of your first pet?',
+  'In what city were you born?',
   "What is your mother's maiden name?",
-  "What was the name of your first school?",
-  "What is your favorite book?",
-  "What street did you grow up on?",
-  "What is your favorite movie?",
-  "What is the name of your best friend from childhood?",
-  "What was your favorite toy as a child?",
-  "What is the name of the city where you were born?",
+  'What was the name of your first school?',
+  'What is your favorite book?',
+  'What street did you grow up on?',
+  'What is your favorite movie?',
+  'What is the name of your best friend from childhood?',
+  'What was your favorite toy as a child?',
+  'What is the name of the city where you were born?',
 ];
 
 export interface SecurityQuestion {
@@ -111,7 +111,9 @@ export class SecurityQuestionsService {
   /**
    * Get security questions for user (without answers)
    */
-  async getSecurityQuestions(userId: string): Promise<Array<{ questionId: number; question: string }>> {
+  async getSecurityQuestions(
+    userId: string
+  ): Promise<Array<{ questionId: number; question: string }>> {
     const user = await UserModel.findById(userId).select('securityQuestions');
     if (!user || !user.securityQuestions) {
       throw new Error('User has not set security questions');

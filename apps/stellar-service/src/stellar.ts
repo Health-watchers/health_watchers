@@ -879,7 +879,13 @@ export async function buildMultiSigTransaction(params: MultiSigPaymentParams): P
 
   const start = Date.now();
   logger.info(
-    { operation: 'buildMultiSigTransaction', from: fromPublicKey, to: toPublicKey, amount, signerCount: signerPublicKeys.length },
+    {
+      operation: 'buildMultiSigTransaction',
+      from: fromPublicKey,
+      to: toPublicKey,
+      amount,
+      signerCount: signerPublicKeys.length,
+    },
     'Building multi-sig payment transaction'
   );
 
@@ -908,14 +914,25 @@ export async function buildMultiSigTransaction(params: MultiSigPaymentParams): P
     const hash = transaction.hash().toString('hex');
 
     logger.info(
-      { operation: 'buildMultiSigTransaction', hash, signerCount: signerPublicKeys.length, outcome: 'success', durationMs: Date.now() - start },
+      {
+        operation: 'buildMultiSigTransaction',
+        hash,
+        signerCount: signerPublicKeys.length,
+        outcome: 'success',
+        durationMs: Date.now() - start,
+      },
       'Multi-sig transaction built'
     );
 
     return { xdr, hash, signerPublicKeys, networkPassphrase: getNetworkPassphrase() };
   } catch (error) {
     logger.error(
-      { operation: 'buildMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'buildMultiSigTransaction',
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
       'Failed to build multi-sig transaction'
     );
     throw error;
@@ -926,7 +943,10 @@ export async function buildMultiSigTransaction(params: MultiSigPaymentParams): P
  * Add a signature from a co-signer to an existing transaction XDR.
  * Returns the updated XDR with the new signature appended.
  */
-export function addCoSignerSignature(xdr: string, signerSecret: string): { xdr: string; signerPublicKey: string } {
+export function addCoSignerSignature(
+  xdr: string,
+  signerSecret: string
+): { xdr: string; signerPublicKey: string } {
   const keypair = Keypair.fromSecret(signerSecret);
   const transaction = new Transaction(xdr, getNetworkPassphrase());
   transaction.sign(keypair);
@@ -946,7 +966,16 @@ export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: st
 
     if (stellarConfig.dryRun) {
       const hash = transaction.hash().toString('hex');
-      logger.info({ operation: 'submitMultiSigTransaction', hash, outcome: 'success', dryRun: true, durationMs: Date.now() - start }, 'Multi-sig transaction submitted (dry run)');
+      logger.info(
+        {
+          operation: 'submitMultiSigTransaction',
+          hash,
+          outcome: 'success',
+          dryRun: true,
+          durationMs: Date.now() - start,
+        },
+        'Multi-sig transaction submitted (dry run)'
+      );
       return { hash };
     }
 
@@ -955,13 +984,23 @@ export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: st
     );
 
     logger.info(
-      { operation: 'submitMultiSigTransaction', hash: result.hash, outcome: 'success', durationMs: Date.now() - start },
+      {
+        operation: 'submitMultiSigTransaction',
+        hash: result.hash,
+        outcome: 'success',
+        durationMs: Date.now() - start,
+      },
       'Multi-sig transaction submitted'
     );
     return { hash: result.hash };
   } catch (error) {
     logger.error(
-      { operation: 'submitMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'submitMultiSigTransaction',
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
       'Failed to submit multi-sig transaction'
     );
     throw error;
@@ -995,9 +1034,7 @@ export async function processBatchPayments(
     throw new Error('Batch must contain between 1 and 100 payments');
   }
 
-  const totalAmount = payments
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0)
-    .toFixed(7);
+  const totalAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0).toFixed(7);
 
   assertTransactionLimit(parseFloat(totalAmount));
 
@@ -1040,26 +1077,50 @@ export async function processBatchPayments(
       const hash = transaction.hash().toString('hex');
       const durationMs = Date.now() - start;
       logger.info(
-        { operation: 'processBatchPayments', hash, count: payments.length, totalAmount, outcome: 'success', dryRun: true, durationMs },
+        {
+          operation: 'processBatchPayments',
+          hash,
+          count: payments.length,
+          totalAmount,
+          outcome: 'success',
+          dryRun: true,
+          durationMs,
+        },
         'Batch payment built (dry run)'
       );
       return { hash, count: payments.length, totalAmount, durationMs };
     }
 
-    const result = await withHorizonCall('submitTransaction', { count: payments.length, totalAmount }, () =>
-      server.submitTransaction(transaction)
+    const result = await withHorizonCall(
+      'submitTransaction',
+      { count: payments.length, totalAmount },
+      () => server.submitTransaction(transaction)
     );
 
     const durationMs = Date.now() - start;
     logger.info(
-      { operation: 'processBatchPayments', hash: result.hash, count: payments.length, totalAmount, outcome: 'success', durationMs },
+      {
+        operation: 'processBatchPayments',
+        hash: result.hash,
+        count: payments.length,
+        totalAmount,
+        outcome: 'success',
+        durationMs,
+      },
       'Batch payments submitted'
     );
 
     return { hash: result.hash, count: payments.length, totalAmount, durationMs };
   } catch (error) {
     logger.error(
-      { operation: 'processBatchPayments', count: payments.length, totalAmount, outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'processBatchPayments',
+        count: payments.length,
+        totalAmount,
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
       'Failed to process batch payments'
     );
     throw error;

@@ -1,4 +1,3 @@
-
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { StaffScheduleModel } from './models/staff-schedule.model';
@@ -10,7 +9,11 @@ import {
   staffScheduleIdParamsSchema,
   getStaffSchedulesQuerySchema,
 } from './schedules.validation';
-import { checkScheduleConflict, isStaffAvailable, isScheduleInDateRange } from './schedules.service';
+import {
+  checkScheduleConflict,
+  isStaffAvailable,
+  isScheduleInDateRange,
+} from './schedules.service';
 
 export const scheduleRoutes = Router();
 scheduleRoutes.use(authenticate);
@@ -22,16 +25,16 @@ scheduleRoutes.post(
   async (req: Request, res: Response) => {
     try {
       const { clinicId } = req.user!;
-      const { 
-        userId, 
-        date, 
-        dayOfWeek, 
-        startTime, 
-        endTime, 
-        isAvailable, 
-        recurrence, 
-        recurrenceEndDate, 
-        notes 
+      const {
+        userId,
+        date,
+        dayOfWeek,
+        startTime,
+        endTime,
+        isAvailable,
+        recurrence,
+        recurrenceEndDate,
+        notes,
       } = req.body;
 
       const hasConflict = await checkScheduleConflict(
@@ -41,7 +44,7 @@ scheduleRoutes.post(
         endTime,
         date ? new Date(date) : undefined,
         dayOfWeek,
-        recurrence,
+        recurrence
       );
 
       if (hasConflict) {
@@ -68,7 +71,7 @@ scheduleRoutes.post(
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // ── GET /schedules/staff ─────────────────────────────────────────────────────
@@ -84,24 +87,20 @@ scheduleRoutes.get(
       if (userId) filter.userId = new Types.ObjectId(userId);
       if (dayOfWeek !== undefined) filter.dayOfWeek = dayOfWeek;
 
-      let schedules = await StaffScheduleModel.find(filter)
-        .sort({ createdAt: -1 })
-        .lean();
+      let schedules = await StaffScheduleModel.find(filter).sort({ createdAt: -1 }).lean();
 
       // Filter by date range if provided
       if (dateFrom || dateTo) {
         const from = dateFrom ? new Date(dateFrom) : new Date(0);
         const to = dateTo ? new Date(dateTo) : new Date(8640000000000000);
-        schedules = schedules.filter(schedule => 
-          isScheduleInDateRange(schedule, from, to)
-        );
+        schedules = schedules.filter((schedule) => isScheduleInDateRange(schedule, from, to));
       }
 
       return res.json({ status: 'success', data: schedules });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // ── GET /schedules/staff/:id ──────────────────────────────────────────────────
@@ -124,15 +123,15 @@ scheduleRoutes.get(
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // ── PUT /schedules/staff/:id ──────────────────────────────────────────────────
 scheduleRoutes.put(
   '/staff/:id',
-  validateRequest({ 
-    params: staffScheduleIdParamsSchema, 
-    body: updateStaffScheduleSchema 
+  validateRequest({
+    params: staffScheduleIdParamsSchema,
+    body: updateStaffScheduleSchema,
   }),
   async (req: Request, res: Response) => {
     try {
@@ -141,7 +140,7 @@ scheduleRoutes.put(
         _id: req.params.id,
         clinicId,
       });
-      
+
       if (!existing) {
         return res.status(404).json({ error: 'NotFound', message: 'Schedule not found' });
       }
@@ -153,11 +152,16 @@ scheduleRoutes.put(
       if (req.body.endTime) updateData.endTime = req.body.endTime;
       if (req.body.isAvailable !== undefined) updateData.isAvailable = req.body.isAvailable;
       if (req.body.recurrence) updateData.recurrence = req.body.recurrence;
-      if (req.body.recurrenceEndDate) updateData.recurrenceEndDate = new Date(req.body.recurrenceEndDate);
+      if (req.body.recurrenceEndDate)
+        updateData.recurrenceEndDate = new Date(req.body.recurrenceEndDate);
       if (req.body.notes !== undefined) updateData.notes = req.body.notes;
 
       // Check for conflicts if we're updating time-related fields
-      const hasTimeChange = req.body.startTime || req.body.endTime || req.body.date !== undefined || req.body.dayOfWeek !== undefined;
+      const hasTimeChange =
+        req.body.startTime ||
+        req.body.endTime ||
+        req.body.date !== undefined ||
+        req.body.dayOfWeek !== undefined;
       if (hasTimeChange) {
         const hasConflict = await checkScheduleConflict(
           String(existing.userId),
@@ -167,7 +171,7 @@ scheduleRoutes.put(
           req.body.date ? new Date(req.body.date) : existing.date,
           req.body.dayOfWeek !== undefined ? req.body.dayOfWeek : existing.dayOfWeek,
           req.body.recurrence || existing.recurrence,
-          req.params.id,
+          req.params.id
         );
 
         if (hasConflict) {
@@ -178,17 +182,16 @@ scheduleRoutes.put(
         }
       }
 
-      const updated = await StaffScheduleModel.findByIdAndUpdate(
-        req.params.id,
-        updateData,
-        { new: true, runValidators: true }
-      ).lean();
+      const updated = await StaffScheduleModel.findByIdAndUpdate(req.params.id, updateData, {
+        new: true,
+        runValidators: true,
+      }).lean();
 
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // ── DELETE /schedules/staff/:id ─────────────────────────────────────────────────
@@ -211,29 +214,26 @@ scheduleRoutes.delete(
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-  },
+  }
 );
 
 // ── GET /schedules/staff/availability/:userId ──────────────────────────────────
-scheduleRoutes.get(
-  '/staff/availability/:userId',
-  async (req: Request, res: Response) => {
-    try {
-      const { clinicId } = req.user!;
-      const { userId } = req.params;
-      const { dateTime, duration } = req.query as any;
+scheduleRoutes.get('/staff/availability/:userId', async (req: Request, res: Response) => {
+  try {
+    const { clinicId } = req.user!;
+    const { userId } = req.params;
+    const { dateTime, duration } = req.query as any;
 
-      const date = dateTime ? new Date(dateTime) : new Date();
-      const dur = duration ? Number(duration) : 30;
+    const date = dateTime ? new Date(dateTime) : new Date();
+    const dur = duration ? Number(duration) : 30;
 
-      const available = await isStaffAvailable(userId, clinicId, date, dur);
+    const available = await isStaffAvailable(userId, clinicId, date, dur);
 
-      return res.json({ 
-        status: 'success', 
-        data: { available, dateTime: date.toISOString(), duration: dur } 
-      });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
-    }
-  },
-);
+    return res.json({
+      status: 'success',
+      data: { available, dateTime: date.toISOString(), duration: dur },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'InternalError', message: err.message });
+  }
+});

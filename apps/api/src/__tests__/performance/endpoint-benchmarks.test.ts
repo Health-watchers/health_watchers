@@ -45,20 +45,36 @@ jest.mock('@api/utils/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
   stopPaymentExpirationJob: jest.fn(),
 }));
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
 
@@ -273,9 +289,7 @@ describe('Load scenario: concurrent mixed requests', () => {
   it('10 concurrent patient list requests all succeed (status 200)', async () => {
     const responses = await Promise.all(
       Array.from({ length: 10 }, () =>
-        request(app)
-          .get('/api/v1/patients?page=1&limit=10')
-          .set('Authorization', `Bearer ${token}`)
+        request(app).get('/api/v1/patients?page=1&limit=10').set('Authorization', `Bearer ${token}`)
       )
     );
     const failures = responses.filter((r) => r.status !== 200);
@@ -286,7 +300,9 @@ describe('Load scenario: concurrent mixed requests', () => {
     const times = await Promise.all(
       Array.from({ length: 10 }, () =>
         timed(() =>
-          request(app).get('/api/v1/patients?page=1&limit=10').set('Authorization', `Bearer ${token}`)
+          request(app)
+            .get('/api/v1/patients?page=1&limit=10')
+            .set('Authorization', `Bearer ${token}`)
         )
       )
     );
@@ -319,7 +335,9 @@ describe('Baseline capture', () => {
     {
       label: 'GET /patients p1',
       fn: () =>
-        request(app).get('/api/v1/patients?page=1&limit=25').set('Authorization', `Bearer ${token}`),
+        request(app)
+          .get('/api/v1/patients?page=1&limit=25')
+          .set('Authorization', `Bearer ${token}`),
     },
     {
       label: 'GET /encounters p1',

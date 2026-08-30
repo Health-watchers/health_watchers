@@ -306,7 +306,7 @@ function AlertThresholdSettings({
           type="checkbox"
           checked={form.alertsEnabled}
           onChange={(e) => handleChange('alertsEnabled', e.target.checked)}
-          className="text-primary-600 h-4 w-4 rounded border-neutral-300"
+          className="h-4 w-4 rounded border-neutral-300 text-primary-600"
         />
         <label htmlFor="alertsEnabled" className="text-sm font-medium text-neutral-700">
           Enable balance alerts
@@ -506,7 +506,7 @@ export default function WalletClient() {
               </div>
 
               <div className="flex items-end gap-2">
-                <span className="text-4xl font-bold text-neutral-900 tabular-nums">
+                <span className="text-4xl font-bold tabular-nums text-neutral-900">
                   {parseFloat(wallet.balance).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 7,
@@ -517,7 +517,7 @@ export default function WalletClient() {
 
               {wallet.usdcBalance !== null && wallet.usdcBalance !== undefined ? (
                 <div className="flex items-end gap-2">
-                  <span className="text-2xl font-semibold text-neutral-700 tabular-nums">
+                  <span className="text-2xl font-semibold tabular-nums text-neutral-700">
                     {parseFloat(wallet.usdcBalance).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
@@ -602,19 +602,19 @@ export default function WalletClient() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-neutral-100">
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Type
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Amount
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         From / To
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Date
                       </th>
-                      <th className="px-6 py-2 text-left text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                         Tx
                       </th>
                     </tr>
@@ -635,7 +635,7 @@ export default function WalletClient() {
                           <td className="px-6 py-3">
                             <StellarAddressDisplay value={isIncoming ? tx.from : tx.to} />
                           </td>
-                          <td className="px-6 py-3 whitespace-nowrap text-neutral-500">
+                          <td className="whitespace-nowrap px-6 py-3 text-neutral-500">
                             {new Date(tx.createdAt).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-3">
@@ -643,7 +643,7 @@ export default function WalletClient() {
                               href={getStellarExplorerUrl(tx.hash, NETWORK)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-primary-500 font-mono text-xs hover:underline"
+                              className="font-mono text-xs text-primary-500 hover:underline"
                               aria-label={`View transaction ${tx.hash} on Stellar Explorer`}
                             >
                               {tx.hash.slice(0, 8)}…

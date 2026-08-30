@@ -45,7 +45,7 @@ export function PaymentFilters({
       </Tabs>
 
       <div className="ml-auto flex items-center gap-2">
-        <label htmlFor="date-from" className="text-xs whitespace-nowrap text-neutral-500">
+        <label htmlFor="date-from" className="whitespace-nowrap text-xs text-neutral-500">
           From
         </label>
         <input
@@ -53,7 +53,7 @@ export function PaymentFilters({
           type="date"
           value={dateFrom}
           onChange={(e) => onDateFromChange(e.target.value)}
-          className="focus:ring-primary-500 rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none"
+          className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <label htmlFor="date-to" className="text-xs text-neutral-500">
           To
@@ -63,7 +63,7 @@ export function PaymentFilters({
           type="date"
           value={dateTo}
           onChange={(e) => onDateToChange(e.target.value)}
-          className="focus:ring-primary-500 rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:ring-2 focus:outline-none"
+          className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>
     </div>

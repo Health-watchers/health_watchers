@@ -43,20 +43,36 @@ jest.mock('@api/utils/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
   stopPaymentExpirationJob: jest.fn(),
 }));
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
 
@@ -193,16 +209,12 @@ describe('Authorization header injection', () => {
   });
 
   it('rejects empty Bearer value', async () => {
-    const res = await request(app)
-      .get('/api/v1/patients')
-      .set('Authorization', 'Bearer ');
+    const res = await request(app).get('/api/v1/patients').set('Authorization', 'Bearer ');
     expect(res.status).toBe(401);
   });
 
   it('rejects Bearer with only spaces', async () => {
-    const res = await request(app)
-      .get('/api/v1/patients')
-      .set('Authorization', 'Bearer    ');
+    const res = await request(app).get('/api/v1/patients').set('Authorization', 'Bearer    ');
     expect(res.status).toBe(401);
   });
 });
@@ -210,7 +222,11 @@ describe('Authorization header injection', () => {
 // ── Role escalation ───────────────────────────────────────────────────────────
 describe('Role escalation attempts', () => {
   it('NURSE role cannot access admin user management', async () => {
-    const nurseToken = signAccessToken({ userId: USER_ID, role: 'NURSE' as any, clinicId: CLINIC_ID });
+    const nurseToken = signAccessToken({
+      userId: USER_ID,
+      role: 'NURSE' as any,
+      clinicId: CLINIC_ID,
+    });
     const res = await request(app)
       .get('/api/v1/users')
       .set('Authorization', `Bearer ${nurseToken}`);
@@ -237,7 +253,8 @@ describe('Role escalation attempts', () => {
     ];
 
     for (const ep of writeEndpoints) {
-      const res = await (request(app) as any)[ep.method](ep.url)
+      const res = await (request(app) as any)
+        [ep.method](ep.url)
         .set('Authorization', `Bearer ${readToken}`)
         .send({});
       expect(res.status).toBe(403);

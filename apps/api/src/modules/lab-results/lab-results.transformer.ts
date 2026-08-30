@@ -42,9 +42,10 @@ export function toLabResultResponse(
     attachmentUrl: doc.attachmentUrl,
     isCritical: doc.isCritical,
     criticalReason: doc.criticalReason,
-    criticalAcknowledgedAt: doc.criticalAcknowledgedAt instanceof Date
-      ? doc.criticalAcknowledgedAt.toISOString()
-      : doc.criticalAcknowledgedAt,
+    criticalAcknowledgedAt:
+      doc.criticalAcknowledgedAt instanceof Date
+        ? doc.criticalAcknowledgedAt.toISOString()
+        : doc.criticalAcknowledgedAt,
     criticalAcknowledgedBy: doc.criticalAcknowledgedBy
       ? String(doc.criticalAcknowledgedBy)
       : undefined,

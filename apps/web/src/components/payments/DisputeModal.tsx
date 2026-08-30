@@ -6,11 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { fetchWithAuth } from '@/lib/auth';
 import { truncateId } from '@/lib/utils';
 
-type DisputeReason =
-  | 'duplicate_payment'
-  | 'service_not_rendered'
-  | 'incorrect_amount'
-  | 'other';
+type DisputeReason = 'duplicate_payment' | 'service_not_rendered' | 'incorrect_amount' | 'other';
 
 interface DisputeModalProps {
   open: boolean;
@@ -76,16 +72,13 @@ export function DisputeModal({ open, onClose, payment, disputesUrl }: DisputeMod
     <Modal open={open} onClose={handleClose} title="File a dispute">
       <div className="space-y-4">
         <p className="text-sm text-neutral-600">
-          File a dispute for payment{' '}
-          <span className="font-mono">{truncateId(payment.id, 14)}</span>.
+          File a dispute for payment <span className="font-mono">{truncateId(payment.id, 14)}</span>
+          .
         </p>
 
         <div className="space-y-3">
           <div>
-            <label
-              htmlFor="dispute-reason"
-              className="block text-sm font-medium text-neutral-700"
-            >
+            <label htmlFor="dispute-reason" className="block text-sm font-medium text-neutral-700">
               Reason
             </label>
             <select
@@ -120,9 +113,7 @@ export function DisputeModal({ open, onClose, payment, disputesUrl }: DisputeMod
         </div>
 
         {message && (
-          <p
-            className={`text-sm font-medium ${isError ? 'text-danger-600' : 'text-success-600'}`}
-          >
+          <p className={`text-sm font-medium ${isError ? 'text-danger-600' : 'text-success-600'}`}>
             {message}
           </p>
         )}
