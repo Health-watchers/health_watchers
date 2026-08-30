@@ -1,0 +1,260 @@
+{
+  "$comment": "AWS CloudFront distribution config for Health Watchers. Apply: aws cloudfront create-distribution --distribution-config file://ops/cdn/cloudfront-distribution.json. Cache/Origin-Request/Response-Headers policies referenced by name must be created first (see the `_policies` block below for their definitions) or replaced with AWS managed-policy IDs. Placeholders: ACCOUNT_ID, ALB_PRIMARY_DNS, ALB_DR_DNS, ACM_CERT_ARN, WAF_WEBACL_ARN.",
+  "CallerReference": "health-watchers-cdn-v1",
+  "Comment": "Health Watchers production CDN",
+  "Enabled": true,
+  "HttpVersion": "http2and3",
+  "IsIPV6Enabled": true,
+  "PriceClass": "PriceClass_100",
+  "WebACLId": "WAF_WEBACL_ARN",
+  "Aliases": { "Quantity": 1, "Items": ["cdn.health-watchers.io"] },
+  "ViewerCertificate": {
+    "ACMCertificateArn": "ACM_CERT_ARN",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+  "Origins": {
+    "Quantity": 2,
+    "Items": [
+      {
+        "Id": "alb-primary",
+        "DomainName": "ALB_PRIMARY_DNS",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] },
+          "OriginReadTimeout": 30,
+          "OriginKeepaliveTimeout": 5
+        },
+        "OriginShield": { "Enabled": true, "OriginShieldRegion": "us-east-1" },
+        "CustomHeaders": {
+          "Quantity": 1,
+          "Items": [{ "HeaderName": "X-CDN-Origin-Verify", "HeaderValue": "REPLACE_WITH_SECRET" }]
+        }
+      },
+      {
+        "Id": "alb-dr",
+        "DomainName": "ALB_DR_DNS",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] },
+          "OriginReadTimeout": 30,
+          "OriginKeepaliveTimeout": 5
+        },
+        "CustomHeaders": {
+          "Quantity": 1,
+          "Items": [{ "HeaderName": "X-CDN-Origin-Verify", "HeaderValue": "REPLACE_WITH_SECRET" }]
+        }
+      }
+    ]
+  },
+  "OriginGroups": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "alb-failover-group",
+        "FailoverCriteria": { "StatusCodes": { "Quantity": 4, "Items": [500, 502, 503, 504] } },
+        "Members": {
+          "Quantity": 2,
+          "Items": [{ "OriginId": "alb-primary" }, { "OriginId": "alb-dr" }]
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "alb-failover-group",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "Compress": true,
+    "AllowedMethods": {
+      "Quantity": 7,
+      "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+      "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+    },
+    "CachePolicyId": "hw-no-store",
+    "OriginRequestPolicyId": "hw-all-viewer",
+    "ResponseHeadersPolicyId": "hw-security-headers",
+    "FieldLevelEncryptionId": ""
+  },
+  "CacheBehaviors": {
+    "Quantity": 5,
+    "Items": [
+      {
+        "PathPattern": "/_next/static/*",
+        "TargetOriginId": "alb-primary",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "Compress": true,
+        "AllowedMethods": {
+          "Quantity": 3,
+          "Items": ["GET", "HEAD", "OPTIONS"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "hw-immutable-1y",
+        "ResponseHeadersPolicyId": "hw-security-headers"
+      },
+      {
+        "PathPattern": "/_next/image*",
+        "TargetOriginId": "alb-primary",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "Compress": true,
+        "AllowedMethods": {
+          "Quantity": 3,
+          "Items": ["GET", "HEAD", "OPTIONS"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "hw-images-30d",
+        "ResponseHeadersPolicyId": "hw-security-headers"
+      },
+      {
+        "PathPattern": "/images/*",
+        "TargetOriginId": "alb-primary",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "Compress": true,
+        "AllowedMethods": {
+          "Quantity": 3,
+          "Items": ["GET", "HEAD", "OPTIONS"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "hw-images-30d",
+        "ResponseHeadersPolicyId": "hw-security-headers"
+      },
+      {
+        "PathPattern": "/api/v1/icd10*",
+        "TargetOriginId": "alb-failover-group",
+        "ViewerProtocolPolicy": "https-only",
+        "Compress": true,
+        "AllowedMethods": {
+          "Quantity": 3,
+          "Items": ["GET", "HEAD", "OPTIONS"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "hw-reference-5m",
+        "OriginRequestPolicyId": "hw-all-viewer",
+        "ResponseHeadersPolicyId": "hw-security-headers"
+      },
+      {
+        "PathPattern": "/api/*",
+        "TargetOriginId": "alb-failover-group",
+        "ViewerProtocolPolicy": "https-only",
+        "Compress": true,
+        "AllowedMethods": {
+          "Quantity": 7,
+          "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "CachePolicyId": "hw-no-store",
+        "OriginRequestPolicyId": "hw-all-viewer",
+        "ResponseHeadersPolicyId": "hw-security-headers"
+      }
+    ]
+  },
+  "CustomErrorResponses": {
+    "Quantity": 2,
+    "Items": [
+      {
+        "ErrorCode": 502,
+        "ResponsePagePath": "/_offline.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      },
+      {
+        "ErrorCode": 503,
+        "ResponsePagePath": "/_offline.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      }
+    ]
+  },
+  "Logging": {
+    "Enabled": true,
+    "Bucket": "health-watchers-cdn-logs.s3.amazonaws.com",
+    "Prefix": "cloudfront/",
+    "IncludeCookies": false
+  },
+  "_policies": {
+    "$comment": "Create these with aws cloudfront create-cache-policy / create-origin-request-policy / create-response-headers-policy, then swap the names above for the returned IDs.",
+    "cachePolicies": {
+      "hw-immutable-1y": {
+        "MinTTL": 31536000,
+        "DefaultTTL": 31536000,
+        "MaxTTL": 31536000,
+        "ParametersInCacheKeyAndForwardedToOrigin": {
+          "EnableAcceptEncodingBrotli": true,
+          "EnableAcceptEncodingGzip": true,
+          "HeadersConfig": { "HeaderBehavior": "none" },
+          "CookiesConfig": { "CookieBehavior": "none" },
+          "QueryStringsConfig": { "QueryStringBehavior": "none" }
+        }
+      },
+      "hw-images-30d": {
+        "MinTTL": 86400,
+        "DefaultTTL": 2592000,
+        "MaxTTL": 2592000,
+        "ParametersInCacheKeyAndForwardedToOrigin": {
+          "EnableAcceptEncodingBrotli": true,
+          "EnableAcceptEncodingGzip": true,
+          "HeadersConfig": {
+            "HeaderBehavior": "whitelist",
+            "Headers": { "Quantity": 1, "Items": ["Accept"] }
+          },
+          "CookiesConfig": { "CookieBehavior": "none" },
+          "QueryStringsConfig": {
+            "QueryStringBehavior": "whitelist",
+            "QueryStrings": { "Quantity": 3, "Items": ["url", "w", "q"] }
+          }
+        }
+      },
+      "hw-reference-5m": {
+        "MinTTL": 0,
+        "DefaultTTL": 300,
+        "MaxTTL": 300,
+        "ParametersInCacheKeyAndForwardedToOrigin": {
+          "EnableAcceptEncodingBrotli": true,
+          "EnableAcceptEncodingGzip": true,
+          "HeadersConfig": {
+            "HeaderBehavior": "whitelist",
+            "Headers": { "Quantity": 1, "Items": ["Accept-Language"] }
+          },
+          "CookiesConfig": { "CookieBehavior": "none" },
+          "QueryStringsConfig": { "QueryStringBehavior": "all" }
+        }
+      },
+      "hw-no-store": {
+        "MinTTL": 0,
+        "DefaultTTL": 0,
+        "MaxTTL": 0,
+        "ParametersInCacheKeyAndForwardedToOrigin": {
+          "EnableAcceptEncodingBrotli": true,
+          "EnableAcceptEncodingGzip": true,
+          "HeadersConfig": { "HeaderBehavior": "none" },
+          "CookiesConfig": { "CookieBehavior": "none" },
+          "QueryStringsConfig": { "QueryStringBehavior": "none" }
+        }
+      }
+    },
+    "responseHeadersPolicies": {
+      "hw-security-headers": {
+        "SecurityHeadersConfig": {
+          "StrictTransportSecurity": {
+            "Override": true,
+            "AccessControlMaxAgeSec": 31536000,
+            "IncludeSubdomains": true,
+            "Preload": true
+          },
+          "ContentTypeOptions": { "Override": true },
+          "FrameOptions": { "Override": true, "FrameOption": "DENY" },
+          "ReferrerPolicy": {
+            "Override": true,
+            "ReferrerPolicy": "strict-origin-when-cross-origin"
+          }
+        },
+        "CustomHeadersConfig": {
+          "Quantity": 1,
+          "Items": [{ "Header": "X-Cache-Config", "Value": "hw-cdn-v1", "Override": false }]
+        }
+      }
+    }
+  }
+}

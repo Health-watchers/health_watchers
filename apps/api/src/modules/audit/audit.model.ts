@@ -25,6 +25,9 @@ export type AuditAction =
   | 'IMMUNIZATION_UPDATE'
   | 'IMMUNIZATION_DELETE'
   | 'IMMUNIZATION_CERTIFICATE'
+  | 'IMMUNIZATION_ANALYTICS'
+  | 'IMMUNIZATION_LOT_RECALL'
+  | 'IMMUNIZATION_RECALL'
   | 'PATIENT_PHOTO_UPLOAD'
   | 'PATIENT_PHOTO_ACCESS'
   | 'PATIENT_PHOTO_DELETE'
@@ -47,7 +50,7 @@ export type AuditAction =
   | 'COMMUNICATION_LOG_VIEWED'
   | 'ACCOUNT_LOCKED'
   | 'ACCOUNT_UNLOCKED'
-  | 'REPORT_SCHEDULE_CREATE';
+  | 'INTERACTION_DATA_REFRESH';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -95,6 +98,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'IMMUNIZATION_UPDATE',
         'IMMUNIZATION_DELETE',
         'IMMUNIZATION_CERTIFICATE',
+        'IMMUNIZATION_ANALYTICS',
+        'IMMUNIZATION_LOT_RECALL',
+        'IMMUNIZATION_RECALL',
         'PATIENT_PHOTO_UPLOAD',
         'PATIENT_PHOTO_ACCESS',
         'PATIENT_PHOTO_DELETE',
@@ -117,7 +123,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'COMMUNICATION_LOG_VIEWED',
         'ACCOUNT_LOCKED',
         'ACCOUNT_UNLOCKED',
-        'REPORT_SCHEDULE_CREATE',
+        'INTERACTION_DATA_REFRESH',
       ],
       index: true,
     },

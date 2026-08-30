@@ -1,0 +1,117 @@
+groups:
+  - name: cdn
+    rules:
+      # Metrics come from scripts/cdn/cdn-performance-report.sh (textfile collector,
+      # scheduled) and a CDN provider exporter for near-real-time signals.
+
+      - alert: CDNCacheHitRatioLow
+        expr: hw_cdn_cache_hit_ratio < 0.95
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-cdn
+        annotations:
+          summary: 'CDN cache hit ratio {{ $value | humanizePercentage }} (< 95% target)'
+          description: >
+            Edge offload has dropped. Check cache-key normalisation, TTLs in
+            ops/cdn/, a recent deploy that changed asset paths, or an
+            over-broad purge.
+
+      - alert: CDNCacheHitRatioCritical
+        expr: hw_cdn_cache_hit_ratio < 0.80
+        for: 30m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-cdn
+        annotations:
+          summary: 'CDN cache hit ratio critically low ({{ $value | humanizePercentage }})'
+          description: 'Origin is taking most traffic — risk of origin overload and cost spike.'
+
+      - alert: CDNOriginErrorRatioHigh
+        expr: >
+          sum(rate(hw_cdn_edge_errors_total{class="5xx"}[10m]))
+            / clamp_min(sum(rate(hw_cdn_requests_total[10m])), 1) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'CDN edge 5xx ratio > 2%'
+          description: 'Errors returned from the edge. Check origin health and the origin failover group.'
+
+      - alert: CDNOriginLatencyHigh
+        expr: hw_cdn_origin_latency_p95_ms > 800
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'CDN → origin p95 latency {{ $value }}ms'
+          description: 'Cache misses are slow. Origin may be under load or the wrong region is primary.'
+
+      - alert: CDNOriginFailoverActive
+        expr: hw_cdn_origin_failover_active == 1
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'CDN is serving from the SECONDARY (DR) origin'
+          description: >
+            The primary origin failed health checks and the CDN origin group has
+            failed over. Follow docs/runbooks/DR_REGION_FAILOVER.md.
+
+      - alert: CDNTTFBRegressed
+        expr: hw_cdn_edge_ttfb_p95_ms > 100
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-cdn
+        annotations:
+          summary: 'Edge TTFB p95 {{ $value }}ms (> 100ms)'
+          description: 'Page-load target (50% faster) at risk. Check compression and cache coverage.'
+
+      - alert: CDNWAFBlockSpike
+        expr: increase(hw_cdn_waf_blocked_total[5m]) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: 'WAF blocked {{ $value }} requests in 5m'
+          description: 'Possible DDoS or scanner activity. Review ops/cdn/waf-rules.json triggers and top offending IPs/ASNs.'
+
+      - alert: CDNAuthRateLimitTriggered
+        expr: increase(hw_cdn_waf_rule_hits_total{rule=~"auth-endpoints-per-ip|login-per-ip"}[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: 'Auth-endpoint rate limiting firing frequently'
+          description: 'Credential-stuffing indicator. Correlate with HighAuthFailureRate on the API.'
+
+      - alert: CDNOriginOffloadCostAnomaly
+        expr: >
+          hw_cdn_origin_bytes > 1.5 * avg_over_time(hw_cdn_origin_bytes[7d])
+        for: 2h
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-cost
+        annotations:
+          summary: 'Origin egress 50% above the 7-day average'
+          description: 'Cache effectiveness dropped or traffic mix changed — cost impact. Cross-check CDNCacheHitRatioLow.'
+
+      - alert: CDNPerformanceReportStale
+        expr: time() - hw_cdn_report_timestamp_seconds > 172800
+        for: 1h
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: 'No CDN performance report in 48h'
+          description: 'The weekly cdn-performance-report job has not run — dashboards/alerts may be blind.'

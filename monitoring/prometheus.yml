@@ -17,6 +17,10 @@ rule_files:
   - 'alerts-security.yml'
   - 'alerts-business.yml'
   - 'alerts-database-replication.yml'
+  - 'alerts-secrets.yml'
+  - 'alerts-disaster-recovery.yml'
+  - 'alerts-cost.yml'
+  - 'alerts-cdn.yml'
 
 scrape_configs:
   # Health Watchers API

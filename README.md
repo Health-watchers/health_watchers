@@ -120,6 +120,10 @@ This will start:
 - API server on http://localhost:3001
 - Stellar service on http://localhost:3002
 
+### IDE Setup
+
+See [`docs/IDE_SETUP.md`](docs/IDE_SETUP.md) for recommended VS Code extensions, formatter/linter integration, and a debugger launch config for `apps/api`.
+
 ## Project Structure
 
 ```
@@ -167,7 +171,11 @@ Health Watchers is designed with HIPAA compliance in mind:
 - 🛡️ Input validation and sanitization
 - 🔐 Secrets management with AWS Secrets Manager support
 
-For detailed security guidelines, see `SECURITY.md`.
+For detailed security guidelines, see `SECURITY.md` and [`docs/SECURITY_POLICY.md`](docs/SECURITY_POLICY.md). For day-to-day rules on handling patient data in code, see [`docs/PHI_HANDLING_GUIDE.md`](docs/PHI_HANDLING_GUIDE.md); for onboarding a new vendor that will touch PHI, see [`docs/BAA_TEMPLATE.md`](docs/BAA_TEMPLATE.md).
+
+## Logging & Tracing
+
+The API uses Pino for structured logging and OpenTelemetry for distributed tracing, with correlation IDs tying logs, traces, and audit entries together for a single request. See [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) for the full guide, including log levels, redaction rules, and tracing/sampling configuration.
 
 ## Database Migrations
 

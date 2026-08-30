@@ -5,6 +5,8 @@ import { paymentExportRoutes } from './payments.export.controller';
 import { claimsRoutes } from './claims.controller';
 import { batchPaymentRouter } from './batch-payment.controller';
 import { exchangeRateRoutes } from './exchange-rate.controller';
+import recurringPaymentRouter from './recurring-payment.controller';
+import { analyticsRoutes } from './analytics.controller';
 
 const router = Router();
 
@@ -14,5 +16,7 @@ router.use('/', paymentRoutes);
 router.use('/', disputeRoutes);
 router.use('/claims', claimsRoutes);
 router.use('/batch', batchPaymentRouter);
+router.use('/recurring', recurringPaymentRouter);
+router.use('/', analyticsRoutes);
 
 export default router;
