@@ -10,6 +10,7 @@
  * │ clinical        │ /patients, /encounters, /appointments,           │
  * │                 │ /lab-results, /immunizations, /care-plans,       │
  * │                 │ /referrals, /medications, /schedules, /cds,      │
+ * │                 │ /interactions,                                        │
  * │                 │ /peer-reviews, /pre-auth, /icd10, /reports,     │
  * │                 │ /consent, /ai, /dashboard, /portal, /surveys     │
  * │ payments        │ /payments, /invoices, /subscriptions,            │
@@ -70,6 +71,7 @@ import { portalRoutes } from '../../modules/portal/portal.controller';
 import scheduleRoutes from '../../modules/schedules/schedules.routes';
 import providerSchedulingRoutes from '../../modules/provider-scheduling/provider-scheduling.routes';
 import cdsRoutes from '../../modules/cds/cds.controller';
+import interactionRoutes from '../../modules/interactions/interaction.controller';
 import { preAuthRoutes } from '../../modules/pre-auth/pre-auth.controller';
 import peerReviewsRouter from '../../modules/peer-reviews/peer-reviews.router';
 
@@ -150,6 +152,7 @@ v1Router.use('/portal', healthLogRouter);
 v1Router.use('/schedules', scheduleRoutes);
 v1Router.use('/provider-scheduling', providerSchedulingRoutes);
 v1Router.use('/cds', cdsRoutes);
+v1Router.use('/interactions', interactionRoutes);
 v1Router.use('/pre-auth', paymentLimiter, preAuthRoutes);
 v1Router.use('/peer-reviews', peerReviewsRouter);
 v1Router.use('/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);

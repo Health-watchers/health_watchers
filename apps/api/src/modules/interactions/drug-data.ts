@@ -1,0 +1,690 @@
+/**
+ * Medication catalog (Issue #1244)
+ *
+ * Curated set of commonly prescribed medications keyed by RxNorm concept
+ * unique identifier (RxCUI). Each entry carries generic + brand names and
+ * synonyms so free-text medication strings can be resolved deterministically.
+ *
+ * RxCUIs are real RxNorm identifiers; the catalog is a subset focused on the
+ * medications that participate in clinically significant interactions.
+ */
+
+export interface DrugEntry {
+  rxCui: string;
+  genericName: string;
+  brandNames: string[];
+  synonyms: string[];
+  drugClass: string;
+}
+
+export const DRUG_CATALOG: DrugEntry[] = [
+  // ── Anticoagulants / antiplatelets ─────────────────────────────────────────
+  {
+    rxCui: '11289',
+    genericName: 'warfarin',
+    brandNames: ['Coumadin', 'Jantoven'],
+    synonyms: [],
+    drugClass: 'anticoagulant',
+  },
+  {
+    rxCui: '1191',
+    genericName: 'aspirin',
+    brandNames: ['Bayer', 'Ecotrin'],
+    synonyms: ['acetylsalicylic acid', 'asa'],
+    drugClass: 'antiplatelet',
+  },
+  {
+    rxCui: '32968',
+    genericName: 'clopidogrel',
+    brandNames: ['Plavix'],
+    synonyms: [],
+    drugClass: 'antiplatelet',
+  },
+  {
+    rxCui: '1366492',
+    genericName: 'apixaban',
+    brandNames: ['Eliquis'],
+    synonyms: [],
+    drugClass: 'anticoagulant',
+  },
+  {
+    rxCui: '1114197',
+    genericName: 'rivaroxaban',
+    brandNames: ['Xarelto'],
+    synonyms: [],
+    drugClass: 'anticoagulant',
+  },
+  {
+    rxCui: '617314',
+    genericName: 'dabigatran',
+    brandNames: ['Pradaxa'],
+    synonyms: [],
+    drugClass: 'anticoagulant',
+  },
+  {
+    rxCui: '5136',
+    genericName: 'heparin',
+    brandNames: [],
+    synonyms: ['unfractionated heparin', 'ufh'],
+    drugClass: 'anticoagulant',
+  },
+  {
+    rxCui: '209387',
+    genericName: 'enoxaparin',
+    brandNames: ['Lovenox'],
+    synonyms: ['low molecular weight heparin', 'lmwh'],
+    drugClass: 'anticoagulant',
+  },
+
+  // ── Statins ────────────────────────────────────────────────────────────────
+  {
+    rxCui: '36567',
+    genericName: 'simvastatin',
+    brandNames: ['Zocor'],
+    synonyms: [],
+    drugClass: 'statin',
+  },
+  {
+    rxCui: '83367',
+    genericName: 'atorvastatin',
+    brandNames: ['Lipitor'],
+    synonyms: [],
+    drugClass: 'statin',
+  },
+  {
+    rxCui: '400017',
+    genericName: 'rosuvastatin',
+    brandNames: ['Crestor'],
+    synonyms: [],
+    drugClass: 'statin',
+  },
+  {
+    rxCui: '6472',
+    genericName: 'lovastatin',
+    brandNames: ['Mevacor', 'Altoprev'],
+    synonyms: [],
+    drugClass: 'statin',
+  },
+
+  // ── Diabetes ───────────────────────────────────────────────────────────────
+  {
+    rxCui: '6809',
+    genericName: 'metformin',
+    brandNames: ['Glucophage', 'Fortamet'],
+    synonyms: [],
+    drugClass: 'biguanide',
+  },
+  {
+    rxCui: '4763',
+    genericName: 'glyburide',
+    brandNames: ['Diabeta', 'Micronase'],
+    synonyms: ['glibenclamide'],
+    drugClass: 'sulfonylurea',
+  },
+  {
+    rxCui: '4785',
+    genericName: 'glipizide',
+    brandNames: ['Glucotrol'],
+    synonyms: [],
+    drugClass: 'sulfonylurea',
+  },
+  {
+    rxCui: '4026',
+    genericName: 'insulin',
+    brandNames: ['Humulin', 'Novolin', 'Lantus', 'Novolog'],
+    synonyms: ['insulin glargine', 'insulin lispro'],
+    drugClass: 'insulin',
+  },
+
+  // ── ACE inhibitors / ARBs / diuretics ──────────────────────────────────────
+  {
+    rxCui: '29046',
+    genericName: 'lisinopril',
+    brandNames: ['Prinivil', 'Zestril'],
+    synonyms: [],
+    drugClass: 'ace-inhibitor',
+  },
+  {
+    rxCui: '3821',
+    genericName: 'enalapril',
+    brandNames: ['Vasotec'],
+    synonyms: [],
+    drugClass: 'ace-inhibitor',
+  },
+  {
+    rxCui: '30395',
+    genericName: 'losartan',
+    brandNames: ['Cozaar'],
+    synonyms: [],
+    drugClass: 'arb',
+  },
+  {
+    rxCui: '65924',
+    genericName: 'valsartan',
+    brandNames: ['Diovan'],
+    synonyms: [],
+    drugClass: 'arb',
+  },
+  {
+    rxCui: '10079',
+    genericName: 'spironolactone',
+    brandNames: ['Aldactone'],
+    synonyms: [],
+    drugClass: 'potassium-sparing-diuretic',
+  },
+  {
+    rxCui: '8617',
+    genericName: 'potassium',
+    brandNames: ['K-Dur', 'Klor-Con'],
+    synonyms: ['potassium chloride', 'kcl'],
+    drugClass: 'electrolyte',
+  },
+  {
+    rxCui: '4602',
+    genericName: 'furosemide',
+    brandNames: ['Lasix'],
+    synonyms: [],
+    drugClass: 'loop-diuretic',
+  },
+  {
+    rxCui: '5487',
+    genericName: 'hydrochlorothiazide',
+    brandNames: ['Microzide'],
+    synonyms: ['hctz'],
+    drugClass: 'thiazide-diuretic',
+  },
+
+  // ── Cardiac rhythm / rate ──────────────────────────────────────────────────
+  {
+    rxCui: '703',
+    genericName: 'amiodarone',
+    brandNames: ['Cordarone', 'Pacerone'],
+    synonyms: [],
+    drugClass: 'antiarrhythmic',
+  },
+  {
+    rxCui: '35636',
+    genericName: 'digoxin',
+    brandNames: ['Lanoxin'],
+    synonyms: [],
+    drugClass: 'cardiac-glycoside',
+  },
+  {
+    rxCui: '9997',
+    genericName: 'sotalol',
+    brandNames: ['Betapace'],
+    synonyms: [],
+    drugClass: 'antiarrhythmic',
+  },
+  {
+    rxCui: '11170',
+    genericName: 'verapamil',
+    brandNames: ['Calan', 'Isoptin'],
+    synonyms: [],
+    drugClass: 'calcium-channel-blocker',
+  },
+  {
+    rxCui: '3379',
+    genericName: 'diltiazem',
+    brandNames: ['Cardizem', 'Tiazac'],
+    synonyms: [],
+    drugClass: 'calcium-channel-blocker',
+  },
+  {
+    rxCui: '8766',
+    genericName: 'propranolol',
+    brandNames: ['Inderal'],
+    synonyms: [],
+    drugClass: 'beta-blocker',
+  },
+  {
+    rxCui: '6918',
+    genericName: 'metoprolol',
+    brandNames: ['Lopressor', 'Toprol'],
+    synonyms: [],
+    drugClass: 'beta-blocker',
+  },
+
+  // ── Antidepressants / psychiatric ──────────────────────────────────────────
+  {
+    rxCui: '4493',
+    genericName: 'fluoxetine',
+    brandNames: ['Prozac'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '8049',
+    genericName: 'paroxetine',
+    brandNames: ['Paxil'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '8640',
+    genericName: 'sertraline',
+    brandNames: ['Zoloft'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '207520',
+    genericName: 'citalopram',
+    brandNames: ['Celexa'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '310798',
+    genericName: 'escitalopram',
+    brandNames: ['Lexapro'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '4183',
+    genericName: 'venlafaxine',
+    brandNames: ['Effexor'],
+    synonyms: [],
+    drugClass: 'snri',
+  },
+  {
+    rxCui: '478726',
+    genericName: 'duloxetine',
+    brandNames: ['Cymbalta'],
+    synonyms: [],
+    drugClass: 'snri',
+  },
+  {
+    rxCui: '856',
+    genericName: 'amitriptyline',
+    brandNames: ['Elavil'],
+    synonyms: [],
+    drugClass: 'tca',
+  },
+  {
+    rxCui: '10767',
+    genericName: 'trazodone',
+    brandNames: ['Desyrel', 'Oleptro'],
+    synonyms: [],
+    drugClass: 'atypical-antidepressant',
+  },
+  {
+    rxCui: '4516',
+    genericName: 'fluvoxamine',
+    brandNames: ['Luvox'],
+    synonyms: [],
+    drugClass: 'ssri',
+  },
+  {
+    rxCui: '8129',
+    genericName: 'phenelzine',
+    brandNames: ['Nardil'],
+    synonyms: [],
+    drugClass: 'maoi',
+  },
+  {
+    rxCui: '10848',
+    genericName: 'tranylcypromine',
+    brandNames: ['Parnate'],
+    synonyms: [],
+    drugClass: 'maoi',
+  },
+  {
+    rxCui: '9651',
+    genericName: 'selegiline',
+    brandNames: ['Emsam', 'Eldepryl'],
+    synonyms: [],
+    drugClass: 'maoi',
+  },
+  {
+    rxCui: '6455',
+    genericName: 'lithium',
+    brandNames: ['Lithobid'],
+    synonyms: ['lithium carbonate'],
+    drugClass: 'mood-stabilizer',
+  },
+
+  // ── Antiepileptics ─────────────────────────────────────────────────────────
+  {
+    rxCui: '8183',
+    genericName: 'phenytoin',
+    brandNames: ['Dilantin'],
+    synonyms: [],
+    drugClass: 'antiepileptic',
+  },
+  {
+    rxCui: '2001',
+    genericName: 'carbamazepine',
+    brandNames: ['Tegretol'],
+    synonyms: [],
+    drugClass: 'antiepileptic',
+  },
+  {
+    rxCui: '10913',
+    genericName: 'valproate',
+    brandNames: ['Depakote'],
+    synonyms: ['valproic acid', 'divalproex'],
+    drugClass: 'antiepileptic',
+  },
+  {
+    rxCui: '29916',
+    genericName: 'lamotrigine',
+    brandNames: ['Lamictal'],
+    synonyms: [],
+    drugClass: 'antiepileptic',
+  },
+  {
+    rxCui: '8134',
+    genericName: 'phenobarbital',
+    brandNames: [],
+    synonyms: [],
+    drugClass: 'barbiturate',
+  },
+
+  // ── Antimicrobials / antifungals ───────────────────────────────────────────
+  {
+    rxCui: '4024',
+    genericName: 'erythromycin',
+    brandNames: ['Ery-Tab'],
+    synonyms: [],
+    drugClass: 'macrolide',
+  },
+  {
+    rxCui: '21212',
+    genericName: 'clarithromycin',
+    brandNames: ['Biaxin'],
+    synonyms: [],
+    drugClass: 'macrolide',
+  },
+  {
+    rxCui: '5736',
+    genericName: 'azithromycin',
+    brandNames: ['Zithromax'],
+    synonyms: [],
+    drugClass: 'macrolide',
+  },
+  {
+    rxCui: '2551',
+    genericName: 'ciprofloxacin',
+    brandNames: ['Cipro'],
+    synonyms: [],
+    drugClass: 'fluoroquinolone',
+  },
+  {
+    rxCui: '30382',
+    genericName: 'levofloxacin',
+    brandNames: ['Levaquin'],
+    synonyms: [],
+    drugClass: 'fluoroquinolone',
+  },
+  {
+    rxCui: '6960',
+    genericName: 'metronidazole',
+    brandNames: ['Flagyl'],
+    synonyms: [],
+    drugClass: 'nitroimidazole',
+  },
+  {
+    rxCui: '4491',
+    genericName: 'fluconazole',
+    brandNames: ['Diflucan'],
+    synonyms: [],
+    drugClass: 'azole-antifungal',
+  },
+  {
+    rxCui: '6270',
+    genericName: 'ketoconazole',
+    brandNames: ['Nizoral'],
+    synonyms: [],
+    drugClass: 'azole-antifungal',
+  },
+  {
+    rxCui: '9384',
+    genericName: 'rifampin',
+    brandNames: ['Rifadin'],
+    synonyms: ['rifampicin'],
+    drugClass: 'rifamycin',
+  },
+  {
+    rxCui: '5944',
+    genericName: 'isoniazid',
+    brandNames: [],
+    synonyms: ['inh'],
+    drugClass: 'antituberculosis',
+  },
+  {
+    rxCui: '723',
+    genericName: 'amoxicillin',
+    brandNames: ['Amoxil'],
+    synonyms: [],
+    drugClass: 'penicillin',
+  },
+  {
+    rxCui: '7980',
+    genericName: 'penicillin',
+    brandNames: ['Penicillin VK'],
+    synonyms: [],
+    drugClass: 'penicillin',
+  },
+  {
+    rxCui: '3658',
+    genericName: 'doxycycline',
+    brandNames: ['Vibramycin'],
+    synonyms: [],
+    drugClass: 'tetracycline',
+  },
+  {
+    rxCui: '10314',
+    genericName: 'tetracycline',
+    brandNames: ['Sumycin'],
+    synonyms: [],
+    drugClass: 'tetracycline',
+  },
+
+  // ── Opioids / pain ─────────────────────────────────────────────────────────
+  {
+    rxCui: '6813',
+    genericName: 'methadone',
+    brandNames: ['Dolophine'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '6822',
+    genericName: 'meperidine',
+    brandNames: ['Demerol'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '107735',
+    genericName: 'tramadol',
+    brandNames: ['Ultram'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  { rxCui: '2670', genericName: 'codeine', brandNames: [], synonyms: [], drugClass: 'opioid' },
+  {
+    rxCui: '7804',
+    genericName: 'oxycodone',
+    brandNames: ['OxyContin', 'Percocet'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '5489',
+    genericName: 'hydrocodone',
+    brandNames: ['Vicodin', 'Norco'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '7052',
+    genericName: 'morphine',
+    brandNames: ['MS Contin'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '4337',
+    genericName: 'fentanyl',
+    brandNames: ['Duragesic'],
+    synonyms: [],
+    drugClass: 'opioid',
+  },
+  {
+    rxCui: '5640',
+    genericName: 'ibuprofen',
+    brandNames: ['Advil', 'Motrin'],
+    synonyms: [],
+    drugClass: 'nsaid',
+  },
+  {
+    rxCui: '7240',
+    genericName: 'naproxen',
+    brandNames: ['Aleve', 'Naprosyn'],
+    synonyms: [],
+    drugClass: 'nsaid',
+  },
+  {
+    rxCui: '3362',
+    genericName: 'diclofenac',
+    brandNames: ['Voltaren'],
+    synonyms: [],
+    drugClass: 'nsaid',
+  },
+  {
+    rxCui: '27881',
+    genericName: 'celecoxib',
+    brandNames: ['Celebrex'],
+    synonyms: [],
+    drugClass: 'nsaid',
+  },
+
+  // ── Benzodiazepines ────────────────────────────────────────────────────────
+  {
+    rxCui: '3319',
+    genericName: 'diazepam',
+    brandNames: ['Valium'],
+    synonyms: [],
+    drugClass: 'benzodiazepine',
+  },
+  {
+    rxCui: '281',
+    genericName: 'alprazolam',
+    brandNames: ['Xanax'],
+    synonyms: [],
+    drugClass: 'benzodiazepine',
+  },
+  {
+    rxCui: '6634',
+    genericName: 'lorazepam',
+    brandNames: ['Ativan'],
+    synonyms: [],
+    drugClass: 'benzodiazepine',
+  },
+
+  // ── Other ──────────────────────────────────────────────────────────────────
+  {
+    rxCui: '6851',
+    genericName: 'methotrexate',
+    brandNames: ['Trexall'],
+    synonyms: [],
+    drugClass: 'antimetabolite',
+  },
+  {
+    rxCui: '636',
+    genericName: 'allopurinol',
+    brandNames: ['Zyloprim'],
+    synonyms: [],
+    drugClass: 'xanthine-oxidase-inhibitor',
+  },
+  {
+    rxCui: '52170',
+    genericName: 'sildenafil',
+    brandNames: ['Viagra', 'Revatio'],
+    synonyms: [],
+    drugClass: 'pde5-inhibitor',
+  },
+  {
+    rxCui: '435024',
+    genericName: 'tadalafil',
+    brandNames: ['Cialis'],
+    synonyms: [],
+    drugClass: 'pde5-inhibitor',
+  },
+  {
+    rxCui: '7420',
+    genericName: 'nitroglycerin',
+    brandNames: ['Nitrostat', 'Nitro-Dur'],
+    synonyms: ['gtn'],
+    drugClass: 'nitrate',
+  },
+  {
+    rxCui: '6113',
+    genericName: 'isosorbide',
+    brandNames: ['Isordil', 'Imdur'],
+    synonyms: ['isosorbide dinitrate', 'isosorbide mononitrate'],
+    drugClass: 'nitrate',
+  },
+  {
+    rxCui: '40216',
+    genericName: 'levothyroxine',
+    brandNames: ['Synthroid', 'Levoxyl'],
+    synonyms: [],
+    drugClass: 'thyroid-hormone',
+  },
+  {
+    rxCui: '7646',
+    genericName: 'omeprazole',
+    brandNames: ['Prilosec'],
+    synonyms: [],
+    drugClass: 'proton-pump-inhibitor',
+  },
+  {
+    rxCui: '284682',
+    genericName: 'esomeprazole',
+    brandNames: ['Nexium'],
+    synonyms: [],
+    drugClass: 'proton-pump-inhibitor',
+  },
+  {
+    rxCui: '8660',
+    genericName: 'prednisone',
+    brandNames: ['Deltasone'],
+    synonyms: [],
+    drugClass: 'corticosteroid',
+  },
+  {
+    rxCui: '3431',
+    genericName: 'dexamethasone',
+    brandNames: ['Decadron'],
+    synonyms: [],
+    drugClass: 'corticosteroid',
+  },
+  {
+    rxCui: '10581',
+    genericName: 'tizanidine',
+    brandNames: ['Zanaflex'],
+    synonyms: [],
+    drugClass: 'muscle-relaxant',
+  },
+  {
+    rxCui: '10582',
+    genericName: 'theophylline',
+    brandNames: ['Theo-24'],
+    synonyms: [],
+    drugClass: 'xanthine',
+  },
+  {
+    rxCui: '2572',
+    genericName: 'cimetidine',
+    brandNames: ['Tagamet'],
+    synonyms: [],
+    drugClass: 'h2-antagonist',
+  },
+];
+
+/** Version of the bundled catalog — bumped when the data files change. */
+export const DRUG_CATALOG_VERSION = '2026.1';
