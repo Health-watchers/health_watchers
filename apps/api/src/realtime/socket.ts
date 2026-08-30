@@ -4,6 +4,7 @@ import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
 import { config } from '@health-watchers/config';
 import { CollaborationHandler } from './collaboration.handler';
 import { PresenceHandler } from './presence.handler';
+import { SyncHandler } from './sync.handler';
 import logger from '../utils/logger';
 
 let io: SocketIOServer | null = null;
