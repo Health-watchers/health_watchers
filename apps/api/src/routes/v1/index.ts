@@ -58,6 +58,7 @@ import {
   cvxCodesRouter,
 } from '../../modules/immunizations/immunizations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
+import { analyticsRoutes } from '../../modules/reports/analytics/analytics.controller';
 import {
   healthLogRouter,
   patientHealthLogRouter,
@@ -137,6 +138,9 @@ v1Router.use('/referrals', referralRoutes);
 v1Router.use('/', consentRoutes);
 v1Router.use('/immunizations/cvx', cvxCodesRouter);
 v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
+// #1251 — Reporting & analytics engine (templates, custom query builder,
+// cohort analysis, scheduling, dashboard widgets)
+v1Router.use('/reports', reportGenerationLimiter, analyticsRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
 v1Router.use('/schedules', scheduleRoutes);

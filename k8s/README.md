@@ -12,14 +12,25 @@ k8s/
 ├── external-secrets.yaml       # External Secrets Operator integration
 ├── ingress.yaml                # Ingress with TLS (cert-manager)
 ├── network-policies.yaml       # NetworkPolicy resources (default-deny + per-service rules)
+├── service-accounts.yaml       # Per-component ServiceAccounts + least-privilege RBAC
+├── storage/
+│   └── persistent-volume-claims.yaml  # PVCs: standalone MongoDB, Redis, backups
+├── logging/
+│   ├── fluent-bit-sidecar.yaml        # Fluent Bit sidecar ConfigMap
+│   └── logging-sidecar-patch.yaml     # Strategic-merge patch to add the sidecar
+├── DISASTER_RECOVERY.md        # DR runbook (RTO/RPO, restore + failover procedures)
 ├── api/
 │   ├── deployment.yaml         # API Deployment (2 replicas)
 │   ├── service.yaml            # API ClusterIP Service
 │   ├── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
 │   └── pdb.yaml                # PodDisruptionBudget (minAvailable: 1)
+├── redis/
+│   ├── deployment.yaml         # In-cluster Redis (AOF persistence, 1 replica)
+│   └── service.yaml            # Redis ClusterIP Service
 ├── web/
 │   ├── deployment.yaml         # Web Deployment (2 replicas)
 │   ├── service.yaml            # Web ClusterIP Service
+│   ├── hpa.yaml                # HorizontalPodAutoscaler (2–8 replicas)
 │   └── pdb.yaml                # PodDisruptionBudget (minAvailable: 1)
 └── stellar-service/
     ├── deployment.yaml         # Stellar Service Deployment (2 replicas)
@@ -69,13 +80,22 @@ kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/secrets.yaml
 
+# Storage, RBAC and the data tier
+kubectl apply -f k8s/service-accounts.yaml
+kubectl apply -f k8s/storage/persistent-volume-claims.yaml
+kubectl apply -f k8s/redis/
+
 # Deploy services
 kubectl apply -f k8s/api/
 kubectl apply -f k8s/web/
 kubectl apply -f k8s/stellar-service/
 
-# Apply ingress
+# Apply ingress + network policies
 kubectl apply -f k8s/ingress.yaml
+kubectl apply -f k8s/network-policies.yaml
+
+# Optional: centralised logging sidecar
+kubectl apply -f k8s/logging/fluent-bit-sidecar.yaml
 ```
 
 ### 5. Verify Deployment
@@ -97,11 +117,12 @@ kubectl get hpa -n health-watchers
 
 ## Autoscaling
 
-Both the API and Stellar Service have HorizontalPodAutoscalers configured:
+The API, Web and Stellar Service each have a HorizontalPodAutoscaler configured:
 
 | Service         | Min | Max | CPU trigger | Memory trigger | Custom metric                        |
 |-----------------|-----|-----|-------------|----------------|--------------------------------------|
 | API             | 2   | 10  | > 70%       | > 80%          | —                                    |
+| Web             | 2   | 8   | > 70%       | > 80%          | —                                    |
 | Stellar Service | 2   | 10  | > 70%       | > 80%          | `stellar_payment_queue_depth` > 10   |
 
 Scale-up is stabilized over 60 s (max +2 pods/min); scale-down over 5 minutes (max -1 pod/min) to prevent flapping.
@@ -265,6 +286,37 @@ Network policies are controlled in `values.yaml` (see `helm/health-watchers/temp
 networkPolicies:
   enabled: false
 ```
+
+## Persistent Storage
+
+`storage/persistent-volume-claims.yaml` defines PVCs for the single-node
+MongoDB Deployment (`standalone-mongodb-data`), Redis (`redis-data`) and a
+shared `backups` volume (ReadWriteMany). The production MongoDB replica set
+(`mongodb-replica-set-statefulset.yaml`) provisions its own PVCs through
+`volumeClaimTemplates` and ignores these. Set `storageClassName` to a class that
+exists in your cluster before applying.
+
+## Service Accounts & RBAC
+
+`rbac.yaml` keeps the original shared `health-watchers` ServiceAccount.
+`service-accounts.yaml` adds least-privilege per-component accounts — `api` gets
+read-only access to ConfigMaps/Secrets/Endpoints; `web`, `stellar-service` and
+`redis` run with `automountServiceAccountToken: false` (no Kubernetes API access
+at all). Point each Deployment's `serviceAccountName` at its component account.
+
+## Centralised Logging
+
+`logging/fluent-bit-sidecar.yaml` (ConfigMap) plus
+`logging/logging-sidecar-patch.yaml` (strategic-merge patch) add a Fluent Bit
+sidecar that tails JSON logs from a shared `emptyDir` and ships them to
+Elasticsearch/Loki. Set `LOG_FILE=/var/log/app/app.log` in the ConfigMap so the
+app writes to the shared volume in addition to stdout.
+
+## Disaster Recovery
+
+See [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md) for RTO/RPO targets, backup
+inventory, and step-by-step restore / region-failover procedures. Run the DR
+test in that document quarterly.
 
 ## Helm Chart
 

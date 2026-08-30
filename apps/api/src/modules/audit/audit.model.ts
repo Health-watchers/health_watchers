@@ -46,7 +46,8 @@ export type AuditAction =
   | 'COMMUNICATION_LOG_CREATED'
   | 'COMMUNICATION_LOG_VIEWED'
   | 'ACCOUNT_LOCKED'
-  | 'ACCOUNT_UNLOCKED';
+  | 'ACCOUNT_UNLOCKED'
+  | 'REPORT_SCHEDULE_CREATE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -116,6 +117,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'COMMUNICATION_LOG_VIEWED',
         'ACCOUNT_LOCKED',
         'ACCOUNT_UNLOCKED',
+        'REPORT_SCHEDULE_CREATE',
       ],
       index: true,
     },
