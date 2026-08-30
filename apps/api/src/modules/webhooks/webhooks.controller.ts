@@ -21,9 +21,43 @@ import { retryDelivery } from './retry-worker';
 const router = Router();
 
 /**
- * POST /webhooks/stellar
- * Receives payment notifications from the stellar-service stream.
- * Matches by memo to a pending PaymentRecord and confirms it.
+ * @swagger
+ * /webhooks/stellar:
+ *   post:
+ *     summary: Receive payment notifications from the stellar-service stream (internal, unauthenticated)
+ *     description: Matches by memo to a pending PaymentRecord and confirms it. Called by the internal stellar-service, not by third-party integrators.
+ *     tags: [Webhooks]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [memo, txHash]
+ *             properties:
+ *               memo: { type: string }
+ *               txHash: { type: string }
+ *               amount: { type: string }
+ *               from: { type: string }
+ *     responses:
+ *       200:
+ *         description: Payment processed, or ignored if no matching pending payment was found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     intentId: { type: string }
+ *                     txHash: { type: string }
+ *       400:
+ *         description: Missing memo or txHash
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post(
   '/stellar',
@@ -61,7 +95,57 @@ router.post(
   })
 );
 
-// POST /webhooks/stellar-payment (inbound webhook with signature verification)
+/**
+ * @swagger
+ * /webhooks/stellar-payment:
+ *   post:
+ *     summary: Receive a signed inbound payment webhook (internal, HMAC-verified)
+ *     description: Requires an X-Webhook-Signature header matching HMAC-SHA256(webhook.secret, rawBody). Matches the registered webhook by destination (clinic Stellar public key), then updates the matching pending PaymentRecord.
+ *     tags: [Webhooks]
+ *     parameters:
+ *       - in: header
+ *         name: X-Webhook-Signature
+ *         required: true
+ *         schema: { type: string }
+ *         description: Hex HMAC-SHA256 digest of the raw request body, signed with the webhook's secret
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [transactionHash, amount, destination, status]
+ *             properties:
+ *               transactionHash: { type: string }
+ *               amount: { type: string }
+ *               destination: { type: string, description: "Clinic's Stellar public key, used to look up the webhook" }
+ *               memo: { type: string }
+ *               status: { type: string, enum: [confirmed, failed] }
+ *     responses:
+ *       200:
+ *         description: Payment status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     intentId: { type: string }
+ *                     status: { type: string }
+ *       401:
+ *         description: Missing or invalid X-Webhook-Signature
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: No matching webhook or payment record found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
   '/stellar-payment',
   validateRequest({ body: inboundWebhookSchema }),
@@ -130,7 +214,70 @@ router.post(
   })
 );
 
-// POST /webhooks (register webhook)
+/**
+ * @swagger
+ * /webhooks:
+ *   post:
+ *     summary: Register a new webhook subscription for the caller's clinic
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [url, events]
+ *             properties:
+ *               url: { type: string, format: uri, example: 'https://your-service.com/webhook' }
+ *               events:
+ *                 type: array
+ *                 items: { type: string }
+ *                 example: [payment.confirmed, appointment.created]
+ *                 description: 'See the full event list at GET /webhooks/events'
+ *               description: { type: string, maxLength: 255 }
+ *               retryConfig:
+ *                 type: object
+ *                 properties:
+ *                   maxRetries: { type: integer, minimum: 1, maximum: 10, default: 3 }
+ *                   backoffType: { type: string, enum: [exponential, linear, fixed], default: exponential }
+ *                   initialDelayMs: { type: integer, minimum: 100, maximum: 60000, default: 1000 }
+ *     responses:
+ *       201:
+ *         description: Webhook registered — the signing secret is returned once and never shown again
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, example: '507f1f77bcf86cd799439040' }
+ *                     url: { type: string }
+ *                     events: { type: array, items: { type: string } }
+ *                     description: { type: string, nullable: true }
+ *                     retryConfig: { type: object }
+ *                     secret: { type: string, description: 'HMAC signing secret — store securely, shown only once' }
+ *                     createdAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error (e.g. disallowed webhook URL)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Caller lacks CLINIC_ADMIN or SUPER_ADMIN role
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
   '/',
   authenticate,
@@ -165,7 +312,41 @@ router.post(
   })
 );
 
-// GET /webhooks (list webhooks)
+/**
+ * @swagger
+ * /webhooks:
+ *   get:
+ *     summary: List webhook subscriptions for the caller's clinic
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of webhooks (secrets excluded)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       url: { type: string }
+ *                       events: { type: array, items: { type: string } }
+ *                       isActive: { type: boolean }
+ *                       description: { type: string, nullable: true }
+ *                       retryConfig: { type: object }
+ *                       createdAt: { type: string, format: date-time }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/',
   authenticate,
@@ -190,7 +371,30 @@ router.get(
   })
 );
 
-// GET /webhooks/events (list available event types)
+/**
+ * @swagger
+ * /webhooks/events:
+ *   get:
+ *     summary: List all webhook event types available for subscription
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of event type strings, e.g. patient.created, payment.confirmed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data: { type: array, items: { type: string }, example: [patient.created, payment.confirmed, appointment.created] }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/events',
   authenticate,
@@ -204,7 +408,45 @@ router.get(
   })
 );
 
-// GET /webhooks/:id (get single webhook)
+/**
+ * @swagger
+ * /webhooks/{id}:
+ *   get:
+ *     summary: Get a single webhook subscription
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Webhook details (secret excluded)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     url: { type: string }
+ *                     events: { type: array, items: { type: string } }
+ *                     isActive: { type: boolean }
+ *                     description: { type: string, nullable: true }
+ *                     retryConfig: { type: object }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/:id',
   authenticate,
@@ -238,7 +480,66 @@ router.get(
   })
 );
 
-// PATCH /webhooks/:id (update webhook url, events, or active state)
+/**
+ * @swagger
+ * /webhooks/{id}:
+ *   patch:
+ *     summary: Update a webhook's URL, events, active state, description, or retry config
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               url: { type: string, format: uri }
+ *               events: { type: array, items: { type: string } }
+ *               isActive: { type: boolean }
+ *               description: { type: string, maxLength: 255 }
+ *               retryConfig:
+ *                 type: object
+ *                 properties:
+ *                   maxRetries: { type: integer, minimum: 1, maximum: 10 }
+ *                   backoffType: { type: string, enum: [exponential, linear, fixed] }
+ *                   initialDelayMs: { type: integer, minimum: 100, maximum: 60000 }
+ *     responses:
+ *       200:
+ *         description: Webhook updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     url: { type: string }
+ *                     events: { type: array, items: { type: string } }
+ *                     isActive: { type: boolean }
+ *                     description: { type: string, nullable: true }
+ *                     retryConfig: { type: object }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.patch(
   '/:id',
   authenticate,
@@ -282,7 +583,39 @@ router.patch(
   })
 );
 
-// DELETE /webhooks/:id (delete webhook)
+/**
+ * @swagger
+ * /webhooks/{id}:
+ *   delete:
+ *     summary: Delete a webhook and its delivery/event history
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Webhook deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     deleted: { type: boolean, example: true }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.delete(
   '/:id',
   authenticate,
@@ -310,7 +643,49 @@ router.delete(
   })
 );
 
-// GET /webhooks/:id/deliveries (webhook delivery log)
+/**
+ * @swagger
+ * /webhooks/{id}/deliveries:
+ *   get:
+ *     summary: Get the delivery log for a webhook (last 50 attempts, newest first)
+ *     description: See the "Webhook Delivery & Retries" section of the API documentation for status lifecycle and backoff behavior.
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: List of delivery attempts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       event: { type: string }
+ *                       status: { type: string, enum: [pending, delivered, failed, dead] }
+ *                       attempts: { type: integer }
+ *                       lastAttemptAt: { type: string, format: date-time, nullable: true }
+ *                       nextRetryAt: { type: string, format: date-time, nullable: true }
+ *                       responseStatus: { type: integer, nullable: true }
+ *                       error: { type: string, nullable: true }
+ *                       createdAt: { type: string, format: date-time }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/:id/deliveries',
   authenticate,
@@ -351,7 +726,49 @@ router.get(
   })
 );
 
-// POST /webhooks/:id/deliveries/:deliveryId/retry (manually retry a delivery)
+/**
+ * @swagger
+ * /webhooks/{id}/deliveries/{deliveryId}/retry:
+ *   post:
+ *     summary: Manually retry a webhook delivery that is not already delivered
+ *     description: Resets attempts to 0 and status to pending, then immediately attempts delivery via the same retry logic used by the background worker.
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: deliveryId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Retry attempted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deliveryId: { type: string }
+ *                     result: { type: string, enum: [delivered, pending_retry] }
+ *       400:
+ *         description: Delivery already succeeded
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Webhook or delivery not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
   '/:id/deliveries/:deliveryId/retry',
   authenticate,
@@ -406,7 +823,56 @@ router.post(
   })
 );
 
-// GET /webhooks/:id/events (event log for a webhook)
+/**
+ * @swagger
+ * /webhooks/{id}/events:
+ *   get:
+ *     summary: Get the paginated dispatch event log for a webhook
+ *     description: One entry per event dispatched to this webhook, with its terminal delivery status. Distinct from /deliveries, which tracks individual attempt-level retries.
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 50 }
+ *     responses:
+ *       200:
+ *         description: Paginated event log
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     events:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           event: { type: string }
+ *                           status: { type: string, enum: [dispatched, delivered, failed, dead] }
+ *                           deliveredAt: { type: string, format: date-time, nullable: true }
+ *                           error: { type: string, nullable: true }
+ *                           createdAt: { type: string, format: date-time }
+ *                     pagination: { $ref: '#/components/schemas/PaginationMeta' }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/:id/events',
   authenticate,
@@ -458,7 +924,41 @@ router.get(
   })
 );
 
-// GET /webhooks/stats/overview (delivery statistics)
+/**
+ * @swagger
+ * /webhooks/stats/overview:
+ *   get:
+ *     summary: Get aggregate webhook and delivery statistics for the caller's clinic
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Webhook and delivery counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalWebhooks: { type: integer }
+ *                     activeWebhooks: { type: integer }
+ *                     deliveries:
+ *                       type: object
+ *                       properties:
+ *                         delivered: { type: integer }
+ *                         pending: { type: integer }
+ *                         failed: { type: integer }
+ *                         dead: { type: integer }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/stats/overview',
   authenticate,

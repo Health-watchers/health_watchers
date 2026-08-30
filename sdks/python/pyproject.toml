@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "health-watchers-sdk"
+version = "0.1.0"
+description = "Official Python client SDK for the Health Watchers API"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Health Watchers" }
+]
+keywords = ["health-watchers", "healthcare", "api", "sdk", "client"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.urls]
+Homepage = "https://github.com/health-watchers/health-watchers"
+Documentation = "https://api.healthwatchers.com/docs"
+
+[tool.setuptools.packages.find]
+include = ["health_watchers*"]

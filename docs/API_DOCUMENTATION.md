@@ -19,6 +19,7 @@ Health Watchers provides a comprehensive REST API for managing healthcare data, 
 - [Pagination](#pagination)
 - [Error Handling](#error-handling)
 - [Webhooks](#webhooks)
+- [Webhook Delivery & Retries](#webhook-delivery--retries)
 - [HIPAA Compliance](#hipaa-compliance)
 
 ---
@@ -198,6 +199,38 @@ GET /api/versions
 ## Authentication
 
 Health Watchers uses two authentication mechanisms.
+
+### Flow Overview
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Health Watchers API
+    participant Service as Third-party service
+
+    rect rgb(235, 245, 255)
+    Note over Client,API: JWT flow (users)
+    Client->>API: POST /auth/login (email, password)
+    alt MFA enabled
+        API-->>Client: 200 { status: mfa_required, tempToken }
+        Client->>API: POST /auth/mfa/verify (tempToken, totp)
+    end
+    API-->>Client: 200 { accessToken (1h), refreshToken (7d) }
+    Client->>API: GET /patients (Authorization: Bearer accessToken)
+    API-->>Client: 200 { data }
+    Note over Client,API: accessToken expires after 1 hour
+    Client->>API: POST /auth/refresh (refreshToken)
+    API-->>Client: 200 { accessToken, refreshToken } (rotated)
+    end
+
+    rect rgb(255, 245, 235)
+    Note over Service,API: API key flow (service-to-service)
+    Service->>API: GET /patients (X-API-Key: hw_...)
+    API-->>Service: 200 { data }
+    end
+```
+
+`POST /auth/login` returns `accessToken` + `refreshToken` directly for accounts without MFA. Accounts with `mfaEnabled: true` (or those still inside their MFA grace period) instead receive a short-lived `tempToken`, which is exchanged for real tokens via `POST /auth/mfa/verify` or `POST /auth/mfa/backup` (TOTP or backup code). `POST /auth/refresh` rotates the refresh token — reusing a consumed refresh token revokes its entire token family (see `apps/api/src/modules/auth/auth.controller.ts`). Service-to-service callers skip the JWT dance entirely and authenticate every request with `X-API-Key`.
 
 ### 1. JWT Bearer Token (primary)
 
@@ -815,6 +848,109 @@ const expected = crypto
 if (signature !== `sha256=${expected}`) {
   return res.status(401).send('Invalid signature');
 }
+```
+
+> Note: the current server implementation (`generateWebhookSignature` in `apps/api/src/modules/webhooks/webhook.service.ts`) sends the raw hex HMAC digest in the `X-Webhook-Signature` header — there is no `sha256=` prefix. Compare against the raw hex digest, not a prefixed value.
+
+---
+
+## Webhook Delivery & Retries
+
+Every dispatched event is tracked as a `WebhookDelivery` document with its own retry lifecycle, independent of the `WebhookEventLog` audit trail. Retry behavior is implemented in `apps/api/src/modules/webhooks/retry-worker.ts` and `webhook.service.ts`.
+
+### Delivery status lifecycle
+
+```
+pending → delivered
+   ↓
+pending → (retry, backoff) → pending → ... → dead
+```
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Queued for delivery, or a previous attempt failed and a retry is scheduled at `nextRetryAt` |
+| `delivered` | The receiving endpoint returned a 2xx response |
+| `failed` | Transient state used internally between attempts (rarely observed at rest) |
+| `dead` | Max retries exhausted, the target URL failed validation (SSRF protection), or the parent webhook was deleted — no further automatic retries |
+
+### Retry / backoff configuration
+
+Each webhook has an optional `retryConfig`, defaulting to:
+
+```json
+{
+  "maxRetries": 3,
+  "backoffType": "exponential",
+  "initialDelayMs": 1000
+}
+```
+
+`backoffType` supports three strategies (`calculateBackoff()` in `retry-worker.ts`):
+
+| Strategy | Delay formula (attempt is 0-indexed) |
+|----------|----------------------------------------|
+| `exponential` (default) | `initialDelayMs * 2^attempt` — e.g. 1s, 2s, 4s for the default config |
+| `linear` | `initialDelayMs * (attempt + 1)` — e.g. 1s, 2s, 3s |
+| `fixed` | `initialDelayMs` every attempt |
+
+Override the defaults per webhook by passing `retryConfig` on `POST /webhooks` or `PATCH /webhooks/:id`:
+
+```json
+{
+  "url": "https://your-service.com/webhook",
+  "events": ["payment.completed"],
+  "retryConfig": { "maxRetries": 5, "backoffType": "linear", "initialDelayMs": 2000 }
+}
+```
+
+`maxRetries` is clamped to 1–10 and `initialDelayMs` to 100–60000 at the schema level.
+
+On dispatch, the initial delivery attempt runs immediately (`enqueueWebhookDelivery` → `executeDelivery`). If it fails, a background worker (`startRetryWorker`, ticking every 30 seconds by default) picks up any `pending` delivery whose `nextRetryAt` has passed and re-attempts it via `retryDelivery()`, using the same backoff config. Once `attempts >= maxRetries`, the delivery — and its corresponding event log entry — is marked `dead` and is not retried automatically again; use the manual retry endpoint below to force another attempt.
+
+Every attempt (success or failure) signs the payload the same way as the original dispatch: `HMAC-SHA256(secret, JSON.stringify(payload))`, sent as the raw hex digest in `X-Webhook-Signature`.
+
+### Inspecting deliveries and event logs
+
+All of the following require `CLINIC_ADMIN` or `SUPER_ADMIN` and are scoped to the caller's clinic (`apps/api/src/modules/webhooks/webhooks.controller.ts`):
+
+| Method & Path | Description |
+|---------------|-------------|
+| `GET /webhooks/:id/deliveries` | Last 50 deliveries for a webhook, newest first — includes `status`, `attempts`, `lastAttemptAt`, `nextRetryAt`, `responseStatus`, `error` |
+| `GET /webhooks/:id/events` | Paginated event log (`?page=&limit=`) — one entry per dispatched event, with its terminal `status` (`dispatched`, `delivered`, `failed`, `dead`) |
+| `POST /webhooks/:id/deliveries/:deliveryId/retry` | Manually force an immediate retry of a delivery that is not already `delivered` — resets `attempts` to 0 and `status` to `pending` before retrying |
+| `GET /webhooks/stats/overview` | Aggregate counts: total/active webhooks, and delivery counts by status (`delivered`, `pending`, `failed`, `dead`) |
+
+Example — check delivery history after a suspected failure:
+
+```bash
+curl http://localhost:3001/api/v1/webhooks/507f1f77bcf86cd799439040/deliveries \
+  -H "Authorization: Bearer <token>"
+```
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439050",
+      "event": "payment.completed",
+      "status": "dead",
+      "attempts": 3,
+      "lastAttemptAt": "2026-08-29T10:04:07.000Z",
+      "nextRetryAt": null,
+      "responseStatus": null,
+      "error": "connect ETIMEDOUT",
+      "createdAt": "2026-08-29T10:04:00.000Z"
+    }
+  ]
+}
+```
+
+Force a retry once the endpoint is back up:
+
+```bash
+curl -X POST http://localhost:3001/api/v1/webhooks/507f1f77bcf86cd799439040/deliveries/507f1f77bcf86cd799439050/retry \
+  -H "Authorization: Bearer <token>"
 ```
 
 ---

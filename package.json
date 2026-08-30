@@ -8,6 +8,7 @@
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
+    "@mermaid-js/mermaid-cli": "^10.9.1",
     "husky": "^9.0.0",
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.6.14",
@@ -20,6 +21,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "docs:diagrams": "mkdir -p docs/diagrams/export && for f in docs/diagrams/*.mmd; do mmdc -i \"$f\" -o \"docs/diagrams/export/$(basename \"$f\" .mmd).svg\"; done",
     "audit:secrets": "ts-node scripts/audit-secrets.ts",
     "audit:secrets:staged": "ts-node scripts/audit-secrets.ts -- --mode=staged",
     "audit:secrets:full": "ts-node scripts/audit-secrets.ts -- --mode=full",
