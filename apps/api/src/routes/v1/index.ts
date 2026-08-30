@@ -77,6 +77,7 @@ import paymentsRouter from '../../modules/payments/payments.routes';
 import { reimbursementRoutes } from '../../modules/payments/reimbursement.controller';
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
+import { billingRoutes } from '../../modules/billing/billing.routes';
 import exportRouter from '../../modules/export/export.routes';
 import batchExportRouter from '../../modules/export/batch-export.routes';
 import hl7v2ExportRouter from '../../modules/export/hl7-v2-export.routes';
@@ -157,6 +158,7 @@ v1Router.use('/payments', paymentLimiter, paymentsRouter);
 v1Router.use('/payments', reimbursementRoutes);
 v1Router.use('/invoices', invoiceRoutes);
 v1Router.use('/subscriptions', subscriptionRoutes);
+v1Router.use('/billing', billingRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
