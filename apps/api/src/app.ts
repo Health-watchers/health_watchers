@@ -77,6 +77,10 @@ import {
   startApiKeyLifecycleJob,
   stopApiKeyLifecycleJob,
 } from './modules/api-keys/api-key-lifecycle-job';
+import {
+  startNotificationDispatchJob,
+  stopNotificationDispatchJob,
+} from './modules/notifications/notification-dispatch-job';
 import { warmCache, registerWarmup } from './services/cache.service';
 
 // ── #1071 Cache warm-up registrations ─────────────────────────────────────────
@@ -326,6 +330,7 @@ async function startServer() {
   startFollowUpReminderJob();
   startRetryWorker();
   startRetentionSweepJob();
+  startNotificationDispatchJob();
 
   // #1071 — Register per-clinic patient-list cache warmup entries now that the
   // DB pool is ready, then warm all registered keys that are currently cold.
@@ -397,6 +402,7 @@ async function startServer() {
       stopFollowUpReminderJob,
       stopRetryWorker,
       stopRetentionSweepJob,
+      stopNotificationDispatchJob,
     ],
   });
 }
