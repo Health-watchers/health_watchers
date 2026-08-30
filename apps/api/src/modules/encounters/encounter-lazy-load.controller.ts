@@ -96,20 +96,18 @@ export const getEncounterRelation = asyncHandler(async (req: Request, res: Respo
     case 'prescribingDoctors':
       if (encounter.prescriptions && encounter.prescriptions.length > 0) {
         const doctorIds = encounter.prescriptions.map((p) => (p.prescribedBy as any).toString());
-        result = await encounterLazyLoadService.loadPrescribingDoctors(
-          encounterId,
-          [...new Set(doctorIds)]
-        );
+        result = await encounterLazyLoadService.loadPrescribingDoctors(encounterId, [
+          ...new Set(doctorIds),
+        ]);
       }
       break;
 
     case 'attachmentUploaders':
       if (encounter.attachments && encounter.attachments.length > 0) {
         const uploaderIds = encounter.attachments.map((a) => (a.uploadedBy as any).toString());
-        result = await encounterLazyLoadService.loadAttachmentUploaders(
-          encounterId,
-          [...new Set(uploaderIds)]
-        );
+        result = await encounterLazyLoadService.loadAttachmentUploaders(encounterId, [
+          ...new Set(uploaderIds),
+        ]);
       }
       break;
 

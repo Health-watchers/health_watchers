@@ -158,9 +158,10 @@ async function fetchEncounterEvents(
   };
   if (dateFilter) filter.createdAt = dateFilter;
 
-  const encounters = (await EncounterModel.find(filter)
-    .sort({ createdAt: -1 })
-    .lean()) as Record<string, unknown>[];
+  const encounters = (await EncounterModel.find(filter).sort({ createdAt: -1 }).lean()) as Record<
+    string,
+    unknown
+  >[];
 
   return encounters.map(mapEncounterToEvent);
 }
@@ -173,9 +174,10 @@ async function fetchLabResultEvents(
   const filter: Record<string, unknown> = { patientId, clinicId };
   if (dateFilter) filter.createdAt = dateFilter;
 
-  const labs = (await LabResultModel.find(filter)
-    .sort({ createdAt: -1 })
-    .lean()) as Record<string, unknown>[];
+  const labs = (await LabResultModel.find(filter).sort({ createdAt: -1 }).lean()) as Record<
+    string,
+    unknown
+  >[];
 
   return labs.map(mapLabResultToEvent);
 }
@@ -227,9 +229,10 @@ async function fetchPrescriptionEvents(
   };
   if (dateFilter) filter.createdAt = dateFilter;
 
-  const encounters = (await EncounterModel.find(filter)
-    .sort({ createdAt: -1 })
-    .lean()) as Record<string, unknown>[];
+  const encounters = (await EncounterModel.find(filter).sort({ createdAt: -1 }).lean()) as Record<
+    string,
+    unknown
+  >[];
 
   const events: TimelineEvent[] = [];
   for (const encounter of encounters) {
@@ -237,7 +240,12 @@ async function fetchPrescriptionEvents(
     if (!prescriptions?.length) continue;
     for (const rx of prescriptions) {
       events.push(
-        mapPrescriptionToEvent(rx, String(encounter._id), String(encounter.clinicId), String(encounter.patientId))
+        mapPrescriptionToEvent(
+          rx,
+          String(encounter._id),
+          String(encounter.clinicId),
+          String(encounter.patientId)
+        )
       );
     }
   }

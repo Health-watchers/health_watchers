@@ -18,9 +18,9 @@ export class PaymentPage extends WalletPage {
       .getByTestId('payment-status')
       .or(page.getByRole('status'))
       .first();
-    this.receiptSection = page.getByTestId('payment-receipt').or(
-      page.getByText(/receipt/i).first()
-    );
+    this.receiptSection = page
+      .getByTestId('payment-receipt')
+      .or(page.getByText(/receipt/i).first());
   }
 
   /** Navigate to the payments list page */
@@ -43,9 +43,7 @@ export class PaymentPage extends WalletPage {
     encounterId: string
   ): Promise<string> {
     await this.createPaymentIntent(amount, patientId, encounterId);
-    const el = this.page.getByTestId('intent-id').or(
-      this.page.locator('[data-intent-id]')
-    );
+    const el = this.page.getByTestId('intent-id').or(this.page.locator('[data-intent-id]'));
     return (await el.textContent({ timeout: 3_000 }).catch(() => null)) ?? '';
   }
 
@@ -90,9 +88,7 @@ export class PaymentPage extends WalletPage {
     claimableAfterDays = 0,
     claimableUntilDays = 30
   ) {
-    await this.page
-      .getByRole('button', { name: /create.*claimable|claimable.*balance/i })
-      .click();
+    await this.page.getByRole('button', { name: /create.*claimable|claimable.*balance/i }).click();
 
     await this.page.getByLabel(/amount/i).fill(amount);
     await this.page.getByLabel(/recipient|claimant/i).fill(recipientKey);
@@ -116,6 +112,9 @@ export class PaymentPage extends WalletPage {
 
   /** Click the claim button for the first available claimable balance */
   async claimBalance() {
-    await this.page.getByRole('button', { name: /^claim$/i }).first().click();
+    await this.page
+      .getByRole('button', { name: /^claim$/i })
+      .first()
+      .click();
   }
 }

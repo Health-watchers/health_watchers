@@ -116,7 +116,7 @@ export function AppointmentBookingForm({
       {/* Patient & Doctor selection */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="patient-id" className="block text-sm font-medium text-gray-900 mb-2">
+          <label htmlFor="patient-id" className="mb-2 block text-sm font-medium text-gray-900">
             Patient ID *
           </label>
           <input
@@ -127,16 +127,16 @@ export function AppointmentBookingForm({
               setDraft((prev) => ({ ...prev, patientId: e.target.value }));
               if (errors.patientId) setErrors((prev) => ({ ...prev, patientId: '' }));
             }}
-            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               errors.patientId ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="Enter patient ID"
           />
-          {errors.patientId && <p className="text-xs text-red-600 mt-1">{errors.patientId}</p>}
+          {errors.patientId && <p className="mt-1 text-xs text-red-600">{errors.patientId}</p>}
         </div>
 
         <div>
-          <label htmlFor="doctor-id" className="block text-sm font-medium text-gray-900 mb-2">
+          <label htmlFor="doctor-id" className="mb-2 block text-sm font-medium text-gray-900">
             Clinician *
           </label>
           <select
@@ -146,7 +146,7 @@ export function AppointmentBookingForm({
               setDraft((prev) => ({ ...prev, doctorId: e.target.value }));
               if (errors.doctorId) setErrors((prev) => ({ ...prev, doctorId: '' }));
             }}
-            className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               errors.doctorId ? 'border-red-500' : 'border-gray-300'
             }`}
           >
@@ -157,21 +157,21 @@ export function AppointmentBookingForm({
               </option>
             ))}
           </select>
-          {errors.doctorId && <p className="text-xs text-red-600 mt-1">{errors.doctorId}</p>}
+          {errors.doctorId && <p className="mt-1 text-xs text-red-600">{errors.doctorId}</p>}
         </div>
       </div>
 
       {/* Appointment type and duration */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="type" className="block text-sm font-medium text-gray-900 mb-2">
+          <label htmlFor="type" className="mb-2 block text-sm font-medium text-gray-900">
             Appointment Type
           </label>
           <select
             id="type"
             value={draft.type}
             onChange={(e) => setDraft((prev) => ({ ...prev, type: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {APPOINTMENT_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -182,14 +182,14 @@ export function AppointmentBookingForm({
         </div>
 
         <div>
-          <label htmlFor="duration" className="block text-sm font-medium text-gray-900 mb-2">
+          <label htmlFor="duration" className="mb-2 block text-sm font-medium text-gray-900">
             Duration (minutes)
           </label>
           <select
             id="duration"
             value={draft.duration}
             onChange={(e) => setDraft((prev) => ({ ...prev, duration: Number(e.target.value) }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {DURATIONS.map((duration) => (
               <option key={duration} value={duration}>
@@ -201,37 +201,35 @@ export function AppointmentBookingForm({
       </div>
 
       {/* Telemedicine checkbox */}
-      <label className="flex items-center gap-3 cursor-pointer">
+      <label className="flex cursor-pointer items-center gap-3">
         <input
           type="checkbox"
           checked={draft.isTelemedicine}
           onChange={(e) => setDraft((prev) => ({ ...prev, isTelemedicine: e.target.checked }))}
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
         />
         <span className="text-sm font-medium text-gray-700">Video visit (telemedicine)</span>
       </label>
 
       {/* Chief complaint */}
       <div>
-        <label htmlFor="complaint" className="block text-sm font-medium text-gray-900 mb-2">
+        <label htmlFor="complaint" className="mb-2 block text-sm font-medium text-gray-900">
           Chief Complaint
         </label>
         <textarea
           id="complaint"
           value={draft.chiefComplaint}
           onChange={(e) => setDraft((prev) => ({ ...prev, chiefComplaint: e.target.value }))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Brief description of patient's concern"
           rows={3}
         />
       </div>
 
       {/* Calendar and time selection */}
-      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Select Date & Time</h3>
-        {errors.scheduledAt && (
-          <p className="text-xs text-red-600 mb-4">{errors.scheduledAt}</p>
-        )}
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <h3 className="mb-4 text-sm font-semibold text-gray-900">Select Date & Time</h3>
+        {errors.scheduledAt && <p className="mb-4 text-xs text-red-600">{errors.scheduledAt}</p>}
         <SchedulingCalendar
           selectedDate={selectedDate}
           onDateChange={setSelectedDate}
@@ -240,7 +238,7 @@ export function AppointmentBookingForm({
           isLoading={loadingSlots}
         />
         {selectedTime && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
             <p className="text-sm text-blue-800">
               <strong>Selected:</strong> {formatScheduleDate(selectedDate)} at {selectedTime}
             </p>
@@ -253,14 +251,14 @@ export function AppointmentBookingForm({
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {isLoading ? 'Booking...' : 'Confirm Appointment'}
         </button>

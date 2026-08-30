@@ -91,7 +91,9 @@ export function AppointmentScheduler({
   const [joinWaitlist, setJoinWaitlist] = useState(false);
   const [showTimezoneInfo, setShowTimezoneInfo] = useState(false);
 
-  const selectedType = appointmentTypes.find((t) => t.appointmentTypeId === draft.appointmentTypeId);
+  const selectedType = appointmentTypes.find(
+    (t) => t.appointmentTypeId === draft.appointmentTypeId
+  );
   const selectedProvider = providers.find((p) => p.id === draft.providerId);
   const selectedLocation = locations.find((l) => l.id === draft.locationId);
 
@@ -140,7 +142,8 @@ export function AppointmentScheduler({
 
     switch (step) {
       case 'type':
-        if (!draft.appointmentTypeId) newErrors.appointmentTypeId = 'Please select appointment type';
+        if (!draft.appointmentTypeId)
+          newErrors.appointmentTypeId = 'Please select appointment type';
         break;
       case 'provider':
         if (!draft.providerId) newErrors.providerId = 'Please select a provider';
@@ -152,7 +155,8 @@ export function AppointmentScheduler({
         break;
       case 'datetime':
         if (!selectedTime) newErrors.scheduledAt = 'Please select a time slot';
-        if (!draft.reasonForVisit.trim()) newErrors.reasonForVisit = 'Please provide reason for visit';
+        if (!draft.reasonForVisit.trim())
+          newErrors.reasonForVisit = 'Please provide reason for visit';
         break;
       case 'confirm':
         if (!draft.patientId.trim()) newErrors.patientId = 'Patient ID is required';
@@ -246,7 +250,8 @@ export function AppointmentScheduler({
                     appointmentTypeId: type.id,
                     duration: type.duration,
                   }));
-                  if (errors.appointmentTypeId) setErrors((prev) => ({ ...prev, appointmentTypeId: '' }));
+                  if (errors.appointmentTypeId)
+                    setErrors((prev) => ({ ...prev, appointmentTypeId: '' }));
                 }}
                 className={`rounded-lg border-2 p-4 text-left transition-all ${
                   draft.appointmentTypeId === type.id
@@ -306,7 +311,7 @@ export function AppointmentScheduler({
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-gray-900">Select Location</h3>
 
-          <label className="flex items-center gap-3 rounded-lg border border-gray-300 p-4 cursor-pointer hover:bg-gray-50">
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-300 p-4 hover:bg-gray-50">
             <input
               type="checkbox"
               checked={draft.isTelemedicine}
@@ -372,7 +377,8 @@ export function AppointmentScheduler({
           {selectedTime && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
               <p className="text-sm font-semibold text-blue-900">
-                Selected: {selectedDate.toLocaleDateString('en-US', {
+                Selected:{' '}
+                {selectedDate.toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'short',
                   day: 'numeric',
@@ -384,7 +390,7 @@ export function AppointmentScheduler({
 
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-900">
                 Reason for Visit *
               </label>
               <textarea
@@ -400,12 +406,12 @@ export function AppointmentScheduler({
                 rows={3}
               />
               {errors.reasonForVisit && (
-                <p className="text-xs text-red-600 mt-1">{errors.reasonForVisit}</p>
+                <p className="mt-1 text-xs text-red-600">{errors.reasonForVisit}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-900">
                 Additional Notes (Optional)
               </label>
               <textarea
@@ -418,7 +424,7 @@ export function AppointmentScheduler({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-900">
                 Appointment Reminders
               </label>
               <select
@@ -447,7 +453,10 @@ export function AppointmentScheduler({
 
             {showTimezoneInfo && (
               <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
-                <p>Your local timezone: {new Date().toLocaleString('en-US', { timeZoneName: 'long' }).split(' ').pop()}</p>
+                <p>
+                  Your local timezone:{' '}
+                  {new Date().toLocaleString('en-US', { timeZoneName: 'long' }).split(' ').pop()}
+                </p>
               </div>
             )}
           </div>
@@ -461,7 +470,7 @@ export function AppointmentScheduler({
 
           <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">Patient ID *</label>
+              <label className="mb-2 block text-sm font-medium text-gray-900">Patient ID *</label>
               <input
                 type="text"
                 value={draft.patientId}
@@ -474,40 +483,40 @@ export function AppointmentScheduler({
                 }`}
                 placeholder="Enter patient ID"
               />
-              {errors.patientId && <p className="text-xs text-red-600 mt-1">{errors.patientId}</p>}
+              {errors.patientId && <p className="mt-1 text-xs text-red-600">{errors.patientId}</p>}
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Type</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Type</p>
                 <p className="text-sm font-medium text-gray-900">{selectedType?.name}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Duration</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Duration</p>
                 <p className="text-sm font-medium text-gray-900">{draft.duration} minutes</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Provider</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Provider</p>
                 <p className="text-sm font-medium text-gray-900">{selectedProvider?.name}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Location</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Location</p>
                 <p className="text-sm font-medium text-gray-900">
                   {draft.isTelemedicine ? 'Telemedicine' : selectedLocation?.name}
                 </p>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">Date & Time</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Date & Time</p>
                 <p className="text-sm font-medium text-gray-900">{draft.scheduledAt}</p>
               </div>
               <div className="sm:col-span-2">
-                <p className="text-xs font-semibold text-gray-600 uppercase">Reason for Visit</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Reason for Visit</p>
                 <p className="text-sm text-gray-900">{draft.reasonForVisit}</p>
               </div>
             </div>
           </div>
 
-          <label className="flex items-center gap-3 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"
               checked={joinWaitlist}

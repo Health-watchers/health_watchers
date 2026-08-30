@@ -22,22 +22,36 @@ interface LabResultsTableProps {
   onRowClick?: (result: LabResult) => void;
 }
 
-export function LabResultsTable({
-  results,
-  isLoading = false,
-  onRowClick,
-}: LabResultsTableProps) {
+export function LabResultsTable({ results, isLoading = false, onRowClick }: LabResultsTableProps) {
   const getStatusBadge = (status: LabResult['status']) => {
     const statusConfig = {
-      normal: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-200', label: 'Normal' },
-      low: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-200', label: 'Low' },
-      high: { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-800 dark:text-orange-200', label: 'High' },
-      critical: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-200', label: 'Critical' },
+      normal: {
+        bg: 'bg-green-100 dark:bg-green-900/30',
+        text: 'text-green-800 dark:text-green-200',
+        label: 'Normal',
+      },
+      low: {
+        bg: 'bg-yellow-100 dark:bg-yellow-900/30',
+        text: 'text-yellow-800 dark:text-yellow-200',
+        label: 'Low',
+      },
+      high: {
+        bg: 'bg-orange-100 dark:bg-orange-900/30',
+        text: 'text-orange-800 dark:text-orange-200',
+        label: 'High',
+      },
+      critical: {
+        bg: 'bg-red-100 dark:bg-red-900/30',
+        text: 'text-red-800 dark:text-red-200',
+        label: 'Critical',
+      },
     };
 
     const config = statusConfig[status];
     return (
-      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${config.bg} ${config.text}`}>
+      <span
+        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${config.bg} ${config.text}`}
+      >
         {config.label}
       </span>
     );
@@ -110,9 +124,7 @@ export function LabResultsTable({
             >
               <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                 <div className="flex items-center gap-2">
-                  {isAbnormal(result.status) && (
-                    <AlertCircle className="h-4 w-4 text-yellow-500" />
-                  )}
+                  {isAbnormal(result.status) && <AlertCircle className="h-4 w-4 text-yellow-500" />}
                   {result.testName}
                 </div>
               </td>
@@ -124,9 +136,7 @@ export function LabResultsTable({
               <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                 {result.referenceMin} - {result.referenceMax} {result.unit}
               </td>
-              <td className="px-6 py-4 text-sm">
-                {getStatusBadge(result.status)}
-              </td>
+              <td className="px-6 py-4 text-sm">{getStatusBadge(result.status)}</td>
               <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                 {formatDate(result.testDate)}
               </td>

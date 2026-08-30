@@ -66,74 +66,89 @@ router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res:
  * GET /api/v1/replication/consistency
  * Get replication consistency metrics
  */
-router.get('/consistency', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
-    const consistency = await monitorConsistency();
+router.get(
+  '/consistency',
+  authenticate,
+  authorize(['admin']),
+  async (req: Request, res: Response) => {
+    try {
+      const consistency = await monitorConsistency();
 
-    if (!consistency) {
-      return res.status(503).json({
-        error: 'Consistency metrics unavailable',
-        message: 'Could not retrieve replica set status',
+      if (!consistency) {
+        return res.status(503).json({
+          error: 'Consistency metrics unavailable',
+          message: 'Could not retrieve replica set status',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: consistency,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        error: 'Failed to get consistency metrics',
+        message: errorMessage,
       });
     }
-
-    res.json({
-      success: true,
-      data: consistency,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get consistency metrics',
-      message: errorMessage,
-    });
   }
-});
+);
 
 /**
  * POST /api/v1/replication/test-failover
  * Test failover procedures
  */
-router.post('/test-failover', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
-    const testResult = await testFailover();
+router.post(
+  '/test-failover',
+  authenticate,
+  authorize(['admin']),
+  async (req: Request, res: Response) => {
+    try {
+      const testResult = await testFailover();
 
-    res.json({
-      success: testResult.success,
-      data: testResult,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failover test failed',
-      message: errorMessage,
-    });
+      res.json({
+        success: testResult.success,
+        data: testResult,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        error: 'Failover test failed',
+        message: errorMessage,
+      });
+    }
   }
-});
+);
 
 /**
  * GET /api/v1/replication/read-preferences
  * Get available read preference configurations
  */
-router.get('/read-preferences', authenticate, authorize(['admin']), (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      available: Object.keys(READ_PREFERENCES),
-      configurations: READ_PREFERENCES,
-      description: {
-        consistent: 'Critical operations requiring consistent reads from primary',
-        highPriority: 'High-priority operations with primary preference',
-        balanced: 'General purpose - balance consistency and scalability',
-        analytics: 'Read-heavy analytics - tolerates staleness',
-        lowest_latency: 'Nearest node - lowest latency',
+router.get(
+  '/read-preferences',
+  authenticate,
+  authorize(['admin']),
+  (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        available: Object.keys(READ_PREFERENCES),
+        configurations: READ_PREFERENCES,
+        description: {
+          consistent: 'Critical operations requiring consistent reads from primary',
+          highPriority: 'High-priority operations with primary preference',
+          balanced: 'General purpose - balance consistency and scalability',
+          analytics: 'Read-heavy analytics - tolerates staleness',
+          lowest_latency: 'Nearest node - lowest latency',
+        },
       },
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
+      timestamp: new Date().toISOString(),
+    });
+  }
+);
 
 /**
  * GET /api/v1/replication/metrics

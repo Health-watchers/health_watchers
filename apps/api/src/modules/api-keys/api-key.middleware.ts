@@ -89,9 +89,7 @@ export const validateApiKeyScopes = (req: Request, res: Response, next: NextFunc
   if (!req.apiKey) return next();
 
   const { scopes } = req.apiKey;
-  const hasAccess = scopes.some((scope: any) =>
-    scopeGrantsAccess(scope, req.path, req.method)
-  );
+  const hasAccess = scopes.some((scope: any) => scopeGrantsAccess(scope, req.path, req.method));
 
   if (!hasAccess) {
     return res.status(403).json({

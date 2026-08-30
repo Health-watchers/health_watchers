@@ -134,7 +134,7 @@ export default function PaymentAnalyticsClient() {
             placeholder="Clinic ID (admin only)"
             value={clinicId}
             onChange={(e) => setClinicId(e.target.value)}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {/* Date preset */}
           {(['7d', '30d', '90d', '12m'] as const).map((p) => (
@@ -154,7 +154,7 @@ export default function PaymentAnalyticsClient() {
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="day">Daily</option>
             <option value="week">Weekly</option>

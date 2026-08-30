@@ -56,7 +56,9 @@ describe('generateBillingInvoice', () => {
         stellarPaymentAddress: 'GABC',
       })
     );
-    expect(invoice?.gracePeriodEnd.getTime() - invoice!.dueDate.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(invoice?.gracePeriodEnd.getTime() - invoice!.dueDate.getTime()).toBe(
+      7 * 24 * 60 * 60 * 1000
+    );
     expect(SubscriptionModel.findByIdAndUpdate).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({ status: 'past_due' })

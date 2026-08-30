@@ -52,11 +52,13 @@ beforeAll(async () => {
   await PaymentRecordModel.ensureIndexes();
 
   // Seed 1 000 patients, 2 000 encounters, 500 payments
-  await PatientModel.insertMany(buildPatientBatch(1000, { clinicId: CLINIC_ID }), { ordered: false });
+  await PatientModel.insertMany(buildPatientBatch(1000, { clinicId: CLINIC_ID }), {
+    ordered: false,
+  });
 
-  const patientIds = (await PatientModel.find({ clinicId: CLINIC_ID }).select('_id').limit(50).lean()).map(
-    (p) => p._id as mongoose.Types.ObjectId
-  );
+  const patientIds = (
+    await PatientModel.find({ clinicId: CLINIC_ID }).select('_id').limit(50).lean()
+  ).map((p) => p._id as mongoose.Types.ObjectId);
 
   const encBatch = buildEncounterBatch(2000, {
     clinicId: CLINIC_ID,
@@ -64,7 +66,9 @@ beforeAll(async () => {
   }).map((e, i) => ({ ...e, patientId: patientIds[i % patientIds.length] }));
   await EncounterModel.insertMany(encBatch, { ordered: false });
 
-  await PaymentRecordModel.insertMany(buildPaymentBatch(500, { clinicId: CLINIC_STR }), { ordered: false });
+  await PaymentRecordModel.insertMany(buildPaymentBatch(500, { clinicId: CLINIC_STR }), {
+    ordered: false,
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -75,9 +79,7 @@ afterAll(async () => {
 // ── Patient queries ───────────────────────────────────────────────────────────
 describe('Query performance: patients', () => {
   it(`clinicId filter completes in < ${Q.simpleIndex}ms`, async () => {
-    const ms = await timed(() =>
-      PatientModel.find({ clinicId: CLINIC_ID }).limit(100).lean()
-    );
+    const ms = await timed(() => PatientModel.find({ clinicId: CLINIC_ID }).limit(100).lean());
     console.log(`[qperf] patients by clinicId: ${ms}ms`);
     expect(ms).toBeLessThan(Q.simpleIndex);
   });
@@ -110,12 +112,14 @@ describe('Query performance: patients', () => {
   });
 
   it('clinicId filter does not cause COLLSCAN', async () => {
-    await PatientModel.insertMany(buildPatientBatch(10, { clinicId: CLINIC_ID }), { ordered: false });
-    const plan = (await PatientModel.find({ clinicId: CLINIC_ID }).explain('executionStats')) as any;
+    await PatientModel.insertMany(buildPatientBatch(10, { clinicId: CLINIC_ID }), {
+      ordered: false,
+    });
+    const plan = (await PatientModel.find({ clinicId: CLINIC_ID }).explain(
+      'executionStats'
+    )) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 });

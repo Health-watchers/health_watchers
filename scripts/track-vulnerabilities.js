@@ -2,7 +2,7 @@
 /**
  * Vulnerability Tracking System
  * Issue #1051 - Dependency Vulnerability Scanning
- * 
+ *
  * Tracks and manages dependency vulnerabilities across scan cycles
  */
 
@@ -31,7 +31,7 @@ function loadTrackingData() {
   return {
     lastScan: null,
     vulnerabilities: {},
-    history: []
+    history: [],
   };
 }
 
@@ -45,7 +45,7 @@ function parseAuditReport(reportPath) {
   if (!fs.existsSync(reportPath)) {
     return null;
   }
-  
+
   try {
     const content = fs.readFileSync(reportPath, 'utf8');
     return JSON.parse(content);
@@ -60,16 +60,17 @@ function getLatestReports() {
   if (!fs.existsSync(REPORTS_DIR)) {
     return [];
   }
-  
-  const files = fs.readdirSync(REPORTS_DIR)
-    .filter(f => f.startsWith('npm-audit-') && f.endsWith('.json'))
-    .map(f => ({
+
+  const files = fs
+    .readdirSync(REPORTS_DIR)
+    .filter((f) => f.startsWith('npm-audit-') && f.endsWith('.json'))
+    .map((f) => ({
       name: f,
       path: path.join(REPORTS_DIR, f),
-      time: fs.statSync(path.join(REPORTS_DIR, f)).mtime
+      time: fs.statSync(path.join(REPORTS_DIR, f)).mtime,
     }))
     .sort((a, b) => b.time - a.time);
-  
+
   // Group by workspace and get latest for each
   const latest = {};
   for (const file of files) {
@@ -78,22 +79,22 @@ function getLatestReports() {
       latest[workspace] = file;
     }
   }
-  
+
   return Object.values(latest);
 }
 
 // Update tracking with new scan results
 function updateTracking() {
   ensureDirectories();
-  
+
   const tracking = loadTrackingData();
   const reports = getLatestReports();
-  
+
   if (reports.length === 0) {
     console.log('No audit reports found. Run scan-dependencies.sh first.');
     return;
   }
-  
+
   const scanDate = new Date().toISOString();
   const scanSummary = {
     date: scanDate,
@@ -103,32 +104,32 @@ function updateTracking() {
       high: 0,
       moderate: 0,
       low: 0,
-      info: 0
-    }
+      info: 0,
+    },
   };
-  
+
   // Process each report
   for (const report of reports) {
     const data = parseAuditReport(report.path);
     if (!data) continue;
-    
+
     const workspace = report.name.replace('npm-audit-', '').replace(/-\d{8}_\d{6}\.json$/, '');
     const vulns = data.metadata?.vulnerabilities || {};
-    
+
     scanSummary.workspaces[workspace] = vulns;
-    
+
     // Aggregate totals
     scanSummary.totals.critical += vulns.critical || 0;
     scanSummary.totals.high += vulns.high || 0;
     scanSummary.totals.moderate += vulns.moderate || 0;
     scanSummary.totals.low += vulns.low || 0;
     scanSummary.totals.info += vulns.info || 0;
-    
+
     // Track individual vulnerabilities
     if (data.vulnerabilities) {
       for (const [name, details] of Object.entries(data.vulnerabilities)) {
         const vulnKey = `${workspace}:${name}:${details.via?.[0]?.title || 'unknown'}`;
-        
+
         if (!tracking.vulnerabilities[vulnKey]) {
           tracking.vulnerabilities[vulnKey] = {
             package: name,
@@ -137,7 +138,7 @@ function updateTracking() {
             firstDetected: scanDate,
             lastSeen: scanDate,
             status: 'open',
-            fixAvailable: details.fixAvailable || false
+            fixAvailable: details.fixAvailable || false,
           };
         } else {
           tracking.vulnerabilities[vulnKey].lastSeen = scanDate;
@@ -146,7 +147,7 @@ function updateTracking() {
       }
     }
   }
-  
+
   // Mark vulnerabilities as resolved if not seen in latest scan
   for (const [key, vuln] of Object.entries(tracking.vulnerabilities)) {
     if (vuln.lastSeen !== scanDate && vuln.status === 'open') {
@@ -154,18 +155,18 @@ function updateTracking() {
       vuln.resolvedDate = scanDate;
     }
   }
-  
+
   // Update tracking data
   tracking.lastScan = scanDate;
   tracking.history.push(scanSummary);
-  
+
   // Keep only last 30 scans in history
   if (tracking.history.length > 30) {
     tracking.history = tracking.history.slice(-30);
   }
-  
+
   saveTrackingData(tracking);
-  
+
   // Print summary
   console.log('\n=== Vulnerability Tracking Updated ===\n');
   console.log(`Scan Date: ${scanDate}`);
@@ -174,10 +175,12 @@ function updateTracking() {
   console.log(`  High:     ${scanSummary.totals.high}`);
   console.log(`  Moderate: ${scanSummary.totals.moderate}`);
   console.log(`  Low:      ${scanSummary.totals.low}`);
-  
-  const openVulns = Object.values(tracking.vulnerabilities).filter(v => v.status === 'open');
-  const resolvedVulns = Object.values(tracking.vulnerabilities).filter(v => v.status === 'resolved');
-  
+
+  const openVulns = Object.values(tracking.vulnerabilities).filter((v) => v.status === 'open');
+  const resolvedVulns = Object.values(tracking.vulnerabilities).filter(
+    (v) => v.status === 'resolved'
+  );
+
   console.log(`\nTracked Vulnerabilities:`);
   console.log(`  Open:     ${openVulns.length}`);
   console.log(`  Resolved: ${resolvedVulns.length}`);
@@ -187,28 +190,28 @@ function updateTracking() {
 // Generate report
 function generateReport() {
   const tracking = loadTrackingData();
-  
+
   if (!tracking.lastScan) {
     console.log('No tracking data available. Run update-tracking first.');
     return;
   }
-  
+
   console.log('\n=== Vulnerability Status Report ===\n');
   console.log(`Last Scan: ${tracking.lastScan}\n`);
-  
-  const openVulns = Object.values(tracking.vulnerabilities).filter(v => v.status === 'open');
+
+  const openVulns = Object.values(tracking.vulnerabilities).filter((v) => v.status === 'open');
   const bySeverity = {
-    critical: openVulns.filter(v => v.severity === 'critical'),
-    high: openVulns.filter(v => v.severity === 'high'),
-    moderate: openVulns.filter(v => v.severity === 'moderate'),
-    low: openVulns.filter(v => v.severity === 'low')
+    critical: openVulns.filter((v) => v.severity === 'critical'),
+    high: openVulns.filter((v) => v.severity === 'high'),
+    moderate: openVulns.filter((v) => v.severity === 'moderate'),
+    low: openVulns.filter((v) => v.severity === 'low'),
   };
-  
+
   console.log(`Open Vulnerabilities: ${openVulns.length}\n`);
-  
+
   for (const [severity, vulns] of Object.entries(bySeverity)) {
     if (vulns.length === 0) continue;
-    
+
     console.log(`${severity.toUpperCase()}: ${vulns.length}`);
     for (const vuln of vulns) {
       console.log(`  - ${vuln.package} (${vuln.workspace})`);
@@ -217,13 +220,15 @@ function generateReport() {
     }
     console.log('');
   }
-  
+
   if (tracking.history.length > 1) {
     console.log('=== Trend (Last 5 Scans) ===\n');
     const recent = tracking.history.slice(-5);
     for (const scan of recent) {
       const date = new Date(scan.date).toLocaleDateString();
-      console.log(`${date}: Critical: ${scan.totals.critical}, High: ${scan.totals.high}, Moderate: ${scan.totals.moderate}`);
+      console.log(
+        `${date}: Critical: ${scan.totals.critical}, High: ${scan.totals.high}, Moderate: ${scan.totals.moderate}`
+      );
     }
   }
 }

@@ -67,9 +67,7 @@ export default function RegisterClient() {
 
       setStep('verify');
     } catch (err) {
-      setServerError(
-        err instanceof Error ? err.message : 'Registration failed. Please try again.'
-      );
+      setServerError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     }
   };
 
@@ -78,7 +76,7 @@ export default function RegisterClient() {
       <div className="w-full max-w-md">
         <Card padding="lg" className="rounded-2xl shadow-lg">
           <div className="mb-8 flex flex-col items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success-100">
+            <div className="bg-success-100 flex h-12 w-12 items-center justify-center rounded-full">
               <span className="text-2xl">✓</span>
             </div>
             <div className="flex flex-col items-center gap-2">
@@ -86,7 +84,8 @@ export default function RegisterClient() {
                 Verify Your Email
               </h1>
               <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
-                We've sent a verification link to your email address. Click the link to activate your account.
+                We've sent a verification link to your email address. Click the link to activate
+                your account.
               </p>
             </div>
           </div>
@@ -97,7 +96,7 @@ export default function RegisterClient() {
               <button
                 type="button"
                 onClick={() => setStep('form')}
-                className="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                className="dark:text-primary-400 font-medium text-primary-600 hover:underline"
               >
                 try again
               </button>
@@ -125,7 +124,9 @@ export default function RegisterClient() {
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary-100">
             <span className="text-2xl">⚕️</span>
           </div>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Create Account</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">
+            Create Account
+          </h1>
           <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
             Join Health Watchers to manage your healthcare
           </p>
@@ -134,7 +135,7 @@ export default function RegisterClient() {
         {serverError && (
           <div
             role="alert"
-            className="mb-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400"
+            className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 mb-4 rounded-lg border px-4 py-3 text-sm"
           >
             <p className="font-medium">Registration Error</p>
             <p className="mt-1">{serverError}</p>
@@ -170,7 +171,13 @@ export default function RegisterClient() {
             {...register('confirmPassword')}
           />
 
-          <Button type="submit" variant="primary" size="md" loading={isSubmitting} className="w-full">
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            loading={isSubmitting}
+            className="w-full"
+          >
             Create Account
           </Button>
         </form>
@@ -202,7 +209,7 @@ export default function RegisterClient() {
           Already have an account?{' '}
           <Link
             href="/login"
-            className="font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+            className="dark:text-primary-400 dark:hover:text-primary-300 font-medium text-primary-600 hover:text-primary-700"
           >
             Sign in
           </Link>

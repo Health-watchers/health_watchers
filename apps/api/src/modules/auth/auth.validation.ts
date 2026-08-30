@@ -128,14 +128,15 @@ export const mfaDisableSchema = z.object({
   totp: z.string().length(6),
 });
 
-export const mfaBackupCodesRegenerateSchema = z.object({
-  password: z.string().min(1, 'Current password is required'),
-  totp: z.string().length(6).optional(),
-  backupCode: z.string().min(1).optional(),
-}).refine(
-  (data) => data.totp !== undefined || data.backupCode !== undefined,
-  { message: 'Either a TOTP code or an existing backup code is required' }
-);
+export const mfaBackupCodesRegenerateSchema = z
+  .object({
+    password: z.string().min(1, 'Current password is required'),
+    totp: z.string().length(6).optional(),
+    backupCode: z.string().min(1).optional(),
+  })
+  .refine((data) => data.totp !== undefined || data.backupCode !== undefined, {
+    message: 'Either a TOTP code or an existing backup code is required',
+  });
 
 export type LoginDto = z.infer<typeof loginSchema>;
 export type RegisterDto = z.infer<typeof registerSchema>;

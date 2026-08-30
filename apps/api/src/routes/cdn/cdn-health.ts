@@ -45,9 +45,7 @@ function getCdnProviderStatuses(): CdnProviderStatus[] {
       case 'cloudfront':
         return {
           provider,
-          configured: !!(
-            process.env.CLOUDFRONT_DISTRIBUTION_ID && process.env.AWS_ACCESS_KEY_ID
-          ),
+          configured: !!(process.env.CLOUDFRONT_DISTRIBUTION_ID && process.env.AWS_ACCESS_KEY_ID),
           url: activeProvider === 'cloudfront' ? cdnUrl : null,
           region: process.env.AWS_REGION || null,
         };
@@ -92,10 +90,7 @@ router.get('/health', authenticate, authorize(['admin']), (_req: Request, res: R
         providers: statuses,
         cacheConfig: {
           maxAge: parseInt(process.env.CDN_CACHE_MAX_AGE || '31536000', 10),
-          staleWhileRevalidate: parseInt(
-            process.env.CDN_STALE_WHILE_REVALIDATE || '86400',
-            10,
-          ),
+          staleWhileRevalidate: parseInt(process.env.CDN_STALE_WHILE_REVALIDATE || '86400', 10),
         },
       },
       timestamp: new Date().toISOString(),
@@ -134,9 +129,7 @@ router.get('/config', authenticate, authorize(['admin']), (_req: Request, res: R
 
   if (activeProvider === 'cloudflare') {
     config.zoneId = process.env.CLOUDFLARE_ZONE_ID ? '***configured***' : 'not-configured';
-    config.accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-      ? '***configured***'
-      : 'not-configured';
+    config.accountId = process.env.CLOUDFLARE_ACCOUNT_ID ? '***configured***' : 'not-configured';
   }
 
   if (activeProvider === 'fastly') {
@@ -206,7 +199,7 @@ router.post(
         latencyMs: Date.now() - start,
       });
     }
-  },
+  }
 );
 
 export default router;

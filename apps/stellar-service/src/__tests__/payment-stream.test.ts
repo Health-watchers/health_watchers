@@ -15,7 +15,10 @@ jest.mock('prom-client', () => {
   const Gauge = jest.fn().mockImplementation(() => ({ set }));
   const Histogram = jest.fn().mockImplementation(() => ({ observe }));
   const collectDefaultMetrics = jest.fn();
-  return { __esModule: true, default: { Registry, Counter, Gauge, Histogram, collectDefaultMetrics } };
+  return {
+    __esModule: true,
+    default: { Registry, Counter, Gauge, Histogram, collectDefaultMetrics },
+  };
 });
 
 // Config mock — values are mutated in tests to simulate different environments
@@ -78,14 +81,16 @@ type PaymentStreamHandler = (payment: {
   from: string;
 }) => void;
 
-function makePaymentRecord(overrides: {
-  type?: string;
-  to?: string;
-  from?: string;
-  amount?: string;
-  transaction_hash?: string;
-  memo?: string;
-} = {}) {
+function makePaymentRecord(
+  overrides: {
+    type?: string;
+    to?: string;
+    from?: string;
+    amount?: string;
+    transaction_hash?: string;
+    memo?: string;
+  } = {}
+) {
   const memo = overrides.memo ?? 'HW:ABCD1234';
   return {
     type: overrides.type ?? 'payment',

@@ -277,7 +277,10 @@ async function startServer() {
     await migrationManager.initialize();
     logger.info('[migration-manager] Initialized successfully');
   } catch (err) {
-    logger.warn({ err }, '[migration-manager] Initialization failed, continuing without migration tracking');
+    logger.warn(
+      { err },
+      '[migration-manager] Initialization failed, continuing without migration tracking'
+    );
   }
 
   // Seed built-in CDS rules
@@ -333,9 +336,18 @@ async function startServer() {
             { createdAt: -1 },
             {
               projection: {
-                systemId: 1, firstName: 1, lastName: 1, searchName: 1,
-                dateOfBirth: 1, sex: 1, contactNumber: 1, clinicId: 1,
-                isActive: 1, riskLevel: 1, riskScore: 1, createdAt: 1,
+                systemId: 1,
+                firstName: 1,
+                lastName: 1,
+                searchName: 1,
+                dateOfBirth: 1,
+                sex: 1,
+                contactNumber: 1,
+                clinicId: 1,
+                isActive: 1,
+                riskLevel: 1,
+                riskScore: 1,
+                createdAt: 1,
               },
               hint: 'clinicId_1_isActive_1',
             }

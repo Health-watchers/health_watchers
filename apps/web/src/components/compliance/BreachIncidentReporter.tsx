@@ -55,7 +55,9 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Breach Incidents</h3>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Report and track security breaches</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Report and track security breaches
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -66,7 +68,10 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-900/10">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-900/10"
+        >
           <input
             type="text"
             placeholder="Incident Title"
@@ -87,7 +92,10 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
             <select
               value={formData.severity}
               onChange={(e) =>
-                setFormData((f) => ({ ...f, severity: e.target.value as BreachIncident['severity'] }))
+                setFormData((f) => ({
+                  ...f,
+                  severity: e.target.value as BreachIncident['severity'],
+                }))
               }
               className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
             >
@@ -100,7 +108,9 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
               type="number"
               placeholder="Affected Records"
               value={formData.affectedRecords}
-              onChange={(e) => setFormData((f) => ({ ...f, affectedRecords: parseInt(e.target.value) }))}
+              onChange={(e) =>
+                setFormData((f) => ({ ...f, affectedRecords: parseInt(e.target.value) }))
+              }
               className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
               min="0"
             />
@@ -127,16 +137,27 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
       <div className="space-y-2">
         {incidents.length > 0 ? (
           incidents.map((incident) => (
-            <div key={incident.id} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+            <div
+              key={incident.id}
+              className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <h4 className="font-medium text-neutral-900 dark:text-neutral-100">{incident.title}</h4>
-                  <p className="text-sm text-neutral-600 dark:text-neutral-400">{incident.description}</p>
+                  <h4 className="font-medium text-neutral-900 dark:text-neutral-100">
+                    {incident.title}
+                  </h4>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    {incident.description}
+                  </p>
                   <div className="mt-2 flex gap-2">
-                    <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${SEVERITY_COLORS[incident.severity]}`}>
+                    <span
+                      className={`inline-block rounded px-2 py-1 text-xs font-medium ${SEVERITY_COLORS[incident.severity]}`}
+                    >
                       {incident.severity}
                     </span>
-                    <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[incident.status]}`}>
+                    <span
+                      className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[incident.status]}`}
+                    >
                       {incident.status}
                     </span>
                   </div>
@@ -149,7 +170,9 @@ export function BreachIncidentReporter({ incidents = [], onReport }: BreachIncid
             </div>
           ))
         ) : (
-          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">No incidents reported</p>
+          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+            No incidents reported
+          </p>
         )}
       </div>
     </div>

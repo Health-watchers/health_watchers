@@ -55,9 +55,7 @@ export function PWAInstallPrompt() {
     <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-blue-300 bg-blue-50 p-4 shadow-lg dark:border-blue-900/50 dark:bg-blue-900/20">
       <div className="space-y-3">
         <div>
-          <p className="font-semibold text-blue-900 dark:text-blue-100">
-            Install Health Watchers
-          </p>
+          <p className="font-semibold text-blue-900 dark:text-blue-100">Install Health Watchers</p>
           <p className="text-sm text-blue-800 dark:text-blue-200">
             Install our app for faster access and offline support.
           </p>

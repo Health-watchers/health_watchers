@@ -39,11 +39,7 @@ function PaymentStack() {
 function DocumentsStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen
-        name="Documents"
-        component={DocumentsScreen}
-        options={{ title: 'Documents' }}
-      />
+      <Stack.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documents' }} />
     </Stack.Navigator>
   );
 }

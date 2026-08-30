@@ -29,7 +29,7 @@ router.post(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   async (req: Request, res: Response) => {
     try {
-     const { businessAssociate, status, signedDate, expiryDate, documentUrl, notes } = req.body;
+      const { businessAssociate, status, signedDate, expiryDate, documentUrl, notes } = req.body;
 
       if (!businessAssociate || typeof businessAssociate !== 'string') {
         return res

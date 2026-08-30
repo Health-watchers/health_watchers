@@ -63,7 +63,12 @@ const webhookSchema = new Schema<IWebhook>(
         enum: ['exponential', 'linear', 'fixed'],
         default: defaultRetryConfig.backoffType,
       },
-      initialDelayMs: { type: Number, default: defaultRetryConfig.initialDelayMs, min: 100, max: 60000 },
+      initialDelayMs: {
+        type: Number,
+        default: defaultRetryConfig.initialDelayMs,
+        min: 100,
+        max: 60000,
+      },
     },
   },
   { timestamps: true, versionKey: false }

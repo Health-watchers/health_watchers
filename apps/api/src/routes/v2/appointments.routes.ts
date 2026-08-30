@@ -13,7 +13,10 @@ import {
   doctorIdParamsSchema,
 } from '../../modules/appointments/appointments.validation';
 import { SocketService } from '../../services/socket.service';
-import { NotificationModel, NOTIFICATION_TYPES } from '../../modules/notifications/notification.model';
+import {
+  NotificationModel,
+  NOTIFICATION_TYPES,
+} from '../../modules/notifications/notification.model';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -24,7 +27,7 @@ async function hasConflict(
   doctorId: string,
   scheduledAt: Date,
   duration: number,
-  excludeId?: string,
+  excludeId?: string
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
@@ -36,14 +39,10 @@ async function hasConflict(
 
   if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  const candidates = await AppointmentModel.find(filter)
-    .select('scheduledAt duration')
-    .lean();
+  const candidates = await AppointmentModel.find(filter).select('scheduledAt duration').lean();
 
   return candidates.some((appt) => {
-    const apptEnd = new Date(
-      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
-    );
+    const apptEnd = new Date(new Date(appt.scheduledAt).getTime() + appt.duration * 60_000);
     return apptEnd > scheduledAt;
   });
 }
@@ -112,12 +111,9 @@ appointmentRoutes.post(
         { new: true, runValidators: true }
       ).lean();
 
-      await emitAppointmentStatusChange(
-        req.params.id,
-        'patient_arrived',
-        updated,
-        { checkedInAt: updated.checkedInAt }
-      );
+      await emitAppointmentStatusChange(req.params.id, 'patient_arrived', updated, {
+        checkedInAt: updated.checkedInAt,
+      });
 
       await NotificationModel.create({
         userId: appointment.doctorId,
@@ -142,7 +138,7 @@ appointmentRoutes.post(
         message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── GET /appointments (V2 with enhanced response format) ──────────────────────
@@ -152,8 +148,7 @@ appointmentRoutes.get(
   async (req: Request, res: Response) => {
     try {
       const { clinicId, role, userId } = req.user!;
-      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } =
-        req.query as any;
+      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } = req.query as any;
 
       const filter: Record<string, unknown> = { clinicId };
 
@@ -164,9 +159,17 @@ appointmentRoutes.get(
       }
 
       if (status) {
-        const ALLOWED_STATUSES = new Set(['scheduled', 'confirmed', 'cancelled', 'completed', 'patient_arrived']);
+        const ALLOWED_STATUSES = new Set([
+          'scheduled',
+          'confirmed',
+          'cancelled',
+          'completed',
+          'patient_arrived',
+        ]);
         if (!ALLOWED_STATUSES.has(String(status))) {
-          return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+          return res
+            .status(400)
+            .json({ error: 'ValidationError', message: 'Invalid status value' });
         }
         filter.status = String(status);
       }
@@ -217,7 +220,7 @@ appointmentRoutes.get(
         message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── PUT /appointments/:id (V2 with real-time updates) ─────────────────────────
@@ -244,7 +247,10 @@ appointmentRoutes.put(
       const newDuration = duration ?? existing.duration;
       const newDoctorId = String(existing.doctorId);
 
-      if ((scheduledAt || duration) && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
+      if (
+        (scheduledAt || duration) &&
+        (await hasConflict(newDoctorId, newStart, newDuration, req.params.id))
+      ) {
         return res.status(409).json({
           success: false,
           error: 'TimeSlotUnavailable',
@@ -263,7 +269,7 @@ appointmentRoutes.put(
           notes,
           encounterId,
         },
-        { new: true, runValidators: true },
+        { new: true, runValidators: true }
       ).lean();
 
       if (status && status !== oldStatus) {
@@ -302,7 +308,7 @@ appointmentRoutes.put(
         message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── DELETE /appointments/:id (V2 with real-time updates) ──────────────────────
@@ -331,7 +337,7 @@ appointmentRoutes.delete(
           cancelledAt: new Date(),
           cancellationReason,
         },
-        { new: true },
+        { new: true }
       ).lean();
 
       await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
@@ -353,7 +359,7 @@ appointmentRoutes.delete(
       ];
 
       await Promise.all(
-        notifications.map(notif =>
+        notifications.map((notif) =>
           NotificationModel.create({
             ...notif,
             clinicId: appointment.clinicId,
@@ -378,10 +384,12 @@ appointmentRoutes.delete(
         message: err.message,
       });
     }
-  },
+  }
 );
 
 // Re-export other routes with V2 enhancements
-appointmentRoutes.get('/doctor/:doctorId/availability', /* same as V1 but with V2 response format */);
-appointmentRoutes.get('/:id', /* same as V1 but with V2 response format */);
-appointmentRoutes.post('/', /* same as V1 but with V2 response format and real-time events */);
+appointmentRoutes.get(
+  '/doctor/:doctorId/availability' /* same as V1 but with V2 response format */
+);
+appointmentRoutes.get('/:id' /* same as V1 but with V2 response format */);
+appointmentRoutes.post('/' /* same as V1 but with V2 response format and real-time events */);

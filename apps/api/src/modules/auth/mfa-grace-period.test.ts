@@ -31,18 +31,36 @@ jest.mock('@health-watchers/config', () => ({
   },
 }));
 
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -199,7 +217,11 @@ describe('MFA grace period enforcement — DOCTOR and NURSE roles', () => {
 
   it('blocks NURSE login after grace period expires', async () => {
     const gracePeriodEndsAt = new Date(Date.now() - 1000);
-    const user = makeUser({ role: 'NURSE', email: 'nurse@clinic.com', mfaGracePeriodEndsAt: gracePeriodEndsAt });
+    const user = makeUser({
+      role: 'NURSE',
+      email: 'nurse@clinic.com',
+      mfaGracePeriodEndsAt: gracePeriodEndsAt,
+    });
     (UserModel.findOne as jest.Mock).mockResolvedValue(user);
 
     const res = await request(app)
@@ -243,11 +265,16 @@ describe('runMfaGracePeriodReminderTick', () => {
 
   it('sends a 3-day reminder to users whose grace period ends in ~3 days', async () => {
     const threeDays = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 - 30 * 60 * 1000); // 30min inside window
-    const user = { id: USER_ID, email: 'doctor@clinic.com', fullName: 'Dr. House', mfaGracePeriodEndsAt: threeDays };
+    const user = {
+      id: USER_ID,
+      email: 'doctor@clinic.com',
+      fullName: 'Dr. House',
+      mfaGracePeriodEndsAt: threeDays,
+    };
 
     (UserModel.find as jest.Mock)
       .mockResolvedValueOnce([user]) // 3-day window
-      .mockResolvedValueOnce([]);    // 1-day window
+      .mockResolvedValueOnce([]); // 1-day window
 
     await runMfaGracePeriodReminderTick();
 
@@ -261,10 +288,15 @@ describe('runMfaGracePeriodReminderTick', () => {
 
   it('sends a 1-day reminder to users whose grace period ends in ~1 day', async () => {
     const oneDay = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000 - 30 * 60 * 1000);
-    const user = { id: USER_ID, email: 'nurse@clinic.com', fullName: 'Nurse Joy', mfaGracePeriodEndsAt: oneDay };
+    const user = {
+      id: USER_ID,
+      email: 'nurse@clinic.com',
+      fullName: 'Nurse Joy',
+      mfaGracePeriodEndsAt: oneDay,
+    };
 
     (UserModel.find as jest.Mock)
-      .mockResolvedValueOnce([])      // 3-day window
+      .mockResolvedValueOnce([]) // 3-day window
       .mockResolvedValueOnce([user]); // 1-day window
 
     await runMfaGracePeriodReminderTick();

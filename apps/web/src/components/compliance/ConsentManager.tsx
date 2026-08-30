@@ -30,13 +30,18 @@ export function ConsentManager({ consents = [], onRevoke }: ConsentManagerProps)
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">Patient Consents</h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">Manage patient consent records</p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Manage patient consent records
+        </p>
       </div>
 
       <div className="space-y-2">
         {consents.length > 0 ? (
           consents.map((consent) => (
-            <div key={consent.id} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+            <div
+              key={consent.id}
+              className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="font-medium text-neutral-900 dark:text-neutral-100">
@@ -46,7 +51,10 @@ export function ConsentManager({ consents = [], onRevoke }: ConsentManagerProps)
                     Patient: {consent.patientId}
                   </p>
                   {consent.documentPath && (
-                    <a href={consent.documentPath} className="text-xs text-blue-600 hover:underline">
+                    <a
+                      href={consent.documentPath}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
                       View Document
                     </a>
                   )}
@@ -54,7 +62,9 @@ export function ConsentManager({ consents = [], onRevoke }: ConsentManagerProps)
                 <div className="text-right text-xs text-neutral-600 dark:text-neutral-400">
                   <div>
                     Status:{' '}
-                    <span className={consent.status === 'active' ? 'text-green-600' : 'text-red-600'}>
+                    <span
+                      className={consent.status === 'active' ? 'text-green-600' : 'text-red-600'}
+                    >
                       {consent.status}
                     </span>
                   </div>
@@ -72,7 +82,9 @@ export function ConsentManager({ consents = [], onRevoke }: ConsentManagerProps)
             </div>
           ))
         ) : (
-          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">No consents recorded</p>
+          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+            No consents recorded
+          </p>
         )}
       </div>
     </div>

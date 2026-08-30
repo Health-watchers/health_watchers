@@ -27,9 +27,7 @@ const publicConfig = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL ?? '',
 
   /** Stellar network — 'testnet' | 'mainnet' */
-  stellarNetwork: (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as
-    | 'testnet'
-    | 'mainnet',
+  stellarNetwork: (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet',
 
   /** CDN origin URL; empty string means serve assets from the same origin */
   cdnUrl: process.env.NEXT_PUBLIC_CDN_URL ?? '',
@@ -52,10 +50,7 @@ const publicConfig = {
 
 const serverConfig = {
   /** Runtime environment */
-  nodeEnv: (process.env.NODE_ENV ?? 'development') as
-    | 'development'
-    | 'production'
-    | 'test',
+  nodeEnv: (process.env.NODE_ENV ?? 'development') as 'development' | 'production' | 'test',
 
   /** CDN provider API key — never expose to the client */
   cdnApiKey: process.env.CDN_API_KEY,
@@ -76,12 +71,8 @@ export const webConfig = {
   /** API connectivity */
   api: {
     url: publicConfig.apiUrl,
-    v1BaseUrl: publicConfig.apiUrl
-      ? `${publicConfig.apiUrl.replace(/\/$/, '')}/api/v1`
-      : '/api/v1',
-    v2BaseUrl: publicConfig.apiUrl
-      ? `${publicConfig.apiUrl.replace(/\/$/, '')}/api/v2`
-      : '/api/v2',
+    v1BaseUrl: publicConfig.apiUrl ? `${publicConfig.apiUrl.replace(/\/$/, '')}/api/v1` : '/api/v1',
+    v2BaseUrl: publicConfig.apiUrl ? `${publicConfig.apiUrl.replace(/\/$/, '')}/api/v2` : '/api/v2',
   },
 
   /** Stellar / blockchain */
@@ -103,8 +94,8 @@ export const webConfig = {
     cloudflareZoneId: serverConfig.cloudflareZoneId,
     cloudfrontDistributionId: serverConfig.cloudfrontDistributionId,
     fastlyApiKey: serverConfig.fastlyApiKey,
-    cacheMaxAge: 31_536_000,        // 1 year — for immutable assets
-    staleWhileRevalidate: 86_400,   // 1 day
+    cacheMaxAge: 31_536_000, // 1 year — for immutable assets
+    staleWhileRevalidate: 86_400, // 1 day
   },
 
   /** UX / branding */
