@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '@api/utils/logger';
 import { WebhookDeliveryModel, WebhookEventLogModel, type IWebhook } from './webhook.model';
 import { generateWebhookSignature } from './webhook.service';
+import { buildSignatureHeaders } from './webhook-signature';
 import { validateWebhookUrl } from '@api/utils/url-validator';
 
 interface RetryConfig {
@@ -68,14 +69,22 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
   }
 
   const payloadString = JSON.stringify(delivery.payload);
-  const signature = generateWebhookSignature(webhook.secret, payloadString);
+  const signed = buildSignatureHeaders(webhook.secret, payloadString);
+  const headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'HealthWatchers-Webhooks/1',
+    'X-Webhook-Signature': generateWebhookSignature(webhook.secret, payloadString), // legacy
+    'X-Webhook-Timestamp': signed['x-webhook-timestamp'],
+    'X-Webhook-Signature-256': signed['x-webhook-signature'],
+    'X-Webhook-Id': String(delivery._id),
+    'X-Webhook-Event': delivery.event,
+    'X-Webhook-Attempt': String(delivery.attempts + 1),
+  };
+  const startedAt = Date.now();
 
   try {
     const response = await axios.post(delivery.url, delivery.payload, {
-      headers: {
-        'X-Webhook-Signature': signature,
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: 10000,
     });
 
@@ -83,6 +92,8 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
     delivery.attempts += 1;
     delivery.lastAttemptAt = new Date();
     delivery.responseStatus = response.status;
+    delivery.durationMs = Date.now() - startedAt;
+    delivery.requestHeaders = headers;
     delivery.error = undefined;
     await delivery.save();
 
@@ -99,7 +110,17 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
   } catch (error) {
     delivery.attempts += 1;
     delivery.lastAttemptAt = new Date();
+    delivery.durationMs = Date.now() - startedAt;
+    delivery.requestHeaders = headers;
     delivery.error = error instanceof Error ? error.message : 'Unknown error';
+    const resp = (error as any)?.response;
+    if (resp) {
+      delivery.responseStatus = resp.status;
+      delivery.responseBody =
+        typeof resp.data === 'string'
+          ? resp.data.slice(0, 2000)
+          : JSON.stringify(resp.data ?? '').slice(0, 2000);
+    }
 
     if (delivery.attempts >= config.maxRetries) {
       delivery.status = 'dead';

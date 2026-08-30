@@ -69,6 +69,14 @@ import {
   startFollowUpReminderJob,
   stopFollowUpReminderJob,
 } from './modules/encounters/follow-up-reminder-job';
+import {
+  startReportScheduleJob,
+  stopReportScheduleJob,
+} from './modules/reports/analytics/report-schedule-job';
+import {
+  startApiKeyLifecycleJob,
+  stopApiKeyLifecycleJob,
+} from './modules/api-keys/api-key-lifecycle-job';
 import { warmCache, registerWarmup } from './services/cache.service';
 
 // ── #1071 Cache warm-up registrations ─────────────────────────────────────────

@@ -9,6 +9,7 @@ import {
   generateWebhookSecret,
   verifyWebhookSignature,
   enqueueWebhookDelivery,
+  sendTestWebhook,
 } from './webhook.service';
 import {
   registerWebhookSchema,
@@ -137,7 +138,7 @@ router.post(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ body: registerWebhookSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { url, events, description, retryConfig } = req.body;
+    const { url, events, description, retryConfig, payloadTemplate, rateLimitPerMin } = req.body;
     const secret = generateWebhookSecret();
 
     const webhook = await WebhookModel.create({
@@ -147,6 +148,8 @@ router.post(
       secret,
       description,
       retryConfig,
+      payloadTemplate,
+      rateLimitPerMin: rateLimitPerMin ?? 0,
       isActive: true,
     });
 
@@ -158,6 +161,8 @@ router.post(
         events: webhook.events,
         description: webhook.description,
         retryConfig: webhook.retryConfig,
+        payloadTemplate: webhook.payloadTemplate,
+        rateLimitPerMin: webhook.rateLimitPerMin,
         secret,
         createdAt: webhook.createdAt,
       },
@@ -245,18 +250,26 @@ router.patch(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ body: updateWebhookSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { url, events, isActive, description, retryConfig } = req.body;
+    const { url, events, isActive, description, retryConfig, payloadTemplate, rateLimitPerMin } =
+      req.body;
 
     const update: Record<string, unknown> = {};
+    const unset: Record<string, unknown> = {};
     if (url !== undefined) update.url = url;
     if (events !== undefined) update.events = events;
     if (isActive !== undefined) update.isActive = isActive;
     if (description !== undefined) update.description = description;
     if (retryConfig !== undefined) update.retryConfig = retryConfig;
+    if (rateLimitPerMin !== undefined) update.rateLimitPerMin = rateLimitPerMin;
+    if (payloadTemplate === null) unset.payloadTemplate = '';
+    else if (payloadTemplate !== undefined) update.payloadTemplate = payloadTemplate;
+
+    const mutation: Record<string, unknown> = { ...update };
+    if (Object.keys(unset).length > 0) mutation.$unset = unset;
 
     const webhook = await WebhookModel.findOneAndUpdate(
       { _id: req.params.id, clinicId: req.user!.clinicId },
-      update,
+      mutation,
       { new: true }
     ).select('-secret');
 
@@ -276,6 +289,8 @@ router.patch(
         isActive: webhook.isActive,
         description: webhook.description,
         retryConfig: webhook.retryConfig,
+        payloadTemplate: webhook.payloadTemplate,
+        rateLimitPerMin: webhook.rateLimitPerMin,
         updatedAt: webhook.updatedAt,
       },
     });
@@ -347,6 +362,83 @@ router.get(
         error: d.error,
         createdAt: d.createdAt,
       })),
+    });
+  })
+);
+
+// GET /webhooks/:id/deliveries/:deliveryId (full delivery detail for debugging)
+router.get(
+  '/:id/deliveries/:deliveryId',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!webhook) {
+      return res.status(404).json({ error: 'NotFound', message: 'Webhook not found' });
+    }
+
+    const delivery = await WebhookDeliveryModel.findOne({
+      _id: req.params.deliveryId,
+      webhookId: webhook._id,
+    });
+    if (!delivery) {
+      return res.status(404).json({ error: 'NotFound', message: 'Delivery not found' });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(delivery._id),
+        event: delivery.event,
+        url: delivery.url,
+        status: delivery.status,
+        attempts: delivery.attempts,
+        isTest: delivery.isTest ?? false,
+        lastAttemptAt: delivery.lastAttemptAt,
+        nextRetryAt: delivery.nextRetryAt,
+        responseStatus: delivery.responseStatus,
+        durationMs: delivery.durationMs,
+        error: delivery.error,
+        requestHeaders: delivery.requestHeaders ?? null,
+        requestBody: delivery.payload,
+        responseBody: delivery.responseBody ?? null,
+        createdAt: delivery.createdAt,
+      },
+    });
+  })
+);
+
+// POST /webhooks/:id/test (send a synthetic webhook.test event)
+router.post(
+  '/:id/test',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!webhook) {
+      return res.status(404).json({ error: 'NotFound', message: 'Webhook not found' });
+    }
+
+    const delivery = await sendTestWebhook({
+      _id: webhook._id,
+      url: webhook.url,
+      secret: webhook.secret,
+    });
+
+    return res.status(202).json({
+      status: 'success',
+      message: 'Test event queued for delivery',
+      data: {
+        deliveryId: String((delivery as { _id?: unknown })._id),
+        status: delivery.status,
+        event: 'webhook.test',
+      },
     });
   })
 );
