@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
@@ -25,6 +26,7 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { DuplicateDetectionService } from './duplicate-detection.service';
+import { DuplicateController } from './duplicate.controller';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
 import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';

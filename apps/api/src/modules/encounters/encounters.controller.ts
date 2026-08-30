@@ -27,11 +27,13 @@ import { auditLog } from '../audit/audit.service';
 import crypto from 'crypto';
 import { emitToClinic } from '@api/realtime/socket';
 import { encountersCreatedTotal } from '../../services/metrics.service';
-import cdsRulesEngine from '../cds/cds-rules-engine.js';
+import cdsRulesEngine from '../cds/cds-rules-engine';
 import { EncounterValidationService } from './encounter-validation.service';
 import { incrementUsage } from '../subscriptions/usage.service';
 import { sendMail } from '@api/lib/email.service';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
+import { cache } from '@api/services/cache.service';
+import { dashboardCacheKey } from '../dashboard/dashboard.controller';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;

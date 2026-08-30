@@ -1,4 +1,4 @@
-import { CDSRuleModel } from './cds-rule.model.js';
+import { CDSRuleModel } from './cds-rule.model';
 import logger from '@api/utils/logger';
 
 export async function seedBuiltInRules(): Promise<void> {

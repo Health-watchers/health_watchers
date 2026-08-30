@@ -87,7 +87,7 @@ const TEST_USER_ID = '507f1f77bcf86cd799439011';
 
 function makeToken(): string {
   return jwt.sign(
-    { userId: TEST_USER_ID, role: 'CLINIC_ADMIN', clinicId: 'clinic-abc' },
+    { userId: TEST_USER_ID, role: 'CLINIC_ADMIN', clinicId: 'clinic-abc', jti: 'test-jti' },
     'test-access-secret',
     {
       expiresIn: '15m',

@@ -21,6 +21,8 @@ import { randomUUID } from 'crypto';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { paymentsInitiatedTotal, feeStrategySelectedTotal } from '@api/services/metrics.service';
+import { cache } from '@api/services/cache.service';
+import { dashboardCacheKey } from '../dashboard/dashboard.controller';
 import { feeOptimizer } from './services/fee-optimizer.service';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
 import { confirmPayment } from './services/payment-confirmation.service';
