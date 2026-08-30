@@ -1,0 +1,229 @@
+# ============================================================
+# Backup & Disaster-Recovery automation CronJobs (#1262)
+#
+# Schedules:
+#   full backup        daily   02:10 UTC   scripts/backup/backup-scheduler.sh --mode full
+#   oplog incremental   hourly  :20        scripts/backup/backup-scheduler.sh --mode incremental
+#   restore drill       monthly 1st 03:00  scripts/dr/dr-drill.sh --scope monthly
+#   cost report         weekly  Mon 06:00  scripts/backup/backup-cost-report.sh
+#
+# All jobs run the API image (which carries the scripts) with mongo tools on
+# PATH. Secret values live in `health-watchers-backup-secrets` — populate it
+# via External Secrets Operator in production (see k8s/external-secrets.yaml).
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-watchers-backup-config
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+data:
+  AWS_REGION: "us-east-1"
+  S3_PREFIX: "mongodb"
+  FULL_BACKUP_HOUR: "02"
+  BACKUP_RETENTION_DAYS: "35"
+  DAILY_KEEP: "7"
+  WEEKLY_KEEP: "4"
+  MONTHLY_KEEP: "12"
+  GLACIER_AFTER_DAYS: "30"
+  DR_TEST_SCOPE: "monthly"
+  PUSHGATEWAY_URL: "http://pushgateway.monitoring:9091"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: health-watchers-backup-secrets
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+type: Opaque
+stringData:
+  # Populate via ESO / sealed-secrets — placeholders only.
+  MONGO_URI: "REPLACE_ME"
+  BACKUP_ENCRYPTION_KEY: "REPLACE_ME"
+  BACKUP_BUCKET: "REPLACE_ME"
+  DR_BACKUP_BUCKET: "REPLACE_ME"
+  AWS_ACCESS_KEY_ID: "REPLACE_ME"
+  AWS_SECRET_ACCESS_KEY: "REPLACE_ME"
+  SLACK_WEBHOOK_URL: "REPLACE_ME"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-full-backup
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "10 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 5400
+      template:
+        metadata:
+          labels:
+            app: mongodb-full-backup
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: health-watchers-api
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: backup
+              image: ghcr.io/chisom92/health-watchers-api:latest
+              command: ["bash", "scripts/backup/backup-scheduler.sh", "--mode", "full"]
+              envFrom:
+                - configMapRef:
+                    name: health-watchers-backup-config
+                - secretRef:
+                    name: health-watchers-backup-secrets
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-incremental-backup
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "20 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 12
+  failedJobsHistoryLimit: 12
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app: mongodb-incremental-backup
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: health-watchers-api
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: backup
+              image: ghcr.io/chisom92/health-watchers-api:latest
+              command: ["bash", "scripts/backup/backup-scheduler.sh", "--mode", "incremental"]
+              envFrom:
+                - configMapRef:
+                    name: health-watchers-backup-config
+                - secretRef:
+                    name: health-watchers-backup-secrets
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-restore-drill
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+  annotations:
+    description: "Monthly automated DR test — restore latest backup, measure RTO/RPO, verify integrity."
+spec:
+  schedule: "0 3 1 * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 6
+  failedJobsHistoryLimit: 6
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: mongodb-restore-drill
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: health-watchers-api
+          containers:
+            - name: dr-drill
+              image: ghcr.io/chisom92/health-watchers-api:latest
+              command: ["bash", "scripts/dr/dr-drill.sh", "--scope", "$(DR_TEST_SCOPE)"]
+              envFrom:
+                - configMapRef:
+                    name: health-watchers-backup-config
+                - secretRef:
+                    name: health-watchers-backup-secrets
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup-cost-report
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 6 * * 1"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 4
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: mongodb-backup-cost-report
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: health-watchers-api
+          containers:
+            - name: cost-report
+              image: ghcr.io/chisom92/health-watchers-api:latest
+              command: ["bash", "scripts/backup/backup-cost-report.sh"]
+              envFrom:
+                - configMapRef:
+                    name: health-watchers-backup-config
+                - secretRef:
+                    name: health-watchers-backup-secrets
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"

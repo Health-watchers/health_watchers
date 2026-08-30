@@ -1,0 +1,80 @@
+groups:
+  # Pre-aggregated RED metrics + SLO ratios (#1257).
+  # Recording rules keep dashboards and multi-window burn-rate alerts cheap and
+  # consistent — alerts reference these series instead of recomputing quantiles.
+  - name: http-red-aggregations
+    interval: 30s
+    rules:
+      - record: job:http_requests:rate5m
+        expr: sum by (job) (rate(http_requests_total[5m]))
+
+      - record: job:http_requests:error_rate5m
+        expr: sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+
+      - record: job:http_requests:error_ratio5m
+        expr: >
+          job:http_requests:error_rate5m
+          / clamp_min(job:http_requests:rate5m, 0.001)
+
+      - record: job:http_requests:error_ratio30m
+        expr: >
+          sum by (job) (rate(http_requests_total{status=~"5.."}[30m]))
+          / clamp_min(sum by (job) (rate(http_requests_total[30m])), 0.001)
+
+      - record: job:http_requests:error_ratio1h
+        expr: >
+          sum by (job) (rate(http_requests_total{status=~"5.."}[1h]))
+          / clamp_min(sum by (job) (rate(http_requests_total[1h])), 0.001)
+
+      - record: job:http_requests:error_ratio6h
+        expr: >
+          sum by (job) (rate(http_requests_total{status=~"5.."}[6h]))
+          / clamp_min(sum by (job) (rate(http_requests_total[6h])), 0.001)
+
+      - record: job:http_request_duration:p50_5m
+        expr: >
+          histogram_quantile(0.50,
+            sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: job:http_request_duration:p95_5m
+        expr: >
+          histogram_quantile(0.95,
+            sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: job:http_request_duration:p99_5m
+        expr: >
+          histogram_quantile(0.99,
+            sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: route:http_request_duration:p99_5m
+        expr: >
+          histogram_quantile(0.99,
+            sum by (job, path, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+  - name: slo-availability
+    interval: 30s
+    rules:
+      # 99% availability SLO — 30-day error budget consumed so far.
+      - record: slo:http_availability:ratio_30d
+        expr: >
+          1 - (
+            sum(rate(http_requests_total{job="health-watchers-api",status=~"5.."}[30d]))
+            / clamp_min(sum(rate(http_requests_total{job="health-watchers-api"}[30d])), 0.001)
+          )
+
+      - record: slo:http_error_budget:burn_rate1h
+        expr: job:http_requests:error_ratio1h{job="health-watchers-api"} / 0.01
+
+  - name: subsystem-aggregations
+    interval: 30s
+    rules:
+      - record: job:notification_deliveries:rate15m
+        expr: sum by (channel, status) (rate(notification_deliveries_total[15m]))
+
+      - record: job:notification_delivery_failure:ratio15m
+        expr: >
+          sum(rate(notification_deliveries_total{status="failed"}[15m]))
+          / clamp_min(sum(rate(notification_deliveries_total[15m])), 0.001)
+
+      - record: job:telehealth_sessions:rate1h
+        expr: sum by (event) (rate(telehealth_sessions_total[1h]))

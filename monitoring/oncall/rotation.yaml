@@ -1,0 +1,71 @@
+# ============================================================
+# On-call rotation as code (#1257)
+#
+# Consumed by Grafana OnCall (apply with `grafana-oncall apply`) or translated
+# to PagerDuty via terraform-provider-pagerduty. Times are UTC; the weekly
+# hand-off is Monday 10:00 UTC (start of the EU working day).
+#
+# The AlertManager `pagerduty-critical` receiver
+# (monitoring/alertmanager.yml) pages whichever schedule the escalation policy
+# in escalation.yaml selects.
+# ============================================================
+apiVersion: oncall/v1
+kind: Schedule
+metadata:
+  name: platform-primary
+  labels:
+    team: platform
+    tier: primary
+spec:
+  timezone: UTC
+  rotation:
+    type: weekly
+    handoffTime: "10:00"
+    handoffDay: monday
+    length: 1w
+  # Ordered participant list — rotates one slot per hand-off.
+  participants:
+    - user: platform-oncall-1
+    - user: platform-oncall-2
+    - user: platform-oncall-3
+    - user: platform-oncall-4
+  overrides: []          # ad-hoc swaps, e.g. { user: platform-oncall-2, start: ..., end: ... }
+---
+apiVersion: oncall/v1
+kind: Schedule
+metadata:
+  name: platform-secondary
+  labels:
+    team: platform
+    tier: secondary
+spec:
+  timezone: UTC
+  rotation:
+    type: weekly
+    handoffTime: "10:00"
+    handoffDay: monday
+    length: 1w
+  # Same pool, offset by two so primary and secondary are never the same person.
+  participants:
+    - user: platform-oncall-3
+    - user: platform-oncall-4
+    - user: platform-oncall-1
+    - user: platform-oncall-2
+---
+apiVersion: oncall/v1
+kind: Schedule
+metadata:
+  name: security-oncall
+  labels:
+    team: security
+spec:
+  timezone: UTC
+  rotation:
+    type: weekly
+    handoffTime: "10:00"
+    handoffDay: monday
+    length: 1w
+  participants:
+    - user: security-oncall-1
+    - user: security-oncall-2
+    - user: security-oncall-3
