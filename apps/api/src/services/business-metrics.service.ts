@@ -4,7 +4,7 @@ import {
   activeUsersTotal,
   apiKeyRequestsTotal,
   stellarTransactionFeeXlm,
-} from './metrics.service.js';
+} from './metrics.service';
 
 /**
  * Record payment success rate for a clinic

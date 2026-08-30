@@ -101,7 +101,9 @@ export function InvoicePaymentInterface({
   onSetupRecurring,
   onCancel,
 }: InvoicePaymentInterfaceProps) {
-  const [activeTab, setActiveTab] = useState<'details' | 'payment' | 'history' | 'plans'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'payment' | 'history' | 'plans'>(
+    'details'
+  );
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
     paymentMethods[0]?.id || ''
   );
@@ -114,9 +116,9 @@ export function InvoicePaymentInterface({
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [insuranceVerifying, setInsuranceVerifying] = useState(false);
-  const [insuranceStatus, setInsuranceStatus] = useState<'idle' | 'verified' | 'pending' | 'failed'>(
-    'idle'
-  );
+  const [insuranceStatus, setInsuranceStatus] = useState<
+    'idle' | 'verified' | 'pending' | 'failed'
+  >('idle');
 
   useEffect(() => {
     // Simulate loading payment history
@@ -133,7 +135,10 @@ export function InvoicePaymentInterface({
   }, []);
 
   const remainingBalance = invoice.total - paymentHistory.reduce((sum, p) => sum + p.amount, 0);
-  const paidAmount = paymentHistory.reduce((sum, p) => sum + (p.status === 'completed' ? p.amount : 0), 0);
+  const paidAmount = paymentHistory.reduce(
+    (sum, p) => sum + (p.status === 'completed' ? p.amount : 0),
+    0
+  );
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +154,10 @@ export function InvoicePaymentInterface({
     }
 
     if (amount > remainingBalance) {
-      setToast({ message: `Payment amount exceeds remaining balance of $${remainingBalance.toFixed(2)}`, type: 'error' });
+      setToast({
+        message: `Payment amount exceeds remaining balance of $${remainingBalance.toFixed(2)}`,
+        type: 'error',
+      });
       return;
     }
 
@@ -245,19 +253,22 @@ export function InvoicePaymentInterface({
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Invoice</h2>
           <p className="text-sm text-gray-600">Invoice #{invoice.invoiceNumber}</p>
-          <p className="text-xs text-gray-500 mt-1">Patient: {invoice.patientName} (ID: {invoice.patientId})</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Patient: {invoice.patientName} (ID: {invoice.patientId})
+          </p>
         </div>
 
         <div className="text-right">
           <div
-            className={`inline-block rounded-full px-4 py-2 text-sm font-semibold border ${getStatusBadgeColor(
+            className={`inline-block rounded-full border px-4 py-2 text-sm font-semibold ${getStatusBadgeColor(
               invoice.status
             )}`}
           >
             {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
           </div>
           <p className="mt-2 text-sm font-medium text-gray-900">
-            Amount Due: <span className="text-2xl text-blue-600">${remainingBalance.toFixed(2)}</span>
+            Amount Due:{' '}
+            <span className="text-2xl text-blue-600">${remainingBalance.toFixed(2)}</span>
           </p>
         </div>
       </div>
@@ -269,7 +280,7 @@ export function InvoicePaymentInterface({
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -288,11 +299,11 @@ export function InvoicePaymentInterface({
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Issued Date</p>
+              <p className="text-xs font-semibold uppercase text-gray-600">Issued Date</p>
               <p className="text-sm font-medium text-gray-900">{invoice.dateIssued}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Due Date</p>
+              <p className="text-xs font-semibold uppercase text-gray-600">Due Date</p>
               <p className="text-sm font-medium text-gray-900">{invoice.dueDate}</p>
             </div>
           </div>
@@ -301,10 +312,10 @@ export function InvoicePaymentInterface({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 font-semibold text-gray-900">Description</th>
-                  <th className="text-right py-2 font-semibold text-gray-900">Qty</th>
-                  <th className="text-right py-2 font-semibold text-gray-900">Unit Price</th>
-                  <th className="text-right py-2 font-semibold text-gray-900">Total</th>
+                  <th className="py-2 text-left font-semibold text-gray-900">Description</th>
+                  <th className="py-2 text-right font-semibold text-gray-900">Qty</th>
+                  <th className="py-2 text-right font-semibold text-gray-900">Unit Price</th>
+                  <th className="py-2 text-right font-semibold text-gray-900">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -312,11 +323,11 @@ export function InvoicePaymentInterface({
                   <tr key={item.id} className="border-b border-gray-100">
                     <td className="py-3">
                       <p className="font-medium text-gray-900">{item.description}</p>
-                      <p className="text-xs text-gray-500 capitalize">{item.category}</p>
+                      <p className="text-xs capitalize text-gray-500">{item.category}</p>
                     </td>
-                    <td className="text-right py-3 text-gray-600">{item.quantity}</td>
-                    <td className="text-right py-3 text-gray-600">${item.unitPrice.toFixed(2)}</td>
-                    <td className="text-right py-3 font-medium text-gray-900">
+                    <td className="py-3 text-right text-gray-600">{item.quantity}</td>
+                    <td className="py-3 text-right text-gray-600">${item.unitPrice.toFixed(2)}</td>
+                    <td className="py-3 text-right font-medium text-gray-900">
                       ${item.total.toFixed(2)}
                     </td>
                   </tr>
@@ -353,7 +364,7 @@ export function InvoicePaymentInterface({
 
           {invoice.notes && (
             <div className="rounded-lg bg-gray-50 p-4">
-              <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Notes</p>
+              <p className="mb-2 text-xs font-semibold uppercase text-gray-600">Notes</p>
               <p className="text-sm text-gray-700">{invoice.notes}</p>
             </div>
           )}
@@ -365,13 +376,13 @@ export function InvoicePaymentInterface({
         <form onSubmit={handlePayment} className="space-y-4">
           {/* Insurance Verification */}
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold text-blue-900">Insurance Verification</h3>
               <button
                 type="button"
                 onClick={handleVerifyInsurance}
                 disabled={insuranceVerifying}
-                className={`text-xs font-medium px-3 py-1 rounded ${
+                className={`rounded px-3 py-1 text-xs font-medium ${
                   insuranceStatus === 'verified'
                     ? 'bg-green-100 text-green-700'
                     : insuranceStatus === 'failed'
@@ -379,7 +390,13 @@ export function InvoicePaymentInterface({
                       : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                 }`}
               >
-                {insuranceVerifying ? 'Verifying...' : insuranceStatus === 'verified' ? '✓ Verified' : insuranceStatus === 'failed' ? '✗ Failed' : 'Verify Insurance'}
+                {insuranceVerifying
+                  ? 'Verifying...'
+                  : insuranceStatus === 'verified'
+                    ? '✓ Verified'
+                    : insuranceStatus === 'failed'
+                      ? '✗ Failed'
+                      : 'Verify Insurance'}
               </button>
             </div>
             <p className="text-sm text-blue-800">
@@ -389,14 +406,17 @@ export function InvoicePaymentInterface({
 
           {/* Payment Method Selection */}
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-3">
+            <label className="mb-3 block text-sm font-semibold text-gray-900">
               Select Payment Method
             </label>
 
             {paymentMethods.length > 0 ? (
               <div className="space-y-2">
                 {paymentMethods.map((method) => (
-                  <label key={method.id} className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+                  <label
+                    key={method.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+                  >
                     <input
                       type="radio"
                       name="payment-method"
@@ -407,21 +427,25 @@ export function InvoicePaymentInterface({
                     />
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">
-                        {method.type === 'card' ? `Card ending in ${method.last4}` : `${method.bankName} - ${method.accountType}`}
+                        {method.type === 'card'
+                          ? `Card ending in ${method.last4}`
+                          : `${method.bankName} - ${method.accountType}`}
                       </p>
-                      <p className="text-xs text-gray-500">{method.holderName || method.accountType}</p>
+                      <p className="text-xs text-gray-500">
+                        {method.holderName || method.accountType}
+                      </p>
                     </div>
                   </label>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 mb-3">No payment methods added yet</p>
+              <p className="mb-3 text-sm text-gray-500">No payment methods added yet</p>
             )}
 
             <button
               type="button"
               onClick={() => setShowAddPaymentMethod(!showAddPaymentMethod)}
-              className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-800"
             >
               + Add Payment Method
             </button>
@@ -429,7 +453,9 @@ export function InvoicePaymentInterface({
             {showAddPaymentMethod && (
               <div className="mt-3 space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-900 mb-1">Card Number</label>
+                  <label className="mb-1 block text-xs font-medium text-gray-900">
+                    Card Number
+                  </label>
                   <input
                     type="text"
                     placeholder="1234 5678 9012 3456"
@@ -438,7 +464,7 @@ export function InvoicePaymentInterface({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-900 mb-1">Expiry</label>
+                    <label className="mb-1 block text-xs font-medium text-gray-900">Expiry</label>
                     <input
                       type="text"
                       placeholder="MM/YY"
@@ -446,7 +472,7 @@ export function InvoicePaymentInterface({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-900 mb-1">CVV</label>
+                    <label className="mb-1 block text-xs font-medium text-gray-900">CVV</label>
                     <input
                       type="text"
                       placeholder="123"
@@ -460,9 +486,9 @@ export function InvoicePaymentInterface({
 
           {/* Payment Amount */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">Payment Amount</label>
+            <label className="mb-2 block text-sm font-medium text-gray-900">Payment Amount</label>
             <div className="flex gap-2">
-              <div className="flex-1 relative">
+              <div className="relative flex-1">
                 <span className="absolute left-3 top-2.5 text-gray-600">$</span>
                 <input
                   type="number"
@@ -489,7 +515,7 @@ export function InvoicePaymentInterface({
 
           {/* Payment Notes */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">Notes (Optional)</label>
+            <label className="mb-2 block text-sm font-medium text-gray-900">Notes (Optional)</label>
             <textarea
               value={paymentNotes}
               onChange={(e) => setPaymentNotes(e.target.value)}
@@ -513,7 +539,9 @@ export function InvoicePaymentInterface({
               disabled={isProcessing || !selectedPaymentMethod}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {isProcessing ? 'Processing...' : `Pay $${parseFloat(paymentAmount || '0').toFixed(2)}`}
+              {isProcessing
+                ? 'Processing...'
+                : `Pay $${parseFloat(paymentAmount || '0').toFixed(2)}`}
             </button>
           </div>
         </form>
@@ -525,10 +553,13 @@ export function InvoicePaymentInterface({
           {paymentHistory.length > 0 ? (
             <div className="space-y-2">
               {paymentHistory.map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-4 hover:bg-gray-50">
+                <div
+                  key={payment.id}
+                  className="flex items-center justify-between rounded-lg border border-gray-200 p-4 hover:bg-gray-50"
+                >
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">${payment.amount.toFixed(2)}</p>
-                    <p className="text-xs text-gray-600 mt-1">
+                    <p className="mt-1 text-xs text-gray-600">
                       {payment.method.type === 'card'
                         ? `Card ending in ${payment.method.last4}`
                         : `${payment.method.bankName}`}
@@ -553,7 +584,7 @@ export function InvoicePaymentInterface({
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-500 py-8">No payment history yet</p>
+            <p className="py-8 text-center text-gray-500">No payment history yet</p>
           )}
         </div>
       )}
@@ -569,14 +600,14 @@ export function InvoicePaymentInterface({
             {PAYMENT_PLANS.map((plan) => (
               <div
                 key={plan.id}
-                className={`rounded-lg border-2 p-4 transition-all cursor-pointer ${
+                className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
                   selectedPlan === plan.id
                     ? 'border-blue-600 bg-blue-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
                 onClick={() => setSelectedPlan(selectedPlan === plan.id ? '' : plan.id)}
               >
-                <div className="flex items-start justify-between mb-2">
+                <div className="mb-2 flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-gray-900">{plan.name}</p>
                     <p className="text-sm text-gray-600">{plan.description}</p>
@@ -592,7 +623,7 @@ export function InvoicePaymentInterface({
 
                 {selectedPlan === plan.id && plan.id === 'custom' && (
                   <div className="mt-3 border-t border-gray-300 pt-3">
-                    <label className="block text-xs font-medium text-gray-700 mb-2">
+                    <label className="mb-2 block text-xs font-medium text-gray-700">
                       Number of Payments
                     </label>
                     <input

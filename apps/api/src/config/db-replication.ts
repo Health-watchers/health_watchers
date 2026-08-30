@@ -10,7 +10,12 @@ import { config } from '@health-watchers/config';
 /**
  * Read preference modes for optimal query routing
  */
-export type ReadPreference = 'primary' | 'primaryPreferred' | 'secondary' | 'secondaryPreferred' | 'nearest';
+export type ReadPreference =
+  | 'primary'
+  | 'primaryPreferred'
+  | 'secondary'
+  | 'secondaryPreferred'
+  | 'nearest';
 
 export interface ReplicationConfig {
   readPreference: ReadPreference;
@@ -284,7 +289,9 @@ export async function testFailover(): Promise<FailoverTestResult> {
 /**
  * Configure read preferences on connection
  */
-export function configureReadPreferences(readPref: ReplicationConfig = DEFAULT_REPLICATION_CONFIG): void {
+export function configureReadPreferences(
+  readPref: ReplicationConfig = DEFAULT_REPLICATION_CONFIG
+): void {
   const connection = mongoose.connection;
 
   // Set read preference at connection level

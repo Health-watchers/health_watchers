@@ -126,7 +126,7 @@ export function ErrorFallback({
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 <span className="font-semibold">Error ID:</span>
               </p>
-              <p className="font-mono text-xs text-gray-900 dark:text-gray-100 break-all">
+              <p className="break-all font-mono text-xs text-gray-900 dark:text-gray-100">
                 {errorId}
               </p>
             </div>

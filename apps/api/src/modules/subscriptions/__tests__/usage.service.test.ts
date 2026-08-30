@@ -2,7 +2,9 @@ import { incrementUsage, getUsage, resetUsageForPeriod } from '../usage.service'
 import { UsageModel } from '../usage.model';
 import { SubscriptionModel } from '../subscription.model';
 
-jest.mock('../usage.model', () => ({ UsageModel: { findOneAndUpdate: jest.fn(), findOne: jest.fn() } }));
+jest.mock('../usage.model', () => ({
+  UsageModel: { findOneAndUpdate: jest.fn(), findOne: jest.fn() },
+}));
 jest.mock('../subscription.model', () => ({ SubscriptionModel: { findOne: jest.fn() } }));
 
 describe('incrementUsage', () => {

@@ -154,8 +154,7 @@ export function VitalSignsChart({
       ctx.beginPath();
       series.readings.forEach((reading, index) => {
         const x = padding.left + (chartWidth / (series.readings.length - 1 || 1)) * index;
-        const y =
-          padding.top + ((maxValue - reading.value) / (maxValue - minValue)) * chartHeight;
+        const y = padding.top + ((maxValue - reading.value) / (maxValue - minValue)) * chartHeight;
 
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -169,8 +168,7 @@ export function VitalSignsChart({
       ctx.fillStyle = series.color;
       series.readings.forEach((reading, index) => {
         const x = padding.left + (chartWidth / (series.readings.length - 1 || 1)) * index;
-        const y =
-          padding.top + ((maxValue - reading.value) / (maxValue - minValue)) * chartHeight;
+        const y = padding.top + ((maxValue - reading.value) / (maxValue - minValue)) * chartHeight;
 
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -209,12 +207,12 @@ export function VitalSignsChart({
 
       <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
         {data.map((series, index) => (
-          <div key={index} className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700">
+          <div
+            key={index}
+            className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700"
+          >
             <div className="flex items-center gap-2">
-              <div
-                className="h-3 w-3 rounded-full"
-                style={{ backgroundColor: series.color }}
-              />
+              <div className="h-3 w-3 rounded-full" style={{ backgroundColor: series.color }} />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {series.name}
               </span>
@@ -222,9 +220,7 @@ export function VitalSignsChart({
             {series.readings.length > 0 && (
               <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {series.readings[series.readings.length - 1].value}
-                <span className="ml-1 text-sm text-gray-500 dark:text-gray-400">
-                  {series.unit}
-                </span>
+                <span className="ml-1 text-sm text-gray-500 dark:text-gray-400">{series.unit}</span>
               </div>
             )}
           </div>

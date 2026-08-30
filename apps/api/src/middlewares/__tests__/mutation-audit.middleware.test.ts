@@ -33,7 +33,7 @@ describe('mutationAuditMiddleware', () => {
     await request(makeApp('POST')).post('/test/123').send({});
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'MUTATION_CREATE', resourceId: '123' }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -41,7 +41,7 @@ describe('mutationAuditMiddleware', () => {
     await request(makeApp('PUT')).put('/test/456').send({});
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'MUTATION_UPDATE', resourceId: '456' }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -49,7 +49,7 @@ describe('mutationAuditMiddleware', () => {
     await request(makeApp('PATCH')).patch('/test/789').send({});
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'MUTATION_UPDATE' }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -57,7 +57,7 @@ describe('mutationAuditMiddleware', () => {
     await request(makeApp('DELETE')).delete('/test/abc');
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'MUTATION_DELETE' }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -77,7 +77,7 @@ describe('mutationAuditMiddleware', () => {
     await request(makeApp('POST')).post('/test/1').send({});
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', clinicId: 'clinic-1' }),
-      expect.anything(),
+      expect.anything()
     );
   });
 });

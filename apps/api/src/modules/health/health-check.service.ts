@@ -158,7 +158,11 @@ function checkMemory(): ServiceCheck {
   const mem = process.memoryUsage();
   const percentage = Math.round((mem.heapUsed / mem.heapTotal) * 100);
   if (percentage > 90) {
-    return { status: 'unhealthy', message: `Heap usage at ${percentage}%`, details: { percentage } };
+    return {
+      status: 'unhealthy',
+      message: `Heap usage at ${percentage}%`,
+      details: { percentage },
+    };
   }
   if (percentage > 75) {
     return { status: 'degraded', message: `Heap usage at ${percentage}%`, details: { percentage } };
@@ -192,10 +196,18 @@ function checkErrorRate(): ServiceCheck {
   const metrics = getErrorMetrics();
   const criticalErrors = metrics.bySeverity.critical + metrics.bySeverity.high;
   if (criticalErrors > 10) {
-    return { status: 'unhealthy', message: `${criticalErrors} critical/high errors`, details: metrics };
+    return {
+      status: 'unhealthy',
+      message: `${criticalErrors} critical/high errors`,
+      details: metrics,
+    };
   }
   if (criticalErrors > 5) {
-    return { status: 'degraded', message: `${criticalErrors} critical/high errors`, details: metrics };
+    return {
+      status: 'degraded',
+      message: `${criticalErrors} critical/high errors`,
+      details: metrics,
+    };
   }
   return { status: 'healthy', details: metrics };
 }
@@ -253,9 +265,7 @@ export async function runComprehensiveHealthCheck(): Promise<ComprehensiveHealth
   healthHistory.push({
     timestamp: result.timestamp,
     status: result.status,
-    services: Object.fromEntries(
-      Object.entries(services).map(([k, v]) => [k, v.status])
-    ),
+    services: Object.fromEntries(Object.entries(services).map(([k, v]) => [k, v.status])),
   });
   if (healthHistory.length > MAX_HISTORY) {
     healthHistory.shift();

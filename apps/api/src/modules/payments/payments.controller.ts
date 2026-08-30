@@ -20,10 +20,7 @@ import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
 import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
-import {
-  paymentsInitiatedTotal,
-  feeStrategySelectedTotal,
-} from '@api/services/metrics.service';
+import { paymentsInitiatedTotal, feeStrategySelectedTotal } from '@api/services/metrics.service';
 import { feeOptimizer } from './services/fee-optimizer.service';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
 import { confirmPayment } from './services/payment-confirmation.service';

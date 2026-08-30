@@ -93,6 +93,10 @@ export const config = {
     s3AccessKey: process.env.S3_ACCESS_KEY_ID || '',
     s3SecretKey: process.env.S3_SECRET_ACCESS_KEY || '',
     localUploadDir: process.env.LOCAL_UPLOAD_DIR || './uploads',
+    // Master key for at-rest document envelope encryption (local driver).
+    // Falls back to the PHI field-encryption key when unset.
+    documentEncryptionKey:
+      process.env.DOCUMENT_ENCRYPTION_KEY || process.env.FIELD_ENCRYPTION_KEY || '',
   },
 };
 

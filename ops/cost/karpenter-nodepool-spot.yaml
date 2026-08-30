@@ -1,0 +1,144 @@
+# Karpenter NodePools for Health Watchers cost optimisation.
+#
+# Strategy:
+#   - spot-general : 100% spot, for stateless web / async workers / CI / DR warm-standby
+#   - api-mixed    : ~70% spot + on-demand fallback, min on-demand capacity guaranteed
+#   - on-demand    : stateful only (MongoDB, Redis, Vault) — never interrupted
+# Consolidation is on everywhere except stateful, so nodes are packed and empty
+# nodes are reclaimed quickly.
+#
+# apply:  kubectl apply -f ops/cost/karpenter-nodepool-spot.yaml
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: spot-general
+  labels:
+    cost-tier: spot
+spec:
+  template:
+    metadata:
+      labels:
+        pool: spot-general
+        cost-tier: spot
+    spec:
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["large", "xlarge", "2xlarge"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: 168h
+      taints:
+        - key: cost-tier
+          value: spot
+          effect: NoSchedule
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
+  limits:
+    cpu: "400"
+    memory: 800Gi
+  weight: 50
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: api-mixed
+  labels:
+    cost-tier: mixed
+spec:
+  template:
+    metadata:
+      labels:
+        pool: api-mixed
+        cost-tier: mixed
+    spec:
+      requirements:
+        # Karpenter prefers spot when available; on-demand is the fallback so the
+        # API always has capacity even during a spot shortage.
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["large", "xlarge"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: 336h
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 2m
+    budgets:
+      # Never disrupt more than 10% of API nodes at once, and none during
+      # the daily peak window.
+      - nodes: "10%"
+      - nodes: "0"
+        schedule: "0 13 * * mon-fri"
+        duration: 4h
+  limits:
+    cpu: "200"
+    memory: 400Gi
+  weight: 30
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: on-demand-stateful
+  labels:
+    cost-tier: on-demand
+spec:
+  template:
+    metadata:
+      labels:
+        pool: on-demand-stateful
+        cost-tier: on-demand
+    spec:
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["r", "m"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["xlarge", "2xlarge"]
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      taints:
+        - key: workload
+          value: stateful
+          effect: NoSchedule
+  disruption:
+    # Stateful nodes are only replaced when completely empty, slowly.
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 10m
+  limits:
+    cpu: "128"
+    memory: 512Gi
+  weight: 10

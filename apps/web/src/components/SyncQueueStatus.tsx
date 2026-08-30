@@ -68,9 +68,13 @@ export function SyncQueueStatus() {
           <h3 className="font-semibold text-gray-900">Sync Status</h3>
           <p className="mt-1 text-sm text-gray-600">
             {isSyncing ? (
-              <>Syncing {pendingCount} pending change{pendingCount !== 1 ? 's' : ''}...</>
+              <>
+                Syncing {pendingCount} pending change{pendingCount !== 1 ? 's' : ''}...
+              </>
             ) : pendingCount > 0 ? (
-              <>{pendingCount} pending change{pendingCount !== 1 ? 's' : ''} waiting to sync</>
+              <>
+                {pendingCount} pending change{pendingCount !== 1 ? 's' : ''} waiting to sync
+              </>
             ) : (
               <>All changes synced</>
             )}
@@ -83,11 +87,7 @@ export function SyncQueueStatus() {
             </Button>
           )}
           {pendingCount > 0 && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setShowDetails(!showDetails)}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setShowDetails(!showDetails)}>
               {showDetails ? 'Hide' : 'Details'}
             </Button>
           )}

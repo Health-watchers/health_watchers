@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  Text,
-  Platform,
-  SafeAreaView,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, Platform, SafeAreaView } from 'react-native';
 
 export interface TabItem {
   name: string;
@@ -28,23 +21,15 @@ export function BottomTabBar({ tabs, activeTab }: BottomTabBarProps) {
         {tabs.map((tab) => (
           <TouchableOpacity
             key={tab.name}
-            style={[
-              styles.tab,
-              tab.name === activeTab && styles.activeTab,
-            ]}
+            style={[styles.tab, tab.name === activeTab && styles.activeTab]}
             onPress={tab.onPress}
             activeOpacity={0.7}
             accessibilityRole="tab"
             accessibilityState={{ selected: tab.name === activeTab }}
           >
-            <View style={styles.iconContainer}>
-              {tab.icon}
-            </View>
+            <View style={styles.iconContainer}>{tab.icon}</View>
             <Text
-              style={[
-                styles.label,
-                tab.name === activeTab && styles.activeLabel,
-              ]}
+              style={[styles.label, tab.name === activeTab && styles.activeLabel]}
               numberOfLines={1}
             >
               {tab.label}

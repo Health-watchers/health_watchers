@@ -6,7 +6,12 @@ import { User, Bell, Lock, Key } from 'lucide-react';
 
 const settingsMenu = [
   { id: 'profile', label: 'Profile', icon: User, href: '/portal/settings/profile' },
-  { id: 'notifications', label: 'Notifications', icon: Bell, href: '/portal/settings/notifications' },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    href: '/portal/settings/notifications',
+  },
   { id: 'security', label: 'Security', icon: Lock, href: '/portal/settings/security' },
   { id: 'api-keys', label: 'API Keys', icon: Key, href: '/portal/settings/api-keys' },
 ];
@@ -45,10 +50,10 @@ export default function SettingsPage() {
           {settingsMenu.map((item) => (
             <TabsContent key={item.id} value={item.id} className="mt-6">
               <div className="rounded-lg bg-white p-6 shadow">
-                <h2 className="text-2xl font-semibold mb-4">{item.label}</h2>
+                <h2 className="mb-4 text-2xl font-semibold">{item.label}</h2>
                 <button
                   onClick={() => router.push(item.href)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700"
                 >
                   Go to {item.label} Settings →
                 </button>

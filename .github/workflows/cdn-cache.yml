@@ -1,0 +1,119 @@
+name: CDN Cache
+
+on:
+  workflow_run:
+    workflows: ['CI/CD Pipeline']
+    types: [completed]
+    branches: [main]
+  schedule:
+    # Weekly CDN performance report — Monday 07:30 UTC
+    - cron: '30 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to run'
+        type: choice
+        options: [invalidate-and-warm, performance-report, verify-headers]
+        default: invalidate-and-warm
+
+concurrency:
+  group: cdn-cache
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  invalidate-and-warm:
+    name: Invalidate mutable paths & warm cache
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'invalidate-and-warm'
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Purge mutable paths
+        env:
+          CDN_PROVIDER: ${{ secrets.CDN_PROVIDER }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: bash scripts/cdn/purge-cache.sh --deploy-defaults
+
+      - name: Warm key pages
+        run: |
+          BASE="${{ secrets.APP_BASE_URL || 'https://app.health-watchers.io' }}"
+          for p in / /about /pricing /sitemap.xml /robots.txt; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$p" || true)
+            echo "warm $p -> $code"
+          done
+
+      - name: Verify cache headers
+        run: |
+          bash scripts/cdn/verify-cache-headers.sh \
+            --base "${{ secrets.APP_BASE_URL || 'https://app.health-watchers.io' }}"
+
+  verify-headers:
+    name: Verify cache headers only
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify-headers'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: bash scripts/cdn/verify-cache-headers.sh --base "${{ secrets.APP_BASE_URL || 'https://app.health-watchers.io' }}"
+
+  performance-report:
+    name: Weekly CDN performance report
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'performance-report')
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Generate report
+        id: report
+        env:
+          CDN_PROVIDER: ${{ secrets.CDN_PROVIDER || 'cloudflare' }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set +e
+          bash scripts/cdn/cdn-performance-report.sh --provider "${CDN_PROVIDER:-cloudflare}" --since 7d --md cdn-report.md
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat cdn-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: cdn-performance-${{ github.run_id }}
+          path: |
+            cdn-report.md
+          retention-days: 90
+
+      - name: Post to Slack
+        if: always()
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
+        with:
+          webhook-url: ${{ secrets.CDN_SLACK_WEBHOOK_URL }}
+          payload-file-path: ./cdn-report.md
+        continue-on-error: true

@@ -60,11 +60,23 @@ import {
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
+import {
+  startRetentionSweepJob,
+  stopRetentionSweepJob,
+} from './modules/documents/document-retention.service';
 import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
 import {
   startFollowUpReminderJob,
   stopFollowUpReminderJob,
 } from './modules/encounters/follow-up-reminder-job';
+import {
+  startReportScheduleJob,
+  stopReportScheduleJob,
+} from './modules/reports/analytics/report-schedule-job';
+import {
+  startApiKeyLifecycleJob,
+  stopApiKeyLifecycleJob,
+} from './modules/api-keys/api-key-lifecycle-job';
 import { warmCache, registerWarmup } from './services/cache.service';
 
 // ── #1071 Cache warm-up registrations ─────────────────────────────────────────
@@ -277,7 +289,10 @@ async function startServer() {
     await migrationManager.initialize();
     logger.info('[migration-manager] Initialized successfully');
   } catch (err) {
-    logger.warn({ err }, '[migration-manager] Initialization failed, continuing without migration tracking');
+    logger.warn(
+      { err },
+      '[migration-manager] Initialization failed, continuing without migration tracking'
+    );
   }
 
   // Seed built-in CDS rules
@@ -310,6 +325,7 @@ async function startServer() {
   startMfaGracePeriodJob();
   startFollowUpReminderJob();
   startRetryWorker();
+  startRetentionSweepJob();
 
   // #1071 — Register per-clinic patient-list cache warmup entries now that the
   // DB pool is ready, then warm all registered keys that are currently cold.
@@ -333,9 +349,18 @@ async function startServer() {
             { createdAt: -1 },
             {
               projection: {
-                systemId: 1, firstName: 1, lastName: 1, searchName: 1,
-                dateOfBirth: 1, sex: 1, contactNumber: 1, clinicId: 1,
-                isActive: 1, riskLevel: 1, riskScore: 1, createdAt: 1,
+                systemId: 1,
+                firstName: 1,
+                lastName: 1,
+                searchName: 1,
+                dateOfBirth: 1,
+                sex: 1,
+                contactNumber: 1,
+                clinicId: 1,
+                isActive: 1,
+                riskLevel: 1,
+                riskScore: 1,
+                createdAt: 1,
               },
               hint: 'clinicId_1_isActive_1',
             }
@@ -371,6 +396,7 @@ async function startServer() {
       stopMfaGracePeriodJob,
       stopFollowUpReminderJob,
       stopRetryWorker,
+      stopRetentionSweepJob,
     ],
   });
 }

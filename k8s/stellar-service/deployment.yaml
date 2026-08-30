@@ -23,6 +23,8 @@ spec:
         app.kubernetes.io/name: health-watchers
         app.kubernetes.io/component: stellar-service
     spec:
+      serviceAccountName: health-watchers-stellar
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true

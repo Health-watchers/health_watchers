@@ -28,7 +28,7 @@ router.get(
     const filter: Record<string, unknown> = { patientId, clinicId: req.user!.clinicId };
     if (status) filter.status = status;
 
-    const pageNum  = Math.max(1, parseInt(page, 10));
+    const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
 
     const [plans, total] = await Promise.all([
@@ -40,7 +40,11 @@ router.get(
       CarePlanModel.countDocuments(filter),
     ]);
 
-    return res.json({ status: 'success', data: plans, meta: { page: pageNum, limit: limitNum, total } });
+    return res.json({
+      status: 'success',
+      data: plans,
+      meta: { page: pageNum, limit: limitNum, total },
+    });
   })
 );
 

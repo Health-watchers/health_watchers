@@ -192,11 +192,19 @@ export function updateOrphanedRecords(collection: string, count: number): void {
 }
 
 /**
+ * Synchronously read an unlabeled gauge's current value.
+ * prom-client's public get() is async, so we use the internal _getValue().
+ */
+function gaugeValue(metric: Gauge<string>): number {
+  return (metric as unknown as { _getValue(labels: Record<string, string>): number })._getValue({});
+}
+
+/**
  * Check if backup verification is stale (hasn't run in 8 days)
  */
 export function isBackupVerificationStale(thresholdDays: number = 8): boolean {
-  const lastVerified = backupLastVerifiedTimestamp.get();
-  if (!lastVerified || typeof lastVerified !== 'number') {
+  const lastVerified = gaugeValue(backupLastVerifiedTimestamp);
+  if (!lastVerified) {
     return true; // Never verified
   }
 
@@ -217,10 +225,11 @@ export function getBackupVerificationStatus(): {
   isStale: boolean;
   daysSinceVerification: number | null;
 } {
-  const lastVerifiedValue = backupLastVerifiedTimestamp.get();
-  const statusValue = backupVerificationStatus.get();
+  // prom-client's get() returns { value } for gauges, not a bare number
+  const lastVerifiedValue = gaugeValue(backupLastVerifiedTimestamp);
+  const statusValue = gaugeValue(backupVerificationStatus);
 
-  if (!lastVerifiedValue || typeof lastVerifiedValue !== 'number') {
+  if (!lastVerifiedValue) {
     return {
       lastVerified: null,
       status: 'unknown',

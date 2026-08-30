@@ -23,6 +23,8 @@ export interface IInvoice extends Document {
   paymentIntentId?: string;
   paidAt?: Date;
   paidTxHash?: string;
+  /** Total value of credit notes applied to this invoice (decimal string). */
+  creditsApplied?: string;
 }
 
 const LineItemSchema = new Schema<ILineItem>(
@@ -52,6 +54,7 @@ const InvoiceSchema = new Schema<IInvoice>(
     paymentIntentId: { type: String },
     paidAt: { type: Date },
     paidTxHash: { type: String },
+    creditsApplied: { type: String, default: '0' },
   },
   { timestamps: true, versionKey: false }
 );

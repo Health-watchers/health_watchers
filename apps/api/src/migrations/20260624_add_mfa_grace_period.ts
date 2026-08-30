@@ -8,14 +8,17 @@ import { Db } from 'mongodb';
  */
 export async function up(db: Db): Promise<void> {
   // Add the index so the grace period reminder job query is fast
-  await db.collection('users').createIndex(
-    { role: 1, mfaEnabled: 1, mfaGracePeriodEndsAt: 1 },
-    { background: true, sparse: true, name: 'role_1_mfaEnabled_1_mfaGracePeriodEndsAt_1' }
-  );
+  await db
+    .collection('users')
+    .createIndex(
+      { role: 1, mfaEnabled: 1, mfaGracePeriodEndsAt: 1 },
+      { background: true, sparse: true, name: 'role_1_mfaEnabled_1_mfaGracePeriodEndsAt_1' }
+    );
 }
 
 export async function down(db: Db): Promise<void> {
-  await db.collection('users')
+  await db
+    .collection('users')
     .dropIndex('role_1_mfaEnabled_1_mfaGracePeriodEndsAt_1')
     .catch(() => {});
 }

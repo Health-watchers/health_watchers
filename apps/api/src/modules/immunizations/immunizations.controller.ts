@@ -7,6 +7,8 @@ import { PatientModel } from '../patients/models/patient.model';
 import { ImmunizationModel, CVX_CODES } from './immunization.model';
 import { calculateDueVaccines, ageInMonths } from './immunization-schedule.service';
 import { generateImmunizationCertificate } from './immunization-certificate.service';
+import { detectVaccineConflicts } from './immunization-conflict.service';
+import { recordDoseAdministered } from './vaccine-lot.service';
 import {
   createImmunizationSchema,
   updateImmunizationSchema,
@@ -151,6 +153,42 @@ router.post(
       notes,
     } = req.body;
 
+    // ── Conflict detection & lot checks (Issue #1246) ────────────────────────
+    const previousDoses = await ImmunizationModel.find({
+      patientId,
+      clinicId,
+      isActive: true,
+      vaccineCode,
+    })
+      .select('vaccineCode doseNumber administeredDate')
+      .lean();
+
+    const conflicts = await detectVaccineConflicts({
+      clinicId,
+      dateOfBirth: String(patient.dateOfBirth),
+      vaccineCode,
+      doseNumber,
+      administeredDate: new Date(administeredDate),
+      previousDoses: previousDoses.map((d) => ({
+        vaccineCode: d.vaccineCode,
+        doseNumber: d.doseNumber,
+        administeredDate: d.administeredDate as Date,
+      })),
+      lotNumber,
+    });
+
+    // Recalled or expired lots are a hard block; schedule conflicts are warnings.
+    const blockingConflict = conflicts.find((c) =>
+      ['recalled_lot', 'expired_lot'].includes(c.type)
+    );
+    if (blockingConflict) {
+      return res.status(409).json({
+        error: 'ConflictDetected',
+        message: blockingConflict.message,
+        data: { conflicts },
+      });
+    }
+
     const immunization = await ImmunizationModel.create({
       patientId,
       clinicId,
@@ -178,6 +216,11 @@ router.post(
       isActive: true,
     });
 
+    // Decrement lot inventory when a tracked lot was used
+    if (lotNumber) {
+      await recordDoseAdministered(clinicId, lotNumber).catch(() => undefined);
+    }
+
     await auditLog(
       {
         action: 'IMMUNIZATION_CREATE',
@@ -191,12 +234,13 @@ router.post(
           vaccineCode,
           doseNumber,
           hasAdverseReaction: !!adverseReaction,
+          conflictCount: conflicts.length,
         },
       },
       req
     );
 
-    return res.status(201).json({ status: 'success', data: immunization });
+    return res.status(201).json({ status: 'success', data: immunization, conflicts });
   })
 );
 

@@ -24,13 +24,18 @@ export function SecurityAssessment({ assessments = [] }: SecurityAssessmentProps
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">Security Assessments</h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">Review security assessment results</p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Review security assessment results
+        </p>
       </div>
 
       <div className="space-y-3">
         {assessments.length > 0 ? (
           assessments.map((assessment) => (
-            <div key={assessment.id} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+            <div
+              key={assessment.id}
+              className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="font-medium text-neutral-900 dark:text-neutral-100">
@@ -67,12 +72,17 @@ export function SecurityAssessment({ assessments = [] }: SecurityAssessmentProps
                 </div>
 
                 <div className="text-right">
-                  <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[assessment.status]}`}>
+                  <span
+                    className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[assessment.status]}`}
+                  >
                     {assessment.status}
                   </span>
                   {assessment.reportUrl && (
                     <div className="mt-2">
-                      <a href={assessment.reportUrl} className="text-xs text-blue-600 hover:underline">
+                      <a
+                        href={assessment.reportUrl}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
                         View Report
                       </a>
                     </div>

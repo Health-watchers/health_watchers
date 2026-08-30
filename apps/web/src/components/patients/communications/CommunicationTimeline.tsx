@@ -22,11 +22,11 @@ export function CommunicationTimeline({ patientId }: Props) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900">Communications</h3>
         <button
           onClick={() => setShowForm(true)}
-          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+          className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
         >
           + Log Communication
         </button>
@@ -35,8 +35,8 @@ export function CommunicationTimeline({ patientId }: Props) {
       {/* Log form modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
-            <h4 className="text-lg font-semibold mb-4">Log Communication</h4>
+          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <h4 className="mb-4 text-lg font-semibold">Log Communication</h4>
             <LogCommunicationForm patientId={patientId} onClose={() => setShowForm(false)} />
           </div>
         </div>
@@ -46,19 +46,17 @@ export function CommunicationTimeline({ patientId }: Props) {
       {isLoading && (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-gray-100" />
           ))}
         </div>
       )}
 
       {/* Error */}
-      {isError && (
-        <p className="text-sm text-red-600">Failed to load communications.</p>
-      )}
+      {isError && <p className="text-sm text-red-600">Failed to load communications.</p>}
 
       {/* Empty */}
       {!isLoading && !isError && logs.length === 0 && (
-        <p className="text-sm text-gray-500 py-8 text-center">No communications on record.</p>
+        <p className="py-8 text-center text-sm text-gray-500">No communications on record.</p>
       )}
 
       {/* List */}

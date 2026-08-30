@@ -254,7 +254,7 @@ export default function PortalSecuritySettings() {
 
       {/* Setup Modal */}
       {showSetupModal && (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6">
             <h3 className="mb-4 text-lg font-semibold">
               Setup {setupMethod === 'totp' ? 'Authenticator App' : 'SMS'} MFA
@@ -327,7 +327,7 @@ export default function PortalSecuritySettings() {
 
       {/* Backup Codes Modal */}
       {showBackupCodes && (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6">
             <h3 className="mb-4 text-lg font-semibold">Save Your Backup Codes</h3>
             <p className="mb-4 text-sm text-gray-600">
@@ -363,7 +363,7 @@ export default function PortalSecuritySettings() {
 
       {/* Disable MFA Modal */}
       {showDisableModal && (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6">
             <h3 className="mb-4 text-lg font-semibold">Disable Two-Factor Authentication</h3>
             <p className="mb-4 text-sm text-gray-600">

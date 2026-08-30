@@ -47,13 +47,13 @@ export function MedicationList({ medications, loading }: MedicationListProps) {
               {med.dosage} • {med.frequency}
             </p>
             {med.hasInteractions && med.interactionWarning && (
-              <p className="mt-2 text-xs text-danger-600 dark:text-danger-400">
+              <p className="text-danger-600 dark:text-danger-400 mt-2 text-xs">
                 ⚠️ {med.interactionWarning}
               </p>
             )}
           </div>
           {med.hasInteractions && (
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-danger-100 dark:bg-danger-900/30">
+            <div className="bg-danger-100 dark:bg-danger-900/30 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
               <span className="text-lg">⚠️</span>
             </div>
           )}

@@ -11,7 +11,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return Notification.requestPermission();
 }
 
-export async function subscribeToPushNotifications(vapidPublicKey: string): Promise<PushSubscription | null> {
+export async function subscribeToPushNotifications(
+  vapidPublicKey: string
+): Promise<PushSubscription | null> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.warn('Push notifications not supported');
     return null;

@@ -9,6 +9,7 @@ import {
   generateWebhookSecret,
   verifyWebhookSignature,
   enqueueWebhookDelivery,
+  sendTestWebhook,
 } from './webhook.service';
 import {
   registerWebhookSchema,
@@ -284,7 +285,7 @@ router.post(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ body: registerWebhookSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { url, events, description, retryConfig } = req.body;
+    const { url, events, description, retryConfig, payloadTemplate, rateLimitPerMin } = req.body;
     const secret = generateWebhookSecret();
 
     const webhook = await WebhookModel.create({
@@ -294,6 +295,8 @@ router.post(
       secret,
       description,
       retryConfig,
+      payloadTemplate,
+      rateLimitPerMin: rateLimitPerMin ?? 0,
       isActive: true,
     });
 
@@ -305,6 +308,8 @@ router.post(
         events: webhook.events,
         description: webhook.description,
         retryConfig: webhook.retryConfig,
+        payloadTemplate: webhook.payloadTemplate,
+        rateLimitPerMin: webhook.rateLimitPerMin,
         secret,
         createdAt: webhook.createdAt,
       },
@@ -546,18 +551,26 @@ router.patch(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ body: updateWebhookSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { url, events, isActive, description, retryConfig } = req.body;
+    const { url, events, isActive, description, retryConfig, payloadTemplate, rateLimitPerMin } =
+      req.body;
 
     const update: Record<string, unknown> = {};
+    const unset: Record<string, unknown> = {};
     if (url !== undefined) update.url = url;
     if (events !== undefined) update.events = events;
     if (isActive !== undefined) update.isActive = isActive;
     if (description !== undefined) update.description = description;
     if (retryConfig !== undefined) update.retryConfig = retryConfig;
+    if (rateLimitPerMin !== undefined) update.rateLimitPerMin = rateLimitPerMin;
+    if (payloadTemplate === null) unset.payloadTemplate = '';
+    else if (payloadTemplate !== undefined) update.payloadTemplate = payloadTemplate;
+
+    const mutation: Record<string, unknown> = { ...update };
+    if (Object.keys(unset).length > 0) mutation.$unset = unset;
 
     const webhook = await WebhookModel.findOneAndUpdate(
       { _id: req.params.id, clinicId: req.user!.clinicId },
-      update,
+      mutation,
       { new: true }
     ).select('-secret');
 
@@ -577,6 +590,8 @@ router.patch(
         isActive: webhook.isActive,
         description: webhook.description,
         retryConfig: webhook.retryConfig,
+        payloadTemplate: webhook.payloadTemplate,
+        rateLimitPerMin: webhook.rateLimitPerMin,
         updatedAt: webhook.updatedAt,
       },
     });
@@ -728,6 +743,170 @@ router.get(
 
 /**
  * @swagger
+ * /webhooks/{id}/deliveries/{deliveryId}:
+ *   get:
+ *     summary: Get full detail for a single webhook delivery attempt
+ *     description: Includes the request/response bodies and headers — intended for debugging failed deliveries.
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: deliveryId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Delivery detail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     event: { type: string }
+ *                     url: { type: string }
+ *                     status: { type: string, enum: [pending, delivered, failed, dead] }
+ *                     attempts: { type: integer }
+ *                     isTest: { type: boolean }
+ *                     lastAttemptAt: { type: string, format: date-time, nullable: true }
+ *                     nextRetryAt: { type: string, format: date-time, nullable: true }
+ *                     responseStatus: { type: integer, nullable: true }
+ *                     durationMs: { type: integer, nullable: true }
+ *                     error: { type: string, nullable: true }
+ *                     requestHeaders: { type: object, nullable: true }
+ *                     requestBody: { type: object, nullable: true }
+ *                     responseBody: { type: string, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *       404:
+ *         description: Webhook or delivery not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+// GET /webhooks/:id/deliveries/:deliveryId (full delivery detail for debugging)
+router.get(
+  '/:id/deliveries/:deliveryId',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!webhook) {
+      return res.status(404).json({ error: 'NotFound', message: 'Webhook not found' });
+    }
+
+    const delivery = await WebhookDeliveryModel.findOne({
+      _id: req.params.deliveryId,
+      webhookId: webhook._id,
+    });
+    if (!delivery) {
+      return res.status(404).json({ error: 'NotFound', message: 'Delivery not found' });
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        id: String(delivery._id),
+        event: delivery.event,
+        url: delivery.url,
+        status: delivery.status,
+        attempts: delivery.attempts,
+        isTest: delivery.isTest ?? false,
+        lastAttemptAt: delivery.lastAttemptAt,
+        nextRetryAt: delivery.nextRetryAt,
+        responseStatus: delivery.responseStatus,
+        durationMs: delivery.durationMs,
+        error: delivery.error,
+        requestHeaders: delivery.requestHeaders ?? null,
+        requestBody: delivery.payload,
+        responseBody: delivery.responseBody ?? null,
+        createdAt: delivery.createdAt,
+      },
+    });
+  })
+);
+
+/**
+ * @swagger
+ * /webhooks/{id}/test:
+ *   post:
+ *     summary: Send a synthetic test webhook event
+ *     description: Queues a webhook.test event delivery to the configured URL, using the same delivery pipeline as real events — useful for verifying an endpoint before relying on it.
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       202:
+ *         description: Test event queued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 message: { type: string, example: 'Test event queued for delivery' }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deliveryId: { type: string }
+ *                     status: { type: string }
+ *                     event: { type: string, example: webhook.test }
+ *       404:
+ *         description: Webhook not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+// POST /webhooks/:id/test (send a synthetic webhook.test event)
+router.post(
+  '/:id/test',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const webhook = await WebhookModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!webhook) {
+      return res.status(404).json({ error: 'NotFound', message: 'Webhook not found' });
+    }
+
+    const delivery = await sendTestWebhook({
+      _id: webhook._id,
+      url: webhook.url,
+      secret: webhook.secret,
+    });
+
+    return res.status(202).json({
+      status: 'success',
+      message: 'Test event queued for delivery',
+      data: {
+        deliveryId: String((delivery as { _id?: unknown })._id),
+        status: delivery.status,
+        event: 'webhook.test',
+      },
+    });
+  })
+);
+
+/**
+ * @swagger
  * /webhooks/{id}/deliveries/{deliveryId}/retry:
  *   post:
  *     summary: Manually retry a webhook delivery that is not already delivered
@@ -769,6 +948,7 @@ router.get(
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
+// POST /webhooks/:id/deliveries/:deliveryId/retry (manually retry a delivery)
 router.post(
   '/:id/deliveries/:deliveryId/retry',
   authenticate,

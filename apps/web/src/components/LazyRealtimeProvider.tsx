@@ -13,11 +13,7 @@ export function LazyRealtimeProvider({ children }: { children: React.ReactNode }
     setToken(match ? match.split('=')[1] : null);
   }, []);
 
-  return (
-    <RealtimeProviderContent token={token}>
-      {children}
-    </RealtimeProviderContent>
-  );
+  return <RealtimeProviderContent token={token}>{children}</RealtimeProviderContent>;
 }
 
 export default LazyRealtimeProvider;

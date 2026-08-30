@@ -24,17 +24,19 @@ export class PatientMergeService {
     ]);
 
     if (!primary || !duplicate) throw new Error('One or both patients not found');
-    if (primary.clinicId.toString() !== clinicId) throw new Error('Patients do not belong to your clinic');
-    if (primary.clinicId.toString() !== duplicate.clinicId.toString()) throw new Error('Patients must belong to the same clinic');
+    if (primary.clinicId.toString() !== clinicId)
+      throw new Error('Patients do not belong to your clinic');
+    if (primary.clinicId.toString() !== duplicate.clinicId.toString())
+      throw new Error('Patients must belong to the same clinic');
     if ((duplicate as any).isDuplicate) throw new Error('Patient has already been merged');
 
     // Snapshot before any mutation
     const mergeLog = await MergeLogModel.create({
-      primaryId:         new Types.ObjectId(primaryId),
-      duplicateId:       new Types.ObjectId(duplicateId),
-      clinicId:          new Types.ObjectId(clinicId),
-      mergedBy:          new Types.ObjectId(userId),
-      primarySnapshot:   primary,
+      primaryId: new Types.ObjectId(primaryId),
+      duplicateId: new Types.ObjectId(duplicateId),
+      clinicId: new Types.ObjectId(clinicId),
+      mergedBy: new Types.ObjectId(userId),
+      primarySnapshot: primary,
       duplicateSnapshot: duplicate,
     });
 
@@ -88,7 +90,7 @@ export class PatientMergeService {
       metadata: {
         mergeLogId: String(mergeLog._id),
         duplicateId,
-        primaryName:   `${primary.firstName} ${primary.lastName}`,
+        primaryName: `${primary.firstName} ${primary.lastName}`,
         duplicateName: `${duplicate.firstName} ${duplicate.lastName}`,
       },
     }).catch((err) => logger.error({ err }, 'Failed to write PATIENT_MERGE audit log'));
@@ -121,7 +123,8 @@ export class PatientMergeService {
   ): Promise<void> {
     const log = await MergeLogModel.findById(mergeLogId);
     if (!log) throw new Error('Merge log not found');
-    if (log.clinicId.toString() !== clinicId) throw new Error('Merge log does not belong to your clinic');
+    if (log.clinicId.toString() !== clinicId)
+      throw new Error('Merge log does not belong to your clinic');
     if (log.undoneAt) throw new Error('This merge has already been undone');
 
     const session = await PatientModel.startSession();

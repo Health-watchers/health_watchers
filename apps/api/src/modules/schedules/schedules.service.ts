@@ -1,4 +1,3 @@
-
 import mongoose, { Types } from 'mongoose';
 import { StaffScheduleModel, IStaffSchedule, RecurrenceType } from './models/staff-schedule.model';
 
@@ -13,11 +12,7 @@ function timeToMinutes(timeStr: string): number {
 /**
  * Check if a schedule falls within a date range
  */
-function isScheduleInDateRange(
-  schedule: IStaffSchedule,
-  dateFrom: Date,
-  dateTo: Date,
-): boolean {
+function isScheduleInDateRange(schedule: IStaffSchedule, dateFrom: Date, dateTo: Date): boolean {
   const dateFromStart = new Date(dateFrom);
   dateFromStart.setHours(0, 0, 0, 0);
   const dateToEnd = new Date(dateTo);
@@ -34,7 +29,7 @@ function isScheduleInDateRange(
     const endCheck = schedule.recurrenceEndDate || new Date(8640000000000000);
     const checkStart = new Date(Math.max(startCheck.getTime(), dateFromStart.getTime()));
     const checkEnd = new Date(Math.min(endCheck.getTime(), dateToEnd.getTime()));
-    
+
     // Check if any day in the range matches the dayOfWeek
     for (let d = new Date(checkStart); d <= checkEnd; d.setDate(d.getDate() + 1)) {
       if (d.getDay() === schedule.dayOfWeek) {
@@ -57,7 +52,7 @@ export async function checkScheduleConflict(
   date?: Date,
   dayOfWeek?: number,
   recurrence?: RecurrenceType,
-  excludeId?: string,
+  excludeId?: string
 ): Promise<boolean> {
   const startMinutes = timeToMinutes(startTime);
   const endMinutes = timeToMinutes(endTime);
@@ -107,7 +102,7 @@ export async function checkScheduleConflict(
 export function isScheduleInDateRange(
   schedule: IStaffSchedule,
   dateFrom: Date,
-  dateTo: Date,
+  dateTo: Date
 ): boolean {
   const dateFromStart = new Date(dateFrom);
   dateFromStart.setHours(0, 0, 0, 0);
@@ -125,7 +120,7 @@ export function isScheduleInDateRange(
     const endCheck = schedule.recurrenceEndDate || new Date(8640000000000000);
     const checkStart = new Date(Math.max(startCheck.getTime(), dateFromStart.getTime()));
     const checkEnd = new Date(Math.min(endCheck.getTime(), dateToEnd.getTime()));
-    
+
     // Check if any day in the range matches the dayOfWeek
     for (let d = new Date(checkStart); d <= checkEnd; d.setDate(d.getDate() + 1)) {
       if (d.getDay() === schedule.dayOfWeek) {
@@ -144,7 +139,7 @@ export async function isStaffAvailable(
   userId: string,
   clinicId: string,
   dateTime: Date,
-  durationMinutes: number = 30,
+  durationMinutes: number = 30
 ): Promise<boolean> {
   const date = new Date(dateTime);
   const dayOfWeek = date.getDay();
@@ -183,7 +178,7 @@ export async function isStaffAvailable(
       hasSchedule = true;
       const schedStart = timeToMinutes(schedule.startTime);
       const schedEnd = timeToMinutes(schedule.endTime);
-      
+
       if (startMinutes >= schedStart && endMinutes <= schedEnd) {
         isAvailable = schedule.isAvailable;
       } else {

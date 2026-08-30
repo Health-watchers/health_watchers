@@ -26,6 +26,7 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 jest.mock('../../utils/logger', () => ({
+  __esModule: true,
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
@@ -49,9 +50,7 @@ describe('connectDB retry logic', () => {
   it('connects on first attempt', async () => {
     mockConnect.mockResolvedValueOnce(undefined);
 
-    // Re-import to get fresh module
-    jest.resetModules();
-    const { connectDB } = await import('../config/db');
+    const { connectDB } = await import('../../config/db');
 
     const promise = connectDB();
     await promise;
@@ -65,8 +64,7 @@ describe('connectDB retry logic', () => {
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
       .mockResolvedValueOnce(undefined);
 
-    jest.resetModules();
-    const { connectDB } = await import('../config/db');
+    const { connectDB } = await import('../../config/db');
 
     const promise = connectDB();
 
@@ -81,7 +79,7 @@ describe('connectDB retry logic', () => {
 describe('getDbStatus', () => {
   it('returns connected when readyState is 1', async () => {
     jest.resetModules();
-    const { getDbStatus } = await import('../config/db');
+    const { getDbStatus } = await import('../../config/db');
     expect(getDbStatus()).toBe('connected');
   });
 });
@@ -89,7 +87,7 @@ describe('getDbStatus', () => {
 describe('getPoolMetrics', () => {
   it('returns pool metrics with correct shape', async () => {
     jest.resetModules();
-    const { getPoolMetrics } = await import('../config/db');
+    const { getPoolMetrics } = await import('../../config/db');
     const metrics = getPoolMetrics();
 
     expect(metrics).toMatchObject({
@@ -105,7 +103,7 @@ describe('getPoolMetrics', () => {
 
   it('utilization is between 0 and 1 when pool is populated', async () => {
     jest.resetModules();
-    const { getPoolMetrics } = await import('../config/db');
+    const { getPoolMetrics } = await import('../../config/db');
     const metrics = getPoolMetrics();
     expect(metrics.utilization).toBeGreaterThanOrEqual(0);
     expect(metrics.utilization).toBeLessThanOrEqual(1);
@@ -113,32 +111,28 @@ describe('getPoolMetrics', () => {
 
   it('returns zero utilization when pool data is unavailable', async () => {
     jest.resetModules();
-    // Temporarily override pool to be undefined
-    (mongoose.connection as any).pool = undefined;
-    const { getPoolMetrics } = await import('../config/db');
+    // resetModules re-runs the mongoose mock factory, so re-import mongoose to
+    // get the same instance config/db will read, then drop its pool.
+    const freshMongoose = await import('mongoose');
+    (freshMongoose.default as any).connection.pool = undefined;
+    const { getPoolMetrics } = await import('../../config/db');
     const metrics = getPoolMetrics();
     expect(metrics.totalConnections).toBe(0);
     expect(metrics.availableConnections).toBe(0);
     expect(metrics.waitQueueSize).toBe(0);
-    // Restore
-    (mongoose.connection as any).pool = {
-      totalConnectionCount: 5,
-      availableConnectionCount: 3,
-      waitQueueSize: 0,
-    };
   });
 });
 
 describe('stopPoolMonitoring', () => {
   it('can be called without error when monitoring is not active', async () => {
     jest.resetModules();
-    const { stopPoolMonitoring } = await import('../config/db');
+    const { stopPoolMonitoring } = await import('../../config/db');
     expect(() => stopPoolMonitoring()).not.toThrow();
   });
 
   it('is exported as a function', async () => {
     jest.resetModules();
-    const mod = await import('../config/db');
+    const mod = await import('../../config/db');
     expect(typeof mod.stopPoolMonitoring).toBe('function');
   });
 });

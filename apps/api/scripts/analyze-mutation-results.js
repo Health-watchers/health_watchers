@@ -27,18 +27,13 @@ function getArg(flag, defaultValue) {
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : defaultValue;
 }
 
-const reportPath = getArg(
-  '--report',
-  path.resolve(__dirname, '../reports/mutation/mutation.json')
-);
+const reportPath = getArg('--report', path.resolve(__dirname, '../reports/mutation/mutation.json'));
 const threshold = Number(getArg('--threshold', '60'));
 
 // ── Load report ───────────────────────────────────────────────────────────────
 if (!fs.existsSync(reportPath)) {
   console.error(`[mutation-analyzer] Report not found: ${reportPath}`);
-  console.error(
-    'Run mutation tests first: npm run test:mutation --workspace=api'
-  );
+  console.error('Run mutation tests first: npm run test:mutation --workspace=api');
   process.exit(0); // non-fatal when no report exists (first run)
 }
 
@@ -116,18 +111,15 @@ for (const [filePath, fileData] of Object.entries(files)) {
 
   const detectedCount = fileSummary.killed + fileSummary.timeout;
   const relevantCount = fileSummary.total - fileSummary.noCoverage - summary.ignored;
-  fileSummary.score =
-    relevantCount > 0 ? Math.round((detectedCount / relevantCount) * 100) : 100;
+  fileSummary.score = relevantCount > 0 ? Math.round((detectedCount / relevantCount) * 100) : 100;
 
   summary.perFile[filePath] = fileSummary;
 }
 
 // ── Global score ──────────────────────────────────────────────────────────────
 const detectedTotal = summary.killed + summary.timeout;
-const relevantTotal =
-  summary.totalMutants - summary.noCoverage - summary.ignored;
-const globalScore =
-  relevantTotal > 0 ? Math.round((detectedTotal / relevantTotal) * 100) : 100;
+const relevantTotal = summary.totalMutants - summary.noCoverage - summary.ignored;
+const globalScore = relevantTotal > 0 ? Math.round((detectedTotal / relevantTotal) * 100) : 100;
 
 // ── Print report ──────────────────────────────────────────────────────────────
 console.log('\n═══════════════════════════════════════════════════');
@@ -136,9 +128,7 @@ console.log('══════════════════════�
 
 console.log('Global Score:');
 const scoreSymbol = globalScore >= threshold ? '✅' : '❌';
-console.log(
-  `  ${scoreSymbol} ${globalScore}% (threshold: ${threshold}%)\n`
-);
+console.log(`  ${scoreSymbol} ${globalScore}% (threshold: ${threshold}%)\n`);
 
 console.log('Totals:');
 console.log(`  Total mutants  : ${summary.totalMutants}`);
@@ -162,15 +152,17 @@ console.log();
 
 // ── Surviving mutants ─────────────────────────────────────────────────────────
 if (summary.survivingMutants.length > 0) {
-  console.log(`Surviving mutants (${summary.survivingMutants.length}) — these indicate weak test areas:`);
+  console.log(
+    `Surviving mutants (${summary.survivingMutants.length}) — these indicate weak test areas:`
+  );
   summary.survivingMutants.slice(0, 30).forEach((m) => {
     const shortFile = m.file.replace(process.cwd(), '.').replace(/\\/g, '/');
-    console.log(
-      `  • ${shortFile}:${m.line}:${m.column}  [${m.mutator}]  ${m.description}`
-    );
+    console.log(`  • ${shortFile}:${m.line}:${m.column}  [${m.mutator}]  ${m.description}`);
   });
   if (summary.survivingMutants.length > 30) {
-    console.log(`  … and ${summary.survivingMutants.length - 30} more. See ${reportPath} for full list.`);
+    console.log(
+      `  … and ${summary.survivingMutants.length - 30} more. See ${reportPath} for full list.`
+    );
   }
   console.log();
 }
