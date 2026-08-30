@@ -157,9 +157,7 @@ function EventDetailModal({
     <Modal open={open} onClose={onClose} title={event.title} size="lg">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>
-            {event.type.replace(/_/g, ' ')}
-          </Badge>
+          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>{event.type.replace(/_/g, ' ')}</Badge>
           <span className="text-sm text-neutral-500">{formatDateTime(event.date)}</span>
         </div>
 
@@ -205,20 +203,17 @@ function SkeletonCard() {
 
 // ── TimelineEventCard ─────────────────────────────────────────────────────────
 
-function TimelineEventCard({
-  event,
-  onClick,
-}: {
-  event: TimelineEvent;
-  onClick: () => void;
-}) {
+function TimelineEventCard({ event, onClick }: { event: TimelineEvent; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded-lg"
+      className="w-full rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       aria-label={`View details for ${event.title}`}
     >
-      <Card padding="sm" className="transition-all duration-150 hover:shadow-md hover:border-neutral-300">
+      <Card
+        padding="sm"
+        className="transition-all duration-150 hover:border-neutral-300 hover:shadow-md"
+      >
         <CardContent>
           <div className="flex items-start gap-3">
             <div
@@ -238,7 +233,9 @@ function TimelineEventCard({
               </div>
               <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{event.description}</p>
             </div>
-            <span className="shrink-0 text-xs text-neutral-400 pt-0.5">{formatDateTime(event.date)}</span>
+            <span className="shrink-0 pt-0.5 text-xs text-neutral-400">
+              {formatDateTime(event.date)}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -425,9 +422,18 @@ export default function PortalTimelinePage() {
         eventType={eventType}
         startDate={startDate}
         endDate={endDate}
-        onEventTypeChange={(v) => { setEventType(v); setPage(1); }}
-        onStartDateChange={(v) => { setStartDate(v); setPage(1); }}
-        onEndDateChange={(v) => { setEndDate(v); setPage(1); }}
+        onEventTypeChange={(v) => {
+          setEventType(v);
+          setPage(1);
+        }}
+        onStartDateChange={(v) => {
+          setStartDate(v);
+          setPage(1);
+        }}
+        onEndDateChange={(v) => {
+          setEndDate(v);
+          setPage(1);
+        }}
         onReset={handleFilterReset}
       />
 
@@ -456,7 +462,9 @@ export default function PortalTimelinePage() {
       {!loading && !error && events.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="text-4xl mb-3" aria-hidden="true">📋</div>
+            <div className="mb-3 text-4xl" aria-hidden="true">
+              📋
+            </div>
             <p className="font-medium text-neutral-700">No health events found</p>
             <p className="mt-1 text-sm text-neutral-500">
               {eventType || startDate || endDate
@@ -480,12 +488,18 @@ export default function PortalTimelinePage() {
         <>
           {/* Vertical spine + events */}
           <div className="relative">
-            <div className="absolute top-0 bottom-0 left-6 w-0.5 bg-neutral-200" aria-hidden="true" />
+            <div
+              className="absolute bottom-0 left-6 top-0 w-0.5 bg-neutral-200"
+              aria-hidden="true"
+            />
 
             <div className="space-y-6">
               {Object.entries(groupedByDate).map(([dateLabel, dateEvents]) => (
                 <div key={dateLabel}>
-                  <DateGroupHeader label={dateLabel} firstType={dateEvents[0]?.type ?? 'encounter'} />
+                  <DateGroupHeader
+                    label={dateLabel}
+                    firstType={dateEvents[0]?.type ?? 'encounter'}
+                  />
                   <div className="ml-9 space-y-3">
                     {dateEvents.map((event) => (
                       <TimelineEventCard

@@ -32,7 +32,9 @@ jest.mock('@health-watchers/config', () => ({
   },
 }));
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/utils/logger', () => ({
   __esModule: true,
@@ -41,12 +43,20 @@ jest.mock('@api/utils/logger', () => ({
 
 // Stub out unrelated route modules
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
   stopPaymentExpirationJob: jest.fn(),
@@ -72,11 +82,31 @@ const mockConsentDoc = {
 
 jest.mock('@api/modules/consent/consent.model', () => {
   const CONSENT_TEMPLATES = {
-    treatment: { version: '1.0', title: 'Consent for Treatment', text: 'I consent to receive medical treatment and care from this clinic.' },
-    data_sharing: { version: '1.0', title: 'Consent for Data Sharing', text: 'I consent to the sharing of my health information with authorized parties for care coordination.' },
-    ai_analysis: { version: '1.0', title: 'Consent for AI Analysis', text: 'I consent to the use of AI tools to analyze my health records to assist in my care.' },
-    research: { version: '1.0', title: 'Consent for Research', text: 'I consent to the use of my de-identified health data for medical research purposes.' },
-    marketing: { version: '1.0', title: 'Consent for Marketing Communications', text: 'I consent to receive health tips and promotional communications from this clinic.' },
+    treatment: {
+      version: '1.0',
+      title: 'Consent for Treatment',
+      text: 'I consent to receive medical treatment and care from this clinic.',
+    },
+    data_sharing: {
+      version: '1.0',
+      title: 'Consent for Data Sharing',
+      text: 'I consent to the sharing of my health information with authorized parties for care coordination.',
+    },
+    ai_analysis: {
+      version: '1.0',
+      title: 'Consent for AI Analysis',
+      text: 'I consent to the use of AI tools to analyze my health records to assist in my care.',
+    },
+    research: {
+      version: '1.0',
+      title: 'Consent for Research',
+      text: 'I consent to the use of my de-identified health data for medical research purposes.',
+    },
+    marketing: {
+      version: '1.0',
+      title: 'Consent for Marketing Communications',
+      text: 'I consent to receive health tips and promotional communications from this clinic.',
+    },
   };
   return {
     ConsentModel: {
@@ -90,7 +120,9 @@ jest.mock('@api/modules/consent/consent.model', () => {
   };
 });
 
-jest.mock('@api/modules/audit/audit.service', () => ({ auditLog: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@api/modules/audit/audit.service', () => ({
+  auditLog: jest.fn().mockResolvedValue(undefined),
+}));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
@@ -106,11 +138,11 @@ const CLINIC_ID = 'clinic_1';
 const PATIENT_ID = '507f1f77bcf86cd799439011';
 
 function makeToken(role: string, clinicId: string = CLINIC_ID) {
-  return jwt.sign(
-    { userId: '507f1f77bcf86cd799439000', role, clinicId },
-    SECRET,
-    { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
-  );
+  return jwt.sign({ userId: '507f1f77bcf86cd799439000', role, clinicId }, SECRET, {
+    expiresIn: '15m',
+    issuer: 'health-watchers-api',
+    audience: 'health-watchers-client',
+  });
 }
 
 const doctorToken = makeToken('DOCTOR');
@@ -118,7 +150,11 @@ const patientToken = makeToken('PATIENT');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function computeExpectedHash(type: keyof typeof CONSENT_TEMPLATES, patientId: string, signedAt: Date) {
+function computeExpectedHash(
+  type: keyof typeof CONSENT_TEMPLATES,
+  patientId: string,
+  signedAt: Date
+) {
   const template = CONSENT_TEMPLATES[type];
   const data = `${template.text}${patientId}${signedAt.toISOString()}`;
   return crypto.createHash('sha256').update(data).digest('hex');
@@ -277,7 +313,10 @@ describe('POST /api/v1/patients/:id/consent — signature generation', () => {
 
     expect(auditLog).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: expect.objectContaining({ event: 'consent_signed', signatureHash: expect.any(String) }),
+        metadata: expect.objectContaining({
+          event: 'consent_signed',
+          signatureHash: expect.any(String),
+        }),
       }),
       expect.anything()
     );
@@ -411,7 +450,9 @@ describe('POST /api/v1/consent/:id/verify — signature verification', () => {
 
 describe('GET /api/v1/patients/:id/consent', () => {
   it('returns consent records for the patient', async () => {
-    (ConsentModel.find as jest.Mock).mockReturnValue({ lean: () => Promise.resolve([mockConsentDoc]) });
+    (ConsentModel.find as jest.Mock).mockReturnValue({
+      lean: () => Promise.resolve([mockConsentDoc]),
+    });
 
     const res = await request(app)
       .get(`/api/v1/patients/${PATIENT_ID}/consent`)
@@ -444,7 +485,11 @@ describe('Signature hash — unit tests', () => {
   });
 
   it('same inputs always produce the same hash', () => {
-    const inputs = ['some content', 'patient_99', new Date('2026-03-01T00:00:00.000Z').toISOString()].join('');
+    const inputs = [
+      'some content',
+      'patient_99',
+      new Date('2026-03-01T00:00:00.000Z').toISOString(),
+    ].join('');
     const h1 = crypto.createHash('sha256').update(inputs).digest('hex');
     const h2 = crypto.createHash('sha256').update(inputs).digest('hex');
     expect(h1).toBe(h2);

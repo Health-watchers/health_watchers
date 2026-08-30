@@ -21,16 +21,20 @@ import { Db } from 'mongodb';
 export async function up(db: Db): Promise<void> {
   // ── Encounters ─────────────────────────────────────────────────────────────
   // Pattern: list encounters for a patient within a clinic, newest first
-  await db.collection('encounters').createIndex(
-    { clinicId: 1, patientId: 1, createdAt: -1 },
-    { background: true, name: 'encounters_clinicId_patientId_createdAt' }
-  );
+  await db
+    .collection('encounters')
+    .createIndex(
+      { clinicId: 1, patientId: 1, createdAt: -1 },
+      { background: true, name: 'encounters_clinicId_patientId_createdAt' }
+    );
 
   // Pattern: list encounters by clinic + status (e.g. "open" follow-ups)
-  await db.collection('encounters').createIndex(
-    { clinicId: 1, status: 1, createdAt: -1 },
-    { background: true, name: 'encounters_clinicId_status_createdAt' }
-  );
+  await db
+    .collection('encounters')
+    .createIndex(
+      { clinicId: 1, status: 1, createdAt: -1 },
+      { background: true, name: 'encounters_clinicId_status_createdAt' }
+    );
 
   // Pattern: follow-up queue — encounters needing review, ordered by followUpDate
   await db.collection('encounters').createIndex(
@@ -44,16 +48,20 @@ export async function up(db: Db): Promise<void> {
 
   // ── Payments ───────────────────────────────────────────────────────────────
   // Pattern: payment history per patient within a clinic, newest first
-  await db.collection('paymentrecords').createIndex(
-    { clinicId: 1, patientId: 1, createdAt: -1 },
-    { background: true, name: 'payments_clinicId_patientId_createdAt' }
-  );
+  await db
+    .collection('paymentrecords')
+    .createIndex(
+      { clinicId: 1, patientId: 1, createdAt: -1 },
+      { background: true, name: 'payments_clinicId_patientId_createdAt' }
+    );
 
   // Pattern: filter by status (pending / confirmed / failed) within a clinic
-  await db.collection('paymentrecords').createIndex(
-    { clinicId: 1, status: 1, createdAt: -1 },
-    { background: true, name: 'payments_clinicId_status_createdAt' }
-  );
+  await db
+    .collection('paymentrecords')
+    .createIndex(
+      { clinicId: 1, status: 1, createdAt: -1 },
+      { background: true, name: 'payments_clinicId_status_createdAt' }
+    );
 
   // Pattern: expiration job — scan for expiring payment intents
   await db.collection('paymentrecords').createIndex(
@@ -67,16 +75,20 @@ export async function up(db: Db): Promise<void> {
 
   // ── Invoices ───────────────────────────────────────────────────────────────
   // Pattern: outstanding invoices per clinic (status != 'paid')
-  await db.collection('invoices').createIndex(
-    { clinicId: 1, status: 1, createdAt: -1 },
-    { background: true, name: 'invoices_clinicId_status_createdAt' }
-  );
+  await db
+    .collection('invoices')
+    .createIndex(
+      { clinicId: 1, status: 1, createdAt: -1 },
+      { background: true, name: 'invoices_clinicId_status_createdAt' }
+    );
 
   // Pattern: invoices for a specific patient
-  await db.collection('invoices').createIndex(
-    { clinicId: 1, patientId: 1, createdAt: -1 },
-    { background: true, name: 'invoices_clinicId_patientId_createdAt' }
-  );
+  await db
+    .collection('invoices')
+    .createIndex(
+      { clinicId: 1, patientId: 1, createdAt: -1 },
+      { background: true, name: 'invoices_clinicId_patientId_createdAt' }
+    );
 
   // ── Webhooks ───────────────────────────────────────────────────────────────
   // Pattern: retry-worker scans for pending deliveries with nextRetryAt <= now
@@ -102,53 +114,98 @@ export async function up(db: Db): Promise<void> {
 
   // ── Medication History ─────────────────────────────────────────────────────
   // Pattern: list medication history for a patient, newest first
-  await db.collection('medicationhistories').createIndex(
-    { patientId: 1, clinicId: 1, createdAt: -1 },
-    { background: true, name: 'medications_patientId_clinicId_createdAt' }
-  );
+  await db
+    .collection('medicationhistories')
+    .createIndex(
+      { patientId: 1, clinicId: 1, createdAt: -1 },
+      { background: true, name: 'medications_patientId_clinicId_createdAt' }
+    );
 
   // ── Care Plans ─────────────────────────────────────────────────────────────
   // Pattern: active care plans per patient within a clinic
-  await db.collection('careplans').createIndex(
-    { clinicId: 1, patientId: 1, status: 1 },
-    { background: true, name: 'careplans_clinicId_patientId_status' }
-  );
+  await db
+    .collection('careplans')
+    .createIndex(
+      { clinicId: 1, patientId: 1, status: 1 },
+      { background: true, name: 'careplans_clinicId_patientId_status' }
+    );
 
   // ── Referrals ──────────────────────────────────────────────────────────────
   // Pattern: referrals list per clinic, sorted by date
-  await db.collection('referrals').createIndex(
-    { clinicId: 1, status: 1, createdAt: -1 },
-    { background: true, name: 'referrals_clinicId_status_createdAt' }
-  );
+  await db
+    .collection('referrals')
+    .createIndex(
+      { clinicId: 1, status: 1, createdAt: -1 },
+      { background: true, name: 'referrals_clinicId_status_createdAt' }
+    );
 }
 
 export async function down(db: Db): Promise<void> {
   // Encounters
-  await db.collection('encounters').dropIndex('encounters_clinicId_patientId_createdAt').catch(() => {});
-  await db.collection('encounters').dropIndex('encounters_clinicId_status_createdAt').catch(() => {});
-  await db.collection('encounters').dropIndex('encounters_clinicId_followUpDate_status').catch(() => {});
+  await db
+    .collection('encounters')
+    .dropIndex('encounters_clinicId_patientId_createdAt')
+    .catch(() => {});
+  await db
+    .collection('encounters')
+    .dropIndex('encounters_clinicId_status_createdAt')
+    .catch(() => {});
+  await db
+    .collection('encounters')
+    .dropIndex('encounters_clinicId_followUpDate_status')
+    .catch(() => {});
 
   // Payments
-  await db.collection('paymentrecords').dropIndex('payments_clinicId_patientId_createdAt').catch(() => {});
-  await db.collection('paymentrecords').dropIndex('payments_clinicId_status_createdAt').catch(() => {});
-  await db.collection('paymentrecords').dropIndex('payments_status_expiresAt').catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('payments_clinicId_patientId_createdAt')
+    .catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('payments_clinicId_status_createdAt')
+    .catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('payments_status_expiresAt')
+    .catch(() => {});
 
   // Invoices
-  await db.collection('invoices').dropIndex('invoices_clinicId_status_createdAt').catch(() => {});
-  await db.collection('invoices').dropIndex('invoices_clinicId_patientId_createdAt').catch(() => {});
+  await db
+    .collection('invoices')
+    .dropIndex('invoices_clinicId_status_createdAt')
+    .catch(() => {});
+  await db
+    .collection('invoices')
+    .dropIndex('invoices_clinicId_patientId_createdAt')
+    .catch(() => {});
 
   // Webhooks
-  await db.collection('webhookdeliveries').dropIndex('webhooks_status_nextRetryAt').catch(() => {});
+  await db
+    .collection('webhookdeliveries')
+    .dropIndex('webhooks_status_nextRetryAt')
+    .catch(() => {});
 
   // Immunizations
-  await db.collection('immunizations').dropIndex('immunizations_clinicId_dueDate_status').catch(() => {});
+  await db
+    .collection('immunizations')
+    .dropIndex('immunizations_clinicId_dueDate_status')
+    .catch(() => {});
 
   // Medications
-  await db.collection('medicationhistories').dropIndex('medications_patientId_clinicId_createdAt').catch(() => {});
+  await db
+    .collection('medicationhistories')
+    .dropIndex('medications_patientId_clinicId_createdAt')
+    .catch(() => {});
 
   // Care plans
-  await db.collection('careplans').dropIndex('careplans_clinicId_patientId_status').catch(() => {});
+  await db
+    .collection('careplans')
+    .dropIndex('careplans_clinicId_patientId_status')
+    .catch(() => {});
 
   // Referrals
-  await db.collection('referrals').dropIndex('referrals_clinicId_status_createdAt').catch(() => {});
+  await db
+    .collection('referrals')
+    .dropIndex('referrals_clinicId_status_createdAt')
+    .catch(() => {});
 }

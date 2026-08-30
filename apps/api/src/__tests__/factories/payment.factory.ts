@@ -22,7 +22,9 @@ export function buildPayment(overrides: Partial<PaymentRecord> = {}): Partial<Pa
   };
 }
 
-export function buildConfirmedPayment(overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord> {
+export function buildConfirmedPayment(
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord> {
   const i = nextSeq();
   return buildPayment({
     intentId: `intent-confirmed-${i}-${Date.now()}`,
@@ -56,7 +58,9 @@ export function buildEscrowPayment(overrides: Partial<PaymentRecord> = {}): Part
   });
 }
 
-export function buildPaymentWithReceipt(overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord> {
+export function buildPaymentWithReceipt(
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord> {
   return buildConfirmedPayment({
     receiptNumber: `RCP-${Date.now()}`,
     receiptUrl: 'https://receipts.example.com/rcp-001.pdf',
@@ -68,7 +72,9 @@ export function buildPaymentWithReceipt(overrides: Partial<PaymentRecord> = {}):
 }
 
 /** Multisig payment — requires multiple signatories before broadcast. */
-export function buildMultisigPayment(overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord> {
+export function buildMultisigPayment(
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord> {
   const i = nextSeq();
   return buildPayment({
     intentId: `intent-multisig-${i}-${Date.now()}`,
@@ -78,7 +84,9 @@ export function buildMultisigPayment(overrides: Partial<PaymentRecord> = {}): Pa
 }
 
 /** Expired pending payment — useful for expiration-job tests. */
-export function buildExpiredPayment(overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord> {
+export function buildExpiredPayment(
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord> {
   const i = nextSeq();
   const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 h ago
   return buildPayment({
@@ -90,7 +98,9 @@ export function buildExpiredPayment(overrides: Partial<PaymentRecord> = {}): Par
 }
 
 /** Payment linked to a specific encounter for billing tests. */
-export function buildEncounterPayment(overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord> {
+export function buildEncounterPayment(
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord> {
   return buildPayment({
     encounterId: new mongoose.Types.ObjectId().toString(),
     patientId: new mongoose.Types.ObjectId().toString(),
@@ -98,6 +108,9 @@ export function buildEncounterPayment(overrides: Partial<PaymentRecord> = {}): P
   });
 }
 
-export function buildPaymentBatch(count: number, overrides: Partial<PaymentRecord> = {}): Partial<PaymentRecord>[] {
+export function buildPaymentBatch(
+  count: number,
+  overrides: Partial<PaymentRecord> = {}
+): Partial<PaymentRecord>[] {
   return Array.from({ length: count }, () => buildPayment(overrides));
 }

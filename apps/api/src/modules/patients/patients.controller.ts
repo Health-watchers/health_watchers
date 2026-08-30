@@ -118,10 +118,17 @@ router.get(
     };
 
     // #1069 — Force the compound index that covers clinicId + isActive for this list query
-    const result = await paginate(PatientModel, filter, page, limit, { createdAt: -1 }, {
-      projection: listProjection,
-      hint: 'clinicId_1_isActive_1',
-    });
+    const result = await paginate(
+      PatientModel,
+      filter,
+      page,
+      limit,
+      { createdAt: -1 },
+      {
+        projection: listProjection,
+        hint: 'clinicId_1_isActive_1',
+      }
+    );
 
     const payload = {
       data: result.data.map(toPatientResponse),

@@ -99,10 +99,14 @@ export function ComplianceChecklist({ items = [], onStatusChange }: ComplianceCh
                       {item.description}
                     </p>
                     <div className="mt-2 flex gap-2">
-                      <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${PRIORITY_COLORS[item.priority]}`}>
+                      <span
+                        className={`inline-block rounded px-2 py-1 text-xs font-medium ${PRIORITY_COLORS[item.priority]}`}
+                      >
                         {item.priority}
                       </span>
-                      <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[item.status]}`}>
+                      <span
+                        className={`inline-block rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[item.status]}`}
+                      >
                         {item.status.replace('_', ' ')}
                       </span>
                     </div>

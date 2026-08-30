@@ -54,10 +54,14 @@ describe('PatientMergeService.mergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
-    const updatedDuplicate = await PatientModel.findById(duplicate._id).lean() as any;
+    const updatedDuplicate = (await PatientModel.findById(duplicate._id).lean()) as any;
     expect(updatedDuplicate.isActive).toBe(false);
     expect(String(updatedDuplicate.mergedInto)).toBe(String(primary._id));
   });
@@ -69,7 +73,11 @@ describe('PatientMergeService.mergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     const log = await MergeLogModel.findById(mergeLogId).lean();
@@ -85,7 +93,11 @@ describe('PatientMergeService.mergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     // audit log is fire-and-forget — wait a tick
@@ -103,7 +115,11 @@ describe('PatientMergeService.mergePatients', () => {
     const sendMailSpy = jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     await new Promise((r) => setTimeout(r, 50));
@@ -127,7 +143,11 @@ describe('PatientMergeService.mergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     const encounter = await EncounterModel.findOne({ patientId: primary._id }).lean();
@@ -144,7 +164,11 @@ describe('PatientMergeService.mergePatients', () => {
 
     await expect(
       PatientMergeService.mergePatients(
-        String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+        String(primary._id),
+        String(duplicate._id),
+        userId,
+        clinicId,
+        'admin@test.com'
       )
     ).rejects.toThrow('already been merged');
   });
@@ -158,12 +182,16 @@ describe('PatientMergeService.unmergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     await PatientMergeService.unmergePatients(mergeLogId, userId, clinicId);
 
-    const restoredDuplicate = await PatientModel.findById(duplicate._id).lean() as any;
+    const restoredDuplicate = (await PatientModel.findById(duplicate._id).lean()) as any;
     expect(restoredDuplicate.isActive).toBe(true);
     expect(restoredDuplicate.isDuplicate).toBeFalsy();
     expect(restoredDuplicate.mergedInto).toBeUndefined();
@@ -176,7 +204,11 @@ describe('PatientMergeService.unmergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     await PatientMergeService.unmergePatients(mergeLogId, userId, clinicId);
@@ -193,14 +225,18 @@ describe('PatientMergeService.unmergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     await PatientMergeService.unmergePatients(mergeLogId, userId, clinicId);
 
-    await expect(
-      PatientMergeService.unmergePatients(mergeLogId, userId, clinicId)
-    ).rejects.toThrow('already been undone');
+    await expect(PatientMergeService.unmergePatients(mergeLogId, userId, clinicId)).rejects.toThrow(
+      'already been undone'
+    );
   });
 
   it('throws if merge log belongs to a different clinic', async () => {
@@ -210,7 +246,11 @@ describe('PatientMergeService.unmergePatients', () => {
     jest.spyOn(mailer, 'sendMail').mockResolvedValue(undefined);
 
     const { mergeLogId } = await PatientMergeService.mergePatients(
-      String(primary._id), String(duplicate._id), userId, clinicId, 'admin@test.com'
+      String(primary._id),
+      String(duplicate._id),
+      userId,
+      clinicId,
+      'admin@test.com'
     );
 
     const otherClinicId = new Types.ObjectId().toString();

@@ -280,7 +280,7 @@ function AppointmentRow({
   return (
     <div className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0">
       <div>
-        <p className="text-sm font-medium text-gray-800 capitalize">{appt.type}</p>
+        <p className="text-sm font-medium capitalize text-gray-800">{appt.type}</p>
         <p className="text-xs text-gray-500">{new Date(appt.scheduledAt).toLocaleString()}</p>
         {appt.chiefComplaint && <p className="text-xs text-gray-400">{appt.chiefComplaint}</p>}
       </div>

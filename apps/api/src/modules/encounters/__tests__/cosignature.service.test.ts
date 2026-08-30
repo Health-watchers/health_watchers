@@ -46,7 +46,9 @@ describe('CoSignatureService — Socket.IO emissions', () => {
 
   beforeEach(() => {
     emitSpy = jest.spyOn(socket, 'emitToUser').mockReturnValue();
-    notifySpy = jest.spyOn(notificationService, 'createNotification').mockResolvedValue(null as any);
+    notifySpy = jest
+      .spyOn(notificationService, 'createNotification')
+      .mockResolvedValue(null as any);
   });
 
   it('emits cosignature:requested to target doctor when co-sign is requested', async () => {
@@ -74,12 +76,18 @@ describe('CoSignatureService — Socket.IO emissions', () => {
 
   it('persists a cosignature_requested notification for the target doctor', async () => {
     const encounter = await EncounterModel.create({
-      patientId: new Types.ObjectId(), clinicId, attendingDoctorId: requestingDoctorId,
-      chiefComplaint: 'Test', status: 'open',
+      patientId: new Types.ObjectId(),
+      clinicId,
+      attendingDoctorId: requestingDoctorId,
+      chiefComplaint: 'Test',
+      status: 'open',
     });
 
     await CoSignatureService.requestCoSignature(
-      String(encounter._id), String(requestingDoctorId), String(targetDoctorId), String(clinicId)
+      String(encounter._id),
+      String(requestingDoctorId),
+      String(targetDoctorId),
+      String(clinicId)
     );
 
     expect(notifySpy).toHaveBeenCalledWith(
@@ -113,7 +121,9 @@ describe('CoSignatureService — Socket.IO emissions', () => {
     const encounter = await EncounterModel.create(makeEncounter());
 
     await CoSignatureService.rejectCoSignature(
-      String(encounter._id), String(targetDoctorId), 'Incomplete notes'
+      String(encounter._id),
+      String(targetDoctorId),
+      'Incomplete notes'
     );
 
     expect(emitSpy).toHaveBeenCalledWith(
@@ -127,7 +137,9 @@ describe('CoSignatureService — Socket.IO emissions', () => {
     const encounter = await EncounterModel.create(makeEncounter());
 
     await CoSignatureService.rejectCoSignature(
-      String(encounter._id), String(targetDoctorId), 'Incomplete notes'
+      String(encounter._id),
+      String(targetDoctorId),
+      'Incomplete notes'
     );
 
     expect(notifySpy).toHaveBeenCalledWith(
@@ -142,7 +154,8 @@ describe('CoSignatureService.getPendingCoSignatureQueue', () => {
     await EncounterModel.create(makeEncounter({ status: 'closed', coSignatureStatus: 'approved' }));
 
     const queue = await CoSignatureService.getPendingCoSignatureQueue(
-      String(requestingDoctorId), String(clinicId)
+      String(requestingDoctorId),
+      String(clinicId)
     );
 
     expect(queue).toHaveLength(1);

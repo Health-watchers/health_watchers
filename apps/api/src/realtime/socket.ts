@@ -71,9 +71,6 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
       user.clinicId
     );
 
-    // Register real-time data synchronization handlers (Issue #1254)
-    SyncHandler.registerHandlers(socket, { userId: user.userId, clinicId: user.clinicId });
-
     socket.on('disconnect', () => {
       socket.leave(clinicRoom);
       socket.leave(userRoom);

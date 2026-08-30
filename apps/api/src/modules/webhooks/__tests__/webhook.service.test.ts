@@ -6,11 +6,7 @@ import {
   enqueueWebhookDelivery,
   dispatchWebhookEvent,
 } from '../webhook.service';
-import {
-  WebhookModel,
-  WebhookDeliveryModel,
-  WebhookEventLogModel,
-} from '../webhook.model';
+import { WebhookModel, WebhookDeliveryModel, WebhookEventLogModel } from '../webhook.model';
 
 jest.mock('../webhook.model', () => ({
   WebhookModel: {

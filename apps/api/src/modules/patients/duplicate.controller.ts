@@ -17,16 +17,27 @@ export class DuplicateController {
       const { clinicId } = req.user!;
 
       if (!firstName || !lastName || !dateOfBirth) {
-        res.status(400).json({ success: false, message: 'firstName, lastName, and dateOfBirth are required' });
+        res
+          .status(400)
+          .json({ success: false, message: 'firstName, lastName, and dateOfBirth are required' });
         return;
       }
 
       const matches = await DuplicateDetectionService.checkDuplicates(
-        firstName, lastName, dateOfBirth, clinicId.toString(), threshold
+        firstName,
+        lastName,
+        dateOfBirth,
+        clinicId.toString(),
+        threshold
       );
       res.status(200).json({ success: true, data: matches, count: matches.length });
     } catch (error) {
-      res.status(500).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -41,12 +52,22 @@ export class DuplicateController {
       const { userId, clinicId, role } = req.user!;
 
       if (!isAdmin(role)) {
-        res.status(403).json({ success: false, message: 'Only CLINIC_ADMIN or SUPER_ADMIN can merge patient records' });
+        res
+          .status(403)
+          .json({
+            success: false,
+            message: 'Only CLINIC_ADMIN or SUPER_ADMIN can merge patient records',
+          });
         return;
       }
 
       if (req.body.confirm !== true) {
-        res.status(400).json({ success: false, message: 'Explicit confirm:true is required to perform a merge' });
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: 'Explicit confirm:true is required to perform a merge',
+          });
         return;
       }
 
@@ -55,12 +76,21 @@ export class DuplicateController {
       const adminEmail = adminUser?.email ?? '';
 
       const result = await PatientMergeService.mergePatients(
-        id, duplicateId, String(userId), clinicId.toString(), adminEmail
+        id,
+        duplicateId,
+        String(userId),
+        clinicId.toString(),
+        adminEmail
       );
 
       res.status(200).json({ success: true, data: result });
     } catch (error) {
-      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -75,19 +105,34 @@ export class DuplicateController {
       const { userId, clinicId, role } = req.user!;
 
       if (!isAdmin(role)) {
-        res.status(403).json({ success: false, message: 'Only CLINIC_ADMIN or SUPER_ADMIN can unmerge patient records' });
+        res
+          .status(403)
+          .json({
+            success: false,
+            message: 'Only CLINIC_ADMIN or SUPER_ADMIN can unmerge patient records',
+          });
         return;
       }
 
       if (req.body.confirm !== true) {
-        res.status(400).json({ success: false, message: 'Explicit confirm:true is required to perform an unmerge' });
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: 'Explicit confirm:true is required to perform an unmerge',
+          });
         return;
       }
 
       await PatientMergeService.unmergePatients(mergeLogId, String(userId), clinicId.toString());
       res.status(200).json({ success: true, message: 'Patients successfully unmerged' });
     } catch (error) {
-      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -99,9 +144,20 @@ export class DuplicateController {
         res.status(404).json({ success: false, message: 'Patient not found' });
         return;
       }
-      res.status(200).json({ success: true, data: patient, redirected: patient._id.toString() !== req.params.id });
+      res
+        .status(200)
+        .json({
+          success: true,
+          data: patient,
+          redirected: patient._id.toString() !== req.params.id,
+        });
     } catch (error) {
-      res.status(500).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 }

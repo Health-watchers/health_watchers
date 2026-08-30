@@ -48,12 +48,7 @@ export interface BatchJob {
   completedAt?: Date;
 }
 
-export type BatchJobStatus =
-  | 'queued'
-  | 'processing'
-  | 'submitted'
-  | 'confirmed'
-  | 'failed';
+export type BatchJobStatus = 'queued' | 'processing' | 'submitted' | 'confirmed' | 'failed';
 
 export interface BatchProcessorStats {
   /** Number of jobs currently in the queue */
@@ -118,7 +113,12 @@ export class BatchProcessor {
   private readonly queue: BatchJob[] = [];
   private readonly completedJobs: Map<string, BatchJob> = new Map();
 
-  private executor: ((fromPublicKey: string, payments: BatchPaymentItem[]) => Promise<{ hash: string; count: number; totalAmount: string; durationMs: number }>) | null = null;
+  private executor:
+    | ((
+        fromPublicKey: string,
+        payments: BatchPaymentItem[]
+      ) => Promise<{ hash: string; count: number; totalAmount: string; durationMs: number }>)
+    | null = null;
 
   private isProcessing = false;
   private accepting = true;
@@ -237,7 +237,10 @@ export class BatchProcessor {
   /**
    * Start a background timer that auto-flushes the queue on a regular interval.
    */
-  startAutoFlush(intervalMs: number = AUTO_FLUSH_INTERVAL_MS, batchSize: number = DEFAULT_BATCH_SIZE): void {
+  startAutoFlush(
+    intervalMs: number = AUTO_FLUSH_INTERVAL_MS,
+    batchSize: number = DEFAULT_BATCH_SIZE
+  ): void {
     if (this.autoFlushHandle !== null) {
       logger.warn('BatchProcessor auto-flush is already running');
       return;
@@ -423,7 +426,12 @@ export class BatchProcessor {
         this.totalFailed += bundleJobs.length;
 
         logger.error(
-          { fromPublicKey, jobCount: bundleJobs.length, paymentCount: payments.length, error: errMsg },
+          {
+            fromPublicKey,
+            jobCount: bundleJobs.length,
+            paymentCount: payments.length,
+            error: errMsg,
+          },
           'Bundle submission failed'
         );
       } finally {

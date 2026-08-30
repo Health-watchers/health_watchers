@@ -37,7 +37,7 @@ export default function Error({ error, reset }: ErrorProps) {
         </p>
 
         {/* Request ID */}
-        <div className="rounded-md bg-neutral-50 p-3 font-mono text-xs break-all text-neutral-500">
+        <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500">
           Request ID: {requestId}
         </div>
 

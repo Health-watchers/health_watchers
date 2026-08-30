@@ -40,32 +40,32 @@ export function TranslationManager() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold mb-3">Language Selection</h3>
-        <p className="text-sm text-gray-600 mb-4">Choose your preferred language</p>
+        <h3 className="mb-3 text-lg font-semibold">Language Selection</h3>
+        <p className="mb-4 text-sm text-gray-600">Choose your preferred language</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        {(Object.entries(LANGUAGE_MAP) as Array<[Locale, typeof LANGUAGE_MAP[Locale]]>).map(
+        {(Object.entries(LANGUAGE_MAP) as Array<[Locale, (typeof LANGUAGE_MAP)[Locale]]>).map(
           ([lang, { name, nativeName, flag }]) => (
             <button
               key={lang}
               onClick={() => handleLocaleChange(lang)}
               disabled={isPending}
-              className={`p-3 rounded-lg border-2 transition-all text-center ${
+              className={`rounded-lg border-2 p-3 text-center transition-all ${
                 locale === lang
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
               } disabled:opacity-50`}
             >
-              <div className="text-2xl mb-2">{flag}</div>
+              <div className="mb-2 text-2xl">{flag}</div>
               <div className="text-xs font-medium">{name}</div>
               <div className="text-xs text-gray-600">{nativeName}</div>
             </button>
-          ),
+          )
         )}
       </div>
 
-      <div className="mt-6 p-3 bg-blue-50 rounded-lg text-sm text-blue-900">
+      <div className="mt-6 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
         <p>
           Current language: <strong>{LANGUAGE_MAP[locale].nativeName}</strong>
         </p>

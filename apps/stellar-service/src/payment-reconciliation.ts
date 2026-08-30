@@ -39,7 +39,12 @@ export interface ReconciliationMatch {
 
 export interface ReconciliationDiscrepancy {
   id: string;
-  type: 'missing_payment' | 'missing_ledger' | 'amount_mismatch' | 'recipient_mismatch' | 'timestamp_mismatch';
+  type:
+    | 'missing_payment'
+    | 'missing_ledger'
+    | 'amount_mismatch'
+    | 'recipient_mismatch'
+    | 'timestamp_mismatch';
   expectedPayment?: PaymentRecord;
   ledgerTransaction?: LedgerTransaction;
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -75,12 +80,20 @@ let resolutions: ReconciliationResolution[] = [];
 /**
  * Fetch transactions from Stellar ledger for a given account
  */
-export async function fetchLedgerTransactions(accountAddress: string, limit: number = 200): Promise<LedgerTransaction[]> {
+export async function fetchLedgerTransactions(
+  accountAddress: string,
+  limit: number = 200
+): Promise<LedgerTransaction[]> {
   const server = getHorizonServer();
   const start = Date.now();
 
   try {
-    const response = await server.payments().forAccount(accountAddress).limit(limit).order('desc').call();
+    const response = await server
+      .payments()
+      .forAccount(accountAddress)
+      .limit(limit)
+      .order('desc')
+      .call();
 
     const transactions: LedgerTransaction[] = response.records
       .filter((r: any) => r.type === 'payment' || r.type === 'create_account')
@@ -117,7 +130,10 @@ export async function fetchLedgerTransactions(accountAddress: string, limit: num
 export function matchPayments(
   expectedPayments: PaymentRecord[],
   ledgerTransactions: LedgerTransaction[],
-  tolerance: { amountVariance: number; timeWindow: number } = { amountVariance: 0.01, timeWindow: 3600000 }
+  tolerance: { amountVariance: number; timeWindow: number } = {
+    amountVariance: 0.01,
+    timeWindow: 3600000,
+  }
 ): ReconciliationMatch[] {
   const matches: ReconciliationMatch[] = [];
   const matchedLedgerIndices = new Set<number>();
@@ -192,7 +208,8 @@ export function matchPayments(
       }
     }
 
-    if (bestMatch && bestMatchScore >= 6) { // At least 60% match score
+    if (bestMatch && bestMatchScore >= 6) {
+      // At least 60% match score
       matchedLedgerIndices.add(bestMatch.index);
       matches.push({
         expectedPayment: expected,
@@ -211,7 +228,7 @@ export function matchPayments(
   }
 
   logger.debug(
-    { totalMatches: matches.length, perfectMatches: matches.filter(m => m.matched).length },
+    { totalMatches: matches.length, perfectMatches: matches.filter((m) => m.matched).length },
     'Payment matching complete'
   );
 
@@ -228,7 +245,7 @@ export function generateReconciliationReport(
   const reportId = `report-${Date.now()}`;
   const timestamp = new Date().toISOString();
 
-  const perfectMatches = matches.filter(m => m.matched);
+  const perfectMatches = matches.filter((m) => m.matched);
   const discrepancies: ReconciliationDiscrepancy[] = [];
   const unmatchedExpected: PaymentRecord[] = [];
   const unmatchedLedger: LedgerTransaction[] = [];
@@ -251,10 +268,13 @@ export function generateReconciliationReport(
         // Partial match with discrepancies
         discrepancies.push({
           id: `discrepancy-${Date.now()}-${Math.random()}`,
-          type: match.discrepancies[0].includes('Amount') ? 'amount_mismatch' :
-                match.discrepancies[0].includes('Recipient') ? 'recipient_mismatch' :
-                match.discrepancies[0].includes('Timestamp') ? 'timestamp_mismatch' :
-                'missing_payment',
+          type: match.discrepancies[0].includes('Amount')
+            ? 'amount_mismatch'
+            : match.discrepancies[0].includes('Recipient')
+              ? 'recipient_mismatch'
+              : match.discrepancies[0].includes('Timestamp')
+                ? 'timestamp_mismatch'
+                : 'missing_payment',
           expectedPayment: match.expectedPayment,
           ledgerTransaction: match.ledgerTransaction,
           severity: 'medium',
@@ -266,7 +286,9 @@ export function generateReconciliationReport(
   }
 
   // Find ledger transactions with no expected payment
-  const matchedLedgerHashes = new Set(matches.filter(m => m.ledgerTransaction.id).map(m => m.ledgerTransaction.hash));
+  const matchedLedgerHashes = new Set(
+    matches.filter((m) => m.ledgerTransaction.id).map((m) => m.ledgerTransaction.hash)
+  );
   for (const ledger of ledgerTransactions) {
     if (!matchedLedgerHashes.has(ledger.hash)) {
       unmatchedLedger.push(ledger);
@@ -326,7 +348,10 @@ export async function runReconciliation(
   const start = Date.now();
 
   try {
-    logger.info({ accountAddress, expectedPayments: expectedPayments.length }, 'Starting reconciliation');
+    logger.info(
+      { accountAddress, expectedPayments: expectedPayments.length },
+      'Starting reconciliation'
+    );
 
     // Fetch ledger transactions
     const ledgerTransactions = await fetchLedgerTransactions(accountAddress);
@@ -360,7 +385,9 @@ export async function runReconciliation(
 /**
  * Record a discrepancy resolution
  */
-export function recordResolution(resolution: Omit<ReconciliationResolution, 'resolvedAt'>): ReconciliationResolution {
+export function recordResolution(
+  resolution: Omit<ReconciliationResolution, 'resolvedAt'>
+): ReconciliationResolution {
   const complete: ReconciliationResolution = {
     ...resolution,
     resolvedAt: new Date().toISOString(),
@@ -402,10 +429,14 @@ export function getReconciliationStatistics(): {
   totalResolutions: number;
   averageMatchPercentage: number;
 } {
-  const totalDiscrepancies = reconciliationHistory.reduce((sum, r) => sum + r.totalDiscrepancies, 0);
+  const totalDiscrepancies = reconciliationHistory.reduce(
+    (sum, r) => sum + r.totalDiscrepancies,
+    0
+  );
   const averageMatchPercentage =
     reconciliationHistory.length > 0
-      ? reconciliationHistory.reduce((sum, r) => sum + r.matchPercentage, 0) / reconciliationHistory.length
+      ? reconciliationHistory.reduce((sum, r) => sum + r.matchPercentage, 0) /
+        reconciliationHistory.length
       : 0;
 
   return {

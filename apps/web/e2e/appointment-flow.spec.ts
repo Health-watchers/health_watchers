@@ -26,7 +26,7 @@ test.describe('Appointment Flow', () => {
     const nextWeekBtn = page.getByRole('button', { name: /next week|›|>/i });
     const prevWeekBtn = page.getByRole('button', { name: /prev(ious)? week|‹|</i });
 
-    if (await nextWeekBtn.count() > 0) {
+    if ((await nextWeekBtn.count()) > 0) {
       await nextWeekBtn.first().click();
       await prevWeekBtn.first().click();
       // Should return to the current week without error
@@ -37,7 +37,7 @@ test.describe('Appointment Flow', () => {
   test('filter by doctor shows the selector', async ({ page }) => {
     await page.goto('/appointments');
     const filterSelect = page.getByRole('combobox').or(page.locator('select'));
-    if (await filterSelect.count() > 0) {
+    if ((await filterSelect.count()) > 0) {
       await expect(filterSelect.first()).toBeVisible();
     }
   });
@@ -46,7 +46,7 @@ test.describe('Appointment Flow', () => {
     await page.goto('/appointments');
 
     const nextWeekBtn = page.getByRole('button', { name: /next week|›|>/i });
-    if (await nextWeekBtn.count() > 0) {
+    if ((await nextWeekBtn.count()) > 0) {
       await nextWeekBtn.first().click();
     }
 

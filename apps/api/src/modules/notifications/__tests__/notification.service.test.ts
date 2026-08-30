@@ -95,7 +95,13 @@ describe('createNotification', () => {
     });
 
     await expect(
-      createNotification({ userId: 'u1', clinicId: 'c1', type: 'system', title: 'Hi', message: 'Hello' })
+      createNotification({
+        userId: 'u1',
+        clinicId: 'c1',
+        type: 'system',
+        title: 'Hi',
+        message: 'Hello',
+      })
     ).resolves.toBeDefined();
   });
 });

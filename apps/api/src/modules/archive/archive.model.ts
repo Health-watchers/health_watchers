@@ -53,4 +53,7 @@ archivedRecordSchema.index({ clinicId: 1, expiryDate: 1 });
 archivedRecordSchema.index({ originalDocumentId: 1, originalCollectionName: 1 });
 
 export const ArchiveModel = (models.Archive ||
-  model<ArchivedRecord>('Archive', archivedRecordSchema)) as import('mongoose').Model<ArchivedRecord>;
+  model<ArchivedRecord>(
+    'Archive',
+    archivedRecordSchema
+  )) as import('mongoose').Model<ArchivedRecord>;

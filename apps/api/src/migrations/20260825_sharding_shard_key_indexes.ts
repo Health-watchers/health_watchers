@@ -25,7 +25,7 @@ export async function up(db: Db): Promise<void> {
     .collection('communicationlogs')
     .createIndex(
       { createdAt: 1 },
-      { background: true, name: 'communicationlogs_shardKey_createdAt' },
+      { background: true, name: 'communicationlogs_shardKey_createdAt' }
     );
 
   // ── AuditLog — shard key: clinicId (hashed) ─────────────────────────────
@@ -44,14 +44,12 @@ export async function up(db: Db): Promise<void> {
     {
       background: true,
       name: 'chunk_migrations_status_scheduledAt',
-    },
+    }
   );
 
   // ── Shard statistics TTL index (keep 90 days) ────────────────────────────
   // Only create if the collection already exists (created by infrastructure migration).
-  const collections = await db
-    .listCollections({ name: 'shard_statistics' })
-    .toArray();
+  const collections = await db.listCollections({ name: 'shard_statistics' }).toArray();
   if (collections.length > 0) {
     await db.collection('shard_statistics').createIndex(
       { recordedAt: 1 },
@@ -59,16 +57,19 @@ export async function up(db: Db): Promise<void> {
         background: true,
         name: 'shard_statistics_ttl',
         expireAfterSeconds: 7_776_000, // 90 days
-      },
+      }
     );
   }
 }
 
 export async function down(db: Db): Promise<void> {
   const drop = (col: string, idx: string) =>
-    db.collection(col).dropIndex(idx).catch(() => {
-      /* already gone */
-    });
+    db
+      .collection(col)
+      .dropIndex(idx)
+      .catch(() => {
+        /* already gone */
+      });
 
   await drop('encounters', 'encounters_shardKey_clinicId');
   await drop('patients', 'patients_shardKey_clinicId');

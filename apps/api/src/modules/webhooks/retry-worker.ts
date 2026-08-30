@@ -28,10 +28,7 @@ function calculateBackoff(attempt: number, config: RetryConfig): number {
   }
 }
 
-export async function retryDelivery(
-  deliveryId: string,
-  webhook: IWebhook
-): Promise<boolean> {
+export async function retryDelivery(deliveryId: string, webhook: IWebhook): Promise<boolean> {
   const delivery = await WebhookDeliveryModel.findById(deliveryId);
   if (!delivery) {
     logger.warn({ deliveryId }, 'Retry skipped: delivery not found');

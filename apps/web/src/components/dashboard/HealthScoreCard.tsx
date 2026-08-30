@@ -6,7 +6,11 @@ interface HealthScoreCardProps {
   trendPercent?: number;
 }
 
-export function HealthScoreCard({ score, trend = 'stable', trendPercent = 0 }: HealthScoreCardProps) {
+export function HealthScoreCard({
+  score,
+  trend = 'stable',
+  trendPercent = 0,
+}: HealthScoreCardProps) {
   const getColorClass = (score: number) => {
     if (score >= 80) return 'text-success-600 dark:text-success-400';
     if (score >= 60) return 'text-warning-600 dark:text-warning-400';
@@ -31,14 +35,17 @@ export function HealthScoreCard({ score, trend = 'stable', trendPercent = 0 }: H
   };
 
   return (
-    <div className={`rounded-lg border border-neutral-200 p-6 ${getBgClass(score)} dark:border-neutral-700`}>
+    <div
+      className={`rounded-lg border border-neutral-200 p-6 ${getBgClass(score)} dark:border-neutral-700`}
+    >
       <h3 className="text-sm font-medium text-neutral-600 dark:text-neutral-400">Health Score</h3>
       <div className="mt-4 flex items-end justify-between">
         <div>
           <div className={`text-4xl font-bold ${getColorClass(score)}`}>{score}</div>
           {trendPercent !== 0 && (
             <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-              {getTrendIcon()} {Math.abs(trendPercent)}% {trend === 'up' ? 'improvement' : 'decline'} this month
+              {getTrendIcon()} {Math.abs(trendPercent)}%{' '}
+              {trend === 'up' ? 'improvement' : 'decline'} this month
             </p>
           )}
         </div>

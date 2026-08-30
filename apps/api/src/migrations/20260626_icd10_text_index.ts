@@ -11,10 +11,10 @@ export async function up(db: Db): Promise<void> {
 }
 
 export async function down(db: Db): Promise<void> {
-  await db.collection('icd10codes').dropIndex('icd10_text_search').catch(() => {});
+  await db
+    .collection('icd10codes')
+    .dropIndex('icd10_text_search')
+    .catch(() => {});
   // Restore single-field index
-  await db.collection('icd10codes').createIndex(
-    { description: 'text' },
-    { background: true }
-  );
+  await db.collection('icd10codes').createIndex({ description: 'text' }, { background: true });
 }

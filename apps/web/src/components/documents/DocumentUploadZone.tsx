@@ -3,7 +3,13 @@
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
 
-const ALLOWED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'application/dicom', 'application/octet-stream']);
+const ALLOWED_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/dicom',
+  'application/octet-stream',
+]);
 const ALLOWED_EXTS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.dcm']);
 const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -24,8 +30,14 @@ function validateFile(file: File): string | null {
   return null;
 }
 
-const DOCUMENT_TYPES = ['lab_result', 'referral_letter', 'consent_form', 'medical_image', 'other'] as const;
-type DocumentType = typeof DOCUMENT_TYPES[number];
+const DOCUMENT_TYPES = [
+  'lab_result',
+  'referral_letter',
+  'consent_form',
+  'medical_image',
+  'other',
+] as const;
+type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export function DocumentUploadZone({ patientId, clinicId, onUploaded }: DocumentUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,13 +61,19 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
     }
   }, []);
 
-  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-    handleFiles(e.dataTransfer.files);
-  }, [handleFiles]);
+  const onDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setDragging(false);
+      handleFiles(e.dataTransfer.files);
+    },
+    [handleFiles]
+  );
 
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragging(true); };
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(true);
+  };
   const onDragLeave = () => setDragging(false);
 
   const handleUpload = async () => {
@@ -102,14 +120,24 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
         className={[
-          'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors cursor-pointer',
+          'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors',
           dragging
             ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-            : 'border-neutral-300 hover:border-primary-400 dark:border-neutral-600',
+            : 'hover:border-primary-400 border-neutral-300 dark:border-neutral-600',
         ].join(' ')}
       >
-        <svg className="mb-3 h-10 w-10 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        <svg
+          className="mb-3 h-10 w-10 text-neutral-400"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+          />
         </svg>
         <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
           {file ? file.name : 'Drag & drop a file, or click to browse'}
@@ -124,14 +152,12 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
         />
       </div>
 
-      {fileError && (
-        <p className="text-sm text-danger-600 dark:text-danger-400">{fileError}</p>
-      )}
+      {fileError && <p className="text-danger-600 dark:text-danger-400 text-sm">{fileError}</p>}
 
       {file && (
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+            <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
               Document Type
             </label>
             <select
@@ -140,7 +166,9 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
               className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
             >
               {DOCUMENT_TYPES.map((t) => (
-                <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                <option key={t} value={t}>
+                  {t.replace(/_/g, ' ')}
+                </option>
               ))}
             </select>
           </div>
@@ -152,9 +180,7 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
         </div>
       )}
 
-      {uploadError && (
-        <p className="text-sm text-danger-600 dark:text-danger-400">{uploadError}</p>
-      )}
+      {uploadError && <p className="text-danger-600 dark:text-danger-400 text-sm">{uploadError}</p>}
     </div>
   );
 }

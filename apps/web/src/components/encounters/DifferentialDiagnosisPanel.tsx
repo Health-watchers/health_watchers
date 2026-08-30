@@ -189,11 +189,11 @@ export default function DifferentialDiagnosisPanel({
           <div className="space-y-4">
             {/* Urgency badge */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium tracking-wide text-gray-500 uppercase">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Urgency:
               </span>
               <span
-                className={`rounded-full px-3 py-0.5 text-xs font-bold tracking-wide uppercase ${URGENCY_STYLES[result.urgency]}`}
+                className={`rounded-full px-3 py-0.5 text-xs font-bold uppercase tracking-wide ${URGENCY_STYLES[result.urgency]}`}
               >
                 {result.urgency}
               </span>

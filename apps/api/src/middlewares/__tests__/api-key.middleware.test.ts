@@ -94,7 +94,10 @@ describe('authenticateApiKey', () => {
     (ApiKeyModel.findOne as jest.Mock).mockReturnValue(
       findOneChain({ _id: 'k1', createdBy: 'u1', clinicId: 'c1', scopes: ['read', 'write'] })
     );
-    const req = { headers: { authorization: 'ApiKey hw_abc123' }, path: '/api/v2/patients' } as Request;
+    const req = {
+      headers: { authorization: 'ApiKey hw_abc123' },
+      path: '/api/v2/patients',
+    } as Request;
     const res = mockRes();
     const next = jest.fn();
 
@@ -102,7 +105,9 @@ describe('authenticateApiKey', () => {
 
     expect(req.user).toEqual({ userId: 'u1', role: 'READ_ONLY', clinicId: 'c1' });
     expect((req as any).apiKey).toEqual({ id: 'k1', scopes: ['read', 'write'] });
-    expect(ApiKeyModel.findByIdAndUpdate).toHaveBeenCalledWith('k1', { lastUsedAt: expect.any(Date) });
+    expect(ApiKeyModel.findByIdAndUpdate).toHaveBeenCalledWith('k1', {
+      lastUsedAt: expect.any(Date),
+    });
     expect(ApiKeyUsageModel.findOneAndUpdate).toHaveBeenCalled();
     expect(next).toHaveBeenCalledTimes(1);
   });

@@ -58,10 +58,15 @@ export function VaccinationStatus({ vaccinations, loading }: VaccinationStatusPr
     <div className="space-y-4">
       {overdue.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-semibold text-danger-700 dark:text-danger-300">Overdue</h4>
+          <h4 className="text-danger-700 dark:text-danger-300 mb-2 text-xs font-semibold">
+            Overdue
+          </h4>
           <div className="space-y-2">
             {overdue.map((vac) => (
-              <div key={vac.id} className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}>
+              <div
+                key={vac.id}
+                className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}
+              >
                 <div className="font-medium">{vac.name}</div>
                 <div className="text-xs opacity-80">
                   Due: {new Date(vac.nextDueDate!).toLocaleDateString()}
@@ -74,10 +79,15 @@ export function VaccinationStatus({ vaccinations, loading }: VaccinationStatusPr
 
       {due.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-semibold text-warning-700 dark:text-warning-300">Due Soon</h4>
+          <h4 className="text-warning-700 dark:text-warning-300 mb-2 text-xs font-semibold">
+            Due Soon
+          </h4>
           <div className="space-y-2">
             {due.map((vac) => (
-              <div key={vac.id} className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}>
+              <div
+                key={vac.id}
+                className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}
+              >
                 <div className="font-medium">{vac.name}</div>
                 <div className="text-xs opacity-80">
                   Due: {new Date(vac.nextDueDate!).toLocaleDateString()}
@@ -90,10 +100,15 @@ export function VaccinationStatus({ vaccinations, loading }: VaccinationStatusPr
 
       {completed.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-semibold text-success-700 dark:text-success-300">Up to Date</h4>
+          <h4 className="text-success-700 dark:text-success-300 mb-2 text-xs font-semibold">
+            Up to Date
+          </h4>
           <div className="space-y-2">
             {completed.slice(0, 3).map((vac) => (
-              <div key={vac.id} className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}>
+              <div
+                key={vac.id}
+                className={`rounded-lg px-3 py-2 text-sm ${getStatusColor(vac.status)}`}
+              >
                 <div className="font-medium">{vac.name}</div>
                 <div className="text-xs opacity-80">
                   {new Date(vac.dateAdministered).toLocaleDateString()}

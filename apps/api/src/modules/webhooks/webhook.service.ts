@@ -65,10 +65,7 @@ export async function enqueueWebhookDelivery(
   return delivery;
 }
 
-async function executeDelivery(
-  delivery: IWebhookDelivery,
-  signature: string
-): Promise<void> {
+async function executeDelivery(delivery: IWebhookDelivery, signature: string): Promise<void> {
   const webhook = await WebhookModel.findById(delivery.webhookId);
   const maxAttempts = webhook?.retryConfig?.maxRetries ?? 3;
   const initialDelay = webhook?.retryConfig?.initialDelayMs ?? 1000;
@@ -118,7 +115,11 @@ async function executeDelivery(
 
       if (attempt < maxAttempts - 1) {
         logger.warn(
-          { deliveryId: String(delivery._id), attempt: attempt + 1, nextRetry: delivery.nextRetryAt },
+          {
+            deliveryId: String(delivery._id),
+            attempt: attempt + 1,
+            nextRetry: delivery.nextRetryAt,
+          },
           'Webhook delivery failed, will retry'
         );
       } else {

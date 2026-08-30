@@ -26,7 +26,10 @@ let db: Db;
 async function dropAllCollections() {
   const cols = await db.listCollections().toArray();
   for (const col of cols) {
-    await db.collection(col.name).drop().catch(() => {});
+    await db
+      .collection(col.name)
+      .drop()
+      .catch(() => {});
   }
 }
 
@@ -107,7 +110,10 @@ describe('Migration: 20260727_add_archive_collection', () => {
 describe('Migration: 20260425_audit_logs_ttl', () => {
   it('up() creates TTL index on audit logs', async () => {
     await auditTtl.up(db);
-    const indexes = await db.collection('auditlogs').indexInformation().catch(() => ({}));
+    const indexes = await db
+      .collection('auditlogs')
+      .indexInformation()
+      .catch(() => ({}));
     // Just verify the migration ran without error; TTL index name varies
     expect(typeof indexes).toBe('object');
   });
@@ -143,8 +149,14 @@ describe('Migration chaining: sequential up and full rollback', () => {
     await auditTtl.up(db);
     await archiveCollection.up(db);
     // Verify each left an artifact
-    const patientIndexes = await db.collection('patients').indexInformation().catch(() => ({}));
-    const auditIndexes = await db.collection('auditlogs').indexInformation().catch(() => ({}));
+    const patientIndexes = await db
+      .collection('patients')
+      .indexInformation()
+      .catch(() => ({}));
+    const auditIndexes = await db
+      .collection('auditlogs')
+      .indexInformation()
+      .catch(() => ({}));
     expect(typeof patientIndexes).toBe('object');
     expect(typeof auditIndexes).toBe('object');
   });
@@ -163,11 +175,17 @@ describe('Migration chaining: sequential up and full rollback', () => {
 
   it('state after up+down+up matches initial up state', async () => {
     await dashboardIndexes.up(db);
-    const afterFirstUp = await db.collection('patients').indexInformation().catch(() => ({}));
+    const afterFirstUp = await db
+      .collection('patients')
+      .indexInformation()
+      .catch(() => ({}));
 
     await dashboardIndexes.down(db);
     await dashboardIndexes.up(db);
-    const afterReUp = await db.collection('patients').indexInformation().catch(() => ({}));
+    const afterReUp = await db
+      .collection('patients')
+      .indexInformation()
+      .catch(() => ({}));
 
     expect(Object.keys(afterFirstUp).sort()).toEqual(Object.keys(afterReUp).sort());
   });

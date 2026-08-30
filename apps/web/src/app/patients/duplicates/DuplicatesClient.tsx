@@ -110,7 +110,7 @@ export default function DuplicatesClient() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor="min-confidence" className="text-sm whitespace-nowrap text-gray-600">
+          <label htmlFor="min-confidence" className="whitespace-nowrap text-sm text-gray-600">
             Min confidence:
           </label>
           <select
@@ -168,13 +168,13 @@ export default function DuplicatesClient() {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
                       Patient A (keep as primary)
                     </p>
                     <PatientCard patient={pair.patientA} />
                   </div>
                   <div>
-                    <p className="mb-1 text-xs font-medium tracking-wide text-gray-500 uppercase">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
                       Patient B (will be merged)
                     </p>
                     <PatientCard patient={pair.patientB} />

@@ -55,7 +55,11 @@ import {
   getCircuitBreakerState,
 } from './error-handler.js';
 import { metricsMiddleware, metricsHandler } from './metrics.js';
-import { startPaymentStream, registerPaymentConfirmationListener, notifyApiOfPayment } from './payment-stream.js';
+import {
+  startPaymentStream,
+  registerPaymentConfirmationListener,
+  notifyApiOfPayment,
+} from './payment-stream.js';
 // #998: Fee Calculator
 import {
   calculateBaseFee,
@@ -988,8 +992,16 @@ app.post('/fee-bump', requireSecret, async (req, res) => {
 app.post('/multi-sig/build', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount, signerPublicKeys } = req.body;
-    if (!fromPublicKey || !toPublicKey || !amount || !Array.isArray(signerPublicKeys) || !signerPublicKeys.length) {
-      return res.status(400).json({ error: 'fromPublicKey, toPublicKey, amount, and signerPublicKeys[] are required' });
+    if (
+      !fromPublicKey ||
+      !toPublicKey ||
+      !amount ||
+      !Array.isArray(signerPublicKeys) ||
+      !signerPublicKeys.length
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'fromPublicKey, toPublicKey, amount, and signerPublicKeys[] are required' });
     }
     const result = await retryWithBackoff(
       () => buildMultiSigTransaction({ fromPublicKey, toPublicKey, amount, signerPublicKeys }),
@@ -1440,7 +1452,11 @@ app.post('/exchange-rates/periodic-refresh/start', requireSecret, (req, res) => 
   try {
     const { intervalMs } = req.body;
     exchangeRateManager.startPeriodicRefresh(intervalMs);
-    return res.json({ success: true, message: 'Periodic refresh started', intervalMs: intervalMs ?? 300000 });
+    return res.json({
+      success: true,
+      message: 'Periodic refresh started',
+      intervalMs: intervalMs ?? 300000,
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -1482,7 +1498,10 @@ app.post('/safety/validate-amount', (req, res) => {
     if (typeof amount !== 'number') {
       return res.status(400).json({ error: 'amount must be a number' });
     }
-    const result = mainnetSafetyManager.validateAmount(amount, { maxAmountXlm, warningThresholdXlm });
+    const result = mainnetSafetyManager.validateAmount(amount, {
+      maxAmountXlm,
+      warningThresholdXlm,
+    });
     return res.json({ success: result.passed, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -1545,9 +1564,17 @@ app.post('/payment-state-machine/create', requireSecret, (req, res) => {
   try {
     const { paymentId, amount, fromPublicKey, toPublicKey, metadata } = req.body;
     if (!paymentId || !amount || !fromPublicKey || !toPublicKey) {
-      return res.status(400).json({ error: 'paymentId, amount, fromPublicKey, and toPublicKey are required' });
+      return res
+        .status(400)
+        .json({ error: 'paymentId, amount, fromPublicKey, and toPublicKey are required' });
     }
-    const context = paymentStateMachine.createPayment({ paymentId, amount, fromPublicKey, toPublicKey, metadata });
+    const context = paymentStateMachine.createPayment({
+      paymentId,
+      amount,
+      fromPublicKey,
+      toPublicKey,
+      metadata,
+    });
     return res.json({ success: true, payment: context });
   } catch (error: any) {
     return res.status(400).json({ error: error.message });
@@ -1568,7 +1595,11 @@ app.post('/payment-state-machine/transition', requireSecret, async (req, res) =>
     if (transactionHash) patch.transactionHash = transactionHash;
     if (errorMsg) patch.error = errorMsg;
     if (metadata) patch.metadata = metadata;
-    const updated = await paymentStateMachine.transition(context as PaymentStateContext, newState as PaymentState, patch);
+    const updated = await paymentStateMachine.transition(
+      context as PaymentStateContext,
+      newState as PaymentState,
+      patch
+    );
     return res.json({ success: true, payment: updated });
   } catch (error: any) {
     return res.status(400).json({ error: error.message });
@@ -1683,7 +1714,12 @@ app.post('/batch/auto-flush/start', requireSecret, (req, res) => {
   try {
     const { intervalMs, batchSize } = req.body;
     batchProcessor.startAutoFlush(intervalMs, batchSize);
-    return res.json({ success: true, message: 'Auto-flush started', intervalMs: intervalMs ?? 10000, batchSize: batchSize ?? 50 });
+    return res.json({
+      success: true,
+      message: 'Auto-flush started',
+      intervalMs: intervalMs ?? 10000,
+      batchSize: batchSize ?? 50,
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
