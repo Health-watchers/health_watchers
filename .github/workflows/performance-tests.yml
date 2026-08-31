@@ -1,0 +1,105 @@
+name: Performance Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        vus: [50, 100, 500]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run k6 load test (${{ matrix.vus }} VUs)
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: scripts/k6/load-test.js
+        env:
+          K6_VUS: ${{ matrix.vus }}
+          K6_TARGET_URL: ${{ secrets.PERF_TEST_TARGET_URL }}
+          K6_OUT: json=results-${{ matrix.vus }}vus.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ matrix.vus }}vus
+          path: results-${{ matrix.vus }}vus.json
+
+  stress-test:
+    name: Stress Testing (ramp to failure)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run k6 stress test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: scripts/k6/stress-test.js
+        env:
+          K6_TARGET_URL: ${{ secrets.PERF_TEST_TARGET_URL }}
+          K6_OUT: json=stress-results.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: k6-stress-results
+          path: stress-results.json
+
+  regression-check:
+    name: Performance Regression Detection
+    runs-on: ubuntu-latest
+    needs: load-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: k6-results-100vus
+      - name: Compare against baseline
+        run: |
+          node scripts/k6/compare-baseline.js \
+            --current results-100vus.json \
+            --baseline scripts/k6/baseline.json \
+            --threshold-pct 10
+      - name: Update baseline on main
+        if: github.ref == 'refs/heads/main'
+        run: cp results-100vus.json scripts/k6/baseline.json
+
+  sla-enforcement:
+    name: Performance SLA Enforcement
+    runs-on: ubuntu-latest
+    needs: [load-test, stress-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: k6-results-100vus
+      - name: Enforce SLA thresholds
+        run: |
+          node scripts/k6/check-sla.js \
+            --results results-100vus.json \
+            --p95-max-ms 500 \
+            --error-rate-max 0.01
+
+  report:
+    name: Post Performance Report to PR
+    runs-on: ubuntu-latest
+    needs: [regression-check, sla-enforcement]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: k6-results-100vus
+      - name: Generate report and comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('results-100vus.json', 'utf8');
+            const report = JSON.parse(summary);
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Performance Test Report\n\n- p95 latency: ${report.metrics?.http_req_duration?.values?.['p(95)'] ?? 'n/a'} ms\n- Error rate: ${report.metrics?.http_req_failed?.values?.rate ?? 'n/a'}\n- Bottleneck suggestions: see \`scripts/k6/check-sla.js\` output above.`
+            });

@@ -7,6 +7,15 @@ metadata:
     app.kubernetes.io/name: health-watchers
     app.kubernetes.io/component: web
     version: v1
+  annotations:
+    # Scaling policy: scale up with 60s stabilization for responsive UI tier scaling.
+    # Scale down conservatively (300s) to prevent connection disruptions to active users.
+    # CPU threshold 70%: SSR workloads benefit from early scale-up to maintain response times.
+    # Memory threshold 80%: Next.js SSR can be memory-intensive; keep headroom.
+    scaling.policy/cpu-threshold: "70"
+    scaling.policy/memory-threshold: "80"
+    scaling.policy/scaleup-stabilization: "60s"
+    scaling.policy/scaledown-stabilization: "300s"
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -15,14 +24,12 @@ spec:
   minReplicas: 2
   maxReplicas: 8
   metrics:
-    # CPU-based scaling - primary metric
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
           averageUtilization: 70
-    # Memory-based scaling - secondary metric
     - type: Resource
       resource:
         name: memory
@@ -30,18 +37,16 @@ spec:
           type: Utilization
           averageUtilization: 80
   behavior:
-    # Scale UP quickly for traffic spikes
     scaleUp:
-      stabilizationWindowSeconds: 30
+      stabilizationWindowSeconds: 60
       policies:
         - type: Percent
           value: 50
-          periodSeconds: 30
+          periodSeconds: 60
         - type: Pods
           value: 2
-          periodSeconds: 30
+          periodSeconds: 60
       selectPolicy: Max
-    # Scale DOWN slowly to avoid flapping
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:

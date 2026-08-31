@@ -122,7 +122,7 @@ const PATIENT_ID = '507f1f77bcf86cd799439033';
 
 function makeToken(clinicId = CLINIC_A, role = 'DOCTOR') {
   return jwt.sign(
-    { userId: '507f1f77bcf86cd799439099', role, clinicId },
+    { userId: '507f1f77bcf86cd799439099', role, clinicId, jti: 'test-jti' },
     'test-access-secret-32-chars-long!!',
     { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
   );

@@ -1,0 +1,38 @@
+{
+  "bundles": [
+    {
+      "name": "main",
+      "maxSize": "100kb",
+      "description": "Main application bundle"
+    },
+    {
+      "name": "react-vendors",
+      "maxSize": "150kb",
+      "description": "React and React DOM"
+    },
+    {
+      "name": "vendors",
+      "maxSize": "300kb",
+      "description": "Third-party dependencies"
+    },
+    {
+      "name": "common",
+      "maxSize": "50kb",
+      "description": "Common shared code"
+    }
+  ],
+  "targets": {
+    "gzip": {
+      "main": "80kb",
+      "total": "600kb"
+    },
+    "brotli": {
+      "main": "70kb",
+      "total": "550kb"
+    }
+  },
+  "metrics": {
+    "trackingEnabled": true,
+    "reportDir": ".bundle-reports"
+  }
+}

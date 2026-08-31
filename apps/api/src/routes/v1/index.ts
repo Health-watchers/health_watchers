@@ -73,6 +73,7 @@ import scheduleRoutes from '../../modules/schedules/schedules.routes';
 import providerSchedulingRoutes from '../../modules/provider-scheduling/provider-scheduling.routes';
 import cdsRoutes from '../../modules/cds/cds.controller';
 import interactionRoutes from '../../modules/interactions/interaction.controller';
+import { telehealthRoutes } from '../../modules/telehealth/telehealth.controller';
 import { preAuthRoutes } from '../../modules/pre-auth/pre-auth.controller';
 import peerReviewsRouter from '../../modules/peer-reviews/peer-reviews.router';
 
@@ -98,6 +99,7 @@ import { auditRoutes } from '../../modules/audit/audit.controller';
 import { documentRoutes } from '../../modules/documents/documents.controller';
 import { documentManagementRoutes } from '../../modules/documents/documents-management.controller';
 import { notificationRoutes } from '../../modules/notifications/notifications.controller';
+import { notificationAdminRoutes } from '../../modules/notifications/notification-admin.controller';
 import { complianceRoutes } from '../../modules/compliance/compliance.controller';
 import { breachIncidentRoutes } from '../../modules/breach-incidents/breach-incidents.controller';
 import { cspReportRoutes } from '../../modules/security/csp-report.controller';
@@ -157,6 +159,9 @@ v1Router.use('/schedules', scheduleRoutes);
 v1Router.use('/provider-scheduling', providerSchedulingRoutes);
 v1Router.use('/cds', cdsRoutes);
 v1Router.use('/interactions', interactionRoutes);
+// #1249 — Telehealth: video visit lifecycle, secure meeting links,
+// consent-gated recording, transcription, in-meeting chat and archive.
+v1Router.use('/telehealth', telehealthRoutes);
 v1Router.use('/pre-auth', paymentLimiter, preAuthRoutes);
 v1Router.use('/peer-reviews', peerReviewsRouter);
 v1Router.use('/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
@@ -189,6 +194,9 @@ v1Router.use('/audit', auditRoutes);
 v1Router.use('/documents', documentRoutes);
 v1Router.use('/documents', documentManagementRoutes);
 v1Router.use('/notifications', notificationRoutes);
+// #1250 — Multi-channel notification delivery: preferences, templates,
+// delivery-status tracking and manual dispatch.
+v1Router.use('/notifications', notificationAdminRoutes);
 v1Router.use('/compliance', complianceRoutes);
 v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
 

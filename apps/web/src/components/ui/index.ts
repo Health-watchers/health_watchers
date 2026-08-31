@@ -23,3 +23,7 @@ export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
 export { Textarea, type TextareaProps } from './Textarea';
 export { PasswordInput, type PasswordInputProps } from './PasswordInput';
 export { OtpInput, type OtpInputProps } from './OtpInput';
+// Issue #1221 — Responsive Design System components
+export { ResponsiveContainer } from './ResponsiveContainer';
+export { ResponsiveGrid } from './ResponsiveGrid';
+export { ResponsiveStack } from './ResponsiveStack';

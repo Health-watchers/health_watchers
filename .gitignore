@@ -75,6 +75,7 @@ test-results*.json
 
 # Playwright test artifacts
 playwright-report/
+playwright-visual-report/
 test-results/
 blob-report/
 playwright/.cache/
