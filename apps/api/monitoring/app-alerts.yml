@@ -1,0 +1,91 @@
+# Application-wide monitoring and alerting rules: error rate, latency,
+# and uptime. Complements the job-specific rules in prometheus-alerts.yml
+# with alerts covering the whole API surface.
+#
+# Loaded by Prometheus via docker-compose.monitoring.yml rule_files.
+
+groups:
+  - name: application_health
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.02
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'API error rate above 2% over the last 5 minutes'
+          description: >
+            {{ $value | humanizePercentage }} of requests are returning 5xx
+            responses. Investigate recent deploys and downstream dependency
+            health before the error budget is exhausted.
+          runbook_url: 'https://wiki.internal/runbooks/high-error-rate'
+
+      - alert: ElevatedErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.005
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'API error rate above 0.5% over the last 5 minutes'
+
+      - alert: HighLatencyP99
+        expr: >
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'p99 request latency above 2s'
+          description: >
+            p99 latency is {{ $value }}s over the last 5 minutes. Check for
+            slow database queries, saturated connection pools, or downstream
+            timeouts.
+          runbook_url: 'https://wiki.internal/runbooks/high-latency'
+
+      - alert: HighLatencyP95
+        expr: >
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'p95 request latency above 1s'
+
+      - alert: ServiceDown
+        expr: up{job="health-watchers-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+          page: oncall
+        annotations:
+          summary: 'API service is down'
+          description: >
+            Prometheus has failed to scrape the API for over 1 minute.
+            Uptime target requires detection within 1 minute; page on-call
+            immediately.
+          runbook_url: 'https://wiki.internal/runbooks/service-down'
+
+      - alert: HealthCheckFailing
+        expr: probe_success{job="blackbox-healthcheck"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+          page: oncall
+        annotations:
+          summary: 'External health check endpoint failing'
+          description: >
+            The /health endpoint has failed synthetic checks for over 1
+            minute from the external blackbox exporter.
