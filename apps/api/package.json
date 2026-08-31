@@ -25,8 +25,8 @@
     "migrate:create": "migrate-mongo create"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.806.0",
-    "@aws-sdk/s3-request-presigner": "^3.806.0",
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@aws-sdk/s3-request-presigner": "^3.1116.0",
     "@google/generative-ai": "^0.24.1",
     "@health-watchers/anonymize": "*",
     "@health-watchers/config": "*",
@@ -34,8 +34,8 @@
     "@opentelemetry/auto-instrumentations-node": "^0.77.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
     "@opentelemetry/sdk-node": "^0.215.0",
-    "@sentry/node": "^8.0.0",
-    "@sentry/profiling-node": "^8.0.0",
+    "@sentry/node": "^8.55.2",
+    "@sentry/profiling-node": "^8.55.2",
     "@stellar/stellar-sdk": "^12.3.0",
     "@types/multer": "^2.1.0",
     "@types/nodemailer": "^8.0.0",

@@ -60,6 +60,8 @@ import {
   registerPaymentConfirmationListener,
   notifyApiOfPayment,
 } from './payment-stream.js';
+// #1082: Claimable Balances / Escrow Service
+import { ClaimableBalanceService } from './claimable-balances.js';
 // #998: Fee Calculator
 import {
   calculateBaseFee,
@@ -1732,6 +1734,113 @@ app.post('/batch/auto-flush/stop', requireSecret, (_req, res) => {
     return res.json({ success: true, message: 'Auto-flush stopped' });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Issue #1082 — Claimable Balances / Escrow (ClaimableBalanceService)
+// ============================================================
+
+const claimableBalanceService = new ClaimableBalanceService(
+  stellarConfig.horizonUrl,
+  getNetworkPassphrase()
+);
+
+// ✅ PROTECTED: POST /api/escrow/create — Create a claimable balance escrow
+app.post('/api/escrow/create', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const {
+      sourceSecretKey,
+      destinationPublicKey,
+      amount,
+      assetCode,
+      assetIssuer,
+      escrowTimeoutSeconds,
+    } = req.body;
+
+    if (!sourceSecretKey || !destinationPublicKey || !amount || !assetCode) {
+      return res.status(400).json({
+        error: 'sourceSecretKey, destinationPublicKey, amount, and assetCode are required',
+      });
+    }
+
+    const sourceKeypair = Keypair.fromSecret(sourceSecretKey);
+    const asset =
+      assetCode === 'XLM' || assetCode === 'native'
+        ? Asset.native()
+        : new Asset(assetCode, assetIssuer);
+
+    const result = await claimableBalanceService.createEscrow({
+      sourceKeypair,
+      destinationPublicKey,
+      amount,
+      asset,
+      escrowTimeoutSeconds,
+    });
+    recordSuccess();
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    recordFailure();
+    return res
+      .status(500)
+      .json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// ✅ PROTECTED: POST /api/escrow/claim — Claim a claimable balance
+app.post('/api/escrow/claim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { claimantSecretKey, balanceId } = req.body;
+
+    if (!claimantSecretKey || !balanceId) {
+      return res.status(400).json({ error: 'claimantSecretKey and balanceId are required' });
+    }
+
+    const claimantKeypair = Keypair.fromSecret(claimantSecretKey);
+    const result = await claimableBalanceService.claimBalance(claimantKeypair, balanceId);
+    recordSuccess();
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    recordFailure();
+    return res
+      .status(500)
+      .json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// ✅ PROTECTED: POST /api/escrow/refund — Refund escrow to source after expiry
+app.post('/api/escrow/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { sourceSecretKey, balanceId } = req.body;
+
+    if (!sourceSecretKey || !balanceId) {
+      return res.status(400).json({ error: 'sourceSecretKey and balanceId are required' });
+    }
+
+    const sourceKeypair = Keypair.fromSecret(sourceSecretKey);
+    const result = await claimableBalanceService.refundEscrow(sourceKeypair, balanceId);
+    recordSuccess();
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    recordFailure();
+    return res
+      .status(500)
+      .json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// ✅ PUBLIC: GET /api/escrow/:balanceId — Get claimable balance details
+app.get('/api/escrow/:balanceId', async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const balance = await claimableBalanceService.getBalance(decodeURIComponent(balanceId));
+    recordSuccess();
+    return res.json({ success: true, data: balance });
+  } catch (error) {
+    recordFailure();
+    return res
+      .status(404)
+      .json({ success: false, error: error instanceof Error ? error.message : 'Balance not found' });
   }
 });
 
