@@ -7,7 +7,55 @@ const config: Config = {
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
+    // Issue #1221: mobile-first container with per-breakpoint padding
+    container: {
+      center: true,
+      padding: {
+        DEFAULT: '1rem',
+        sm: '1.5rem',
+        lg: '2rem',
+        xl: '2rem',
+        '2xl': '2rem',
+      },
+    },
     extend: {
+      // Issue #1221: add xs breakpoint (480px) for fine-grained mobile control
+      screens: {
+        xs: '480px',
+      },
+      // Issue #1221: responsive typography scale
+      fontSize: {
+        '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
+        xs: ['0.75rem', { lineHeight: '1rem' }],
+        sm: ['0.875rem', { lineHeight: '1.25rem' }],
+        base: ['1rem', { lineHeight: '1.5rem' }],
+        lg: ['1.125rem', { lineHeight: '1.75rem' }],
+        xl: ['1.25rem', { lineHeight: '1.75rem' }],
+        '2xl': ['1.5rem', { lineHeight: '2rem' }],
+        '3xl': ['1.875rem', { lineHeight: '2.25rem' }],
+        '4xl': ['2.25rem', { lineHeight: '2.5rem' }],
+        '5xl': ['3rem', { lineHeight: '1.1' }],
+        '6xl': ['3.75rem', { lineHeight: '1.1' }],
+      },
+      // Issue #1221: extended spacing scale
+      spacing: {
+        '4.5': '1.125rem',
+        '13': '3.25rem',
+        '15': '3.75rem',
+        '18': '4.5rem',
+        '22': '5.5rem',
+        '26': '6.5rem',
+        '30': '7.5rem',
+        '34': '8.5rem',
+        '68': '17rem',
+        '76': '19rem',
+        '84': '21rem',
+        '88': '22rem',
+        '92': '23rem',
+        '100': '25rem',
+        '112': '28rem',
+        '128': '32rem',
+      },
       colors: {
         primary: {
           50: '#eff6ff',
