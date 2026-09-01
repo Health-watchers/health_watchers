@@ -1,0 +1,19 @@
+%% POST /payments sequence
+sequenceDiagram
+    actor Client
+    participant API as Express API
+    participant Stellar as Stellar Service
+    participant Horizon as Stellar Network (Horizon)
+    participant Recon as Reconciliation
+
+    Client->>API: POST /payments
+    API->>API: Validate amount, create invoice
+    API->>Stellar: Request payment submission
+    Stellar->>Stellar: Build transaction
+    Stellar->>Stellar: Multi-sig check
+    Stellar->>Horizon: Submit transaction
+    Horizon-->>Stellar: Transaction confirmed
+    Stellar-->>API: Payment confirmed
+    API-->>Client: 200 OK (payment confirmed)
+    Horizon->>Recon: Ledger transaction stream
+    Recon->>Recon: Daily reconciliation

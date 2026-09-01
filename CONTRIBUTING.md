@@ -283,6 +283,7 @@ Brief description of the changes
 - [ ] No new warnings generated
 - [ ] Tests pass locally
 - [ ] Dependent changes merged
+- [ ] If this PR changes system architecture, the relevant diagram(s) under `docs/diagrams/` (and their embeds in `docs/ARCHITECTURE.md`) are updated
 
 ## Related Issues
 Closes #(issue number)

@@ -26,7 +26,105 @@ async function findPatient(patientId: string, clinicId: string) {
   return PatientModel.findOne({ _id: patientId, clinicId, isActive: true });
 }
 
-// POST /api/v1/patients/:id/immunizations — Record immunization
+/**
+ * @swagger
+ * /patients/{id}/immunizations:
+ *   post:
+ *     summary: Record an immunization for a patient
+ *     description: Restricted to clinical staff (DOCTOR, NURSE, CLINIC_ADMIN, SUPER_ADMIN). The recording clinician is taken from the authenticated caller. The action is recorded in the audit log.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vaccineName, vaccineCode, administeredDate, doseNumber]
+ *             properties:
+ *               vaccineName: { type: string, maxLength: 200, example: 'DTaP' }
+ *               vaccineCode: { type: string, maxLength: 10, description: 'CVX code', example: '20' }
+ *               manufacturer: { type: string, maxLength: 200 }
+ *               lotNumber: { type: string, maxLength: 100 }
+ *               administeredDate: { type: string, format: date-time }
+ *               expiryDate: { type: string, format: date-time }
+ *               doseNumber: { type: integer, minimum: 1, maximum: 20, example: 1 }
+ *               seriesComplete: { type: boolean, default: false }
+ *               site:
+ *                 type: string
+ *                 enum: [Left deltoid, Right deltoid, Left thigh, Right thigh, Left arm, Right arm, Oral, Nasal, Other]
+ *               route:
+ *                 type: string
+ *                 enum: [Intramuscular, Subcutaneous, Intradermal, Oral, Intranasal, Intravenous]
+ *               adverseReaction:
+ *                 type: object
+ *                 required: [description, severity, onsetDate]
+ *                 properties:
+ *                   description: { type: string, maxLength: 1000 }
+ *                   severity: { type: string, enum: [mild, moderate, severe, life-threatening] }
+ *                   onsetDate: { type: string, format: date-time }
+ *                   resolvedDate: { type: string, format: date-time }
+ *                   reportedToVAERS: { type: boolean, default: false }
+ *               notes: { type: string, maxLength: 2000 }
+ *     responses:
+ *       201:
+ *         description: Immunization recorded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id: { type: string, example: '507f1f77bcf86cd799439011' }
+ *                     patientId: { type: string }
+ *                     clinicId: { type: string }
+ *                     vaccineName: { type: string }
+ *                     vaccineCode: { type: string }
+ *                     manufacturer: { type: string, nullable: true }
+ *                     lotNumber: { type: string, nullable: true }
+ *                     administeredDate: { type: string, format: date-time }
+ *                     expiryDate: { type: string, format: date-time, nullable: true }
+ *                     doseNumber: { type: integer }
+ *                     seriesComplete: { type: boolean }
+ *                     administeredBy: { type: string, description: 'User ObjectId of the administering clinician' }
+ *                     site: { type: string, nullable: true }
+ *                     route: { type: string, nullable: true }
+ *                     adverseReaction: { type: object, nullable: true }
+ *                     notes: { type: string, nullable: true }
+ *                     isActive: { type: boolean, example: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Caller lacks DOCTOR, NURSE, CLINIC_ADMIN, or SUPER_ADMIN role
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Patient not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
   '/',
   CLINICAL_ROLES,
@@ -146,7 +244,71 @@ router.post(
   })
 );
 
-// GET /api/v1/patients/:id/immunizations — List immunizations
+/**
+ * @swagger
+ * /patients/{id}/immunizations:
+ *   get:
+ *     summary: List a patient's immunization records
+ *     description: Returns active immunization records for the patient, scoped to the caller's clinic, newest administered date first.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - in: query
+ *         name: vaccineCode
+ *         schema: { type: string }
+ *         description: Filter by CVX code
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Paginated list of immunization records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       patientId: { type: string }
+ *                       vaccineName: { type: string }
+ *                       vaccineCode: { type: string }
+ *                       doseNumber: { type: integer }
+ *                       seriesComplete: { type: boolean }
+ *                       administeredDate: { type: string, format: date-time }
+ *                       administeredBy: { type: string }
+ *                 meta: { $ref: '#/components/schemas/PaginationMeta' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Patient not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/',
   validateRequest({ query: listImmunizationsQuerySchema }),
@@ -186,7 +348,66 @@ router.get(
   })
 );
 
-// GET /api/v1/patients/:id/immunizations/due — Get due vaccines
+/**
+ * @swagger
+ * /patients/{id}/immunizations/due:
+ *   get:
+ *     summary: Get due and overdue vaccines for a patient
+ *     description: Compares the patient's age and administered vaccines against the CDC ACIP recommended immunization schedule. Requires the patient's date of birth to be on file.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Due/overdue vaccine schedule
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     patientAgeMonths: { type: integer }
+ *                     overdueCount: { type: integer }
+ *                     dueCount: { type: integer }
+ *                     vaccines:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           vaccineName: { type: string }
+ *                           vaccineCode: { type: string }
+ *                           doseNumber: { type: integer }
+ *                           seriesTotal: { type: integer }
+ *                           category: { type: string, enum: [infant, child, adolescent, adult, travel, senior] }
+ *                           description: { type: string }
+ *                           status: { type: string, enum: [due, overdue] }
+ *                           dueAtAgeMonths: { type: integer }
+ *                           overdueAtAgeMonths: { type: integer }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Patient not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       422:
+ *         description: Patient date of birth is required to calculate due vaccines
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/due',
   asyncHandler(async (req: Request, res: Response) => {
@@ -229,7 +450,38 @@ router.get(
   })
 );
 
-// GET /api/v1/patients/:id/immunizations/certificate — Download PDF certificate
+/**
+ * @swagger
+ * /patients/{id}/immunizations/certificate:
+ *   get:
+ *     summary: Download a PDF immunization certificate for a patient
+ *     description: Streams a generated PDF certificate as an attachment. The download is recorded in the audit log.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: PDF certificate stream
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Patient not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/certificate',
   asyncHandler(async (req: Request, res: Response) => {
@@ -263,7 +515,64 @@ router.get(
   })
 );
 
-// GET /api/v1/patients/:id/immunizations/:immunizationId — Get single record
+/**
+ * @swagger
+ * /patients/{id}/immunizations/{immunizationId}:
+ *   get:
+ *     summary: Get a single immunization record
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *       - in: path
+ *         name: immunizationId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Immunization record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id: { type: string }
+ *                     patientId: { type: string }
+ *                     clinicId: { type: string }
+ *                     vaccineName: { type: string }
+ *                     vaccineCode: { type: string }
+ *                     manufacturer: { type: string, nullable: true }
+ *                     lotNumber: { type: string, nullable: true }
+ *                     administeredDate: { type: string, format: date-time }
+ *                     expiryDate: { type: string, format: date-time, nullable: true }
+ *                     doseNumber: { type: integer }
+ *                     seriesComplete: { type: boolean }
+ *                     administeredBy: { type: string }
+ *                     site: { type: string, nullable: true }
+ *                     route: { type: string, nullable: true }
+ *                     adverseReaction: { type: object, nullable: true }
+ *                     notes: { type: string, nullable: true }
+ *                     isActive: { type: boolean }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Immunization record not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/:immunizationId',
   asyncHandler(async (req: Request, res: Response) => {
@@ -285,7 +594,94 @@ router.get(
   })
 );
 
-// PUT /api/v1/patients/:id/immunizations/:immunizationId — Update record
+/**
+ * @swagger
+ * /patients/{id}/immunizations/{immunizationId}:
+ *   put:
+ *     summary: Update an immunization record
+ *     description: Restricted to clinical staff (DOCTOR, NURSE, CLINIC_ADMIN, SUPER_ADMIN). All fields are optional; only supplied fields are updated. The update is recorded in the audit log.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *       - in: path
+ *         name: immunizationId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vaccineName: { type: string, maxLength: 200 }
+ *               vaccineCode: { type: string, maxLength: 10 }
+ *               manufacturer: { type: string, maxLength: 200 }
+ *               lotNumber: { type: string, maxLength: 100 }
+ *               administeredDate: { type: string, format: date-time }
+ *               expiryDate: { type: string, format: date-time }
+ *               doseNumber: { type: integer, minimum: 1, maximum: 20 }
+ *               seriesComplete: { type: boolean }
+ *               site:
+ *                 type: string
+ *                 enum: [Left deltoid, Right deltoid, Left thigh, Right thigh, Left arm, Right arm, Oral, Nasal, Other]
+ *               route:
+ *                 type: string
+ *                 enum: [Intramuscular, Subcutaneous, Intradermal, Oral, Intranasal, Intravenous]
+ *               adverseReaction:
+ *                 type: object
+ *                 properties:
+ *                   description: { type: string, maxLength: 1000 }
+ *                   severity: { type: string, enum: [mild, moderate, severe, life-threatening] }
+ *                   onsetDate: { type: string, format: date-time }
+ *                   resolvedDate: { type: string, format: date-time }
+ *                   reportedToVAERS: { type: boolean }
+ *               notes: { type: string, maxLength: 2000 }
+ *     responses:
+ *       200:
+ *         description: Immunization record updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id: { type: string }
+ *                     vaccineName: { type: string }
+ *                     vaccineCode: { type: string }
+ *                     doseNumber: { type: integer }
+ *                     administeredDate: { type: string, format: date-time }
+ *                     administeredBy: { type: string }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Caller lacks DOCTOR, NURSE, CLINIC_ADMIN, or SUPER_ADMIN role
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Immunization record not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.put(
   '/:immunizationId',
   CLINICAL_ROLES,
@@ -330,7 +726,55 @@ router.put(
   })
 );
 
-// DELETE /api/v1/patients/:id/immunizations/:immunizationId — Soft delete
+/**
+ * @swagger
+ * /patients/{id}/immunizations/{immunizationId}:
+ *   delete:
+ *     summary: Soft-delete an immunization record
+ *     description: Restricted to clinical staff (DOCTOR, NURSE, CLINIC_ADMIN, SUPER_ADMIN). Sets isActive to false rather than removing the document. The deletion is recorded in the audit log.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *       - in: path
+ *         name: immunizationId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Immunization record deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     isActive: { type: boolean, example: false }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Caller lacks DOCTOR, NURSE, CLINIC_ADMIN, or SUPER_ADMIN role
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Immunization record not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.delete(
   '/:immunizationId',
   CLINICAL_ROLES,
@@ -364,7 +808,37 @@ router.delete(
   })
 );
 
-// GET /api/v1/immunizations/cvx-codes — CVX code lookup table
+/**
+ * @swagger
+ * /immunizations/cvx:
+ *   get:
+ *     summary: List the CVX vaccine code lookup table
+ *     description: Returns the platform's subset of CDC CVX (vaccine administered) codes used when recording immunizations.
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of CVX code/name pairs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code: { type: string, example: '20' }
+ *                       name: { type: string, example: 'DTaP' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 export const cvxCodesRouter = Router();
 cvxCodesRouter.use(authenticate);
 cvxCodesRouter.get(
@@ -375,7 +849,68 @@ cvxCodesRouter.get(
   })
 );
 
-// GET /api/v1/immunizations/overdue — List overdue immunizations
+/**
+ * @swagger
+ * /patients/{id}/immunizations/overdue:
+ *   get:
+ *     summary: List overdue immunizations across the clinic
+ *     description: >
+ *       Restricted to CLINIC_ADMIN and DOCTOR. Scans every active patient in the caller's clinic against the
+ *       compliance schedule and returns overdue doses, sorted by days overdue (descending). The `:id` path
+ *       segment is not used by this handler (route is defined on the same router as the patient-scoped
+ *       immunization endpoints).
+ *     tags: [Immunizations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 100 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *     responses:
+ *       200:
+ *         description: Overdue immunizations for the clinic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       patientId: { type: string }
+ *                       patientName: { type: string }
+ *                       vaccineName: { type: string }
+ *                       vaccineCode: { type: string }
+ *                       dueDate: { type: string, format: date-time }
+ *                       daysOverdue: { type: integer }
+ *                       attendingDoctorId: { type: string }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     limit: { type: integer }
+ *                     offset: { type: integer }
+ *                     total: { type: integer }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Caller lacks CLINIC_ADMIN or DOCTOR role
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
   '/overdue',
   requireRoles('CLINIC_ADMIN', 'DOCTOR'),

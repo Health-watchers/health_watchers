@@ -327,3 +327,9 @@ Import the collection and environment from [`docs/postman/`](./docs/postman/) to
 **Public workspace:** [Run in Postman](https://www.postman.com/health-watchers/workspace/health-watchers-api) *(publish via CI by setting `POSTMAN_API_KEY` and `POSTMAN_COLLECTION_UID` secrets)*
 
 The collection is validated on every PR and synced to the public workspace on every merge to `main` (see `.github/workflows/ci.yml` — `postman-sync` job).
+
+## Architecture Documentation
+
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full system design — component
+architecture, data flows, deployment topology, security, and observability — with diagrams
+rendered inline via Mermaid. The diagram sources live in [`docs/diagrams/`](./docs/diagrams/).
