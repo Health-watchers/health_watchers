@@ -389,6 +389,165 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # Stage 5b: Visual Regression Tests
+  visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 30
+    # Run on PRs targeting main/develop and on every push to main/develop.
+    # The job never blocks the deploy — it is informational on PRs so reviewers
+    # can inspect diffs before merging.
+    continue-on-error: true
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Install only the browsers used by the visual config (all three engines)
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: apps/web
+
+      # Restore cached baselines so PRs don't need to regenerate from scratch.
+      # The cache key is keyed on the snapshot directory tree checksum so it
+      # automatically invalidates when any baseline changes.
+      - name: Restore visual regression baselines cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        id: snapshot-cache
+        with:
+          path: apps/web/e2e/snapshots
+          key: visual-snapshots-${{ hashFiles('apps/web/e2e/snapshots/**/*.png') }}
+          restore-keys: |
+            visual-snapshots-
+
+      - name: Start API server
+        run: npm run dev --workspace=api &
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_visual
+          JWT_ACCESS_TOKEN_SECRET: visual-access-secret-32-chars-long!
+          JWT_REFRESH_TOKEN_SECRET: visual-refresh-secret-32-chars-!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: development
+          PORT: 3001
+
+      - name: Seed test data
+        run: npm run seed || echo "Seed script not found, skipping"
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_visual
+
+      - name: Start web server
+        run: npm run dev --workspace=web &
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+
+      - name: Wait for servers
+        run: npx wait-on http://localhost:3001/health http://localhost:3000 --timeout 60000
+
+      # If no baselines exist yet (first run or cache miss), generate them
+      - name: Generate initial baselines
+        if: steps.snapshot-cache.outputs.cache-hit != 'true'
+        run: |
+          npx playwright test --config=playwright.visual.config.ts \
+            --update-snapshots \
+            --project=chromium-desktop \
+            --project=chromium-desktop-dark \
+            --project=chromium-mobile
+        working-directory: apps/web
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          E2E_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          E2E_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      # Run visual regression tests against the baselines
+      - name: Run visual regression tests
+        run: |
+          npx playwright test --config=playwright.visual.config.ts \
+            --project=chromium-desktop \
+            --project=chromium-desktop-dark \
+            --project=chromium-mobile
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          E2E_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          E2E_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      # Generate the metrics report regardless of test outcome
+      - name: Generate visual metrics report
+        if: always()
+        run: node scripts/visual-metrics.mjs --print
+        working-directory: apps/web
+        continue-on-error: true
+
+      # Write a summary to the GitHub Actions job summary page
+      - name: Write job summary
+        if: always()
+        run: |
+          METRICS_FILE="apps/web/playwright-visual-report/visual-metrics.json"
+          if [ -f "$METRICS_FILE" ]; then
+            PASSED=$(node -e "const m=require('./apps/web/playwright-visual-report/visual-metrics.json'); console.log(m.passed)")
+            FAILED=$(node -e "const m=require('./apps/web/playwright-visual-report/visual-metrics.json'); console.log(m.failed)")
+            TOTAL=$(node -e "const m=require('./apps/web/playwright-visual-report/visual-metrics.json'); console.log(m.totalTests)")
+            RATE=$(node -e "const m=require('./apps/web/playwright-visual-report/visual-metrics.json'); console.log(m.passRate)")
+            {
+              echo "## 📸 Visual Regression Results"
+              echo ""
+              echo "| Status | Count |"
+              echo "|--------|-------|"
+              echo "| ✅ Passed  | ${PASSED} |"
+              echo "| ❌ Failed  | ${FAILED} |"
+              echo "| 📊 Total   | ${TOTAL}  |"
+              echo "| 📈 Pass rate | ${RATE} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$FAILED" -gt 0 ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "⚠️ Some snapshots differ from their baselines. Download the **visual-regression-report** artefact and review the diffs." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "To approve intentional changes, run locally:" >> "$GITHUB_STEP_SUMMARY"
+              echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+              echo "npm run test:visual:update --workspace=web  # regenerate baselines" >> "$GITHUB_STEP_SUMMARY"
+              echo "git add apps/web/e2e/snapshots && git commit -m 'chore: update visual baselines'" >> "$GITHUB_STEP_SUMMARY"
+              echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+        continue-on-error: true
+
+      # Upload the full HTML report and all diffs as an artefact
+      - name: Upload visual regression report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: visual-regression-report
+          path: |
+            apps/web/playwright-visual-report/
+          retention-days: 30
+
+      # On push to main, upload the updated snapshots too so they can be
+      # downloaded and committed to the repo if the run generated new baselines.
+      - name: Upload updated snapshots (main branch only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: visual-snapshots
+          path: apps/web/e2e/snapshots/
+          retention-days: 14
+
   # Stage 6: Deploy (main branch only)
   deploy-staging:
     name: Deploy to Staging

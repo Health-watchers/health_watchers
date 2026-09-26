@@ -113,11 +113,15 @@ const DISPUTE_ID = '507f1f77bcf86cd799439020';
 const INTENT_ID = 'intent-test-1';
 
 function makeToken(role = 'CLINIC_ADMIN') {
-  return jwt.sign({ userId: USER_ID, role, clinicId: CLINIC_ID }, 'test-access-secret', {
-    expiresIn: '15m',
-    issuer: 'health-watchers-api',
-    audience: 'health-watchers-client',
-  });
+  return jwt.sign(
+    { userId: USER_ID, role, clinicId: CLINIC_ID, jti: 'test-jti' },
+    'test-access-secret',
+    {
+      expiresIn: '15m',
+      issuer: 'health-watchers-api',
+      audience: 'health-watchers-client',
+    }
+  );
 }
 
 const mockPayment = {

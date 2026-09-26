@@ -165,3 +165,12 @@ export function useAppointmentEvents() {
 
   return events;
 }
+
+/** Returns the shared socket connection for this token (used by useRealtimeUpdates). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
+}

@@ -1,0 +1,74 @@
+{
+  "title": "Incident Tracking",
+  "uid": "hw-incident-tracking",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["health-watchers", "incidents"],
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "bargauge",
+      "title": "Firing Alerts by Severity",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) by (severity)",
+          "legendFormat": "{{ severity }}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 2,
+      "type": "bargauge",
+      "title": "Firing Alerts by Service",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) by (service)",
+          "legendFormat": "{{ service }}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Time in Firing State",
+      "description": "Seconds since each currently-active alert entered its current state (pending or firing), derived from ALERTS_FOR_STATE. Rising lines indicate an incident that has not yet been resolved.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "time() - ALERTS_FOR_STATE",
+          "legendFormat": "{{ alertname }} ({{ severity }})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "text",
+      "title": "Incident Response Runbooks",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Incident Response Runbooks\n\nWhen an alert fires, consult the matching runbook in `monitoring/runbooks/` for diagnosis and remediation steps:\n\n- **API_DOWN.md** — API service unreachable / health check failing\n- **HIGH_ERROR_RATE.md** — Elevated 5xx error rate on the API\n- **HIGH_LATENCY.md** — API request latency above SLO\n- **MONGODB_OPLOG_FULL.md** — MongoDB replica set oplog nearing capacity\n- **MONGODB_POOL_WAIT_QUEUE.md** — MongoDB connection pool wait queue backing up\n- **MONGODB_PRIMARY_DOWN.md** — MongoDB replica set primary unreachable\n- **MONGODB_REPLICATION_LAG.md** — MongoDB secondary falling behind primary\n- **MONGODB_SECONDARY_FALLING.md** — MongoDB secondary member unhealthy\n- **SECRETS_MANAGEMENT.md** — Secrets rotation / access incidents\n- **STELLAR_KEYPAIR_DECRYPTION_FAILURE.md** — Stellar keypair decryption failures\n\nRunbooks are versioned alongside this dashboard at `monitoring/runbooks/`."
+      }
+    }
+  ]
+}

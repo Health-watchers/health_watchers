@@ -12,13 +12,16 @@ alerting:
             - 'alertmanager:9093'
 
 rule_files:
+  - 'recording-rules.yml'
   - 'alerts.yml'
+  - 'alerts-application.yml'
   - 'alerts-payments.yml'
   - 'alerts-security.yml'
   - 'alerts-business.yml'
   - 'alerts-database-replication.yml'
   - 'alerts-secrets.yml'
   - 'alerts-disaster-recovery.yml'
+  - 'alerts-backup.yml'
   - 'alerts-cost.yml'
   - 'alerts-cdn.yml'
 

@@ -10,7 +10,7 @@ interface TimeSlot {
   booked?: boolean;
 }
 
-interface AppointmentDraft {
+export interface AppointmentDraft {
   patientId: string;
   doctorId: string;
   scheduledAt: string;
@@ -25,6 +25,9 @@ interface AppointmentBookingFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   doctors?: Array<{ id: string; name: string; specialty: string }>;
+  /** Pre-fills the form, e.g. when offering a slot to a waitlisted patient */
+  initialValues?: Partial<AppointmentDraft>;
+  submitLabel?: string;
 }
 
 const APPOINTMENT_TYPES = ['Office visit', 'Telemedicine', 'Follow-up', 'Initial consultation'];
@@ -35,8 +38,11 @@ export function AppointmentBookingForm({
   onCancel,
   isLoading,
   doctors = [],
+  initialValues,
+  submitLabel = 'Confirm Appointment',
 }: AppointmentBookingFormProps) {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const initialDate = initialValues?.scheduledAt ? new Date(initialValues.scheduledAt) : new Date();
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [draft, setDraft] = useState<AppointmentDraft>({
     patientId: '',
@@ -46,7 +52,12 @@ export function AppointmentBookingForm({
     type: APPOINTMENT_TYPES[0],
     isTelemedicine: false,
     chiefComplaint: '',
+    ...initialValues,
   });
+  const appointmentTypes =
+    initialValues?.type && !APPOINTMENT_TYPES.includes(initialValues.type)
+      ? [initialValues.type, ...APPOINTMENT_TYPES]
+      : APPOINTMENT_TYPES;
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -139,24 +150,40 @@ export function AppointmentBookingForm({
           <label htmlFor="doctor-id" className="mb-2 block text-sm font-medium text-gray-900">
             Clinician *
           </label>
-          <select
-            id="doctor-id"
-            value={draft.doctorId}
-            onChange={(e) => {
-              setDraft((prev) => ({ ...prev, doctorId: e.target.value }));
-              if (errors.doctorId) setErrors((prev) => ({ ...prev, doctorId: '' }));
-            }}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.doctorId ? 'border-red-500' : 'border-gray-300'
-            }`}
-          >
-            <option value="">Select a clinician</option>
-            {doctors.map((doctor) => (
-              <option key={doctor.id} value={doctor.id}>
-                Dr. {doctor.name} ({doctor.specialty})
-              </option>
-            ))}
-          </select>
+          {doctors.length === 0 ? (
+            <input
+              id="doctor-id"
+              type="text"
+              value={draft.doctorId}
+              onChange={(e) => {
+                setDraft((prev) => ({ ...prev, doctorId: e.target.value }));
+                if (errors.doctorId) setErrors((prev) => ({ ...prev, doctorId: '' }));
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.doctorId ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="Enter clinician ID"
+            />
+          ) : (
+            <select
+              id="doctor-id"
+              value={draft.doctorId}
+              onChange={(e) => {
+                setDraft((prev) => ({ ...prev, doctorId: e.target.value }));
+                if (errors.doctorId) setErrors((prev) => ({ ...prev, doctorId: '' }));
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.doctorId ? 'border-red-500' : 'border-gray-300'
+              }`}
+            >
+              <option value="">Select a clinician</option>
+              {doctors.map((doctor) => (
+                <option key={doctor.id} value={doctor.id}>
+                  Dr. {doctor.name} ({doctor.specialty})
+                </option>
+              ))}
+            </select>
+          )}
           {errors.doctorId && <p className="mt-1 text-xs text-red-600">{errors.doctorId}</p>}
         </div>
       </div>
@@ -173,7 +200,7 @@ export function AppointmentBookingForm({
             onChange={(e) => setDraft((prev) => ({ ...prev, type: e.target.value }))}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {APPOINTMENT_TYPES.map((type) => (
+            {appointmentTypes.map((type) => (
               <option key={type} value={type}>
                 {type}
               </option>
@@ -260,7 +287,7 @@ export function AppointmentBookingForm({
           disabled={isLoading}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {isLoading ? 'Booking...' : 'Confirm Appointment'}
+          {isLoading ? 'Booking...' : submitLabel}
         </button>
       </div>
     </form>

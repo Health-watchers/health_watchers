@@ -46,3 +46,44 @@ export function objectsToCsv(rows: Record<string, unknown>[]): string {
 
   return lines.join('\n');
 }
+
+/**
+ * Parses CSV text into rows of string cells (RFC 4180: quoted fields,
+ * escaped quotes, CRLF). Blank lines are dropped.
+ */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell);
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+}

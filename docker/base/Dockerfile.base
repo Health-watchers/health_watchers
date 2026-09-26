@@ -1,0 +1,27 @@
+# Shared base image with common Node.js dependencies, used as the first
+# stage for both apps/api and apps/web multi-stage builds. Building this
+# once and pulling it from cache avoids re-installing shared deps
+# (typescript, prisma/migrate-mongo CLIs, etc) on every service build.
+#
+# Build:
+#   docker buildx build -f docker/base/Dockerfile.base -t health-watchers/node-base:20 .
+
+# syntax=docker/dockerfile:1.7
+
+FROM node:20-alpine AS base
+
+RUN apk add --no-cache libc6-compat python3 make g++ \
+  && corepack enable \
+  && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Common dev/build tooling shared across services, cached as its own layer.
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g typescript@5 turbo@2
+
+ENV NODE_ENV=production \
+    PNPM_HOME="/pnpm" \
+    PATH="/pnpm:$PATH"
+
+LABEL org.opencontainers.image.description="Shared base image for Health Watchers Node services"

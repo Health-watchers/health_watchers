@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { type Patient, formatDate } from '@health-watchers/types';
 import {
@@ -16,6 +16,10 @@ import PatientImport from '@/components/patients/PatientImport';
 import { usePatients, type PatientFilters } from '@/lib/queries/usePatients';
 import { SearchTips } from '@/components/patients/SearchTips';
 import { DuplicateDetectionWarning } from '@/components/patients/DuplicateDetectionWarning';
+import { createGroup, evaluateFilter, isEmptyGroup } from '@/lib/filters/engine';
+import { PATIENT_FILTER_FIELDS } from '@/lib/filters/fields';
+import type { FilterGroup } from '@/lib/filters/types';
+import FilterBuilder from '@/components/patients/FilterBuilder';
 
 interface Labels {
   title: string;
@@ -89,6 +93,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const [filterGroup, setFilterGroup] = useState<FilterGroup>(() => createGroup('and'));
   const debounceTimer = useRef<NodeJS.Timeout>();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -100,6 +105,16 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
     ...appliedFilters,
     q: searchQuery,
   });
+
+  const visiblePatients = useMemo(
+    () =>
+      evaluateFilter(
+        patients as unknown as Array<Record<string, unknown>>,
+        isEmptyGroup(filterGroup) ? null : filterGroup,
+        PATIENT_FILTER_FIELDS
+      ) as unknown as Array<Patient & { riskLevel?: RiskLevel; riskScore?: number }>,
+    [patients, filterGroup]
+  );
 
   useEffect(() => {
     const loadSearchHistory = () => {
@@ -139,10 +154,10 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   };
 
   const exportToCSV = () => {
-    if (patients.length === 0) return;
+    if (visiblePatients.length === 0) return;
 
     const headers = ['ID', 'First Name', 'Last Name', 'DOB', 'Sex', 'Contact', 'Risk Level'];
-    const rows = patients.map((p: Patient & { riskLevel?: string }) => [
+    const rows = visiblePatients.map((p: Patient & { riskLevel?: string }) => [
       p.systemId || '',
       p.firstName || '',
       p.lastName || '',
@@ -194,7 +209,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           {labels.title}
         </h1>
         <div className="flex flex-wrap gap-2">
-          {patients.length > 0 && (
+          {visiblePatients.length > 0 && (
             <Button
               onClick={exportToCSV}
               variant="outline"
@@ -206,7 +221,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           <Link
             href="/patients/new"
             id="register-new-patient-btn"
-            className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 active:bg-primary-800"
+            className="bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-500 active:bg-primary-800 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           >
             <span aria-hidden="true">+</span>
             {labels.registerNew}
@@ -214,9 +229,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         </div>
       </div>
 
-      {patients.length > 0 && (
+      {visiblePatients.length > 0 && (
         <DuplicateDetectionWarning
-          patients={patients.map((p) => ({
+          patients={visiblePatients.map((p) => ({
             ...p,
             matchScore: 0.8,
           }))}
@@ -239,7 +254,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 onFocus={() => setShowSearchHistory(true)}
                 onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
                 placeholder={`${labels.search} by name, ID, or medical condition`}
-                className="focus:border-primary-400 w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-700 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-100 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-400 dark:focus:ring-primary-900/50"
+                className="focus:border-primary-400 focus:ring-primary-100 dark:focus:ring-primary-900/50 w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-700 placeholder-neutral-500 focus:outline-none focus:ring-2 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-400"
                 aria-label={labels.search}
               />
               <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-2">
@@ -467,6 +482,15 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               </div>
             </div>
           )}
+
+          <div className="border-t border-gray-200 pt-4">
+            <FilterBuilder
+              fields={PATIENT_FILTER_FIELDS}
+              records={patients as unknown as Array<Record<string, unknown>>}
+              group={filterGroup}
+              onChange={setFilterGroup}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -476,7 +500,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             </span>
           )}
           <p className="text-sm text-gray-500">
-            Showing {patients.length} patient{patients.length !== 1 ? 's' : ''}
+            Showing {visiblePatients.length} patient{visiblePatients.length !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
@@ -488,7 +512,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           message={error instanceof Error ? error.message : 'Failed to load patients.'}
           onRetry={() => window.location.reload()}
         />
-      ) : patients.length === 0 ? (
+      ) : visiblePatients.length === 0 ? (
         <ModuleEmptyState
           module="patients"
           action={
@@ -505,7 +529,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
       ) : (
         <SectionErrorBoundary name="patient list">
           <div className="flex flex-col gap-4 md:hidden">
-            {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
+            {visiblePatients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
                 <div className="mb-3 flex items-center gap-3">
                   <PatientThumbnail
@@ -575,43 +599,47 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
-                  <tr key={p._id} className="even:bg-gray-50">
-                    <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      <PatientThumbnail
-                        patientId={String(p._id)}
-                        firstName={p.firstName}
-                        lastName={p.lastName}
-                        thumbnailUrl={(p as any).thumbnailUrl}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.firstName} {p.lastName}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {formatDate(p.dateOfBirth)}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
-                    <td className="border border-gray-200 px-4 py-2">{p.contactNumber || 'N/A'}</td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.riskLevel ? (
-                        <Badge variant={riskVariant(p.riskLevel)}>
-                          {p.riskLevel}
-                          {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
-                        {labels.view}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {visiblePatients.map(
+                  (p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
+                    <tr key={p._id} className="even:bg-gray-50">
+                      <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        <PatientThumbnail
+                          patientId={String(p._id)}
+                          firstName={p.firstName}
+                          lastName={p.lastName}
+                          thumbnailUrl={(p as any).thumbnailUrl}
+                          size="sm"
+                        />
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        {p.firstName} {p.lastName}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        {formatDate(p.dateOfBirth)}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        {p.contactNumber || 'N/A'}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        {p.riskLevel ? (
+                          <Badge variant={riskVariant(p.riskLevel)}>
+                            {p.riskLevel}
+                            {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2">
+                        <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
+                          {labels.view}
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>

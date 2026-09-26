@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { authenticate } from '@/middleware/auth';
-import { authorize } from '@/middleware/authorization';
-import { validateRequest } from '@/middleware/validation';
+import { authenticate } from '@/middlewares/auth.middleware';
+import { authorize } from '@/middlewares/rbac.middleware';
+import { validateRequest } from '@/middlewares/validate.middleware';
 import { z } from 'zod';
 
 const router = Router();

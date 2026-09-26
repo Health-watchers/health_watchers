@@ -78,6 +78,8 @@ const navItems: NavItem[] = [
   {
     label: 'Inbox',
     href: '/inbox',
+    label: 'Lab Results',
+    href: '/lab-results',
     icon: (
       <svg
         className="h-5 w-5"
@@ -116,6 +118,15 @@ const navItems: NavItem[] = [
       </svg>
     ),
     roles: ['CLINIC_ADMIN', 'DOCTOR'],
+          d="M9 3v6.172a2 2 0 01-.586 1.414L4.293 14.707A2 2 0 005.707 18h12.586a2 2 0 001.414-3.293l-4.121-4.121A2 2 0 0115 9.172V3M8 3h8"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE'],
+          d="M9 3v6.5L4.2 18a2 2 0 001.7 3h12.2a2 2 0 001.7-3L15 9.5V3M8 3h8m-5 9h2"
+        />
+      </svg>
+    ),
   },
   {
     label: 'Payments',
@@ -139,6 +150,27 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR'],
   },
   {
+    label: 'Billing',
+    href: '/billing',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
     label: 'Appointments',
     href: '/appointments',
     icon: (
@@ -154,6 +186,26 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  },
+  {
+    label: 'Schedules',
+    href: '/schedules',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
     ),
@@ -219,6 +271,26 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    label: 'Medications',
+    href: '/medications',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m0-18h10a2 2 0 012 2v14a2 2 0 01-2 2H9m0-18v18M13 8h4m-4 4h4m-4 4h4"
+        />
+      </svg>
+    ),
+  },
+  {
     label: 'Settings',
     href: '/settings',
     icon: (
@@ -246,8 +318,29 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
+    label: 'Compliance',
+    href: '/compliance',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
     label: 'Audit Log',
-    href: '/audit-log',
+    href: '/compliance/audit-logs',
     icon: (
       <svg
         className="h-5 w-5"

@@ -1,92 +1,180 @@
-# Mutation Testing Guide — Issue #1034
+# Mutation Testing Guide
 
-Mutation testing measures how well the test suite catches real bugs by injecting small code changes ("mutants") and checking whether tests fail.
+Mutation testing measures how well the test suite catches real bugs. Stryker injects small, deliberate code changes ("mutants") and checks whether at least one test fails. A mutant that survives means a change to production code went undetected — a genuine test gap.
 
-## Tool
+---
 
-We use [Stryker Mutator](https://stryker-mutator.io/) with the `@stryker-mutator/jest-runner` adapter.
+## Tool stack
 
-## Quick Start
+| Package | Role |
+|---------|------|
+| `@stryker-mutator/core` v8.7.1 | Runner orchestrator |
+| `@stryker-mutator/jest-runner` v8.7.1 | Jest adapter |
+| `@stryker-mutator/typescript-checker` v8.7.1 | Compile-time filter (skips mutants that don't type-check) |
+
+---
+
+## Quick start
 
 ```bash
-# Run mutation tests (from repo root or apps/api/)
+# From repo root
 npm run test:mutation --workspace=api
 
-# Analyze results after the run
-node apps/api/scripts/analyze-mutation-results.js
+# Analyse results after the run
+npm run test:mutation:analyze --workspace=api
 ```
 
-## Configuration
+Both commands run from `apps/api/`. The second reads
+`apps/api/reports/mutation/mutation.json` and prints a per-file score table
+plus a list of surviving mutants.
+
+---
+
+## Configuration files
 
 | File | Purpose |
 |------|---------|
-| `apps/api/stryker.config.json` | Stryker configuration (mutated modules, thresholds, reporters) |
-| `apps/api/jest.mutation.config.cjs` | Jest config scoped to mutation-relevant tests |
-| `apps/api/scripts/analyze-mutation-results.js` | Post-run analyzer: surfaces surviving mutants and weak areas |
+| `apps/api/stryker.config.json` | Main Stryker config — mutated modules, thresholds, reporters |
+| `apps/api/jest.mutation.config.cjs` | Jest config scoped to mutation-relevant tests (CJS, no coverage) |
+| `apps/api/scripts/analyze-mutation-results.js` | Post-run analyser — per-file breakdown, surviving mutants, exit code |
 
-### Mutated modules
+### stryker.config.json key settings
 
-| Module | Why it matters |
-|--------|---------------|
-| `modules/auth/token.service.ts` | JWT signing / verification — critical security path |
-| `modules/auth/jwt-claim-validator.ts` | Claim validation logic |
-| `services/token-denylist.service.ts` | Token invalidation after logout |
-| `modules/auth/services/backup-code.service.ts` | MFA backup code logic |
-| `utils/paginate.ts` | Pagination — off-by-one errors are classic mutation survivors |
-| `utils/sanitize.ts` | Input sanitisation |
-| `lib/encrypt.ts` | AES-GCM PHI encryption |
-| `modules/patients/duplicate-detection.service.ts` | Business-critical deduplication |
+```jsonc
+{
+  "coverageAnalysis": "perTest",   // only run tests that cover a mutant
+  "ignoreStatic":     true,        // skip mutations in static initialisers
+  "concurrency":      2,           // parallel worker count
+  "timeoutMS":        60000,       // per-mutant test timeout
+  "timeoutFactor":    1.5          // multiplier over baseline test time
+}
+```
+
+---
+
+## Mutated modules
+
+These are the files Stryker targets, chosen because mutations in them are the
+most likely to represent real production bugs that tests should catch.
+
+| Module | Why it's included |
+|--------|------------------|
+| `modules/auth/token.service.ts` | JWT signing and verification — critical security path |
+| `modules/auth/jwt-claim-validator.ts` | Claim field validation; wrong logic lets bad tokens through |
+| `modules/auth/services/backup-code.service.ts` | MFA backup code hashing and comparison |
+| `services/token-denylist.service.ts` | Token invalidation after logout; survivors mean sessions can't be revoked |
+| `modules/patients/duplicate-detection.service.ts` | Business-critical deduplication — off-by-one survivors cause duplicate records |
+| `utils/paginate.ts` | Offset/limit arithmetic — classic source of off-by-one survivors |
+| `utils/sanitize.ts` | Input sanitisation; survivors mean malicious input can pass through |
+| `lib/encrypt.ts` | AES-GCM PHI encryption — any survivor here is a HIPAA risk |
 | `utils/app-error.ts` | Error classification used across all error handlers |
 
-### Thresholds
+---
+
+## Score thresholds
+
+Configured in `stryker.config.json`:
 
 | Level | Value | Effect |
 |-------|-------|--------|
-| `high` | 80 % | Green badge |
-| `low` | 60 % | Orange warning |
-| `break` | 50 % | CI fails |
+| `high` | 80 % | Stryker prints a green badge |
+| `low` | 60 % | Stryker prints an orange warning |
+| `break` | 50 % | Stryker exits non-zero — **CI pipeline fails** |
+
+The `analyze-mutation-results.js` script applies an independent `--threshold`
+flag (default 60, CI passes `--threshold 80`) and exits 1 when the score is
+below it. This is how the **>80 % acceptance criterion** is enforced.
+
+---
 
 ## Reports
 
-After a run, reports are written to `apps/api/reports/mutation/`:
+After every run, Stryker writes to `apps/api/reports/mutation/`:
 
 | File | Description |
 |------|-------------|
-| `mutation.html` | Interactive HTML report — open in browser |
-| `mutation.json` | Machine-readable JSON — consumed by `analyze-mutation-results.js` |
+| `mutation.html` | Interactive HTML report — click any mutant to see the diff |
+| `mutation.json` | Machine-readable report consumed by `analyze-mutation-results.js` |
 
-## Adding a New Module to Mutation Testing
+Open `mutation.html` in a browser to navigate surviving mutants by file. Each
+entry shows the original code, the mutation applied, and which tests ran.
 
-1. Add the path to the `mutate` array in `stryker.config.json`.
+---
+
+## Mutant statuses
+
+| Status | Meaning |
+|--------|---------|
+| `Killed` | At least one test failed when this mutant was active — good |
+| `Survived` | No test detected the change — test gap, needs fixing |
+| `NoCoverage` | No test even executes this code — dead code or missing test |
+| `Timeout` | Test timed out under the mutant — counted as killed |
+| `Ignored` | Excluded via `// Stryker disable` comment |
+| `CompileError` | TypeScript checker rejected the mutant — not counted |
+
+---
+
+## Adding a new module
+
+1. Add the source path to the `mutate` array in `stryker.config.json`.
 2. Add the matching test glob to `testMatch` in `jest.mutation.config.cjs`.
-3. Run `npm run test:mutation --workspace=api` to verify the new module is picked up.
-4. Run `node apps/api/scripts/analyze-mutation-results.js` to check the score.
-5. If surviving mutants are reported, strengthen tests for those specific code paths.
+3. Run the suite locally to confirm the module appears in the report.
+4. If surviving mutants appear, add targeted tests before merging (see the
+   [Best Practices guide](./mutation-best-practices.md)).
 
-## Interpreting Surviving Mutants
+---
 
-A **surviving mutant** means a change to production code was not caught by any test.
+## Interpreting surviving mutants
 
-Common patterns and fixes:
+```
+• src/utils/paginate.ts:14:18  [ConditionalExpression]
+  Replaced (offset + limit) <= total with true
+```
 
-| Mutant type | Common cause | Fix |
-|------------|-------------|-----|
-| `ConditionalExpression` | Missing boundary test (e.g. `>` vs `>=`) | Add edge-case test for the exact boundary value |
-| `EqualityOperator` | No test for the failing/passing threshold | Add both sides of the equality |
-| `LogicalOperator` | `&&` changed to `\|\|` not detected | Test when only one condition is true |
-| `StringLiteral` | Error message not asserted | Assert on `message` in the test |
-| `ArithmeticOperator` | Calculation not validated precisely | Add numeric precision assertions |
+This means the condition on line 14 was replaced with `true` and no test
+failed. The fix: add a test where `offset + limit > total` and assert the
+result is capped correctly.
 
-## CI Integration
+Common patterns:
 
-Mutation tests run on every PR via `.github/workflows/ci.yml`.  
-The `analyze-mutation-results.js` script exits 1 if the score drops below `break` (50 %), causing the pipeline to fail.
+| Mutant type | Root cause | Typical fix |
+|-------------|-----------|-------------|
+| `ConditionalExpression` | Missing boundary test | Add a test for the exact threshold value (both sides) |
+| `EqualityOperator` | No test for the failing case | Test `===` vs `!==` explicitly |
+| `LogicalOperator` | `&&`/`\|\|` not distinguished | Test where only one operand is true |
+| `ArithmeticOperator` | Computed value not asserted | Add a numeric precision assertion |
+| `BlockStatement` | Side-effect never verified | Assert observable state change when block executes |
+| `BooleanLiteral` | Flag not verified | Flip flag in test and assert different behaviour |
+| `UpdateOperator` | Counter not tested at boundaries | Test loop counter at 0, 1, and max |
 
-## Regression Workflow
+For a full pattern catalogue see [mutation-best-practices.md](./mutation-best-practices.md).
 
-If a surviving mutant is found:
+---
 
-1. Identify the location from the HTML report or `analyze-mutation-results.js` output.
-2. Write a failing test that exercises the mutated line.
-3. Verify the test kills the mutant by re-running `npm run test:mutation --workspace=api`.
-4. Commit the new test and confirm CI is green.
+## Regression workflow
+
+When a surviving mutant is found:
+
+1. Open the HTML report and locate the mutant (file, line, diff).
+2. Write a test that fails when the mutation is active.
+   - Focus the test on the **specific condition**, not just general behaviour.
+   - Use `expect(...).toBe(exactValue)` rather than truthiness checks.
+3. Re-run `npm run test:mutation --workspace=api` to confirm the mutant is now
+   killed.
+4. Commit the test. CI will verify the score gate before merge.
+
+---
+
+## CI integration
+
+Mutation tests run on every push/PR that touches a mutated module, via
+`.github/workflows/mutation-tests.yml`. The workflow:
+
+1. Runs `stryker run` (full suite).
+2. Uploads `mutation.html` and `mutation.json` as artifacts (retained 30 days).
+3. Runs `analyze-mutation-results.js --threshold 80` — exits 1 if score < 80 %.
+4. Prints a score summary to the job log.
+
+See [mutation-score-tracking.md](./mutation-score-tracking.md) for details on
+score history and enforcement, and [mutation-incremental.md](./mutation-incremental.md)
+for the incremental (PR-only diff) workflow.

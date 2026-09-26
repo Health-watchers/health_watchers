@@ -7,6 +7,8 @@ export interface BAA extends Document {
   signedDate?: Date;
   expiryDate?: Date;
   documentUrl?: string;
+  documentStorageKey?: string;
+  documentFileName?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +22,8 @@ const baaSchema = new Schema<BAA>(
     signedDate: Date,
     expiryDate: Date,
     documentUrl: String,
+    documentStorageKey: String,
+    documentFileName: String,
     notes: String,
   },
   { timestamps: true }

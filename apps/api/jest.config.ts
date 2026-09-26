@@ -30,6 +30,9 @@ const config: Config = {
     '^pino-http$': `${srcRoot}/__mocks__/pino-http.ts`,
     // Mock Sentry profiling native binary — not available in test environments
     '^@sentry/profiling-node$': `${srcRoot}/__mocks__/sentry-profiling-node.ts`,
+    // Mock @stellar/stellar-sdk — the real package ships ESM that ts-jest
+    // cannot parse; the API only uses it for clinic keypair generation.
+    '^@stellar/stellar-sdk$': `${srcRoot}/__mocks__/stellar-sdk.ts`,
   },
 
   // Tell Jest to look in the API workspace's node_modules first, then the root

@@ -3,7 +3,7 @@ import {
   advancedRateLimiting,
   SubscriptionTier,
 } from '../../services/advanced-rate-limiting.service';
-import { requireAuth } from '../../middlewares/auth.middleware';
+import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
 import { requireRole } from '../../middlewares/role.middleware';
 import logger from '../../utils/logger';
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { authenticate } from '@/middleware/auth';
-import { authorize } from '@/middleware/authorization';
+import { authenticate } from '@/middlewares/auth.middleware';
+import { authorize } from '@/middlewares/rbac.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,

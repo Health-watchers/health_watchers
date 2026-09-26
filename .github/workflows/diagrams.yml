@@ -1,0 +1,50 @@
+name: Diagrams
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'docs/diagrams/**'
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  validate-diagrams:
+    name: Validate Mermaid Diagrams
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint each diagram with mermaid-cli
+        run: |
+          shopt -s nullglob
+          files=(docs/diagrams/*.mmd)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .mmd files found under docs/diagrams/"
+            exit 1
+          fi
+
+          status=0
+          for f in "${files[@]}"; do
+            echo "::group::Validating $f"
+            if npx mmdc -i "$f" -o /tmp/out.svg; then
+              echo "✓ $f is valid"
+            else
+              echo "✗ $f failed to render" >&2
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+
+          exit $status

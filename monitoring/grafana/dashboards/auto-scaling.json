@@ -1,0 +1,490 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Prometheus --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Kubernetes HPA auto-scaling monitoring for Health Watchers services",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 9 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "{{horizontalpodautoscaler}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Replica Count",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * kube_horizontalpodautoscaler_status_target_metric_value{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\", metric_name=\"cpu\"}",
+          "legendFormat": "CPU {{horizontalpodautoscaler}}",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Utilization %",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * kube_horizontalpodautoscaler_status_target_metric_value{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\", metric_name=\"memory\"}",
+          "legendFormat": "Memory {{horizontalpodautoscaler}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Utilization %",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "Replicas",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 8 },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": ["min", "max", "last"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "Current — {{horizontalpodautoscaler}}",
+          "refId": "A"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "Min — {{horizontalpodautoscaler}}",
+          "refId": "B"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "Max — {{horizontalpodautoscaler}}",
+          "refId": "C"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_status_desired_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "Desired — {{horizontalpodautoscaler}}",
+          "refId": "D"
+        }
+      ],
+      "title": "Replica History",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "id": 5,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{namespace=~\"$namespace\"} |= \"HorizontalPodAutoscaler\" |~ \"(Scaled|ScaleUp|ScaleDown|SuccessfulRescale|DesiredReplicas)\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Scale Events",
+      "type": "logs"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "Utilization %",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 65 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * avg by (horizontalpodautoscaler) (kube_horizontalpodautoscaler_status_target_metric_value{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\", metric_name=\"cpu\"})",
+          "legendFormat": "CPU — {{horizontalpodautoscaler}}",
+          "refId": "A"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "100 * avg by (horizontalpodautoscaler) (kube_horizontalpodautoscaler_status_target_metric_value{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\", metric_name=\"memory\"})",
+          "legendFormat": "Memory — {{horizontalpodautoscaler}}",
+          "refId": "B"
+        }
+      ],
+      "title": "CPU & Memory Utilization History",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OK", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "AT MAX", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"} >= kube_horizontalpodautoscaler_spec_max_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}",
+          "legendFormat": "{{horizontalpodautoscaler}}",
+          "refId": "A"
+        }
+      ],
+      "title": "At Max Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 8 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "id": 8,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "increase(kube_horizontalpodautoscaler_status_current_replicas{namespace=~\"$namespace\", horizontalpodautoscaler=~\"$deployment\"}[1h])",
+          "legendFormat": "Scale events (1h)",
+          "refId": "A"
+        }
+      ],
+      "title": "Scale Events (1h)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["autoscaling", "kubernetes", "health-watchers"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "health-watchers",
+          "value": "health-watchers"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(kube_horizontalpodautoscaler_info, namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_horizontalpodautoscaler_info, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(kube_horizontalpodautoscaler_info{namespace=~\"$namespace\"}, horizontalpodautoscaler)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Deployment (HPA)",
+        "multi": true,
+        "name": "deployment",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_horizontalpodautoscaler_info{namespace=~\"$namespace\"}, horizontalpodautoscaler)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Auto-Scaling Dashboard",
+  "uid": "autoscaling-001",
+  "version": 1
+}
