@@ -42,6 +42,27 @@ export const queryKeys = {
     list: (status?: string) => [...queryKeys.preAuth.all, 'list', status] as const,
     detail: (id: string) => [...queryKeys.preAuth.all, 'detail', id] as const,
   },
+  waitlist: {
+    all: ['waitlist'] as const,
+    list: (status: string) => [...queryKeys.waitlist.all, 'list', status] as const,
+  },
+  recurringPayments: {
+    all: ['recurring-payments'] as const,
+    list: () => [...queryKeys.recurringPayments.all, 'list'] as const,
+  },
+  batchPayments: {
+    all: ['batch-payments'] as const,
+    detail: (batchId: string) => [...queryKeys.batchPayments.all, 'detail', batchId] as const,
+  },
+  billing: {
+    all: ['billing'] as const,
+    counts: () => [...queryKeys.billing.all, 'counts'] as const,
+    claims: (status: string, page: number) =>
+      [...queryKeys.billing.all, 'claims', status, page] as const,
+    claim: (id: string) => [...queryKeys.billing.all, 'claim', id] as const,
+    unbilled: () => [...queryKeys.billing.all, 'unbilled'] as const,
+    aging: () => [...queryKeys.billing.all, 'aging'] as const,
+  },
   communications: {
     all: ['communications'] as const,
     byPatient: (patientId: string, params?: Record<string, string>) =>

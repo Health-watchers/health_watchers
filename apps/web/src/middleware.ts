@@ -7,7 +7,7 @@ const ONBOARDING_PATH = '/onboarding';
 const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
 const PORTAL_PUBLIC = ['/portal/login'];
 
-const ADMIN_PATHS = ['/settings', '/reports', '/users'];
+const ADMIN_PATHS = ['/settings', '/reports', '/users', '/billing'];
 const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
 
 function isStaffPublic(pathname: string): boolean {

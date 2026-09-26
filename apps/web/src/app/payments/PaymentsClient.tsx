@@ -9,7 +9,13 @@ import {
   PageWrapper,
   PageHeader,
   SectionErrorBoundary,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
 } from '@/components/ui';
+import { RecurringPaymentsPanel } from '@/components/payments/RecurringPaymentsPanel';
+import { BatchPaymentsPanel } from '@/components/payments/BatchPaymentsPanel';
 import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
 import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
 import { Button } from '@/components/ui/Button';
@@ -51,9 +57,28 @@ function hasPendingPayments(payments: Payment[]): boolean {
   return payments.some((p) => p.status === 'pending');
 }
 
+type PaymentsTab = 'payments' | 'recurring' | 'batch';
+const TABS: PaymentsTab[] = ['payments', 'recurring', 'batch'];
+
 export default function PaymentsClient() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [tab, setTab] = useState<PaymentsTab>('payments');
+
+  // Deep link: /payments?tab=recurring | batch
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab') as PaymentsTab;
+    if (TABS.includes(requested)) setTab(requested);
+  }, []);
+
+  const changeTab = (next: string) => {
+    const value = TABS.includes(next as PaymentsTab) ? (next as PaymentsTab) : 'payments';
+    setTab(value);
+    const url = new URL(window.location.href);
+    if (value === 'payments') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', value);
+    window.history.replaceState(null, '', url);
+  };
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const { data: payments = [], isLoading, error } = usePayments(hasPendingPayments([]));
@@ -146,32 +171,54 @@ export default function PaymentsClient() {
         </div>
       </div>
 
-      {(isLoading || pollingLoading) && !displayPayments.length && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="flex items-center gap-3 py-8 text-neutral-500"
-        >
-          <span
-            className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
-            aria-hidden="true"
-          />
-          <span>Loading payments...</span>
-        </div>
-      )}
+      <Tabs value={tab} onValueChange={changeTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="recurring">Recurring</TabsTrigger>
+          <TabsTrigger value="batch">Batch</TabsTrigger>
+        </TabsList>
 
-      {error && (
-        <ErrorMessage
-          message={getPaymentsErrorMessage(error)}
-          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })}
-        />
-      )}
+        <TabsContent value="recurring">
+          <SectionErrorBoundary name="recurring payments">
+            <RecurringPaymentsPanel />
+          </SectionErrorBoundary>
+        </TabsContent>
 
-      {!isLoading && !error && (
-        <SectionErrorBoundary name="payment panel">
-          <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
-        </SectionErrorBoundary>
-      )}
+        <TabsContent value="batch">
+          <SectionErrorBoundary name="batch payments">
+            <BatchPaymentsPanel />
+          </SectionErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="payments">
+          {(isLoading || pollingLoading) && !displayPayments.length && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-3 py-8 text-neutral-500"
+            >
+              <span
+                className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
+                aria-hidden="true"
+              />
+              <span>Loading payments...</span>
+            </div>
+          )}
+
+          {error && (
+            <ErrorMessage
+              message={getPaymentsErrorMessage(error)}
+              onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })}
+            />
+          )}
+
+          {!isLoading && !error && (
+            <SectionErrorBoundary name="payment panel">
+              <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+            </SectionErrorBoundary>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Intent">
         <PaymentIntentForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
