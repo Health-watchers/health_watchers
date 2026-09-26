@@ -7,14 +7,17 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
 import { detectCriticalValues } from './critical-value.service';
 import { createNotification } from '../notifications/notification.service';
-import { emitToUser } from '@api/realtime/socket';
+import { emitToClinic, emitToUser } from '@api/realtime/socket';
 import { AuditLogModel } from '../audit/audit-log.model';
 import { sendEmail } from '@api/lib/email.service';
 import { UserModel } from '../auth/models/user.model';
+import { PatientModel } from '../patients/models/patient.model';
+import logger from '@api/utils/logger';
 import {
   orderLabResultSchema,
   enterLabResultsSchema,
   listLabResultsQuerySchema,
+  reviewLabResultSchema,
   idParamSchema,
 } from './lab-results.validation';
 
@@ -181,10 +184,13 @@ router.get(
   '/',
   validateRequest({ query: listLabResultsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { patientId, status, from, to } = req.query as Record<string, string>;
+    const { patientId, status, from, to, reviewed, isCritical, includePatient } =
+      req.query as Record<string, string>;
     const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
     if (patientId) filter.patientId = patientId;
     if (status) filter.status = status;
+    if (reviewed) filter.reviewedAt = { $exists: reviewed === 'true' };
+    if (isCritical) filter.isCritical = isCritical === 'true';
     if (from || to) {
       filter.orderedAt = {};
       if (from) (filter.orderedAt as any).$gte = new Date(from);
@@ -198,11 +204,33 @@ router.get(
     }
     const { page, limit } = pagination;
     const result = await paginate(LabResultModel, filter, page, limit, { orderedAt: -1 });
-    return res.json({
-      status: 'success',
-      data: result.data.map((d: any) => toLabResultResponse(d, req.user!.role)),
-      meta: result.meta,
-    });
+    const data = result.data.map((d: any) => toLabResultResponse(d, req.user!.role));
+
+    // Worklists need patient names; batch-load them instead of one request per row
+    if (includePatient === 'true' && data.length) {
+      const patients = await PatientModel.find({
+        _id: { $in: Array.from(new Set(data.map((d) => d.patientId))) },
+        clinicId: req.user!.clinicId,
+      })
+        .select('firstName lastName systemId')
+        .lean();
+      const byId = new Map(patients.map((p: any) => [String(p._id), p]));
+      return res.json({
+        status: 'success',
+        data: data.map((d) => {
+          const p = byId.get(d.patientId);
+          return p
+            ? {
+                ...d,
+                patient: { firstName: p.firstName, lastName: p.lastName, systemId: p.systemId },
+              }
+            : d;
+        }),
+        meta: result.meta,
+      });
+    }
+
+    return res.json({ status: 'success', data, meta: result.meta });
   })
 );
 
@@ -461,13 +489,16 @@ router.put(
           metadata: { labResultId: doc._id, isCritical: true },
         });
 
-        // Emit Socket.IO event
+        // Emit Socket.IO event to the ordering clinician and the clinic-wide worklist
         try {
-          emitToUser(String(doc.orderedBy), 'lab:critical', {
+          const payload = {
             labResultId: doc._id,
+            patientId: String(doc.patientId),
             reason: criticalReason,
             testName: doc.testName,
-          });
+          };
+          emitToUser(String(doc.orderedBy), 'lab:critical', payload);
+          emitToClinic(String(doc.clinicId), 'lab:critical', payload);
         } catch {
           // Socket may not be initialized
         }
@@ -491,6 +522,18 @@ router.put(
           outcome: 'SUCCESS',
           metadata: { reason: criticalReason },
         });
+      }
+    }
+
+    if (!isCritical) {
+      try {
+        emitToClinic(String(doc.clinicId), 'lab:resulted', {
+          labResultId: doc._id,
+          patientId: String(doc.patientId),
+          testName: doc.testName,
+        });
+      } catch {
+        // Socket may not be initialized
       }
     }
 
@@ -578,6 +621,46 @@ router.post(
     });
 
     return res.json({ status: 'success', data: toLabResultResponse(doc, req.user!.role) });
+  })
+);
+
+// POST /api/v1/lab-results/:id/review — Mark a resulted lab as reviewed (optional comment)
+router.post(
+  '/:id/review',
+  CLINICAL_ROLES,
+  validateRequest({ params: idParamSchema, body: reviewLabResultSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const existing = await LabResultModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      status: 'resulted',
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'NotFound', message: 'Resulted lab result not found' });
+    }
+
+    const now = new Date();
+    existing.reviewedBy = req.user!.userId as any;
+    existing.reviewedAt = now;
+    existing.reviewComment = req.body.comment || undefined;
+    // Reviewing a critical result also acknowledges it
+    if (existing.isCritical && !existing.criticalAcknowledgedAt) {
+      existing.criticalAcknowledgedBy = req.user!.userId as any;
+      existing.criticalAcknowledgedAt = now;
+    }
+    await existing.save();
+
+    await AuditLogModel.create({
+      userId: req.user!.userId,
+      clinicId: req.user!.clinicId,
+      action: 'UPDATE',
+      resourceType: 'LabResult',
+      resourceId: String(existing._id),
+      ipAddress: req.ip ?? 'unknown',
+      userAgent: req.get('user-agent') ?? 'unknown',
+    }).catch((err) => logger.error({ err }, 'Failed to write lab review audit log'));
+
+    return res.json({ status: 'success', data: toLabResultResponse(existing, req.user!.role) });
   })
 );
 

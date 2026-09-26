@@ -18,6 +18,9 @@ export interface LabResultResponse {
   criticalReason?: string;
   criticalAcknowledgedAt?: string;
   criticalAcknowledgedBy?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewComment?: string;
   orderedAt: string;
   resultedAt?: string;
   createdAt: string;
@@ -49,6 +52,9 @@ export function toLabResultResponse(
     criticalAcknowledgedBy: doc.criticalAcknowledgedBy
       ? String(doc.criticalAcknowledgedBy)
       : undefined,
+    reviewedAt: doc.reviewedAt instanceof Date ? doc.reviewedAt.toISOString() : doc.reviewedAt,
+    reviewedBy: doc.reviewedBy ? String(doc.reviewedBy) : undefined,
+    reviewComment: doc.reviewComment,
     orderedAt: doc.orderedAt instanceof Date ? doc.orderedAt.toISOString() : doc.orderedAt,
     resultedAt: doc.resultedAt instanceof Date ? doc.resultedAt.toISOString() : doc.resultedAt,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,

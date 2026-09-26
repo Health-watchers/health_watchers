@@ -31,6 +31,23 @@ export const queryKeys = {
   labResults: {
     all: ['lab-results'] as const,
     byPatient: (patientId: string) => [...queryKeys.labResults.all, 'patient', patientId] as const,
+    worklist: () => [...queryKeys.labResults.all, 'worklist'] as const,
+  },
+  compliance: {
+    all: ['compliance'] as const,
+    breachIncidents: () => [...queryKeys.compliance.all, 'breach-incidents'] as const,
+    baas: () => [...queryKeys.compliance.all, 'baas'] as const,
+  },
+  auditLogs: {
+    all: ['audit-logs'] as const,
+    list: (query: string) => [...queryKeys.auditLogs.all, 'list', query] as const,
+  },
+  schedules: {
+    all: ['schedules'] as const,
+    staff: (from: string, to: string) => [...queryKeys.schedules.all, 'staff', from, to] as const,
+  },
+  staff: {
+    all: ['staff'] as const,
   },
   invoices: {
     all: ['invoices'] as const,

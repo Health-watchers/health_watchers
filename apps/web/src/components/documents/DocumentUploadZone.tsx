@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
+import { csrfHeader } from '@/lib/api';
 
 const ALLOWED_TYPES = new Set([
   'application/pdf',
@@ -14,9 +15,18 @@ const ALLOWED_EXTS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.dcm']);
 const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 
 export interface DocumentUploadZoneProps {
-  patientId: string;
-  clinicId: string;
-  onUploaded: () => void;
+  patientId?: string;
+  clinicId?: string;
+  /** Endpoint that receives the multipart upload. Defaults to the patient documents API. */
+  uploadUrl?: string;
+  /** Additional multipart fields sent with the file. */
+  extraFields?: Record<string, string>;
+  /** Selectable document types; the picker is hidden when there is one or none. */
+  documentTypes?: readonly string[];
+  /** Human-readable hint shown under the drop target. */
+  hint?: string;
+  accept?: string;
+  onUploaded: (uploaded?: unknown) => void;
 }
 
 function validateFile(file: File): string | null {
@@ -37,6 +47,17 @@ const DOCUMENT_TYPES = [
   'medical_image',
   'other',
 ] as const;
+
+export function DocumentUploadZone({
+  patientId,
+  clinicId,
+  uploadUrl = '/api/v1/documents/upload',
+  extraFields,
+  documentTypes = DOCUMENT_TYPES,
+  hint = 'PDF, JPEG, PNG, DICOM — max 20 MB',
+  accept = '.pdf,.jpg,.jpeg,.png,.dcm',
+  onUploaded,
+}: DocumentUploadZoneProps) {
 type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export function DocumentUploadZone({ patientId, clinicId, onUploaded }: DocumentUploadZoneProps) {
@@ -44,7 +65,9 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [docType, setDocType] = useState<DocumentType>('other');
+  const [docType, setDocType] = useState<string>(
+    documentTypes.includes('other') ? 'other' : (documentTypes[0] ?? '')
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -84,13 +107,15 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
     try {
       const form = new FormData();
       form.append('file', file);
-      form.append('patientId', patientId);
-      form.append('clinicId', clinicId);
-      form.append('documentType', docType);
+      if (patientId) form.append('patientId', patientId);
+      if (clinicId) form.append('clinicId', clinicId);
+      if (docType) form.append('documentType', docType);
+      Object.entries(extraFields ?? {}).forEach(([key, value]) => form.append(key, value));
 
-      const res = await fetch('/api/v1/documents/upload', {
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         credentials: 'include',
+        headers: csrfHeader(),
         body: form,
       });
 
@@ -99,9 +124,10 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
         throw new Error(data.message ?? `Upload failed (${res.status})`);
       }
 
+      const uploaded = await res.json().catch(() => undefined);
       setFile(null);
       if (inputRef.current) inputRef.current.value = '';
-      onUploaded();
+      onUploaded(uploaded);
     } catch (err: any) {
       setUploadError(err.message ?? 'Upload failed');
     } finally {
@@ -142,12 +168,12 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
         <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
           {file ? file.name : 'Drag & drop a file, or click to browse'}
         </p>
-        <p className="mt-1 text-xs text-neutral-500">PDF, JPEG, PNG, DICOM — max 20 MB</p>
+        <p className="mt-1 text-xs text-neutral-500">{hint}</p>
         <input
           ref={inputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.jpg,.jpeg,.png,.dcm"
+          accept={accept}
           onChange={(e) => handleFiles(e.target.files)}
         />
       </div>
@@ -156,6 +182,24 @@ export function DocumentUploadZone({ patientId, clinicId, onUploaded }: Document
 
       {file && (
         <div className="flex items-center gap-3">
+          {documentTypes.length > 1 && (
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                Document Type
+              </label>
+              <select
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+                className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+              >
+                {documentTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex-1">
             <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
               Document Type
