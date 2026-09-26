@@ -64,6 +64,14 @@ export interface IClinicSettings {
     defaultStrategy: 'auto' | 'slow' | 'standard' | 'fast';
     highValueThresholdXlm: number;
   };
+  /**
+   * Clinic opt-in for features that send clinical data (including audio) to the external AI
+   * provider. Off by default — nothing leaves the platform until an admin enables it.
+   */
+  ai: {
+    enabled: boolean;
+    voiceDictation: boolean;
+  };
 }
 
 const clinicSettingsSchema = new Schema<IClinicSettings>(
@@ -115,6 +123,10 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
         default: 'auto',
       },
       highValueThresholdXlm: { type: Number, default: 1000 },
+    },
+    ai: {
+      enabled: { type: Boolean, default: false },
+      voiceDictation: { type: Boolean, default: false },
     },
   },
   { timestamps: true, versionKey: false }

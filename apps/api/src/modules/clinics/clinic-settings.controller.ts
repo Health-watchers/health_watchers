@@ -186,6 +186,7 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
       notifications,
       branding,
       feeOptimization,
+      ai,
     } = req.body;
 
     if (timezone && !isValidTimezone(timezone)) {
@@ -203,6 +204,13 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
     if (notifications !== undefined) update.notifications = notifications;
     if (branding !== undefined) update.branding = branding;
     if (feeOptimization !== undefined) update.feeOptimization = feeOptimization;
+    if (ai !== undefined) {
+      if (typeof ai !== 'object' || ai === null) {
+        return res.status(400).json({ error: 'BadRequest', message: 'ai must be an object' });
+      }
+      if (ai.enabled !== undefined) update['ai.enabled'] = Boolean(ai.enabled);
+      if (ai.voiceDictation !== undefined) update['ai.voiceDictation'] = Boolean(ai.voiceDictation);
+    }
 
     const settings = await ClinicSettingsModel.findOneAndUpdate(
       { clinicId },

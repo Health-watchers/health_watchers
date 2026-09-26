@@ -44,6 +44,10 @@ interface ClinicSettings {
     signatureName?: string;
     signatureTitle?: string;
   };
+  ai?: {
+    enabled: boolean;
+    voiceDictation: boolean;
+  };
 }
 
 async function fetchSettings(): Promise<ClinicSettings> {
@@ -437,6 +441,54 @@ export default function ClinicSettingsClient() {
                 })
               }
             />
+          </label>
+        </section>
+
+        {/* ── AI features ── */}
+        <section style={sectionStyle}>
+          <h2 style={sectionTitle}>AI features</h2>
+          <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+            These features send clinical content to an external AI provider. They are off until you
+            enable them.
+          </p>
+          <label
+            style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <input
+              type="checkbox"
+              checked={merged.ai?.enabled ?? false}
+              onChange={(e) =>
+                update({
+                  ai: {
+                    enabled: e.target.checked,
+                    voiceDictation: e.target.checked ? (merged.ai?.voiceDictation ?? false) : false,
+                  },
+                })
+              }
+            />
+            Enable AI features for this clinic
+          </label>
+          <label
+            style={{
+              ...labelStyle,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: '0.5rem',
+              opacity: merged.ai?.enabled ? 1 : 0.5,
+            }}
+          >
+            <input
+              type="checkbox"
+              disabled={!merged.ai?.enabled}
+              checked={merged.ai?.voiceDictation ?? false}
+              onChange={(e) =>
+                update({
+                  ai: { enabled: merged.ai?.enabled ?? false, voiceDictation: e.target.checked },
+                })
+              }
+            />
+            Voice dictation in SOAP notes (audio is processed by the browser’s speech service or the
+            clinic’s AI transcription provider)
           </label>
         </section>
 

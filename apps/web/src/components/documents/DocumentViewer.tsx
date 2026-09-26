@@ -17,6 +17,20 @@ export interface Document {
 interface DocumentViewerProps {
   document: Document | null;
   onClose: () => void;
+  /**
+   * Direct file URL (e.g. a portal message attachment) — skips the document-download lookup.
+   * Only http(s) URLs are rendered.
+   */
+  src?: string;
+}
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url, window.location.href);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -25,7 +39,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ document, onClose, src }: DocumentViewerProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +47,18 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
   useEffect(() => {
     if (!document) {
       setUrl(null);
+      return;
+    }
+
+    if (src !== undefined) {
+      setLoading(false);
+      if (isSafeUrl(src)) {
+        setError(null);
+        setUrl(src);
+      } else {
+        setUrl(null);
+        setError('This attachment link is not a valid web address.');
+      }
       return;
     }
 
@@ -44,7 +70,7 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
       .then((data) => setUrl(data.data?.url ?? null))
       .catch((err) => setError(err.message ?? 'Failed to load document'))
       .finally(() => setLoading(false));
-  }, [document]);
+  }, [document, src]);
 
   if (!document) return null;
 
@@ -58,10 +84,12 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
           <span>
             Type: <span className="capitalize">{document.documentType.replace(/_/g, ' ')}</span>
           </span>
-          <span>Size: {formatBytes(document.sizeBytes)}</span>
-          <span>
-            Version: {document.currentVersion} of {document.versionCount}
-          </span>
+          {document.sizeBytes > 0 && <span>Size: {formatBytes(document.sizeBytes)}</span>}
+          {src === undefined && (
+            <span>
+              Version: {document.currentVersion} of {document.versionCount}
+            </span>
+          )}
           <span>Uploaded: {new Date(document.createdAt).toLocaleDateString()}</span>
         </div>
 

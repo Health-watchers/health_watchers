@@ -75,6 +75,8 @@ import cdsRoutes from '../../modules/cds/cds.controller';
 import interactionRoutes from '../../modules/interactions/interaction.controller';
 import { preAuthRoutes } from '../../modules/pre-auth/pre-auth.controller';
 import peerReviewsRouter from '../../modules/peer-reviews/peer-reviews.router';
+import { surveyRoutes } from '../../modules/surveys/surveys.controller';
+import { inboxRoutes } from '../../modules/inbox/inbox.controller';
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 import paymentsRouter from '../../modules/payments/payments.routes';
@@ -159,6 +161,8 @@ v1Router.use('/cds', cdsRoutes);
 v1Router.use('/interactions', interactionRoutes);
 v1Router.use('/pre-auth', paymentLimiter, preAuthRoutes);
 v1Router.use('/peer-reviews', peerReviewsRouter);
+v1Router.use('/surveys', surveyRoutes);
+v1Router.use('/inbox', inboxRoutes);
 v1Router.use('/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 v1Router.use('/dashboard', dashboardRoutes);
 

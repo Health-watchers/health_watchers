@@ -9,6 +9,8 @@ import { createNotification } from '../notifications/notification.service';
 
 const router = Router();
 
+const CATEGORY_KEYS = ['documentation', 'diagnosis', 'treatment', 'followUp'] as const;
+
 // POST /peer-reviews — CLINIC_ADMIN assigns an encounter for peer review
 router.post(
   '/',
@@ -86,6 +88,8 @@ router.get(
     const filter: Record<string, unknown> = {
       reviewerId: new Types.ObjectId(req.user!.userId),
       clinicId: new Types.ObjectId(req.user!.clinicId),
+      // Never surface a clinician's own encounter as something they can review
+      revieweeId: { $ne: new Types.ObjectId(req.user!.userId) },
     };
     if (status) {
       if (!ALLOWED_STATUSES.has(status)) {
@@ -104,18 +108,53 @@ router.get(
   }
 );
 
+// GET /peer-reviews/received — completed reviews of the current clinician's encounters
+router.get(
+  '/received',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    const reviews = await PeerReviewModel.find({
+      revieweeId: new Types.ObjectId(req.user!.userId),
+      clinicId: new Types.ObjectId(req.user!.clinicId),
+      status: 'completed',
+    })
+      .populate('encounterId', 'chiefComplaint patientId createdAt status')
+      .populate('reviewerId', 'fullName role')
+      .sort({ completedAt: -1 })
+      .lean();
+
+    // Strip reviewer identity from anonymous reviews before it leaves the server
+    const data = reviews.map((r: any) => (r.isAnonymous ? { ...r, reviewerId: null } : r));
+
+    return res.json({ status: 'success', data });
+  }
+);
+
 // PUT /peer-reviews/:id — submit a review (reviewer only)
 router.put(
   '/:id',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN'),
   async (req: Request, res: Response) => {
-    const { rating, feedback, categories } = req.body;
+    const { rating, feedback, categories, requiresFollowUp } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return res
         .status(400)
         .json({ error: 'BadRequest', message: 'rating must be between 1 and 5' });
+    }
+
+    if (categories !== undefined) {
+      const invalid = CATEGORY_KEYS.some((k) => {
+        const v = categories?.[k];
+        return v !== undefined && (!Number.isInteger(v) || v < 1 || v > 5);
+      });
+      if (invalid || typeof categories !== 'object' || categories === null) {
+        return res
+          .status(400)
+          .json({ error: 'BadRequest', message: 'category scores must be between 1 and 5' });
+      }
     }
 
     const review = await PeerReviewModel.findOne({
@@ -132,9 +171,25 @@ router.put(
       return res.status(409).json({ error: 'Conflict', message: 'Review already completed' });
     }
 
+    // A clinician may never score their own encounter — check both the stored reviewee and
+    // the encounter's current attending doctor in case the encounter was reassigned.
+    const encounter = await EncounterModel.findById(review.encounterId, {
+      attendingDoctorId: 1,
+    }).lean();
+    if (
+      String(review.revieweeId) === req.user!.userId ||
+      (encounter && String(encounter.attendingDoctorId) === req.user!.userId)
+    ) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You cannot review your own encounter',
+      });
+    }
+
     review.rating = rating;
-    review.feedback = feedback;
+    review.feedback = typeof feedback === 'string' ? feedback.slice(0, 5000) : undefined;
     review.categories = categories;
+    review.requiresFollowUp = Boolean(requiresFollowUp);
     review.status = 'completed';
     review.completedAt = new Date();
     await review.save();
@@ -177,6 +232,8 @@ router.get(
           avgDiagnosis: { $avg: '$categories.diagnosis' },
           avgTreatment: { $avg: '$categories.treatment' },
           avgFollowUp: { $avg: '$categories.followUp' },
+          followUpCount: { $sum: { $cond: ['$requiresFollowUp', 1, 0] } },
+          lastReviewedAt: { $max: '$completedAt' },
         },
       },
       {
