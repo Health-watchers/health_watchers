@@ -83,18 +83,10 @@ export function SessionTimeoutWarning() {
           inactivity. Click continue to stay logged in.
         </p>
         <div className="mt-6 flex gap-3">
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="flex-1"
-          >
+          <Button variant="outline" onClick={handleLogout} className="flex-1">
             Sign out
           </Button>
-          <Button
-            variant="primary"
-            onClick={handleContinue}
-            className="flex-1"
-          >
+          <Button variant="primary" onClick={handleContinue} className="flex-1">
             Continue
           </Button>
         </div>

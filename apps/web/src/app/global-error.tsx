@@ -32,14 +32,14 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               {error.message || 'A critical error occurred. Please try again.'}
             </p>
             {error.digest && (
-              <div className="rounded-md bg-neutral-50 p-3 font-mono text-xs break-all text-neutral-500">
+              <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500">
                 Request ID: {error.digest}
               </div>
             )}
             <div className="flex flex-col gap-3 pt-2">
               <button
                 onClick={reset}
-                className="bg-primary-600 hover:bg-primary-700 w-full rounded-md px-4 py-2 font-medium text-white transition-colors"
+                className="w-full rounded-md bg-primary-600 px-4 py-2 font-medium text-white transition-colors hover:bg-primary-700"
               >
                 Try Again
               </button>

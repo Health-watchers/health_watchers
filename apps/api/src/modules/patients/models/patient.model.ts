@@ -234,26 +234,14 @@ function decryptDoc(doc: unknown) {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function encryptUpdatePayload(update: Record<string, unknown>) {
-  const target = isRecord(update.$set) ? update.$set : update;
-  for (const field of PHI_FIELDS) {
-    const value = target[field];
-    if (typeof value === 'string') target[field] = encrypt(value);
-  }
-}
-
-patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, unknown>;
-  if (update) encryptUpdatePayload(update);
-});
-
 patientSchema.pre('updateMany', function () {
-  const update = this.getUpdate() as Record<string, unknown>;
-  if (update) encryptUpdatePayload(update);
+  const update = this.getUpdate() as Record<string, unknown> | null;
+  if (!update) return;
+  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+  for (const field of PHI_FIELDS) {
+    const val = target[field];
+    if (typeof val === 'string') target[field] = encrypt(val);
+  }
 });
 
 patientSchema.post('save', function () {

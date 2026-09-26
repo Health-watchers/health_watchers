@@ -29,12 +29,7 @@ export async function runMfaGracePeriodReminderTick(): Promise<void> {
     }).select('email fullName mfaGracePeriodEndsAt');
 
     for (const user of users) {
-      sendMfaGracePeriodReminderEmail(
-        user.email,
-        user.fullName,
-        days,
-        user.mfaGracePeriodEndsAt!
-      );
+      sendMfaGracePeriodReminderEmail(user.email, user.fullName, days, user.mfaGracePeriodEndsAt!);
       logger.info({ userId: user.id, days }, '[mfa-grace-period-job] reminder sent');
     }
   }

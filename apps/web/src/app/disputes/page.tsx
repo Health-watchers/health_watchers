@@ -127,7 +127,7 @@ export default function DisputesPage() {
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
                 {['Payment ID', 'Patient', 'Reason', 'Status', 'Opened', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium">
@@ -141,7 +141,7 @@ export default function DisputesPage() {
                 <tr key={d._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs">{d.paymentIntentId.slice(0, 14)}…</td>
                   <td className="px-4 py-3 text-gray-700">{d.patientId}</td>
-                  <td className="px-4 py-3 text-gray-700 capitalize">
+                  <td className="px-4 py-3 capitalize text-gray-700">
                     {d.reason.replace(/_/g, ' ')}
                   </td>
                   <td className="px-4 py-3">

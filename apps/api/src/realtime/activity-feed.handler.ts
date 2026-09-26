@@ -38,7 +38,10 @@ export class ActivityFeedHandler {
   /**
    * Add activity to patient's feed
    */
-  static addActivity(patientId: string, activity: Omit<ActivityFeedEntry, 'id' | 'timestamp'>): ActivityFeedEntry {
+  static addActivity(
+    patientId: string,
+    activity: Omit<ActivityFeedEntry, 'id' | 'timestamp'>
+  ): ActivityFeedEntry {
     const entry: ActivityFeedEntry = {
       ...activity,
       id: `activity_${Date.now()}_${Math.random()}`,

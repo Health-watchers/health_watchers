@@ -66,7 +66,7 @@ export function CDSRuleTester({ rule, onBack }: CDSRuleTesterProps) {
 
   return (
     <div className="space-y-6">
-      <button onClick={onBack} className="text-primary-600 hover:text-primary-700 text-sm">
+      <button onClick={onBack} className="text-sm text-primary-600 hover:text-primary-700">
         ← Back to Rules
       </button>
 

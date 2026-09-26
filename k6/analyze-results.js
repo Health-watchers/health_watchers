@@ -91,10 +91,7 @@ export function analyzeResults(summaryFilePath) {
 if (process.argv[2]) {
   const analysis = analyzeResults(process.argv[2]);
   console.log(JSON.stringify(analysis, null, 2));
-  fs.writeFileSync(
-    process.argv[3] || 'load-test-analysis.json',
-    JSON.stringify(analysis, null, 2)
-  );
+  fs.writeFileSync(process.argv[3] || 'load-test-analysis.json', JSON.stringify(analysis, null, 2));
 }
 
 export default analyzeResults;

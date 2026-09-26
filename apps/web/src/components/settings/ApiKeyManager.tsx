@@ -128,7 +128,7 @@ export default function ApiKeyManager() {
             Save your API key — it will only be shown once.
           </p>
           <div className="mt-2 flex items-center gap-3">
-            <code className="flex-1 rounded bg-yellow-100 px-3 py-2 font-mono text-xs break-all text-yellow-900">
+            <code className="flex-1 break-all rounded bg-yellow-100 px-3 py-2 font-mono text-xs text-yellow-900">
               {newKeyResult.key}
             </code>
             <Button size="sm" variant="secondary" onClick={copyKey}>
@@ -166,7 +166,7 @@ export default function ApiKeyManager() {
               <div>
                 <label className="text-secondary-700 mb-1 block text-sm font-medium">Name</label>
                 <input
-                  className="border-secondary-300 focus:ring-primary-500 w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+                  className="border-secondary-300 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="e.g. Lab System Integration"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -184,7 +184,7 @@ export default function ApiKeyManager() {
                       onClick={() => toggleScope(scope)}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         selectedScopes.includes(scope)
-                          ? 'bg-primary-600 border-primary-600 text-white'
+                          ? 'border-primary-600 bg-primary-600 text-white'
                           : 'text-secondary-700 border-secondary-300 hover:border-primary-400 bg-white'
                       }`}
                     >
@@ -203,7 +203,7 @@ export default function ApiKeyManager() {
                 </label>
                 <input
                   type="date"
-                  className="border-secondary-300 focus:ring-primary-500 rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+                  className="border-secondary-300 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
                 />
@@ -227,13 +227,13 @@ export default function ApiKeyManager() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-secondary-200 text-secondary-500 border-b text-left text-xs tracking-wide uppercase">
-                    <th className="pr-4 pb-2">Name</th>
-                    <th className="pr-4 pb-2">Prefix</th>
-                    <th className="pr-4 pb-2">Scopes</th>
-                    <th className="pr-4 pb-2">Last Used</th>
-                    <th className="pr-4 pb-2">Expires</th>
-                    <th className="pr-4 pb-2">Status</th>
+                  <tr className="border-secondary-200 text-secondary-500 border-b text-left text-xs uppercase tracking-wide">
+                    <th className="pb-2 pr-4">Name</th>
+                    <th className="pb-2 pr-4">Prefix</th>
+                    <th className="pb-2 pr-4">Scopes</th>
+                    <th className="pb-2 pr-4">Last Used</th>
+                    <th className="pb-2 pr-4">Expires</th>
+                    <th className="pb-2 pr-4">Status</th>
                     <th className="pb-2" />
                   </tr>
                 </thead>
@@ -247,7 +247,7 @@ export default function ApiKeyManager() {
                           {k.scopes.map((s) => (
                             <span
                               key={s}
-                              className="bg-primary-50 text-primary-700 rounded-full px-2 py-0.5 text-xs"
+                              className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-700"
                             >
                               {s}
                             </span>

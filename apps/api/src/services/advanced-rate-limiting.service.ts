@@ -198,7 +198,12 @@ export class AdvancedRateLimitingService {
 
     this.violations.set(key, violations);
     logger.warn(
-      { userId: violation.userId, ip: violation.ip, endpoint: violation.endpoint, limitType: violation.limitType },
+      {
+        userId: violation.userId,
+        ip: violation.ip,
+        endpoint: violation.endpoint,
+        limitType: violation.limitType,
+      },
       '[rate-limit] Violation recorded'
     );
   }

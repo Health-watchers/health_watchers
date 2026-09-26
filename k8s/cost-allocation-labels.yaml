@@ -1,0 +1,88 @@
+# Cost allocation labelling standard for Health Watchers.
+#
+# Every workload MUST carry these labels so spend can be attributed by team,
+# environment, and component. A Kyverno policy (below) rejects workloads that
+# are missing them. AWS cost-allocation tags of the same names are activated in
+# Billing and propagated to nodes/volumes by the cloud controller.
+#
+# Required labels:
+#   app.kubernetes.io/part-of : always "health-watchers"
+#   app.kubernetes.io/component : api | web | stellar-service | worker | infra
+#   env         : production | staging | dev | dr | shared
+#   owner       : team slug (e.g. platform, clinical, payments)
+#   cost-center : finance code (e.g. CC-1001)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cost-allocation-standard
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/part-of: health-watchers
+    app.kubernetes.io/component: infra
+    env: shared
+    owner: platform
+    cost-center: CC-1000
+data:
+  required-labels: |
+    app.kubernetes.io/part-of
+    app.kubernetes.io/component
+    env
+    owner
+    cost-center
+  allowed-env: 'production,staging,dev,dr,shared'
+  allowed-owner: 'platform,clinical,payments,data,security'
+  guidance: |
+    - Set labels on the Deployment/StatefulSet/CronJob metadata AND the pod
+      template so kube-state-metrics and OpenCost can attribute node cost.
+    - Do not invent new env values — add them here and to ops/cost/budgets.json.
+    - Namespaces also carry env/owner/cost-center for namespace-level rollups.
+---
+# Kyverno policy — reject workloads that are missing a required cost label.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-cost-allocation-labels
+  annotations:
+    policies.kyverno.io/title: Require cost allocation labels
+    policies.kyverno.io/category: FinOps
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-cost-labels
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet, CronJob, Job]
+              namespaces: [health-watchers, health-watchers-dr, health-watchers-staging]
+      validate:
+        message: >-
+          Workloads must set labels: app.kubernetes.io/part-of,
+          app.kubernetes.io/component, env, owner, cost-center
+          (see k8s/cost-allocation-labels.yaml).
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/part-of: '?*'
+              app.kubernetes.io/component: '?*'
+              env: '?*'
+              owner: '?*'
+              cost-center: '?*'
+    - name: check-pod-template-labels
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet]
+              namespaces: [health-watchers, health-watchers-dr, health-watchers-staging]
+      validate:
+        message: 'Pod template must repeat env/owner/cost-center labels for node cost attribution.'
+        pattern:
+          spec:
+            template:
+              metadata:
+                labels:
+                  env: '?*'
+                  owner: '?*'
+                  cost-center: '?*'

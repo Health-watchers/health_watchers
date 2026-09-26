@@ -45,7 +45,6 @@ import {
   stopReplicationMonitoring,
 } from '../../config/db-replication';
 
-
 describe('db-replication config', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -95,7 +94,7 @@ describe('db-replication config', () => {
     it('calls setOptions on the mongoose connection', () => {
       configureReadPreferences(READ_PREFERENCES.balanced);
       expect(mongoose.connection.setOptions).toHaveBeenCalledWith(
-        expect.objectContaining({ readPreference: 'secondaryPreferred' }),
+        expect.objectContaining({ readPreference: 'secondaryPreferred' })
       );
     });
   });

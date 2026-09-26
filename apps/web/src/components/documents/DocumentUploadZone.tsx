@@ -58,6 +58,9 @@ export function DocumentUploadZone({
   accept = '.pdf,.jpg,.jpeg,.png,.dcm',
   onUploaded,
 }: DocumentUploadZoneProps) {
+type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+export function DocumentUploadZone({ patientId, clinicId, onUploaded }: DocumentUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -197,6 +200,22 @@ export function DocumentUploadZone({
               </select>
             </div>
           )}
+          <div className="flex-1">
+            <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              Document Type
+            </label>
+            <select
+              value={docType}
+              onChange={(e) => setDocType(e.target.value as DocumentType)}
+              className="block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+            >
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex-shrink-0 pt-6">
             <Button onClick={handleUpload} loading={uploading} disabled={uploading}>
               Upload

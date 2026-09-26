@@ -1,0 +1,119 @@
+name: Cost Report
+
+on:
+  schedule:
+    # Weekly, Monday 07:00 UTC
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      set_baseline:
+        description: 'Record the latest full month as the new baseline'
+        type: boolean
+        default: false
+
+concurrency:
+  group: cost-report
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    name: Generate cloud cost report
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq bc
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_COST_EXPLORER_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Cost report
+        id: cost
+        run: |
+          set +e
+          ARGS=""
+          if [ "${{ github.event.inputs.set_baseline }}" = "true" ]; then ARGS="--set-baseline"; fi
+          bash scripts/cost/cost-report.sh --months 3 --md cost-report.md $ARGS
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Utilization analysis
+        continue-on-error: true
+        env:
+          PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_DATA }}
+        run: |
+          if [ -n "$KUBECONFIG_DATA" ]; then
+            echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+            export KUBECONFIG=/tmp/kubeconfig
+          fi
+          bash scripts/cost/analyze-utilization.sh --aws --json cost-utilization.json || true
+          bash scripts/cost/rightsizing-recommendations.sh --input cost-utilization.json --md rightsizing.md --compute-optimizer || true
+
+      - name: Unused resource scan (dry-run)
+        continue-on-error: true
+        run: bash scripts/cost/cleanup-unused-resources.sh --report cost-cleanup.json || true
+
+      - name: Assemble summary
+        run: |
+          {
+            echo "# Weekly Cost Report — $(date -u +%Y-%m-%d)"
+            echo
+            [ -f cost-report.md ] && cat cost-report.md
+            echo
+            [ -f rightsizing.md ] && cat rightsizing.md
+            echo
+            if [ -f cost-cleanup.json ]; then
+              n=$(jq '.items | length' cost-cleanup.json)
+              echo "## Unused resources: $n candidate(s) (dry-run) — see artifact \`cost-cleanup.json\`"
+            fi
+          } > summary.md
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: cost-report-${{ github.run_id }}
+          path: |
+            cost-report.md
+            cost-utilization.json
+            rightsizing.md
+            rightsizing.csv
+            cost-cleanup.json
+            summary.md
+          retention-days: 90
+
+      - name: Post to Slack
+        if: always()
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
+        with:
+          webhook-url: ${{ secrets.COST_SLACK_WEBHOOK_URL }}
+          payload-file-path: ./summary.md
+        continue-on-error: true
+
+      - name: Open issue if spend is trending up
+        if: steps.cost.outputs.exit_code == '3'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.existsSync('summary.md') ? fs.readFileSync('summary.md','utf8') : 'See workflow run.';
+            const title = `💸 Cloud spend trending up — week of ${new Date().toISOString().split('T')[0]}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo, title,
+              body: body.slice(0, 60000) + `\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['cost', 'devops'],
+            });

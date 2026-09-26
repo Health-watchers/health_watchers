@@ -7,7 +7,7 @@ This directory contains the complete ELK (Elasticsearch, Logstash, Kibana) stack
 ### Elasticsearch
 - **Port**: 9200
 - **Data Storage**: Persistent volume at `/data/elasticsearch`
-- **Index Management**: Automated via ILM policies with 90-day retention
+- **Index Management**: Automated via ILM policies; 90-day retention on the live/searchable cluster, with daily snapshots to a long-term archive for HIPAA's 7-year compliance window (see [Log Compliance Archival](#log-compliance-archival))
 - **Security**: Authentication enabled with username/password
 
 ### Logstash
@@ -70,9 +70,18 @@ Defines index structure, field types, and mappings for optimal search and aggreg
 ### ilm-policy.json
 Index Lifecycle Management policy defining:
 - **Hot** (0 days): Real-time indexing, high priority
-- **Warm** (7 days): Read-optimized, merged indices
-- **Cold** (30 days): Searchable snapshots for long-term storage
-- **Delete** (90 days): Automatic deletion
+- **Warm** (3 days): Read-optimized, merged indices
+- **Cold** (30 days): Frozen from writes, allocated to cold nodes
+- **Frozen** (60 days): Mounted as a searchable snapshot against the `health-watchers-archive` repository
+- **Delete** (90 days): Automatic deletion from the live cluster
+
+See [Log Compliance Archival](#log-compliance-archival) for how data survives past the 90-day delete phase.
+
+### slm-policy.json
+Snapshot Lifecycle Management policy that snapshots `health-watchers-*` indices daily to the `health-watchers-archive` repository, retained for 7 years (see [Log Compliance Archival](#log-compliance-archival))
+
+### watchers/
+Elasticsearch Watcher definitions for alerting on log patterns (see [Alerting](#alerting))
 
 ## Sending Logs
 
@@ -210,6 +219,73 @@ http_path: * | stats avg(response_time_ms), max(response_time_ms) by http_path
 is_error: true | stats count() by timestamp
 ```
 
+## Alerting
+
+Elasticsearch Watcher definitions live in `elasticsearch/watchers/` and are loaded automatically by `setup-elk.sh`. Each watch polls its target index on a rolling window and posts to a webhook when a threshold is crossed.
+
+| File | Watches | Threshold | Index |
+|------|---------|-----------|-------|
+| `critical-error-rate.json` | CRITICAL/FATAL log volume | >20 in 5 min | `health-watchers-errors-critical-*` |
+| `failed-auth-spike.json` | Failed login attempts (`audit_action: login`, `audit_outcome: failure`) | >20 in 5 min | `health-watchers-audit-*` |
+
+Both watches post to a placeholder webhook URL (`https://hooks.example.com/CHANGE_ME`) — **replace this with a real Slack incoming-webhook or PagerDuty Events API URL** before enabling in production (see the `_meta.notes` field in each watch file).
+
+### Loading a Watch Manually
+
+```bash
+curl -X PUT -u elastic:password "http://localhost:9200/_watcher/watch/critical-error-rate" \
+  -H "Content-Type: application/json" \
+  -d @elasticsearch/watchers/critical-error-rate.json
+
+curl -X PUT -u elastic:password "http://localhost:9200/_watcher/watch/failed-auth-spike" \
+  -H "Content-Type: application/json" \
+  -d @elasticsearch/watchers/failed-auth-spike.json
+```
+
+### Checking Watch Status
+
+```bash
+curl -u elastic:password http://localhost:9200/_watcher/watch/critical-error-rate
+```
+
+## Log Compliance Archival
+
+HIPAA requires health-record-related logs to be retrievable for **7 years**, but the ILM policy above deletes indices from the live cluster after 90 days (fast tier storage isn't sized or priced for years of data). These are reconciled with two separate mechanisms:
+
+1. **ILM (`ilm-policy.json`)** governs the live, searchable cluster only: hot → warm → cold → frozen (searchable snapshot, mounted read-only at 60 days) → **delete at 90 days**. This keeps live cluster storage bounded and unaffected by long-term retention.
+2. **SLM (`slm-policy.json`)** independently snapshots every `health-watchers-*` index nightly to the `health-watchers-archive` snapshot repository (S3), retained for **2555 days (7 years)** before expiring. Because SLM snapshots run daily — well before the 90-day ILM delete phase removes an index from the live cluster — every index is durably archived before it is deleted.
+
+In short: an index disappears from the live, queryable cluster at 90 days, but a snapshot of it already exists in `health-watchers-archive` and stays there for 7 years to satisfy HIPAA record-retention requirements. Restoring an archived index for e-discovery or audit requires `POST _snapshot/health-watchers-archive/<snapshot>/_restore`.
+
+### One-Time Snapshot Repository Registration
+
+Before SLM or the ILM `frozen` phase can use `health-watchers-archive`, register it once per environment:
+
+```bash
+curl -X PUT -u elastic:password "http://localhost:9200/_snapshot/health-watchers-archive" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "s3",
+    "settings": {
+      "bucket": "<YOUR_S3_BUCKET>",
+      "region": "<YOUR_AWS_REGION>",
+      "base_path": "health-watchers/elasticsearch",
+      "role_arn": "<YOUR_IAM_ROLE_ARN>",
+      "server_side_encryption": true
+    }
+  }'
+```
+
+`<YOUR_S3_BUCKET>`, `<YOUR_AWS_REGION>`, and `<YOUR_IAM_ROLE_ARN>` are placeholders — fill in per-environment values (a dedicated, versioned, encrypted bucket with a lifecycle policy preventing deletion for 7 years is recommended). The `repository-s3` plugin must be installed on every Elasticsearch node.
+
+### Applying the SLM Policy
+
+```bash
+curl -X PUT -u elastic:password "http://localhost:9200/_slm/policy/health-watchers-archive" \
+  -H "Content-Type: application/json" \
+  -d @elasticsearch/slm-policy.json
+```
+
 ## Troubleshooting
 
 ### Logs Not Appearing in Kibana
@@ -262,6 +338,19 @@ is_error: true | stats count() by timestamp
      "index.search.slowlog.threshold.query.warn": "1s"
    }'
    ```
+
+## Performance SLAs
+
+Target service levels for the logging pipeline:
+
+| Metric | Target | Notes |
+|--------|--------|-------|
+| Search latency (p95) | < 500ms | Below the 1s slow-query warn threshold (see [Slow Queries](#slow-queries)) |
+| Ingest rate | 5,000 events/sec sustained | Per Logstash node; scale `pipeline.workers`/batch size to hold this (see Performance Tuning below) |
+| Index refresh interval | 30s | As configured in `index-templates.json` (`index.refresh_interval`) |
+| Max result window | 50,000 docs | As configured in `index-templates.json` (`index.max_result_window`); use `search_after`/scroll beyond this |
+
+These are targets, not hard limits — review them against real traffic once the stack has run in production for a full retention cycle.
 
 ## Performance Tuning
 

@@ -71,7 +71,9 @@ beforeAll(async () => {
   const patientId = new mongoose.Types.ObjectId();
 
   await PatientModel.insertMany(makePatients(CLINIC_ID, PATIENT_COUNT), { ordered: false });
-  await EncounterModel.insertMany(makeEncounters(CLINIC_ID, String(patientId), ENCOUNTER_COUNT), { ordered: false });
+  await EncounterModel.insertMany(makeEncounters(CLINIC_ID, String(patientId), ENCOUNTER_COUNT), {
+    ordered: false,
+  });
   await PaymentRecordModel.insertMany(makePayments(CLINIC_ID, PAYMENT_COUNT), { ordered: false });
 
   // Create a test user and get a token
@@ -121,9 +123,7 @@ describe('Dashboard performance', () => {
 
   it('cached response resolves in < 50ms', async () => {
     // Warm the cache
-    await request(app)
-      .get('/api/v1/dashboard/stats')
-      .set('Authorization', `Bearer ${authToken}`);
+    await request(app).get('/api/v1/dashboard/stats').set('Authorization', `Bearer ${authToken}`);
 
     const start = Date.now();
     const res = await request(app)
@@ -138,9 +138,7 @@ describe('Dashboard performance', () => {
 
   it('?refresh=true bypasses cache and returns fresh data', async () => {
     // Prime the cache
-    await request(app)
-      .get('/api/v1/dashboard/stats')
-      .set('Authorization', `Bearer ${authToken}`);
+    await request(app).get('/api/v1/dashboard/stats').set('Authorization', `Bearer ${authToken}`);
 
     const getCacheSpy = jest.spyOn(cache, 'get');
 

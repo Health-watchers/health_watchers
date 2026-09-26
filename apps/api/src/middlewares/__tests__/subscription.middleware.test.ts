@@ -50,22 +50,29 @@ describe('checkSubscriptionLimit', () => {
   });
 
   it('returns 402 when the subscription is suspended', async () => {
-    (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({ status: 'suspended', tier: 'free' });
+    (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({
+      status: 'suspended',
+      tier: 'free',
+    });
     const res = mockRes();
     const next = jest.fn();
 
     await checkSubscriptionLimit('patients')(mockReq('c1'), res, next);
 
     expect(res.status).toHaveBeenCalledWith(402);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'AccountSuspended' })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'AccountSuspended' }));
     expect(next).not.toHaveBeenCalled();
   });
 
   it('returns 402 with limit details when the clinic is at its patient limit', async () => {
     (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({ status: 'active', tier: 'free' });
-    (UsageModel.findOne as jest.Mock).mockResolvedValue({ patientCount: 100, encounterCount: 0, aiRequestCount: 0, doctorCount: 0, userCount: 0 });
+    (UsageModel.findOne as jest.Mock).mockResolvedValue({
+      patientCount: 100,
+      encounterCount: 0,
+      aiRequestCount: 0,
+      doctorCount: 0,
+      userCount: 0,
+    });
     const res = mockRes();
     const next = jest.fn();
 
@@ -73,14 +80,25 @@ describe('checkSubscriptionLimit', () => {
 
     expect(res.status).toHaveBeenCalledWith(402);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'SubscriptionLimitExceeded', limit: 100, current: 100, tier: 'free' })
+      expect.objectContaining({
+        error: 'SubscriptionLimitExceeded',
+        limit: 100,
+        current: 100,
+        tier: 'free',
+      })
     );
     expect(next).not.toHaveBeenCalled();
   });
 
   it('calls next when usage is below the limit', async () => {
     (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({ status: 'active', tier: 'basic' });
-    (UsageModel.findOne as jest.Mock).mockResolvedValue({ patientCount: 10, encounterCount: 0, aiRequestCount: 0, doctorCount: 0, userCount: 0 });
+    (UsageModel.findOne as jest.Mock).mockResolvedValue({
+      patientCount: 10,
+      encounterCount: 0,
+      aiRequestCount: 0,
+      doctorCount: 0,
+      userCount: 0,
+    });
     const res = mockRes();
     const next = jest.fn();
 
@@ -91,7 +109,10 @@ describe('checkSubscriptionLimit', () => {
   });
 
   it('treats a missing usage record as zero usage and calls next', async () => {
-    (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({ status: 'active', tier: 'premium' });
+    (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({
+      status: 'active',
+      tier: 'premium',
+    });
     (UsageModel.findOne as jest.Mock).mockResolvedValue(null);
     const res = mockRes();
     const next = jest.fn();
@@ -103,8 +124,16 @@ describe('checkSubscriptionLimit', () => {
 
   it('sends a warning notification to clinic admins at 80-90% usage', async () => {
     (SubscriptionModel.findOne as jest.Mock).mockResolvedValue({ status: 'active', tier: 'free' });
-    (UsageModel.findOne as jest.Mock).mockResolvedValue({ patientCount: 85, encounterCount: 0, aiRequestCount: 0, doctorCount: 0, userCount: 0 });
-    (UserModel.find as jest.Mock).mockReturnValue({ lean: jest.fn().mockResolvedValue([{ _id: 'admin1' }]) });
+    (UsageModel.findOne as jest.Mock).mockResolvedValue({
+      patientCount: 85,
+      encounterCount: 0,
+      aiRequestCount: 0,
+      doctorCount: 0,
+      userCount: 0,
+    });
+    (UserModel.find as jest.Mock).mockReturnValue({
+      lean: jest.fn().mockResolvedValue([{ _id: 'admin1' }]),
+    });
     const res = mockRes();
     const next = jest.fn();
 

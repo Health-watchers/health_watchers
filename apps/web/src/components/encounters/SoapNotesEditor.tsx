@@ -198,9 +198,9 @@ function SoapTabEditor({
                 e.preventDefault();
                 applySuggestion(expansion);
               }}
-              className="hover:bg-primary-50 flex w-full items-center gap-3 px-3 py-2 text-left text-sm"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-primary-50"
             >
-              <span className="text-primary-700 w-12 shrink-0 font-mono font-semibold">{abbr}</span>
+              <span className="w-12 shrink-0 font-mono font-semibold text-primary-700">{abbr}</span>
               <span className="text-secondary-600">{expansion}</span>
             </button>
           ))}
@@ -251,7 +251,7 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false 
             onClick={() => setActiveTab(tab.key)}
             className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
               activeTab === tab.key
-                ? 'border-primary-600 text-primary-700 border-b-2 bg-white'
+                ? 'border-b-2 border-primary-600 bg-white text-primary-700'
                 : 'text-secondary-600 hover:text-secondary-900'
             }`}
           >

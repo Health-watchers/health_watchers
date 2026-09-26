@@ -30,9 +30,7 @@ describe('Shared Fixtures', () => {
       expect(s.nurse.role).toBe('NURSE');
       expect(s.admin.role).toBe('CLINIC_ADMIN');
       expect(s.patients).toHaveLength(3);
-      s.patients.forEach((p) =>
-        expect(p.clinicId.toString()).toBe(s.clinicId.toString())
-      );
+      s.patients.forEach((p) => expect(p.clinicId.toString()).toBe(s.clinicId.toString()));
     });
 
     it('accepts a custom clinicId override', () => {

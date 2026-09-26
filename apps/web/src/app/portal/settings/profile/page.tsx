@@ -106,16 +106,12 @@ export default function ProfileSettingsPage() {
           </div>
         )}
 
-        {success && (
-          <Toast type="success" message="Profile updated successfully!" />
-        )}
+        {success && <Toast type="success" message="Profile updated successfully!" />}
 
         <form onSubmit={handleSubmit} className="rounded-lg bg-white p-6 shadow">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                First Name
-              </label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">First Name</label>
               <Input
                 type="text"
                 name="firstName"
@@ -126,9 +122,7 @@ export default function ProfileSettingsPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Last Name
-              </label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Last Name</label>
               <Input
                 type="text"
                 name="lastName"
@@ -153,9 +147,7 @@ export default function ProfileSettingsPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Phone Number
-              </label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Phone Number</label>
               <Input
                 type="tel"
                 name="phone"

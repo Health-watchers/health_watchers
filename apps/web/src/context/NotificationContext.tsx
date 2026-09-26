@@ -32,7 +32,13 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-export function NotificationProvider({ children, token }: { children: React.ReactNode; token?: string }) {
+export function NotificationProvider({
+  children,
+  token,
+}: {
+  children: React.ReactNode;
+  token?: string;
+}) {
   const { socket } = useSocket(token);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -67,19 +73,31 @@ export function NotificationProvider({ children, token }: { children: React.Reac
     };
 
     socket.on('notification:data-change', (data) => handleNotification('data-change', data));
-    socket.on('notification:appointment-update', (data) => handleNotification('appointment-update', data));
+    socket.on('notification:appointment-update', (data) =>
+      handleNotification('appointment-update', data)
+    );
     socket.on('notification:alert', (data) => handleNotification('alert', data));
-    socket.on('notification:appointment-reminder', (data) => handleNotification('appointment-reminder', data));
-    socket.on('notification:critical-result', (data) => handleNotification('critical-result', data));
+    socket.on('notification:appointment-reminder', (data) =>
+      handleNotification('appointment-reminder', data)
+    );
+    socket.on('notification:critical-result', (data) =>
+      handleNotification('critical-result', data)
+    );
     socket.on('notification:marked-read', handleMarkedRead);
     socket.on('notification:cleared', handleCleared);
 
     return () => {
       socket.off('notification:data-change', (data) => handleNotification('data-change', data));
-      socket.off('notification:appointment-update', (data) => handleNotification('appointment-update', data));
+      socket.off('notification:appointment-update', (data) =>
+        handleNotification('appointment-update', data)
+      );
       socket.off('notification:alert', (data) => handleNotification('alert', data));
-      socket.off('notification:appointment-reminder', (data) => handleNotification('appointment-reminder', data));
-      socket.off('notification:critical-result', (data) => handleNotification('critical-result', data));
+      socket.off('notification:appointment-reminder', (data) =>
+        handleNotification('appointment-reminder', data)
+      );
+      socket.off('notification:critical-result', (data) =>
+        handleNotification('critical-result', data)
+      );
       socket.off('notification:marked-read', handleMarkedRead);
       socket.off('notification:cleared', handleCleared);
     };
@@ -102,14 +120,15 @@ export function NotificationProvider({ children, token }: { children: React.Reac
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-    if (socket?.connected) {
-      socket.emit('notification:mark-read', { notificationId: id });
-    }
-  }, [socket]);
+  const markAsRead = useCallback(
+    (id: string) => {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      if (socket?.connected) {
+        socket.emit('notification:mark-read', { notificationId: id });
+      }
+    },
+    [socket]
+  );
 
   const markAllAsRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));

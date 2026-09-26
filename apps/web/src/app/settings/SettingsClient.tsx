@@ -11,7 +11,14 @@ import { SessionManagement } from '@/components/settings/SessionManagement';
 import ApiKeyManager from '@/components/settings/ApiKeyManager';
 import WebhookManager from '@/components/settings/WebhookManager';
 
-type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions' | 'api-keys' | 'webhooks';
+type Section =
+  | 'profile'
+  | 'security'
+  | 'preferences'
+  | 'subscription'
+  | 'sessions'
+  | 'api-keys'
+  | 'webhooks';
 
 interface MeResponse {
   status: 'success';

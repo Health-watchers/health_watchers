@@ -30,7 +30,12 @@ async function getJson(baseUrl: string, endpoint: string, token = 'stub-bearer-t
   return { status: res.status, body: await res.json() };
 }
 
-async function postJson(baseUrl: string, endpoint: string, body: unknown, token = 'stub-bearer-token') {
+async function postJson(
+  baseUrl: string,
+  endpoint: string,
+  body: unknown,
+  token = 'stub-bearer-token'
+) {
   const res = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: {

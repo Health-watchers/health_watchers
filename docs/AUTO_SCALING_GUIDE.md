@@ -338,3 +338,60 @@ metrics:
 - [HPA Behavior Documentation](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-policies)
 - [Metrics Server](https://github.com/kubernetes-sigs/metrics-server)
 - [Custom Metrics API](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/instrumentation/custom-metrics-api.md)
+
+## Scaling Policies
+
+### Overview
+
+The HPA configurations have been enhanced (Issue #1081) to use `autoscaling/v2` with dual CPU+memory metrics and carefully tuned scale-up/scale-down stabilization windows. All policies follow a **fast scale-up, slow scale-down** philosophy to handle traffic spikes quickly while avoiding replica thrashing.
+
+### Thresholds and Rationale
+
+| Metric | Threshold | Rationale |
+|--------|-----------|-----------|
+| CPU (api, web) | 70% | Provides headroom for burst traffic while keeping utilization high |
+| CPU (stellar-service) | 65% | Lower due to XDR parsing and crypto operations that cause utilization spikes |
+| Memory (api, web) | 80% | Allows high utilization while preventing OOM before scale-out |
+| Memory (stellar-service) | 75% | Stellar SDK keeps in-memory ledger caches; extra headroom needed |
+
+### Stabilization Windows
+
+| Phase | api | web | stellar-service | Purpose |
+|-------|-----|-----|-----------------|---------|
+| Scale-up | 60s | 60s | 30s | Fast response to load spikes; stellar needs fastest response due to latency sensitivity |
+| Scale-down | 300s | 300s | 300s | Conservative — prevents thrashing during temporary dips; avoids dropping active connections |
+
+### Per-Service Limits
+
+| Service | Min Replicas | Max Replicas | Notes |
+|---------|-------------|--------------|-------|
+| api | 2 | 10 | High availability; handles most application load |
+| web | 2 | 8 | SSR frontend; lower max as traffic is more predictable |
+| stellar-service | 1 | 5 | Blockchain calls are stateless; 5 is sufficient for throughput |
+
+### Scale-Up Behavior
+
+- **api**: Scale by up to 100% or +4 pods per 60-second window (whichever is larger, `selectPolicy: Max`)
+- **web**: Scale by up to 50% or +2 pods per 60-second window
+- **stellar-service**: Scale by up to 100% or +2 pods per 30-second window (fastest response)
+
+### Scale-Down Behavior
+
+All services use `selectPolicy: Min` (most conservative policy) — remove at most 50% of replicas or 1 pod per period, whichever removes fewer pods.
+
+### Monitoring
+
+Use the **Auto-Scaling Dashboard** in Grafana (`monitoring/grafana/dashboards/auto-scaling.json`, uid: `autoscaling-001`) to observe:
+
+- Current vs. desired vs. min/max replicas
+- CPU and memory utilization gauges with threshold markers
+- Replica history over time
+- Kubernetes scale events log
+- At-max-replicas alerts
+
+### When to Adjust Policy
+
+1. **Frequent scale thrashing** → Increase `scaleDown.stabilizationWindowSeconds` (e.g., from 300s to 600s)
+2. **Slow response to traffic spikes** → Reduce `scaleUp.stabilizationWindowSeconds` or lower CPU threshold
+3. **Consistently at max replicas** → Increase `maxReplicas` or optimize application performance
+4. **Underutilization** → Increase CPU/memory thresholds or reduce `maxReplicas`

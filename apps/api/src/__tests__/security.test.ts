@@ -44,7 +44,9 @@ jest.mock('@api/utils/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -53,13 +55,27 @@ jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
 
 // Mock unused route modules
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
 
@@ -149,7 +165,13 @@ describe('Injection tests', () => {
       const res = await request(app)
         .post('/api/v1/patients')
         .set('Authorization', `Bearer ${doctorToken}`)
-        .send({ $where: 'this.isActive === true', firstName: 'X', lastName: 'Y', dateOfBirth: '1990-01-01', sex: 'M' });
+        .send({
+          $where: 'this.isActive === true',
+          firstName: 'X',
+          lastName: 'Y',
+          dateOfBirth: '1990-01-01',
+          sex: 'M',
+        });
 
       expect([400, 201]).toContain(res.status);
       if (res.status === 201) {
@@ -427,7 +449,12 @@ describe('Data exposure', () => {
     const res = await request(app)
       .post('/api/v1/patients')
       .set('Authorization', `Bearer ${doctorToken}`)
-      .send({ firstName: { nested: { deep: 'value' } }, lastName: 'X', dateOfBirth: '1990-01-01', sex: 'M' });
+      .send({
+        firstName: { nested: { deep: 'value' } },
+        lastName: 'X',
+        dateOfBirth: '1990-01-01',
+        sex: 'M',
+      });
 
     const body = JSON.stringify(res.body);
     expect(body.toLowerCase()).not.toContain('mongodb');

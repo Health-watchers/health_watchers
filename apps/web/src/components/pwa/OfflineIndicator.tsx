@@ -27,12 +27,10 @@ export function OfflineIndicator() {
     <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border border-orange-300 bg-orange-50 p-4 shadow-lg dark:border-orange-900/50 dark:bg-orange-900/20">
       <div className="flex items-start gap-3">
         <div className="mt-0.5">
-          <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+          <div className="h-2 w-2 animate-pulse rounded-full bg-orange-500" />
         </div>
         <div className="flex-1">
-          <p className="font-medium text-orange-900 dark:text-orange-100">
-            You are offline
-          </p>
+          <p className="font-medium text-orange-900 dark:text-orange-100">You are offline</p>
           <p className="text-sm text-orange-800 dark:text-orange-200">
             Changes will be synced when you're back online. Core features remain available.
           </p>

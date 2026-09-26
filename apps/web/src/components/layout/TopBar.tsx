@@ -19,7 +19,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <button
           type="button"
           onClick={onMenuClick}
-          className="focus:ring-primary-500 rounded-md p-2 text-neutral-500 hover:bg-neutral-100 focus:ring-2 focus:outline-none md:hidden dark:text-neutral-400 dark:hover:bg-neutral-700"
+          className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500 md:hidden dark:text-neutral-400 dark:hover:bg-neutral-700"
           aria-label="Open navigation menu"
         >
           <svg
@@ -39,7 +39,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         </button>
 
         {/* App logo (visible on mobile since sidebar is hidden) */}
-        <span className="text-primary-500 text-base font-bold md:hidden">HealthWatchers</span>
+        <span className="text-base font-bold text-primary-500 md:hidden">HealthWatchers</span>
       </div>
 
       {/* Center: clinic name */}
@@ -54,7 +54,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <NotificationBell />
         <div
           role="img"
-          className="bg-primary-500 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+          className="flex h-8 w-8 select-none items-center justify-center rounded-full bg-primary-500 text-xs font-bold text-white"
           aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}
           title={user?.name}
         >

@@ -18,11 +18,15 @@ describe('createImmunizationSchema', () => {
   });
 
   it('rejects a doseNumber above 20', () => {
-    expect(createImmunizationSchema.safeParse({ ...validCreate, doseNumber: 21 }).success).toBe(false);
+    expect(createImmunizationSchema.safeParse({ ...validCreate, doseNumber: 21 }).success).toBe(
+      false
+    );
   });
 
   it('rejects a doseNumber below 1', () => {
-    expect(createImmunizationSchema.safeParse({ ...validCreate, doseNumber: 0 }).success).toBe(false);
+    expect(createImmunizationSchema.safeParse({ ...validCreate, doseNumber: 0 }).success).toBe(
+      false
+    );
   });
 
   it('rejects an invalid administeredDate', () => {
@@ -61,7 +65,9 @@ describe('immunizationParamsSchema', () => {
   });
 
   it('accepts an optional immunizationId', () => {
-    expect(immunizationParamsSchema.safeParse({ id: 'p1', immunizationId: 'i1' }).success).toBe(true);
+    expect(immunizationParamsSchema.safeParse({ id: 'p1', immunizationId: 'i1' }).success).toBe(
+      true
+    );
   });
 });
 

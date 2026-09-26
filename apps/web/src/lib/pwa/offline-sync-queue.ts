@@ -34,7 +34,9 @@ async function getDB(): Promise<IDBPDatabase<OfflineDB>> {
   return db;
 }
 
-export async function addToSyncQueue(request: Omit<OfflineRequest, 'id' | 'timestamp' | 'retryCount'>): Promise<string> {
+export async function addToSyncQueue(
+  request: Omit<OfflineRequest, 'id' | 'timestamp' | 'retryCount'>
+): Promise<string> {
   const database = await getDB();
   const id = `${Date.now()}-${Math.random()}`;
   const offlineRequest: OfflineRequest = {

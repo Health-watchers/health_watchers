@@ -1,10 +1,5 @@
 import { formatDate, formatDistanceToNow, parseISO } from 'date-fns';
-import {
-  enUS,
-  fr,
-  pt,
-  ptBR,
-} from 'date-fns/locale';
+import { enUS, fr, pt, ptBR } from 'date-fns/locale';
 
 export type Locale = 'en' | 'fr' | 'pt' | 'yo' | 'ha';
 
@@ -26,14 +21,22 @@ export const currencyMap: Record<Locale, string> = {
 
 export const rtlLocales: Locale[] = [];
 
-export function formatLocalizedDate(date: Date | string, locale: Locale, format: string = 'PPP'): string {
+export function formatLocalizedDate(
+  date: Date | string,
+  locale: Locale,
+  format: string = 'PPP'
+): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   return formatDate(dateObj, format, {
     locale: dateLocaleMap[locale],
   });
 }
 
-export function formatLocalizedTime(date: Date | string, locale: Locale, format: string = 'p'): string {
+export function formatLocalizedTime(
+  date: Date | string,
+  locale: Locale,
+  format: string = 'p'
+): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   return formatDate(dateObj, format, {
     locale: dateLocaleMap[locale],
@@ -73,7 +76,12 @@ export function isRTLLocale(locale: Locale): boolean {
   return rtlLocales.includes(locale);
 }
 
-export function formatPlural(count: number, locale: Locale, singular: string, plural: string): string {
+export function formatPlural(
+  count: number,
+  locale: Locale,
+  singular: string,
+  plural: string
+): string {
   if (locale === 'fr' || locale === 'pt') {
     return count > 1 ? plural : singular;
   }

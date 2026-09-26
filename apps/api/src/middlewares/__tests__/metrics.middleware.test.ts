@@ -57,7 +57,9 @@ describe('metricsMiddleware', () => {
 
     const metric = await securityHeaderViolationsTotal.get();
     const violation = metric.values.find(
-      (v) => v.labels.header === 'content-security-policy' && v.labels.path === '/api/v2/missing-headers-unique'
+      (v) =>
+        v.labels.header === 'content-security-policy' &&
+        v.labels.path === '/api/v2/missing-headers-unique'
     );
     expect(violation?.value).toBeGreaterThanOrEqual(1);
   });

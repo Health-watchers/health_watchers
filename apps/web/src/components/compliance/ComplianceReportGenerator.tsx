@@ -5,10 +5,16 @@ import type { ComplianceReport } from './types';
 
 interface ComplianceReportGeneratorProps {
   reports?: ComplianceReport[];
-  onGenerate?: (reportType: ComplianceReport['reportType'], period: { startDate: string; endDate: string }) => Promise<void>;
+  onGenerate?: (
+    reportType: ComplianceReport['reportType'],
+    period: { startDate: string; endDate: string }
+  ) => Promise<void>;
 }
 
-export function ComplianceReportGenerator({ reports = [], onGenerate }: ComplianceReportGeneratorProps) {
+export function ComplianceReportGenerator({
+  reports = [],
+  onGenerate,
+}: ComplianceReportGeneratorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -38,7 +44,9 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Compliance Reports</h3>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Generate compliance reports in seconds</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            Generate compliance reports in seconds
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -49,7 +57,10 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
       </div>
 
       {showForm && (
-        <form onSubmit={handleGenerate} className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+        <form
+          onSubmit={handleGenerate}
+          className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/30 dark:bg-blue-900/10"
+        >
           <select
             value={formData.reportType}
             onChange={(e) =>
@@ -68,7 +79,7 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+              <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
                 Start Date
               </label>
               <input
@@ -79,7 +90,7 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+              <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
                 End Date
               </label>
               <input
@@ -113,7 +124,10 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
       <div className="space-y-2">
         {reports.length > 0 ? (
           reports.map((report) => (
-            <div key={report.id} className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+            <div
+              key={report.id}
+              className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-neutral-700"
+            >
               <div className="flex-1">
                 <p className="font-medium text-neutral-900 dark:text-neutral-100">{report.title}</p>
                 <p className="text-xs text-neutral-600 dark:text-neutral-400">
@@ -122,7 +136,9 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
                 </p>
               </div>
               <div className="flex gap-2">
-                <span className={`inline-block rounded px-2 py-1 text-xs font-medium ${report.status === 'final' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'}`}>
+                <span
+                  className={`inline-block rounded px-2 py-1 text-xs font-medium ${report.status === 'final' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'}`}
+                >
                   {report.status}
                 </span>
                 {report.fileName && (
@@ -132,7 +148,9 @@ export function ComplianceReportGenerator({ reports = [], onGenerate }: Complian
             </div>
           ))
         ) : (
-          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">No reports generated yet</p>
+          <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+            No reports generated yet
+          </p>
         )}
       </div>
     </div>

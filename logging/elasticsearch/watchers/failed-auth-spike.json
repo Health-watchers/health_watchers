@@ -1,0 +1,44 @@
+{
+  "trigger": {
+    "schedule": { "interval": "1m" }
+  },
+  "input": {
+    "search": {
+      "request": {
+        "search_type": "query_then_fetch",
+        "indices": ["health-watchers-audit-*"],
+        "rest_total_hits_as_int": true,
+        "body": {
+          "query": {
+            "bool": {
+              "filter": [
+                { "range": { "@timestamp": { "gte": "now-5m" } } },
+                { "term": { "audit_action": "login" } },
+                { "term": { "audit_outcome": "failure" } }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "condition": {
+    "compare": {
+      "ctx.payload.hits.total": { "gt": 20 }
+    }
+  },
+  "actions": {
+    "notify_webhook": {
+      "webhook": {
+        "method": "POST",
+        "url": "https://hooks.example.com/CHANGE_ME",
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"text\": \"[Health Watchers] Failed-auth spike: {{ctx.payload.hits.total}} failed login attempts in the last 5 minutes (threshold: 20). Index: health-watchers-audit-*\"}"
+      }
+    }
+  },
+  "_meta": {
+    "issue": "#1275",
+    "notes": "Watches the health-watchers-audit-* index (audit_action/audit_outcome fields are populated from parsed[auditAction]/parsed[auditOutcome] in logstash/pipeline/health-watchers.conf). Assumes the application emits auditAction=\"login\" and auditOutcome=\"failure\" for failed logins — adjust the term values if your app uses different strings. REPLACE the webhook URL above with a real Slack incoming-webhook or PagerDuty Events API URL before enabling in production."
+  }
+}

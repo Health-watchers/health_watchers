@@ -183,9 +183,7 @@ export function requireClinicMatch(options: ClinicMatchOptions = {}) {
     if (isSuperAdmin && allowSuperAdmin) {
       // If a clinicId param is present, use it; otherwise leave filter open
       const paramClinicId = paramName ? req.params[paramName] : undefined;
-      res.locals.filter = paramClinicId
-        ? { clinicId: new Types.ObjectId(paramClinicId) }
-        : {};
+      res.locals.filter = paramClinicId ? { clinicId: new Types.ObjectId(paramClinicId) } : {};
       next();
       return;
     }

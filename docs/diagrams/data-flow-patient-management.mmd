@@ -1,0 +1,7 @@
+%% Patient Registration data flow
+%% Mirrors docs/ARCHITECTURE.md "Patient Registration Flow"
+flowchart TD
+    A["Patient Web"] -->|"POST /patients"| B["API Gateway"]
+    B -->|"Validate request"| C["Express API<br/>- Validate data<br/>- Hash PII<br/>- Create record"]
+    C -->|"Insert"| D[("MongoDB<br/>patients collection")]
+    D -->|"Emit event"| E["RabbitMQ<br/>- Send email<br/>- Audit log"]

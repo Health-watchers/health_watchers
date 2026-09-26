@@ -26,17 +26,54 @@ interface LabResult {
 }
 
 function exportLabResultsCSV(labResults: LabResult[], patientId: string) {
-  const rows = [['Test', 'Code', 'Status', 'Ordered', 'Resulted', 'Parameter', 'Value', 'Unit', 'Reference', 'Flag']];
+  const rows = [
+    [
+      'Test',
+      'Code',
+      'Status',
+      'Ordered',
+      'Resulted',
+      'Parameter',
+      'Value',
+      'Unit',
+      'Reference',
+      'Flag',
+    ],
+  ];
   for (const lab of labResults) {
     if (lab.results?.length) {
       for (const r of lab.results) {
-        rows.push([lab.testName, lab.testCode ?? '', lab.status, lab.orderedAt, lab.resultedAt ?? '', r.parameter, r.value, r.unit, r.referenceRange, r.flag ?? '']);
+        rows.push([
+          lab.testName,
+          lab.testCode ?? '',
+          lab.status,
+          lab.orderedAt,
+          lab.resultedAt ?? '',
+          r.parameter,
+          r.value,
+          r.unit,
+          r.referenceRange,
+          r.flag ?? '',
+        ]);
       }
     } else {
-      rows.push([lab.testName, lab.testCode ?? '', lab.status, lab.orderedAt, lab.resultedAt ?? '', '', '', '', '', '']);
+      rows.push([
+        lab.testName,
+        lab.testCode ?? '',
+        lab.status,
+        lab.orderedAt,
+        lab.resultedAt ?? '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
     }
   }
-  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -160,7 +197,11 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
           {showOrderForm ? 'Cancel' : '+ Order Test'}
         </Button>
         {labResults.length > 0 && (
-          <Button size="sm" variant="outline" onClick={() => exportLabResultsCSV(labResults, patientId)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => exportLabResultsCSV(labResults, patientId)}
+          >
             ↓ Export CSV
           </Button>
         )}
@@ -181,7 +222,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
             <input
               id="testName"
               required
-              className="focus:ring-primary-500 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:outline-none"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               value={orderForm.testName}
               onChange={(e) => setOrderForm((f) => ({ ...f, testName: e.target.value }))}
               placeholder="e.g. Complete Blood Count"
@@ -193,7 +234,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
             </label>
             <input
               id="testCode"
-              className="focus:ring-primary-500 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:outline-none"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               value={orderForm.testCode}
               onChange={(e) => setOrderForm((f) => ({ ...f, testCode: e.target.value }))}
               placeholder="e.g. 58410-2"
@@ -206,7 +247,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
             <textarea
               id="labNotes"
               rows={2}
-              className="focus:ring-primary-500 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:ring-2 focus:outline-none"
+              className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               value={orderForm.notes}
               onChange={(e) => setOrderForm((f) => ({ ...f, notes: e.target.value }))}
             />
@@ -285,7 +326,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                       aria-label={`Results for ${lab.testName}`}
                     >
                       <thead>
-                        <tr className="bg-neutral-50 tracking-wide text-neutral-500 uppercase">
+                        <tr className="bg-neutral-50 uppercase tracking-wide text-neutral-500">
                           <th className="px-2 py-1 text-left font-semibold">Parameter</th>
                           <th className="px-2 py-1 text-left font-semibold">Value</th>
                           <th className="px-2 py-1 text-left font-semibold">Unit</th>
@@ -320,7 +361,7 @@ export default function LabResultsTab({ patientId }: { patientId: string }) {
                   <div className="mt-3">
                     {aiInterpretations[lab._id] ? (
                       <details open>
-                        <summary className="text-primary-600 cursor-pointer text-xs font-medium hover:underline">
+                        <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:underline">
                           AI Interpretation
                         </summary>
                         <p className="mt-1 text-sm text-neutral-600">

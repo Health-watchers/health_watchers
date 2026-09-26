@@ -1,0 +1,58 @@
+%% Deployment topology across environments
+%% Ground truth: docker-compose.dev.yml, docker-compose.yml, k8s/, helm/health-watchers
+flowchart TB
+    subgraph Local["Local Development — docker-compose.dev.yml"]
+        DEV_APPS["api / web / stellar-service<br/>(npm run dev, on host)"]
+        DEV_MONGO[("mongo")]
+        DEV_JAEGER["jaeger"]
+        DEV_MEXP["mongo-express"]
+    end
+
+    subgraph Compose["Docker Compose — docker-compose.yml"]
+        C_API["api"]
+        C_WEB["web"]
+        C_STELLAR["stellar-service"]
+        C_MONGO[("mongodb")]
+        C_JAEGER["jaeger"]
+        C_PROM["prometheus"]
+        C_GRAFANA["grafana"]
+    end
+
+    subgraph K8s["Kubernetes — namespace: health-watchers"]
+        API_K8S["api<br/>Deployment + HPA + PDB"]
+        WEB_K8S["web<br/>Deployment + HPA + PDB"]
+        STELLAR_K8S["stellar-service<br/>Deployment + HPA + PDB"]
+        REDIS_K8S["redis<br/>Deployment (Helm)"]
+        INGRESS["Ingress"]
+    end
+
+    subgraph Cloud["Cloud / External Services"]
+        MONGO_ATLAS[("MongoDB Atlas /<br/>managed replica set")]
+        STELLAR_NET(("Stellar Network"))
+        SECRETS["AWS Secrets Manager"]
+        S3["S3 Backups"]
+    end
+
+    DEV_APPS --> DEV_MONGO
+    DEV_APPS --> DEV_JAEGER
+    DEV_MEXP --> DEV_MONGO
+
+    C_API --> C_MONGO
+    C_WEB --> C_API
+    C_STELLAR --> C_JAEGER
+    C_API --> C_JAEGER
+    C_PROM --> C_API
+    C_GRAFANA --> C_PROM
+
+    Local -.->|"containerized equivalent"| Compose
+    Compose -.->|"promoted via CI/CD"| K8s
+
+    INGRESS --> API_K8S
+    INGRESS --> WEB_K8S
+    API_K8S --> REDIS_K8S
+    API_K8S --> STELLAR_K8S
+    API_K8S --> MONGO_ATLAS
+    STELLAR_K8S --> STELLAR_NET
+
+    K8s -.-> SECRETS
+    K8s -.-> S3

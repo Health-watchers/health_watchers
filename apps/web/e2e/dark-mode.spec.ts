@@ -35,9 +35,7 @@ test.describe('Dark mode — persistence', () => {
     await expect(page.locator('html')).toHaveClass(/dark/);
 
     // The body background should actually be the dark token, not white.
-    const bg = await page.evaluate(
-      () => getComputedStyle(document.body).backgroundColor
-    );
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bg).not.toBe('rgb(255, 255, 255)');
 
     await page.reload();

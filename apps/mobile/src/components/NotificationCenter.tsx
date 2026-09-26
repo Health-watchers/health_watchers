@@ -42,20 +42,16 @@ export function NotificationCenter({
   };
 
   const handleClearAll = async () => {
-    Alert.alert(
-      'Clear All Notifications',
-      'Are you sure you want to clear all notifications?',
-      [
-        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
-        {
-          text: 'Clear',
-          onPress: async () => {
-            await onClearAll?.();
-          },
-          style: 'destructive',
+    Alert.alert('Clear All Notifications', 'Are you sure you want to clear all notifications?', [
+      { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+      {
+        text: 'Clear',
+        onPress: async () => {
+          await onClearAll?.();
         },
-      ]
-    );
+        style: 'destructive',
+      },
+    ]);
   };
 
   const renderNotification = ({ item: notification }: { item: NotificationData }) => {
@@ -63,10 +59,7 @@ export function NotificationCenter({
 
     return (
       <TouchableOpacity
-        style={[
-          styles.notificationCard,
-          !notification.read && styles.unreadCard,
-        ]}
+        style={[styles.notificationCard, !notification.read && styles.unreadCard]}
         onPress={() => {
           setExpandedId(isExpanded ? null : notification.id);
           handleMarkAsRead(notification);
@@ -75,31 +68,17 @@ export function NotificationCenter({
         activeOpacity={0.7}
       >
         <View style={styles.notificationContent}>
-          <Text style={styles.notificationIcon}>
-            {NOTIFICATION_ICONS[notification.type]}
-          </Text>
+          <Text style={styles.notificationIcon}>{NOTIFICATION_ICONS[notification.type]}</Text>
           <View style={styles.notificationText}>
-            <Text
-              style={[
-                styles.notificationTitle,
-                !notification.read && styles.unreadTitle,
-              ]}
-            >
+            <Text style={[styles.notificationTitle, !notification.read && styles.unreadTitle]}>
               {notification.title}
             </Text>
-            <Text
-              numberOfLines={isExpanded ? 0 : 2}
-              style={styles.notificationMessage}
-            >
+            <Text numberOfLines={isExpanded ? 0 : 2} style={styles.notificationMessage}>
               {notification.message}
             </Text>
-            <Text style={styles.notificationTime}>
-              {formatTime(notification.timestamp)}
-            </Text>
+            <Text style={styles.notificationTime}>{formatTime(notification.timestamp)}</Text>
           </View>
-          {!notification.read && (
-            <View style={styles.unreadIndicator} />
-          )}
+          {!notification.read && <View style={styles.unreadIndicator} />}
         </View>
       </TouchableOpacity>
     );

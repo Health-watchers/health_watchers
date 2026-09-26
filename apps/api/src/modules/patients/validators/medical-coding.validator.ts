@@ -6,21 +6,50 @@
 
 // Simplified list of common ICD-10 codes
 const ICD10_CODES = new Set([
-  'A00', 'A01', 'A02', 'A03', 'A04', 'A05', // Cholera, typhoid, etc.
-  'E10', 'E11', 'E12', 'E13', // Diabetes
-  'I10', 'I11', 'I12', 'I13', // Hypertension
-  'J00', 'J01', 'J02', 'J03', // Respiratory
+  'A00',
+  'A01',
+  'A02',
+  'A03',
+  'A04',
+  'A05', // Cholera, typhoid, etc.
+  'E10',
+  'E11',
+  'E12',
+  'E13', // Diabetes
+  'I10',
+  'I11',
+  'I12',
+  'I13', // Hypertension
+  'J00',
+  'J01',
+  'J02',
+  'J03', // Respiratory
   'M79', // Pain in limb
-  'R00', 'R01', 'R02', 'R03', // Symptoms
-  'Z00', 'Z01', 'Z02', 'Z03', // Encounters
+  'R00',
+  'R01',
+  'R02',
+  'R03', // Symptoms
+  'Z00',
+  'Z01',
+  'Z02',
+  'Z03', // Encounters
 ]);
 
 // Common CPT codes (sample)
 const CPT_CODES = new Set([
-  '99201', '99202', '99203', '99204', '99205', // Office visits
-  '70450', '70451', '70452', // CT scans
-  '93000', '93005', '93010', // EKG
-  '80053', '80055', // Comprehensive metabolic panel
+  '99201',
+  '99202',
+  '99203',
+  '99204',
+  '99205', // Office visits
+  '70450',
+  '70451',
+  '70452', // CT scans
+  '93000',
+  '93005',
+  '93010', // EKG
+  '80053',
+  '80055', // Comprehensive metabolic panel
 ]);
 
 // SNOMED CT sample

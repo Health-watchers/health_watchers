@@ -180,7 +180,7 @@ export function SubscriptionSection() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-semibold text-neutral-900">{TIER_LABELS[tier]}</span>
                   {isCurrent && (
-                    <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-medium">
+                    <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
                       Current
                     </span>
                   )}
@@ -204,7 +204,7 @@ export function SubscriptionSection() {
                     onClick={() => setConfirmTier(tier)}
                     className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                       isUpgrade
-                        ? 'bg-primary-600 hover:bg-primary-700 text-white'
+                        ? 'bg-primary-600 text-white hover:bg-primary-700'
                         : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
@@ -241,7 +241,7 @@ export function SubscriptionSection() {
                 type="button"
                 disabled={mutation.isPending}
                 onClick={() => mutation.mutate(confirmTier)}
-                className="bg-primary-600 hover:bg-primary-700 flex-1 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="flex-1 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
               >
                 {mutation.isPending ? 'Saving…' : 'Confirm'}
               </button>

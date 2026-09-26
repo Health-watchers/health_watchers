@@ -30,12 +30,7 @@ interface DocumentListProps {
 
 export function DocumentList({ documents, onView }: DocumentListProps) {
   if (documents.length === 0) {
-    return (
-      <EmptyState
-        title="No documents"
-        description="Upload a document to get started."
-      />
-    );
+    return <EmptyState title="No documents" description="Upload a document to get started." />;
   }
 
   return (

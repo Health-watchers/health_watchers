@@ -153,7 +153,8 @@ export const ERROR_TAXONOMY: Record<string, ErrorTaxonomy> = {
     category: ErrorCategory.INTERNAL,
     statusCode: 500,
     severity: ErrorSeverity.CRITICAL,
-    clientMessage: 'An unexpected error occurred. Our team has been notified. Please try again later.',
+    clientMessage:
+      'An unexpected error occurred. Our team has been notified. Please try again later.',
     i18nKey: 'errors.internalServerError',
     trackInSentry: true,
   },

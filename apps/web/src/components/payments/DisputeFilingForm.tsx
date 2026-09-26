@@ -54,8 +54,8 @@ export function DisputeFilingForm({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      const totalSize = attachments.reduce((sum, f) => sum + f.size, 0) +
-        files.reduce((sum, f) => sum + f.size, 0);
+      const totalSize =
+        attachments.reduce((sum, f) => sum + f.size, 0) + files.reduce((sum, f) => sum + f.size, 0);
 
       if (totalSize > 10 * 1024 * 1024) {
         setError('Total file size cannot exceed 10MB');
@@ -102,9 +102,7 @@ export function DisputeFilingForm({
       setFormData({ reason: '', description: '', contactEmail: '', contactPhone: '' });
       setAttachments([]);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to submit dispute. Please try again.'
-      );
+      setError(err instanceof Error ? err.message : 'Failed to submit dispute. Please try again.');
     }
   };
 
@@ -128,7 +126,10 @@ export function DisputeFilingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+    >
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">File a Dispute</h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -246,11 +247,7 @@ export function DisputeFilingForm({
         )}
       </div>
 
-      <Button
-        type="submit"
-        disabled={isLoading}
-        className="w-full"
-      >
+      <Button type="submit" disabled={isLoading} className="w-full">
         <Send className="mr-2 h-4 w-4" />
         {isLoading ? 'Submitting...' : 'Submit Dispute'}
       </Button>

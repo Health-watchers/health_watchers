@@ -42,13 +42,20 @@ export function EmployeeTraining({ trainings = [], onMarkComplete }: EmployeeTra
     {} as Record<EmployeeTrainingType['status'], EmployeeTrainingType[]>
   );
 
-  const statusOrder: EmployeeTrainingType['status'][] = ['expired', 'pending', 'in_progress', 'completed'];
+  const statusOrder: EmployeeTrainingType['status'][] = [
+    'expired',
+    'pending',
+    'in_progress',
+    'completed',
+  ];
 
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold">Employee Training</h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">Track compliance training completion</p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          Track compliance training completion
+        </p>
       </div>
 
       {statusOrder.map((status) => {
@@ -63,7 +70,10 @@ export function EmployeeTraining({ trainings = [], onMarkComplete }: EmployeeTra
 
             <div className="space-y-2">
               {items.map((training) => (
-                <div key={training.id} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+                <div
+                  key={training.id}
+                  className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700"
+                >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <p className="font-medium text-neutral-900 dark:text-neutral-100">
@@ -73,18 +83,25 @@ export function EmployeeTraining({ trainings = [], onMarkComplete }: EmployeeTra
                         Employee: {training.employeeId}
                       </p>
                       {training.certificateUrl && (
-                        <a href={training.certificateUrl} className="text-xs text-blue-600 hover:underline">
+                        <a
+                          href={training.certificateUrl}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
                           View Certificate
                         </a>
                       )}
                     </div>
 
                     <div className="text-right text-xs text-neutral-600 dark:text-neutral-400">
-                      <span className={`inline-block rounded px-2 py-1 font-medium ${STATUS_COLORS[status]}`}>
+                      <span
+                        className={`inline-block rounded px-2 py-1 font-medium ${STATUS_COLORS[status]}`}
+                      >
                         {status}
                       </span>
                       {training.completedAt && (
-                        <div className="mt-1">{new Date(training.completedAt).toLocaleDateString()}</div>
+                        <div className="mt-1">
+                          {new Date(training.completedAt).toLocaleDateString()}
+                        </div>
                       )}
                       {training.expiryDate && (
                         <div>Expires: {new Date(training.expiryDate).toLocaleDateString()}</div>

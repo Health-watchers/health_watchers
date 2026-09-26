@@ -44,7 +44,11 @@ function buildApp() {
 
 const SECRET = 'test-access-secret-32-chars-long!!';
 
-function makeToken(clinicId: string, role = 'DOCTOR', userId = new mongoose.Types.ObjectId().toString()) {
+function makeToken(
+  clinicId: string,
+  role = 'DOCTOR',
+  userId = new mongoose.Types.ObjectId().toString()
+) {
   return jwt.sign({ userId, role, clinicId }, SECRET, {
     expiresIn: '15m',
     issuer: 'health-watchers-api',
@@ -103,7 +107,11 @@ describe('POST /api/v1/patients/:id/consent', () => {
     expect(res.body.data.status).toBe('granted');
     expect(res.body.data.signatureHash).toMatch(/^[a-f0-9]{64}$/);
 
-    const stored = await ConsentModel.findOne({ patientId: PATIENT_1, clinicId: CLINIC_A, type: 'treatment' });
+    const stored = await ConsentModel.findOne({
+      patientId: PATIENT_1,
+      clinicId: CLINIC_A,
+      type: 'treatment',
+    });
     expect(stored?.status).toBe('granted');
 
     const audit = await AuditLogModel.findOne({ resourceType: 'Consent' });
@@ -235,7 +243,9 @@ describe('POST /api/v1/consent/:id/verify', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ type: 'ai_analysis', signatureData: 'sig' });
 
-    await ConsentModel.findByIdAndUpdate(grantRes.body.data._id, { signatureHash: 'tampered-hash' });
+    await ConsentModel.findByIdAndUpdate(grantRes.body.data._id, {
+      signatureHash: 'tampered-hash',
+    });
 
     const res = await request(app)
       .post(`/api/v1/consent/${grantRes.body.data._id}/verify`)

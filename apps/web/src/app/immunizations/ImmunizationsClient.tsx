@@ -104,18 +104,29 @@ async function fetchUpcoming(): Promise<UpcomingVaccine[]> {
 function AlertBanner({ overdue }: { overdue: UpcomingVaccine[] }) {
   if (overdue.length === 0) return null;
   return (
-    <div className="rounded-lg border border-danger-200 bg-danger-50 p-4">
+    <div className="border-danger-200 bg-danger-50 rounded-lg border p-4">
       <div className="flex items-start gap-3">
-        <svg className="mt-0.5 h-5 w-5 shrink-0 text-danger-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <svg
+          className="text-danger-500 mt-0.5 h-5 w-5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
         </svg>
         <div>
-          <p className="text-sm font-semibold text-danger-700">
+          <p className="text-danger-700 text-sm font-semibold">
             {overdue.length} overdue vaccine{overdue.length > 1 ? 's' : ''}
           </p>
           <ul className="mt-1 space-y-0.5">
             {overdue.map((v) => (
-              <li key={v._id} className="text-sm text-danger-600">
+              <li key={v._id} className="text-danger-600 text-sm">
                 {v.vaccine} — due {formatDate(v.dueDate)}
               </li>
             ))}
@@ -132,9 +143,7 @@ function UpcomingCard({ vaccine }: { vaccine: UpcomingVaccine }) {
     <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3">
       <div>
         <p className="text-sm font-medium text-neutral-900">{vaccine.vaccine}</p>
-        {vaccine.description && (
-          <p className="text-xs text-neutral-500">{vaccine.description}</p>
-        )}
+        {vaccine.description && <p className="text-xs text-neutral-500">{vaccine.description}</p>}
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-neutral-500">{formatDate(vaccine.dueDate)}</span>
@@ -184,9 +193,7 @@ export default function ImmunizationsClient() {
     queryFn: fetchUpcoming,
   });
 
-  const overdue = upcoming.filter(
-    (v) => (v.status ?? getUpcomingStatus(v.dueDate)) === 'overdue',
-  );
+  const overdue = upcoming.filter((v) => (v.status ?? getUpcomingStatus(v.dueDate)) === 'overdue');
 
   const handleChange = (field: keyof ImmunizationFormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -251,7 +258,9 @@ export default function ImmunizationsClient() {
             ) : upcomingError ? (
               <ErrorMessage
                 message="Failed to load upcoming vaccines"
-                onRetry={() => queryClient.invalidateQueries({ queryKey: ['immunizations', 'upcoming'] })}
+                onRetry={() =>
+                  queryClient.invalidateQueries({ queryKey: ['immunizations', 'upcoming'] })
+                }
               />
             ) : upcoming.length === 0 ? (
               <EmptyState title="No upcoming vaccines" icon="💉" />
@@ -280,7 +289,9 @@ export default function ImmunizationsClient() {
             ) : recordsError ? (
               <ErrorMessage
                 message="Failed to load immunization records"
-                onRetry={() => queryClient.invalidateQueries({ queryKey: ['immunizations', 'records'] })}
+                onRetry={() =>
+                  queryClient.invalidateQueries({ queryKey: ['immunizations', 'records'] })
+                }
               />
             ) : records.length === 0 ? (
               <EmptyState title="No immunization records" icon="📋" />
@@ -312,7 +323,10 @@ export default function ImmunizationsClient() {
       {/* Add entry modal */}
       <Modal
         open={showForm}
-        onClose={() => { setShowForm(false); setForm(INITIAL_FORM); }}
+        onClose={() => {
+          setShowForm(false);
+          setForm(INITIAL_FORM);
+        }}
         title="Log Vaccination"
         size="lg"
       >
@@ -368,7 +382,10 @@ export default function ImmunizationsClient() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => { setShowForm(false); setForm(INITIAL_FORM); }}
+              onClick={() => {
+                setShowForm(false);
+                setForm(INITIAL_FORM);
+              }}
             >
               Cancel
             </Button>

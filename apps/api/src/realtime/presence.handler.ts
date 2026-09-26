@@ -24,7 +24,12 @@ export class PresenceHandler {
   /**
    * Register presence event handlers
    */
-  static registerHandlers(socket: Socket, userId: string, userName: string, clinicId: string): void {
+  static registerHandlers(
+    socket: Socket,
+    userId: string,
+    userName: string,
+    clinicId: string
+  ): void {
     presenceMap.set(userId, {
       userId,
       userName,

@@ -95,10 +95,16 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [updatingGoal, setUpdatingGoal] = useState<string | null>(null);
 
-  const { data: plans = [], isLoading, error } = useQuery<CarePlan[]>({
+  const {
+    data: plans = [],
+    isLoading,
+    error,
+  } = useQuery<CarePlan[]>({
     queryKey: ['care-plans', patientId],
     queryFn: async () => {
-      const res = await fetch(`${API_V1}/care-plans?patientId=${patientId}`, { credentials: 'include' });
+      const res = await fetch(`${API_V1}/care-plans?patientId=${patientId}`, {
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error('Failed to load care plans');
       return (await res.json()).data ?? [];
     },
@@ -154,7 +160,11 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
 
   // ── Update goal status ──────────────────────────────────────────────────────
 
-  const handleGoalStatus = async (plan: CarePlan, goalIdx: number, newStatus: CarePlanGoal['status']) => {
+  const handleGoalStatus = async (
+    plan: CarePlan,
+    goalIdx: number,
+    newStatus: CarePlanGoal['status']
+  ) => {
     const key = `${plan._id}-${goalIdx}`;
     setUpdatingGoal(key);
     try {
@@ -220,14 +230,14 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
       {showForm && (
         <form
           onSubmit={handleCreate}
-          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm space-y-5"
+          className="space-y-5 rounded-xl border border-neutral-200 bg-white p-5 shadow-sm"
         >
           <h3 className="font-semibold text-neutral-900">New Care Plan</h3>
 
           {/* Condition + ICD + Review date */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-neutral-600 mb-1">Condition *</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600">Condition *</label>
               <input
                 required
                 value={form.condition}
@@ -237,7 +247,7 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">ICD Code</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600">ICD Code</label>
               <input
                 value={form.icdCode}
                 onChange={(e) => setForm((f) => ({ ...f, icdCode: e.target.value }))}
@@ -246,7 +256,9 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">Review Date *</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600">
+                Review Date *
+              </label>
               <input
                 required
                 type="date"
@@ -259,11 +271,16 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
 
           {/* Goals */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex items-center justify-between">
               <label className="text-xs font-medium text-neutral-600">Goals</label>
               <button
                 type="button"
-                onClick={() => setForm((f) => ({ ...f, goals: [...f.goals, { description: '', targetValue: '', targetDate: '' }] }))}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    goals: [...f.goals, { description: '', targetValue: '', targetDate: '' }],
+                  }))
+                }
                 className="text-xs text-primary-600 hover:underline"
               >
                 + Add goal
@@ -271,41 +288,49 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
             </div>
             <div className="space-y-2">
               {form.goals.map((g, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                <div key={i} className="grid grid-cols-12 items-start gap-2">
                   <input
                     value={g.description}
-                    onChange={(e) => setForm((f) => {
-                      const goals = [...f.goals];
-                      goals[i] = { ...goals[i], description: e.target.value };
-                      return { ...f, goals };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const goals = [...f.goals];
+                        goals[i] = { ...goals[i], description: e.target.value };
+                        return { ...f, goals };
+                      })
+                    }
                     placeholder="Goal description"
                     className="col-span-5 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <input
                     value={g.targetValue}
-                    onChange={(e) => setForm((f) => {
-                      const goals = [...f.goals];
-                      goals[i] = { ...goals[i], targetValue: e.target.value };
-                      return { ...f, goals };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const goals = [...f.goals];
+                        goals[i] = { ...goals[i], targetValue: e.target.value };
+                        return { ...f, goals };
+                      })
+                    }
                     placeholder="Target value"
                     className="col-span-3 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <input
                     type="date"
                     value={g.targetDate}
-                    onChange={(e) => setForm((f) => {
-                      const goals = [...f.goals];
-                      goals[i] = { ...goals[i], targetDate: e.target.value };
-                      return { ...f, goals };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const goals = [...f.goals];
+                        goals[i] = { ...goals[i], targetDate: e.target.value };
+                        return { ...f, goals };
+                      })
+                    }
                     className="col-span-3 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, goals: f.goals.filter((_, j) => j !== i) }))}
-                    className="col-span-1 text-neutral-400 hover:text-danger-500 text-lg leading-none pt-0.5"
+                    onClick={() =>
+                      setForm((f) => ({ ...f, goals: f.goals.filter((_, j) => j !== i) }))
+                    }
+                    className="hover:text-danger-500 col-span-1 pt-0.5 text-lg leading-none text-neutral-400"
                     aria-label="Remove goal"
                   >
                     ×
@@ -317,11 +342,19 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
 
           {/* Interventions */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex items-center justify-between">
               <label className="text-xs font-medium text-neutral-600">Interventions</label>
               <button
                 type="button"
-                onClick={() => setForm((f) => ({ ...f, interventions: [...f.interventions, { type: 'lifestyle', description: '', frequency: '' }] }))}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    interventions: [
+                      ...f.interventions,
+                      { type: 'lifestyle', description: '', frequency: '' },
+                    ],
+                  }))
+                }
                 className="text-xs text-primary-600 hover:underline"
               >
                 + Add intervention
@@ -329,14 +362,16 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
             </div>
             <div className="space-y-2">
               {form.interventions.map((iv, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                <div key={i} className="grid grid-cols-12 items-start gap-2">
                   <select
                     value={iv.type}
-                    onChange={(e) => setForm((f) => {
-                      const interventions = [...f.interventions];
-                      interventions[i] = { ...interventions[i], type: e.target.value as any };
-                      return { ...f, interventions };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const interventions = [...f.interventions];
+                        interventions[i] = { ...interventions[i], type: e.target.value as any };
+                        return { ...f, interventions };
+                      })
+                    }
                     className="col-span-3 rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   >
                     <option value="medication">Medication</option>
@@ -346,28 +381,37 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                   </select>
                   <input
                     value={iv.description}
-                    onChange={(e) => setForm((f) => {
-                      const interventions = [...f.interventions];
-                      interventions[i] = { ...interventions[i], description: e.target.value };
-                      return { ...f, interventions };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const interventions = [...f.interventions];
+                        interventions[i] = { ...interventions[i], description: e.target.value };
+                        return { ...f, interventions };
+                      })
+                    }
                     placeholder="Description"
                     className="col-span-5 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <input
                     value={iv.frequency}
-                    onChange={(e) => setForm((f) => {
-                      const interventions = [...f.interventions];
-                      interventions[i] = { ...interventions[i], frequency: e.target.value };
-                      return { ...f, interventions };
-                    })}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const interventions = [...f.interventions];
+                        interventions[i] = { ...interventions[i], frequency: e.target.value };
+                        return { ...f, interventions };
+                      })
+                    }
                     placeholder="Frequency"
                     className="col-span-3 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, interventions: f.interventions.filter((_, j) => j !== i) }))}
-                    className="col-span-1 text-neutral-400 hover:text-danger-500 text-lg leading-none pt-0.5"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        interventions: f.interventions.filter((_, j) => j !== i),
+                      }))
+                    }
+                    className="hover:text-danger-500 col-span-1 pt-0.5 text-lg leading-none text-neutral-400"
                     aria-label="Remove intervention"
                   >
                     ×
@@ -377,13 +421,17 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
             </div>
           </div>
 
-          {formError && <p className="text-sm text-danger-600">{formError}</p>}
+          {formError && <p className="text-danger-600 text-sm">{formError}</p>}
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="secondary"
-              onClick={() => { setShowForm(false); setForm(blankForm()); setFormError(null); }}
+              onClick={() => {
+                setShowForm(false);
+                setForm(blankForm());
+                setFormError(null);
+              }}
             >
               Cancel
             </Button>
@@ -398,24 +446,31 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
       {plans.length === 0 && !showForm ? (
         <EmptyState
           title="No care plans"
-          description={canWrite ? 'Create a care plan to start tracking goals and interventions.' : 'No care plans have been created for this patient.'}
+          description={
+            canWrite
+              ? 'Create a care plan to start tracking goals and interventions.'
+              : 'No care plans have been created for this patient.'
+          }
           icon="📋"
         />
       ) : (
         <ol className="space-y-3" aria-label="Care plans">
           {plans.map((plan) => {
             const isOpen = expanded === plan._id;
-            const activeGoals   = plan.goals.filter((g) => g.status === 'active').length;
+            const activeGoals = plan.goals.filter((g) => g.status === 'active').length;
             const achievedGoals = plan.goals.filter((g) => g.status === 'achieved').length;
-            const totalGoals    = plan.goals.length;
+            const totalGoals = plan.goals.length;
 
             return (
-              <li key={plan._id} className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
+              <li
+                key={plan._id}
+                className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm"
+              >
                 {/* Plan header */}
                 <button
                   type="button"
                   onClick={() => setExpanded(isOpen ? null : plan._id)}
-                  className="w-full flex items-start justify-between gap-3 p-4 text-left hover:bg-neutral-50 transition-colors"
+                  className="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-neutral-50"
                   aria-expanded={isOpen}
                 >
                   <div className="min-w-0 flex-1">
@@ -425,12 +480,16 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                         <span className="font-mono text-xs text-neutral-500">{plan.icdCode}</span>
                       )}
                       {plan.aiGenerated && (
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">AI</span>
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
+                          AI
+                        </span>
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-neutral-500">
                       {totalGoals > 0 && (
-                        <span>{achievedGoals}/{totalGoals} goals achieved</span>
+                        <span>
+                          {achievedGoals}/{totalGoals} goals achieved
+                        </span>
                       )}
                       <span>Review: {new Date(plan.reviewDate).toLocaleDateString()}</span>
                       <span>Created: {new Date(plan.createdAt).toLocaleDateString()}</span>
@@ -440,47 +499,55 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                     {totalGoals > 0 && (
                       <div className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-neutral-100">
                         <div
-                          className="h-1.5 rounded-full bg-success-500 transition-all"
+                          className="bg-success-500 h-1.5 rounded-full transition-all"
                           style={{ width: `${Math.round((achievedGoals / totalGoals) * 100)}%` }}
                         />
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex flex-shrink-0 items-center gap-2">
                     <Badge variant={statusVariant(plan.status)}>{plan.status}</Badge>
-                    <span className="text-neutral-400 text-sm">{isOpen ? '▲' : '▼'}</span>
+                    <span className="text-sm text-neutral-400">{isOpen ? '▲' : '▼'}</span>
                   </div>
                 </button>
 
                 {/* Expanded detail */}
                 {isOpen && (
-                  <div className="border-t border-neutral-100 px-4 pb-4 pt-3 space-y-4">
-
+                  <div className="space-y-4 border-t border-neutral-100 px-4 pb-4 pt-3">
                     {/* Goals */}
                     {plan.goals.length > 0 && (
                       <section aria-label="Goals">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Goals</h4>
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                          Goals
+                        </h4>
                         <ul className="space-y-2">
                           {plan.goals.map((goal, gi) => {
                             const gKey = `${plan._id}-${gi}`;
                             return (
-                              <li key={gi} className="flex items-start justify-between gap-3 rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2">
+                              <li
+                                key={gi}
+                                className="flex items-start justify-between gap-3 rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2"
+                              >
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm text-neutral-800">{goal.description}</p>
                                   <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-neutral-500">
                                     {goal.targetValue && <span>Target: {goal.targetValue}</span>}
-                                    {goal.targetDate && <span>By: {new Date(goal.targetDate).toLocaleDateString()}</span>}
+                                    {goal.targetDate && (
+                                      <span>
+                                        By: {new Date(goal.targetDate).toLocaleDateString()}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <div className="flex flex-shrink-0 items-center gap-1.5">
                                   <Badge variant={goalVariant(goal.status)}>{goal.status}</Badge>
                                   {canWrite && goal.status === 'active' && (
                                     <>
                                       <button
                                         onClick={() => handleGoalStatus(plan, gi, 'achieved')}
                                         disabled={updatingGoal === gKey}
-                                        className="rounded bg-success-100 px-2 py-0.5 text-xs text-success-700 hover:bg-success-200 disabled:opacity-50"
+                                        className="bg-success-100 text-success-700 hover:bg-success-200 rounded px-2 py-0.5 text-xs disabled:opacity-50"
                                       >
                                         Achieved
                                       </button>
@@ -504,15 +571,23 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                     {/* Interventions */}
                     {plan.interventions.length > 0 && (
                       <section aria-label="Interventions">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Interventions</h4>
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                          Interventions
+                        </h4>
                         <ul className="space-y-1.5">
                           {plan.interventions.map((iv, ii) => (
-                            <li key={ii} className="flex items-start gap-2 text-sm text-neutral-700">
+                            <li
+                              key={ii}
+                              className="flex items-start gap-2 text-sm text-neutral-700"
+                            >
                               <span>{INTERVENTION_ICONS[iv.type] ?? '•'}</span>
                               <span>
-                                <span className="capitalize font-medium">{iv.type}</span>
-                                {' — '}{iv.description}
-                                {iv.frequency && <span className="text-neutral-500"> · {iv.frequency}</span>}
+                                <span className="font-medium capitalize">{iv.type}</span>
+                                {' — '}
+                                {iv.description}
+                                {iv.frequency && (
+                                  <span className="text-neutral-500"> · {iv.frequency}</span>
+                                )}
                               </span>
                             </li>
                           ))}
@@ -523,13 +598,18 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                     {/* Monitoring */}
                     {plan.monitoringSchedule.length > 0 && (
                       <section aria-label="Monitoring schedule">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Monitoring</h4>
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                          Monitoring
+                        </h4>
                         <ul className="space-y-1.5">
                           {plan.monitoringSchedule.map((m, mi) => (
                             <li key={mi} className="text-sm text-neutral-700">
                               <span className="font-medium">{m.parameter}</span>
-                              {' — '}{m.frequency}
-                              {m.targetRange && <span className="text-neutral-500"> (target: {m.targetRange})</span>}
+                              {' — '}
+                              {m.frequency}
+                              {m.targetRange && (
+                                <span className="text-neutral-500"> (target: {m.targetRange})</span>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -539,7 +619,7 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                     {/* Review history */}
                     {plan.reviewHistory.length > 0 && (
                       <section aria-label="Review history">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                           Review History ({plan.reviewHistory.length})
                         </h4>
                         <ul className="space-y-1">

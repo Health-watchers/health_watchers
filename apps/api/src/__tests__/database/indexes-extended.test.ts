@@ -84,9 +84,7 @@ describe('Appointment indexes', () => {
       'executionStats'
     )) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 });
@@ -113,9 +111,7 @@ describe('Compound index effectiveness', () => {
       'executionStats'
     )) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 });
@@ -131,7 +127,9 @@ describe('Sparse index behaviour', () => {
   it('multiple payments without txHash can coexist (sparse allows nulls)', async () => {
     const payments = buildPaymentBatch(3).map((p) => ({ ...p, txHash: undefined }));
     // Should not throw unique constraint error for missing txHash fields
-    await expect(PaymentRecordModel.insertMany(payments, { ordered: false })).resolves.toBeDefined();
+    await expect(
+      PaymentRecordModel.insertMany(payments, { ordered: false })
+    ).resolves.toBeDefined();
   });
 });
 
@@ -169,9 +167,7 @@ describe('Index coverage for common query patterns', () => {
       'executionStats'
     )) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 
@@ -185,9 +181,7 @@ describe('Index coverage for common query patterns', () => {
 
     const plan = (await EncounterModel.find({ patientId }).explain('executionStats')) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 
@@ -199,9 +193,7 @@ describe('Index coverage for common query patterns', () => {
       'executionStats'
     )) as any;
     const stage: string =
-      plan?.executionStats?.executionStages?.stage ??
-      plan?.queryPlanner?.winningPlan?.stage ??
-      '';
+      plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
     expect(stage).not.toBe('COLLSCAN');
   });
 });

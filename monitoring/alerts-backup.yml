@@ -1,0 +1,102 @@
+groups:
+  - name: backup-pipeline
+    rules:
+      # ── Freshness — "backups complete daily" ─────────────────────────────
+      - alert: FullBackupRunMissing
+        expr: time() - backup_run_last_timestamp{kind="full"} > 93600
+        for: 30m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'No successful full backup run in ~26h'
+          description: >
+            backup-scheduler.sh has not recorded a successful full backup since
+            {{ $value | humanizeDuration }} ago. Check the mongodb-full-backup CronJob.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/BACKUP_AND_DR_RUNBOOK.md'
+
+      - alert: IncrementalBackupStalled
+        expr: time() - backup_incremental_last_success_timestamp > 5400
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Oplog incremental backup has not run in > 90 minutes'
+          description: >
+            The hourly incremental is overdue, so the recovery point is drifting.
+            Current RPO age: {{ with query "dr_rpo_age_seconds{source=\"oplog\",region=\"primary\"}" }}{{ . | first | value | humanizeDuration }}{{ end }}.
+
+      - alert: BackupRunFailing
+        expr: backup_run_status == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Last {{ $labels.kind }} backup run reported failure'
+          description: 'backup-scheduler.sh exited non-zero for the {{ $labels.kind }} run.'
+
+      # ── Verification — "verification passes 100%" ───────────────────────
+      - alert: BackupChecksumVerificationFailed
+        expr: backup_checksum_status == 0
+        for: 0m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Post-backup checksum verification FAILED'
+          description: >
+            verify-backup-checksum.sh could not download, decrypt or structurally
+            validate the newest backup. Treat the latest backup as unusable.
+
+      - alert: BackupChecksumVerificationStale
+        expr: time() - backup_checksum_last_run_timestamp > 172800
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Backup checksum verification has not run in 48h'
+
+      # ── Monthly DR test — "recovery tested monthly" ────────────────────
+      - alert: MonthlyDRTestOverdue
+        expr: time() - dr_rto_test_timestamp_seconds{component="mongodb"} > 3110400
+        for: 6h
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Monthly DR restore drill has not run in > 36 days'
+          description: 'The mongodb-restore-drill CronJob has not produced a fresh RTO result.'
+
+      # ── Retention & cost — "cost monitored" ───────────────────────────
+      - alert: BackupRetentionNotEnforced
+        expr: time() - backup_retention_last_run_timestamp > 172800
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'GFS retention has not run in 48h — storage may be growing unbounded'
+
+      - alert: BackupStorageCostSpike
+        expr: >
+          backup_estimated_monthly_cost_usd
+          > (avg_over_time(backup_estimated_monthly_cost_usd[30d]) * 1.5)
+        for: 2h
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Estimated backup storage cost is 50% above the 30-day average'
+          description: >
+            Estimated ${{ $value | humanize }}/mo. Check for a retention failure,
+            an unusually large dump, or objects that should be on a colder tier
+            (scripts/backup/backup-cost-report.sh).

@@ -211,7 +211,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               <p className="animate-pulse text-primary-700">Calculating best paths...</p>
             ) : paths.length > 0 ? (
               <fieldset className="space-y-2">
-                <legend className="text-primary-600 font-medium">Available Paths</legend>
+                <legend className="font-medium text-primary-600">Available Paths</legend>
                 <div className="space-y-2">
                   {paths.map((p, idx) => {
                     const rate = parseFloat(p.sourceAmount) / parseFloat(amount);
@@ -219,7 +219,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                     return (
                       <label
                         key={idx}
-                        className={`flex items-center justify-between rounded-md border p-2 cursor-pointer ${
+                        className={`flex cursor-pointer items-center justify-between rounded-md border p-2 ${
                           selectedPathIndex === idx
                             ? 'border-primary-400 bg-white'
                             : 'border-transparent'
@@ -232,7 +232,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                           <div className="text-xs text-primary-500">
                             1 {destinationAsset} ≈ {rate.toFixed(4)} {payWithAsset}
                           </div>
-                          <div className="text-xs text-primary-400">
+                          <div className="text-primary-400 text-xs">
                             {hops === 0
                               ? 'Direct conversion'
                               : `via ${p.path.join(' → ')} (${hops} hop${hops > 1 ? 's' : ''})`}
@@ -250,7 +250,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                     );
                   })}
                 </div>
-                <p className="text-xs text-primary-400">
+                <p className="text-primary-400 text-xs">
                   Rates refresh automatically. Network fees are paid separately in XLM.
                 </p>
               </fieldset>
@@ -305,7 +305,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               <span>Fee speed</span>
               <span className="capitalize">{feeStrategy}</span>
             </div>
-            <p className="text-xs text-neutral-400 pt-1">
+            <p className="pt-1 text-xs text-neutral-400">
               Review carefully — Stellar transactions cannot be reversed.
             </p>
           </div>

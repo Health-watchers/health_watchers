@@ -199,7 +199,7 @@ function formatReport(report: LeakReport, format: string): string {
           ],
         },
         null,
-        2,
+        2
       );
 
     default:

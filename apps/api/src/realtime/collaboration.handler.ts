@@ -239,14 +239,12 @@ export class CollaborationHandler {
     // Send operation history and current state
     const operations = editOperationHistory.get(sessionKey) || [];
     const version = documentVersions.get(sessionKey) || 0;
-    const presence = Array.from(activeEditingSessions.get(sessionKey)?.values() || []).map(
-      (p) => ({
-        userId: p.userId,
-        userName: p.userName,
-        color: p.color,
-        cursorPosition: p.cursorPosition,
-      })
-    );
+    const presence = Array.from(activeEditingSessions.get(sessionKey)?.values() || []).map((p) => ({
+      userId: p.userId,
+      userName: p.userName,
+      color: p.color,
+      cursorPosition: p.cursorPosition,
+    }));
 
     socket.emit('collaboration:sync', {
       resourceId,

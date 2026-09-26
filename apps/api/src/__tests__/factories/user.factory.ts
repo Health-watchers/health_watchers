@@ -29,7 +29,9 @@ const defaultPreferences: User['preferences'] = {
   },
 };
 
-export function buildUser(overrides: Partial<User> = {}): Omit<User, 'password'> & { password: string } {
+export function buildUser(
+  overrides: Partial<User> = {}
+): Omit<User, 'password'> & { password: string } {
   const i = nextSeq();
   return {
     fullName: `Test User ${i}`,

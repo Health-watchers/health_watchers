@@ -31,14 +31,16 @@ const mockRedis = {
     keys.forEach((k) => mockRedisStore.delete(k));
     return keys.length;
   }),
-  scan: jest.fn(async (_cursor: string, _match: string, pattern: string, _count: string, _n: number) => {
-    const matched = [...mockRedisStore.keys()].filter((k) => {
-      // Simple glob matching for tests (replaces * with .*)
-      const re = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-      return re.test(k);
-    });
-    return ['0', matched];
-  }),
+  scan: jest.fn(
+    async (_cursor: string, _match: string, pattern: string, _count: string, _n: number) => {
+      const matched = [...mockRedisStore.keys()].filter((k) => {
+        // Simple glob matching for tests (replaces * with .*)
+        const re = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        return re.test(k);
+      });
+      return ['0', matched];
+    }
+  ),
   exists: jest.fn(async (key: string) => (mockRedisStore.has(key) ? 1 : 0)),
   ping: jest.fn(async () => 'PONG'),
   on: jest.fn(),
@@ -218,12 +220,7 @@ describe('registerWarmup and warmCache', () => {
 
     await warmCache();
 
-    expect(mockRedis.set).toHaveBeenCalledWith(
-      testKey,
-      JSON.stringify(testValue),
-      'EX',
-      120
-    );
+    expect(mockRedis.set).toHaveBeenCalledWith(testKey, JSON.stringify(testValue), 'EX', 120);
   });
 
   it('skips warming when the key is already present', async () => {
@@ -246,7 +243,9 @@ describe('registerWarmup and warmCache', () => {
     registerWarmup({
       key: badKey,
       ttlSeconds: 60,
-      loader: async () => { throw new Error('loader failed'); },
+      loader: async () => {
+        throw new Error('loader failed');
+      },
     });
     registerWarmup({
       key: goodKey,

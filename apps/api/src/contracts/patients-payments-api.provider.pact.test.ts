@@ -79,9 +79,7 @@ describe('Patients & Payments API provider contract verification', () => {
     const verifier = new Verifier({
       provider: 'health-watchers-api',
       providerBaseUrl: `http://localhost:${API_PORT}`,
-      pactUrls: [
-        path.join(PACT_DIR, 'health-watchers-web-health-watchers-api.json'),
-      ],
+      pactUrls: [path.join(PACT_DIR, 'health-watchers-web-health-watchers-api.json')],
       logLevel: 'warn',
       stateHandlers: {
         'patients exist for the authenticated clinic': async () => {

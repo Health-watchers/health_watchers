@@ -33,7 +33,13 @@ interface ActivityFeedContextType {
 
 const ActivityFeedContext = createContext<ActivityFeedContextType | undefined>(undefined);
 
-export function ActivityFeedProvider({ children, token }: { children: React.ReactNode; token?: string }) {
+export function ActivityFeedProvider({
+  children,
+  token,
+}: {
+  children: React.ReactNode;
+  token?: string;
+}) {
   const { socket } = useSocket(token);
   const [activities, setActivities] = useState<Map<string, ActivityEntry[]>>(new Map());
   const [subscribedPatients, setSubscribedPatients] = useState<Set<string>>(new Set());

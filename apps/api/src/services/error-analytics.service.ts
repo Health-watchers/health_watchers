@@ -75,10 +75,7 @@ export class ErrorAnalyticsService {
     return Array.from(this.errorCounts.values());
   }
 
-  getErrorTrends(
-    code?: string,
-    hoursBack: number = 24
-  ): ErrorTrend[] {
+  getErrorTrends(code?: string, hoursBack: number = 24): ErrorTrend[] {
     const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
     let trends = this.errorTrends.filter((t) => t.timestamp >= cutoff);
     if (code) {

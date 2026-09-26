@@ -182,7 +182,10 @@ class PaymentStateMachine {
           typeof validationResult === 'string'
             ? validationResult
             : `Validation failed for transition ${currentState} → ${newState}`;
-        logger.error({ paymentId, currentState, newState, reason }, 'State transition validation failed');
+        logger.error(
+          { paymentId, currentState, newState, reason },
+          'State transition validation failed'
+        );
         throw Object.assign(new Error(reason), {
           paymentId,
           from: currentState,
@@ -204,7 +207,13 @@ class PaymentStateMachine {
     this.recordStateChange(paymentId, updatedContext);
 
     logger.info(
-      { paymentId, from: currentState, to: newState, amount: context.amount, transitionCount: updatedContext.transitionCount },
+      {
+        paymentId,
+        from: currentState,
+        to: newState,
+        amount: context.amount,
+        transitionCount: updatedContext.transitionCount,
+      },
       `Payment state: ${currentState} → ${newState}`
     );
 
@@ -338,7 +347,12 @@ class PaymentStateMachine {
     this.recordStateChange(params.paymentId, context);
 
     logger.info(
-      { paymentId: params.paymentId, amount: params.amount, from: params.fromPublicKey, to: params.toPublicKey },
+      {
+        paymentId: params.paymentId,
+        amount: params.amount,
+        from: params.fromPublicKey,
+        to: params.toPublicKey,
+      },
       'Payment created in PENDING state'
     );
 

@@ -1,0 +1,145 @@
+groups:
+  - name: application-slo
+    rules:
+      # ── Request SLOs (multi-window burn rate on the 99% availability SLO) ──
+      - alert: APIErrorBudgetFastBurn
+        expr: >
+          (
+            job:http_requests:error_ratio5m{job="health-watchers-api"} > (14.4 * 0.01)
+            and
+            job:http_requests:error_ratio1h{job="health-watchers-api"} > (14.4 * 0.01)
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: 'Fast error-budget burn on the API'
+          description: >
+            5m and 1h error ratios are both burning the 99% SLO budget 14x too
+            fast. At this rate the 30-day budget is gone in ~2 days.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/monitoring/runbooks/HIGH_ERROR_RATE.md'
+
+      - alert: APIErrorBudgetSlowBurn
+        expr: >
+          (
+            job:http_requests:error_ratio30m{job="health-watchers-api"} > (6 * 0.01)
+            and
+            job:http_requests:error_ratio6h{job="health-watchers-api"} > (6 * 0.01)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: 'Slow error-budget burn on the API'
+          description: '30m and 6h error ratios exceed the slow-burn threshold for the 99% SLO.'
+
+      - alert: APILatencySLOBreach
+        expr: >
+          job:http_request_duration:p99_5m{job="health-watchers-api"} > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-api-performance
+        annotations:
+          summary: 'API p99 latency over the 1.5s SLO for 10m'
+          description: 'p99 is {{ $value | humanizeDuration }}.'
+
+      # ── Node runtime health ──────────────────────────────────────────────
+      - alert: EventLoopLagHigh
+        expr: nodejs_eventloop_lag_p99_seconds{job="health-watchers-api"} > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Node event-loop p99 lag > 200ms'
+          description: >
+            The API event loop is blocked ({{ $value | humanizeDuration }} p99).
+            Look for synchronous work / large JSON serialisation / GC pressure.
+
+      - alert: NodeHeapNearLimit
+        expr: >
+          nodejs_heap_size_used_bytes{job="health-watchers-api"}
+          / nodejs_heap_size_total_bytes{job="health-watchers-api"} > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'API heap usage above 90%'
+
+  - name: application-subsystems
+    rules:
+      # ── Notifications (#1250) ───────────────────────────────────────────
+      - alert: NotificationDeliveryFailureRateHigh
+        expr: >
+          (
+            sum(rate(notification_deliveries_total{status="failed"}[15m]))
+            / clamp_min(sum(rate(notification_deliveries_total[15m])), 0.001)
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-notifications-telehealth
+        annotations:
+          summary: 'Notification delivery failure rate over 10%'
+          description: >
+            {{ $value | humanizePercentage }} of notification deliveries failed
+            in the last 15m. Check the email/SMS/push provider adapters and
+            `notification_deliveries_total{status="failed"}` by channel.
+
+      - alert: NotificationRetryQueueBacklog
+        expr: notification_retry_queue_depth > 500
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-notifications-telehealth
+        annotations:
+          summary: 'Notification retry queue backing up ({{ $value }} pending)'
+          description: 'The dispatch worker is not draining scheduled/retry deliveries fast enough.'
+
+      - alert: NotificationChannelAllSkipped
+        expr: >
+          sum(rate(notification_deliveries_total{status="skipped"}[15m])) > 0
+          and sum(rate(notification_deliveries_total{status=~"sent|delivered"}[15m])) == 0
+        for: 15m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'Every notification is being skipped — no channel is configured'
+          description: 'No provider adapter reported itself configured; users are receiving nothing.'
+
+      # ── Telehealth (#1249) ─────────────────────────────────────────────
+      - alert: TelehealthRecordingConsentDenialSpike
+        expr: >
+          sum(increase(telehealth_recording_consent_total{outcome="denied"}[1h])) > 20
+        for: 0m
+        labels:
+          severity: info
+          team: product
+          dashboard: hw-notifications-telehealth
+        annotations:
+          summary: 'Unusual number of recording-consent denials in the last hour'
+
+      - alert: TelehealthActiveSessionsStuck
+        expr: >
+          telehealth_active_sessions > 0
+          and sum(increase(telehealth_sessions_total{event="ended"}[2h])) == 0
+          and sum(increase(telehealth_sessions_total{event="started"}[2h])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Active telehealth sessions gauge is stuck'
+          description: >
+            {{ $value }} sessions show active but none have started or ended in 2h —
+            sessions may not be getting closed out (missing end/cancel calls).

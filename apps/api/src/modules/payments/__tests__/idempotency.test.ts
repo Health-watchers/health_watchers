@@ -89,11 +89,15 @@ const CLINIC_A = 'clinic-aaa';
 const CLINIC_B = 'clinic-bbb';
 
 function makeToken(clinicId: string, role = 'CLINIC_ADMIN'): string {
-  return jwt.sign({ userId: new mongoose.Types.ObjectId().toString(), role, clinicId }, SECRET, {
-    expiresIn: '15m',
-    issuer: 'health-watchers-api',
-    audience: 'health-watchers-client',
-  });
+  return jwt.sign(
+    { userId: new mongoose.Types.ObjectId().toString(), role, clinicId, jti: 'test-jti' },
+    SECRET,
+    {
+      expiresIn: '15m',
+      issuer: 'health-watchers-api',
+      audience: 'health-watchers-client',
+    }
+  );
 }
 
 // ── MongoDB Memory Server lifecycle ──────────────────────────────────────────

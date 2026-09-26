@@ -59,20 +59,16 @@ export function DocumentViewer({
   };
 
   const handleDelete = (document: DocumentData) => {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete "${document.name}"?`,
-      [
-        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
-        {
-          text: 'Delete',
-          onPress: async () => {
-            await onDocumentDelete?.(document.id);
-          },
-          style: 'destructive',
+    Alert.alert('Delete Document', `Are you sure you want to delete "${document.name}"?`, [
+      { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+      {
+        text: 'Delete',
+        onPress: async () => {
+          await onDocumentDelete?.(document.id);
         },
-      ]
-    );
+        style: 'destructive',
+      },
+    ]);
   };
 
   const renderDocument = ({ item: document }: { item: DocumentData }) => {
@@ -80,17 +76,12 @@ export function DocumentViewer({
 
     return (
       <TouchableOpacity
-        style={[
-          styles.documentCard,
-          selectedId === document.id && styles.selectedCard,
-        ]}
+        style={[styles.documentCard, selectedId === document.id && styles.selectedCard]}
         onPress={() => setSelectedId(selectedId === document.id ? null : document.id)}
         activeOpacity={0.7}
       >
         <View style={styles.documentHeader}>
-          <Text style={styles.documentIcon}>
-            {DOCUMENT_ICONS[document.type]}
-          </Text>
+          <Text style={styles.documentIcon}>{DOCUMENT_ICONS[document.type]}</Text>
           <View style={styles.documentInfo}>
             <Text style={styles.documentName} numberOfLines={1}>
               {document.name}
@@ -147,9 +138,7 @@ export function DocumentViewer({
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Documents</Text>
-        {documents.length > 0 && (
-          <Text style={styles.count}>{documents.length}</Text>
-        )}
+        {documents.length > 0 && <Text style={styles.count}>{documents.length}</Text>}
       </View>
 
       {documents.length > 0 ? (
