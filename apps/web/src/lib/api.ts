@@ -21,10 +21,17 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_URL}${endpoint}`;
+export function apiFetch(endpoint: string, options: RequestInit = {}) {
+  return requestJson(`${API_URL}${endpoint}`, options);
+}
 
-  // Read CSRF token from cookie for state-changing requests
+/** Like apiFetch, but relative to the normalised /api/v1 base (e.g. `/audit?limit=50`). */
+export function apiV1Fetch(endpoint: string, options: RequestInit = {}) {
+  return requestJson(`${API_V1}${endpoint}`, options);
+}
+
+/** CSRF header for state-changing requests made outside apiFetch (e.g. multipart uploads). */
+export function csrfHeader(): Record<string, string> {
   const csrfToken =
     typeof document !== 'undefined'
       ? document.cookie
@@ -32,7 +39,10 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
           .find((r) => r.startsWith('csrf-token='))
           ?.split('=')[1]
       : undefined;
+  return csrfToken ? { 'X-CSRF-Token': csrfToken } : {};
+}
 
+async function requestJson(url: string, options: RequestInit) {
   const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
     (options.method ?? 'GET').toUpperCase()
   );
@@ -42,7 +52,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(isMutation && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...(isMutation ? csrfHeader() : {}),
       ...(options.headers ?? {}),
     },
   });
