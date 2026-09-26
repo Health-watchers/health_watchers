@@ -183,7 +183,7 @@ export function InsuranceTab({ patientId, canEdit }: { patientId: string; canEdi
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="bg-primary-600 hover:bg-primary-700 rounded px-4 py-2 text-sm text-white disabled:opacity-50"
+                  className="rounded bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50"
                 >
                   {submitting ? 'Saving...' : 'Save Insurance'}
                 </button>
@@ -238,7 +238,7 @@ export function InsuranceTab({ patientId, canEdit }: { patientId: string; canEdi
                     {!ins.isPrimary && (
                       <button
                         onClick={() => setPrimary(ins)}
-                        className="text-primary-600 text-xs hover:underline focus:outline-none"
+                        className="text-xs text-primary-600 hover:underline focus:outline-none"
                         aria-label={`Set ${ins.provider} as primary insurance`}
                       >
                         Set primary

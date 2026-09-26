@@ -47,27 +47,69 @@ interface ExportConfig {
 const DEFAULT_FIELDS: ExportField[] = [
   // Demographics
   { id: 'name', name: 'name', label: 'Patient Name', selected: true, category: 'demographics' },
-  { id: 'mrn', name: 'mrn', label: 'Medical Record Number', selected: true, category: 'demographics' },
+  {
+    id: 'mrn',
+    name: 'mrn',
+    label: 'Medical Record Number',
+    selected: true,
+    category: 'demographics',
+  },
   { id: 'dob', name: 'dob', label: 'Date of Birth', selected: true, category: 'demographics' },
   { id: 'gender', name: 'gender', label: 'Gender', selected: true, category: 'demographics' },
-  { id: 'contact', name: 'contact', label: 'Contact Information', selected: true, category: 'demographics' },
+  {
+    id: 'contact',
+    name: 'contact',
+    label: 'Contact Information',
+    selected: true,
+    category: 'demographics',
+  },
 
   // Clinical
   { id: 'vitals', name: 'vitals', label: 'Vital Signs', selected: true, category: 'clinical' },
   { id: 'diagnosis', name: 'diagnosis', label: 'Diagnosis', selected: true, category: 'clinical' },
-  { id: 'medications', name: 'medications', label: 'Medications', selected: true, category: 'clinical' },
+  {
+    id: 'medications',
+    name: 'medications',
+    label: 'Medications',
+    selected: true,
+    category: 'clinical',
+  },
   { id: 'allergy', name: 'allergy', label: 'Allergies', selected: true, category: 'clinical' },
   { id: 'notes', name: 'notes', label: 'Clinical Notes', selected: true, category: 'clinical' },
-  { id: 'procedures', name: 'procedures', label: 'Procedures', selected: false, category: 'clinical' },
+  {
+    id: 'procedures',
+    name: 'procedures',
+    label: 'Procedures',
+    selected: false,
+    category: 'clinical',
+  },
   { id: 'labs', name: 'labs', label: 'Lab Results', selected: false, category: 'clinical' },
 
   // Billing
   { id: 'invoices', name: 'invoices', label: 'Invoices', selected: false, category: 'billing' },
-  { id: 'payments', name: 'payments', label: 'Payment History', selected: false, category: 'billing' },
-  { id: 'insurance', name: 'insurance', label: 'Insurance Information', selected: false, category: 'billing' },
+  {
+    id: 'payments',
+    name: 'payments',
+    label: 'Payment History',
+    selected: false,
+    category: 'billing',
+  },
+  {
+    id: 'insurance',
+    name: 'insurance',
+    label: 'Insurance Information',
+    selected: false,
+    category: 'billing',
+  },
 
   // Attachments
-  { id: 'documents', name: 'documents', label: 'Documents', selected: false, category: 'attachments' },
+  {
+    id: 'documents',
+    name: 'documents',
+    label: 'Documents',
+    selected: false,
+    category: 'attachments',
+  },
 ];
 
 export function DataExportInterface({
@@ -76,7 +118,9 @@ export function DataExportInterface({
   onExport,
   onCancel,
 }: DataExportInterfaceProps) {
-  const [step, setStep] = useState<'format' | 'fields' | 'options' | 'schedule' | 'review'>('format');
+  const [step, setStep] = useState<'format' | 'fields' | 'options' | 'schedule' | 'review'>(
+    'format'
+  );
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('pdf');
   const [fields, setFields] = useState<ExportField[]>(DEFAULT_FIELDS);
   const [startDate, setStartDate] = useState(
@@ -102,15 +146,11 @@ export function DataExportInterface({
   };
 
   const handleFieldToggle = (fieldId: string) => {
-    setFields((prev) =>
-      prev.map((f) => (f.id === fieldId ? { ...f, selected: !f.selected } : f))
-    );
+    setFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f, selected: !f.selected } : f)));
   };
 
   const handleSelectCategory = (category: string, selected: boolean) => {
-    setFields((prev) =>
-      prev.map((f) => (f.category === category ? { ...f, selected } : f))
-    );
+    setFields((prev) => prev.map((f) => (f.category === category ? { ...f, selected } : f)));
   };
 
   const handleNextStep = () => {
@@ -234,7 +274,7 @@ export function DataExportInterface({
         <button
           type="button"
           onClick={() => setShowAuditLog(!showAuditLog)}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          className="text-sm font-medium text-blue-600 hover:text-blue-800"
         >
           {showAuditLog ? 'Hide' : 'View'} Audit Log
         </button>
@@ -282,10 +322,8 @@ export function DataExportInterface({
               <div key={category} className="space-y-2 rounded-lg border border-gray-200 p-4">
                 <button
                   type="button"
-                  onClick={() =>
-                    handleSelectCategory(category, !allSelected)
-                  }
-                  className="flex items-center gap-3 font-semibold text-gray-900 capitalize hover:text-blue-600"
+                  onClick={() => handleSelectCategory(category, !allSelected)}
+                  className="flex items-center gap-3 font-semibold capitalize text-gray-900 hover:text-blue-600"
                 >
                   <input
                     type="checkbox"
@@ -298,7 +336,7 @@ export function DataExportInterface({
 
                 <div className="ml-7 space-y-2">
                   {categoryFields.map((field) => (
-                    <label key={field.id} className="flex items-center gap-3 cursor-pointer">
+                    <label key={field.id} className="flex cursor-pointer items-center gap-3">
                       <input
                         type="checkbox"
                         checked={field.selected}
@@ -326,7 +364,7 @@ export function DataExportInterface({
 
           <div className="space-y-3 rounded-lg border border-gray-200 p-4">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">Date Range</label>
+              <label className="mb-2 block text-sm font-medium text-gray-900">Date Range</label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-medium text-gray-600">Start Date</label>
@@ -334,7 +372,7 @@ export function DataExportInterface({
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -343,14 +381,14 @@ export function DataExportInterface({
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="mb-2 block text-sm font-medium text-gray-900">
                 Encryption Level
               </label>
               <select
@@ -362,15 +400,17 @@ export function DataExportInterface({
                 <option value="aes256">AES-256 Encryption (Recommended)</option>
                 <option value="pgp">PGP Encryption</option>
               </select>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-gray-500">
                 Encrypted exports are HIPAA-compliant and password-protected
               </p>
             </div>
 
             {encryption !== 'none' && (
-              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
-                <p className="font-semibold mb-1">Security Note:</p>
-                <p>Exported data will be encrypted. You'll receive a separate password via email.</p>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                <p className="mb-1 font-semibold">Security Note:</p>
+                <p>
+                  Exported data will be encrypted. You'll receive a separate password via email.
+                </p>
               </div>
             )}
           </div>
@@ -383,7 +423,7 @@ export function DataExportInterface({
           <h3 className="text-lg font-semibold text-gray-900">Delivery Options</h3>
 
           <div className="space-y-4 rounded-lg border border-gray-200 p-4">
-            <label className="flex items-center gap-3 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
                 checked={sendEmail}
@@ -395,7 +435,9 @@ export function DataExportInterface({
 
             {sendEmail && (
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Email Address</label>
+                <label className="mb-2 block text-sm font-medium text-gray-900">
+                  Email Address
+                </label>
                 <input
                   type="email"
                   value={emailAddress}
@@ -407,30 +449,35 @@ export function DataExportInterface({
             )}
 
             <div className="border-t border-gray-200 pt-4">
-              <label className="flex items-center gap-3 cursor-pointer mb-3">
+              <label className="mb-3 flex cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
                   checked={scheduleExport}
                   onChange={(e) => setScheduleExport(e.target.checked)}
                   className="h-4 w-4"
                 />
-                <span className="text-sm font-medium text-gray-900">Schedule Automated Exports</span>
+                <span className="text-sm font-medium text-gray-900">
+                  Schedule Automated Exports
+                </span>
               </label>
 
               {scheduleExport && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-2">Frequency</label>
+                  <label className="mb-2 block text-sm font-medium text-gray-900">Frequency</label>
                   <select
                     value={frequency}
-                    onChange={(e) => setFrequency(e.target.value as 'weekly' | 'monthly' | 'quarterly')}
+                    onChange={(e) =>
+                      setFrequency(e.target.value as 'weekly' | 'monthly' | 'quarterly')
+                    }
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                   </select>
-                  <p className="text-xs text-gray-500 mt-2">
-                    You'll receive automated exports on the selected schedule. All activity is logged for audit purposes.
+                  <p className="mt-2 text-xs text-gray-500">
+                    You'll receive automated exports on the selected schedule. All activity is
+                    logged for audit purposes.
                   </p>
                 </div>
               )}
@@ -446,43 +493,47 @@ export function DataExportInterface({
 
           <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Format</p>
+              <p className="text-xs font-semibold uppercase text-gray-600">Format</p>
               <p className="text-sm font-medium text-gray-900">{formatInfo[selectedFormat].name}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Fields</p>
+              <p className="text-xs font-semibold uppercase text-gray-600">Fields</p>
               <p className="text-sm text-gray-900">{selectedFields.length} fields selected</p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Date Range</p>
+              <p className="text-xs font-semibold uppercase text-gray-600">Date Range</p>
               <p className="text-sm text-gray-900">
                 {startDate} to {endDate}
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Encryption</p>
-              <p className="text-sm text-gray-900 capitalize">
-                {encryption === 'aes256' ? 'AES-256' : encryption === 'pgp' ? 'PGP' : 'No encryption'}
+              <p className="text-xs font-semibold uppercase text-gray-600">Encryption</p>
+              <p className="text-sm capitalize text-gray-900">
+                {encryption === 'aes256'
+                  ? 'AES-256'
+                  : encryption === 'pgp'
+                    ? 'PGP'
+                    : 'No encryption'}
               </p>
             </div>
             {sendEmail && (
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Email Delivery</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Email Delivery</p>
                 <p className="text-sm text-gray-900">{emailAddress}</p>
               </div>
             )}
             {scheduleExport && (
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase">Schedule</p>
-                <p className="text-sm text-gray-900 capitalize">{frequency} automatic exports</p>
+                <p className="text-xs font-semibold uppercase text-gray-600">Schedule</p>
+                <p className="text-sm capitalize text-gray-900">{frequency} automatic exports</p>
               </div>
             )}
           </div>
 
-          <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm text-blue-900">
-              <strong>Privacy Notice:</strong> Your data export is HIPAA-compliant and will be encrypted.
-              All export activities are logged and audited.
+              <strong>Privacy Notice:</strong> Your data export is HIPAA-compliant and will be
+              encrypted. All export activities are logged and audited.
             </p>
           </div>
         </div>
@@ -499,7 +550,7 @@ export function DataExportInterface({
                 <p className="text-xs text-gray-500">{job.createdAt}</p>
               </div>
               <span
-                className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                className={`rounded-full px-2 py-1 text-xs font-semibold ${
                   job.status === 'completed'
                     ? 'bg-green-100 text-green-700'
                     : job.status === 'failed'

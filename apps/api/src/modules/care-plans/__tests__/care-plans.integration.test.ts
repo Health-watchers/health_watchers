@@ -43,7 +43,11 @@ function buildApp() {
 
 const SECRET = 'test-access-secret-32-chars-long!!';
 
-function makeToken(clinicId: string, role = 'DOCTOR', userId = new mongoose.Types.ObjectId().toString()) {
+function makeToken(
+  clinicId: string,
+  role = 'DOCTOR',
+  userId = new mongoose.Types.ObjectId().toString()
+) {
   return jwt.sign({ userId, role, clinicId }, SECRET, {
     expiresIn: '15m',
     issuer: 'health-watchers-api',

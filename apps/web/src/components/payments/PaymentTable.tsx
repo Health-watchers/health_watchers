@@ -107,6 +107,17 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                   {t(col)}
                 </th>
               ))}
+              {['ID', 'Patient', 'Amount', 'Status', 'Transaction', 'Date', 'Actions'].map(
+                (col) => (
+                  <th
+                    key={col}
+                    scope="col"
+                    className={`px-4 py-3 text-xs font-medium uppercase tracking-wide text-neutral-500 ${col === 'Actions' ? 'text-right' : 'text-left'}`}
+                  >
+                    {col}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100 bg-white">
@@ -147,11 +158,14 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                           timeStyle: 'short',
                         })
                       : '—'}
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-500">
+                    {p.createdAt ? formatDate(p.createdAt) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setTimelineTarget(p)}>
                         {t('timeline')}
+                        Timeline
                       </Button>
 
                       {canShowReceipt(p) && (
@@ -167,12 +181,14 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                       {canFileDispute(p.status) && (
                         <Button size="sm" variant="secondary" onClick={() => setDisputeTarget(p)}>
                           {t('fileDispute')}
+                          File dispute
                         </Button>
                       )}
 
                       {p.status === 'pending' && (
                         <Button size="sm" variant="primary" onClick={() => setConfirmTarget(p.id)}>
                           {t('confirm')}
+                          Confirm
                         </Button>
                       )}
 
@@ -181,7 +197,7 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                           href={`https://stellar.expert/explorer/${network}/tx/${p.txHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary-500 hover:bg-primary-50 focus-visible:ring-primary-500 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2"
+                          className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-500 transition-colors hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                         >
                           {t('viewOnExplorer')}
                           <svg

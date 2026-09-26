@@ -246,7 +246,7 @@ export default function WebhookManager() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-200 text-left text-xs tracking-wide uppercase text-neutral-500">
+                  <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
                     <th className="pb-2 pr-4">URL</th>
                     <th className="pb-2 pr-4">Events</th>
                     <th className="pb-2 pr-4">Status</th>
@@ -292,11 +292,7 @@ export default function WebhookManager() {
                           <Button size="sm" variant="ghost" onClick={() => handleViewDetails(wh)}>
                             Details
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleToggle(wh)}
-                          >
+                          <Button size="sm" variant="ghost" onClick={() => handleToggle(wh)}>
                             {wh.isActive ? 'Pause' : 'Enable'}
                           </Button>
                         </div>
@@ -392,15 +388,15 @@ export default function WebhookManager() {
                       <div className="text-sm">
                         <span className="font-medium text-neutral-900">{d.event}</span>
                         <span className="mx-2 text-neutral-300">|</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(d.status)}`}>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(d.status)}`}
+                        >
                           {d.status}
                         </span>
                         <span className="ml-2 text-xs text-neutral-500">
                           {d.attempts} attempt{d.attempts !== 1 ? 's' : ''}
                         </span>
-                        {d.error && (
-                          <p className="mt-1 text-xs text-red-600">{d.error}</p>
-                        )}
+                        {d.error && <p className="mt-1 text-xs text-red-600">{d.error}</p>}
                       </div>
                       {(d.status === 'failed' || d.status === 'dead') && (
                         <Button
@@ -427,15 +423,15 @@ export default function WebhookManager() {
                     <div className="text-sm">
                       <span className="font-medium text-neutral-900">{e.event}</span>
                       <span className="mx-2 text-neutral-300">|</span>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(e.status)}`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(e.status)}`}
+                      >
                         {e.status}
                       </span>
                       <span className="ml-2 text-xs text-neutral-500">
                         {new Date(e.createdAt).toLocaleString()}
                       </span>
-                      {e.error && (
-                        <p className="mt-1 text-xs text-red-600">{e.error}</p>
-                      )}
+                      {e.error && <p className="mt-1 text-xs text-red-600">{e.error}</p>}
                     </div>
                   </div>
                 ))}
@@ -443,11 +439,7 @@ export default function WebhookManager() {
             )}
 
             <div className="flex justify-end gap-2 border-t border-neutral-200 pt-4">
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => handleDelete(selectedWebhook)}
-              >
+              <Button size="sm" variant="danger" onClick={() => handleDelete(selectedWebhook)}>
                 Delete Webhook
               </Button>
             </div>
@@ -520,7 +512,7 @@ function CreateWebhookForm({
   return (
     <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose}>
       <div
-        className="fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 shadow-lg dark:bg-neutral-800"
+        className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 shadow-lg dark:bg-neutral-800"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
@@ -531,7 +523,7 @@ function CreateWebhookForm({
             <label className="mb-1 block text-sm font-medium text-neutral-700">URL</label>
             <input
               type="url"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="https://your-server.com/webhook"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -545,7 +537,7 @@ function CreateWebhookForm({
             </label>
             <input
               type="text"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="e.g. Lab system integration"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -564,7 +556,7 @@ function CreateWebhookForm({
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       selectedEvents.includes(event)
                         ? 'border-primary-600 bg-primary-600 text-white'
-                        : 'border-neutral-300 bg-white text-neutral-700 hover:border-primary-400'
+                        : 'hover:border-primary-400 border-neutral-300 bg-white text-neutral-700'
                     }`}
                   >
                     {event}
@@ -584,15 +576,17 @@ function CreateWebhookForm({
                 type="number"
                 min={1}
                 max={10}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 value={maxRetries}
                 onChange={(e) => setMaxRetries(parseInt(e.target.value) || 3)}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Backoff Type</label>
+              <label className="mb-1 block text-sm font-medium text-neutral-700">
+                Backoff Type
+              </label>
               <select
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 value={backoffType}
                 onChange={(e) => setBackoffType(e.target.value)}
               >

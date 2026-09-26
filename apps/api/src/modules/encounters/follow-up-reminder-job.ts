@@ -58,7 +58,10 @@ export async function sendFollowUpReminders(): Promise<void> {
         }
       }
     } catch (err) {
-      logger.error({ err, encounterId: (encounter as any)._id }, 'Failed to send follow-up reminder');
+      logger.error(
+        { err, encounterId: (encounter as any)._id },
+        'Failed to send follow-up reminder'
+      );
     }
   }
 }
@@ -75,9 +78,7 @@ export function startFollowUpReminderJob(): void {
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
   setTimeout(() => {
-    sendFollowUpReminders().catch((err) =>
-      logger.error({ err }, 'Follow-up reminder job failed')
-    );
+    sendFollowUpReminders().catch((err) => logger.error({ err }, 'Follow-up reminder job failed'));
     reminderInterval = setInterval(() => {
       sendFollowUpReminders().catch((err) =>
         logger.error({ err }, 'Follow-up reminder job failed')
@@ -85,7 +86,9 @@ export function startFollowUpReminderJob(): void {
     }, TWENTY_FOUR_HOURS);
   }, delay);
 
-  logger.info(`Follow-up reminder job scheduled (first run in ${Math.round(delay / 60000)} minutes)`);
+  logger.info(
+    `Follow-up reminder job scheduled (first run in ${Math.round(delay / 60000)} minutes)`
+  );
 }
 
 export function stopFollowUpReminderJob(): void {

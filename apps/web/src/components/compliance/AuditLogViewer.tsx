@@ -118,7 +118,7 @@ export function AuditLogViewer({ logs = [], onExport }: AuditLogViewerProps) {
               filteredLogs.map((log) => (
                 <tr
                   key={log.id}
-                  className="border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900/50"
+                  className="border-b border-neutral-200 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900/50"
                 >
                   <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
                     {new Date(log.timestamp).toLocaleString()}
@@ -143,7 +143,10 @@ export function AuditLogViewer({ logs = [], onExport }: AuditLogViewerProps) {
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-600 dark:text-neutral-400">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-600 dark:text-neutral-400"
+                >
                   No audit logs match the selected filters
                 </td>
               </tr>

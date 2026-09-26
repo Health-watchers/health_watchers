@@ -15,9 +15,7 @@ describe('surveyResponseSchema', () => {
   });
 
   it('rejects a rating below 1', () => {
-    expect(
-      surveyResponseSchema.safeParse({ ...validResponse, waitTime: 0 }).success
-    ).toBe(false);
+    expect(surveyResponseSchema.safeParse({ ...validResponse, waitTime: 0 }).success).toBe(false);
   });
 
   it('rejects a rating above 5', () => {

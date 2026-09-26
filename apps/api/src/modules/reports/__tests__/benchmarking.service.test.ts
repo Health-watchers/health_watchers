@@ -43,7 +43,12 @@ describe('calculateClinicMetrics', () => {
     (PatientModel.countDocuments as jest.Mock).mockResolvedValue(2);
     (EncounterModel.find as jest.Mock).mockReturnValue(leanArray([]));
     (PaymentRecordModel.find as jest.Mock).mockReturnValue(
-      leanArray([{ status: 'confirmed' }, { status: 'confirmed' }, { status: 'failed' }, { status: 'failed' }])
+      leanArray([
+        { status: 'confirmed' },
+        { status: 'confirmed' },
+        { status: 'failed' },
+        { status: 'failed' },
+      ])
     );
     (EncounterModel.countDocuments as jest.Mock).mockResolvedValue(0);
 

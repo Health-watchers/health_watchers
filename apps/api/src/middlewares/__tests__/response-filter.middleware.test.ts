@@ -78,7 +78,12 @@ describe('responseFilterMiddleware', () => {
   });
 
   it('filters arrays of objects', async () => {
-    const arr = { items: [{ ssn: '111', name: 'A' }, { ssn: '222', name: 'B' }] };
+    const arr = {
+      items: [
+        { ssn: '111', name: 'A' },
+        { ssn: '222', name: 'B' },
+      ],
+    };
     const res = await request(makeApp('READ_ONLY', arr)).get('/test');
     expect(res.body.items[0].name).toBe('A');
     expect(res.body.items[0].ssn).toBeUndefined();

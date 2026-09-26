@@ -58,7 +58,9 @@ export default function ForgotPasswordPage() {
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary-100">
             <span className="text-2xl">🔐</span>
           </div>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">Reset Password</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">
+            Reset Password
+          </h1>
           <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
             Enter your email address and we'll send you a secure link to reset your password.
           </p>
@@ -66,11 +68,11 @@ export default function ForgotPasswordPage() {
 
         {success ? (
           <div className="space-y-4">
-            <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 dark:border-success-900 dark:bg-success-900/30">
-              <p className="font-medium text-success-900 dark:text-success-200">Check your email</p>
-              <p className="mt-1 text-sm text-success-700 dark:text-success-300">
-                We've sent a password reset link to <span className="font-semibold">{emailValue}</span>.
-                The link expires in 1 hour.
+            <div className="border-success-200 bg-success-50 dark:border-success-900 dark:bg-success-900/30 rounded-lg border px-4 py-3">
+              <p className="text-success-900 dark:text-success-200 font-medium">Check your email</p>
+              <p className="text-success-700 dark:text-success-300 mt-1 text-sm">
+                We've sent a password reset link to{' '}
+                <span className="font-semibold">{emailValue}</span>. The link expires in 1 hour.
               </p>
             </div>
             <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
@@ -78,7 +80,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="button"
                 onClick={() => setSuccess(false)}
-                className="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                className="dark:text-primary-400 font-medium text-primary-600 hover:underline"
               >
                 try again
               </button>
@@ -90,7 +92,7 @@ export default function ForgotPasswordPage() {
             {serverError && (
               <div
                 role="alert"
-                className="mb-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400"
+                className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 mb-4 rounded-lg border px-4 py-3 text-sm"
               >
                 <p className="font-medium">Error</p>
                 <p className="mt-1">{serverError}</p>
@@ -123,7 +125,7 @@ export default function ForgotPasswordPage() {
         <div className="mt-6 text-center">
           <Link
             href="/login"
-            className="text-primary-600 text-sm font-medium hover:text-primary-700 focus:outline-none focus:underline dark:text-primary-400 dark:hover:text-primary-300"
+            className="dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium text-primary-600 hover:text-primary-700 focus:underline focus:outline-none"
           >
             ← Back to sign in
           </Link>

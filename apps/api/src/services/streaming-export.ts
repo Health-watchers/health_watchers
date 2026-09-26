@@ -92,8 +92,15 @@ export async function streamPatientExport(
 
     if (format === 'csv') {
       const headers = [
-        'systemId', 'firstName', 'lastName', 'dateOfBirth', 'sex',
-        'contactNumber', 'address', 'isActive', 'createdAt',
+        'systemId',
+        'firstName',
+        'lastName',
+        'dateOfBirth',
+        'sex',
+        'contactNumber',
+        'address',
+        'isActive',
+        'createdAt',
       ];
       const csvGenerator = new StreamingCsvGenerator({ headers });
       const transform = csvGenerator.createTransformStream();
@@ -167,8 +174,15 @@ export async function streamPaymentExport(
 
     if (format === 'csv') {
       const headers = [
-        'id', 'amount', 'assetCode', 'status', 'fromAddress', 'toAddress',
-        'memo', 'txHash', 'createdAt',
+        'id',
+        'amount',
+        'assetCode',
+        'status',
+        'fromAddress',
+        'toAddress',
+        'memo',
+        'txHash',
+        'createdAt',
       ];
       const csvGenerator = new StreamingCsvGenerator({ headers });
       const transform = csvGenerator.createTransformStream();
@@ -236,7 +250,9 @@ export async function streamResearchExport(
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', 'attachment; filename="research-export.json"');
     res.setHeader('Transfer-Encoding', 'chunked');
-    res.write(`{\n  "status": "success",\n  "exportedAt": "${new Date().toISOString()}",\n  "data": [\n`);
+    res.write(
+      `{\n  "status": "success",\n  "exportedAt": "${new Date().toISOString()}",\n  "data": [\n`
+    );
 
     let processed = 0;
     let first = true;

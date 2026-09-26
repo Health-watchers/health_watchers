@@ -55,7 +55,10 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
     <div
       role="tablist"
       onKeyDown={handleKeyDown}
-      className={['flex gap-1 border-b border-neutral-200 dark:border-neutral-700', className ?? ''].join(' ')}
+      className={[
+        'flex gap-1 border-b border-neutral-200 dark:border-neutral-700',
+        className ?? '',
+      ].join(' ')}
     >
       {children}
     </div>
@@ -81,9 +84,9 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
       tabIndex={isActive ? 0 : -1}
       onClick={() => onChange(value)}
       className={[
-        'focus-visible:ring-primary-500 -mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2',
+        '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
         isActive
-          ? 'border-primary-500 text-primary-500 dark:text-primary-400'
+          ? 'dark:text-primary-400 border-primary-500 text-primary-500'
           : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100',
         className ?? '',
       ].join(' ')}

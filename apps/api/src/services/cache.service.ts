@@ -194,6 +194,24 @@ export const cache = {
     logger.debug({ clinicId }, '[cache] reports invalidated');
   },
 
+  /**
+   * Atomically increment a counter and (on first write) set its TTL.
+   * Returns the new value, or `null` when Redis is unavailable so callers
+   * can fall back to a local strategy. Used by the per-API-key rate limiter.
+   */
+  async incr(key: string, ttlSeconds: number): Promise<number | null> {
+    const redis = getClient();
+    if (!redis) return null;
+    try {
+      const value = await redis.incr(key);
+      if (value === 1) await redis.expire(key, ttlSeconds);
+      return value;
+    } catch (err) {
+      logger.warn({ err, key }, '[cache] incr error');
+      return null;
+    }
+  },
+
   async ping(): Promise<{ status: string; latency?: number }> {
     const redis = getClient();
     if (!redis) return { status: 'disabled' };

@@ -55,9 +55,7 @@ function shouldDispatch(clinicId: string, event: string): boolean {
   return true;
 }
 
-export async function dispatchWebhookEvent(
-  options: DispatchOptions
-): Promise<void>;
+export async function dispatchWebhookEvent(options: DispatchOptions): Promise<void>;
 export async function dispatchWebhookEvent(
   clinicId: string,
   event: string,
@@ -148,7 +146,10 @@ export async function dispatchBulkEvents(
       dispatched++;
     } catch (error) {
       failed++;
-      logger.error({ event: event.event, clinicId: event.clinicId, error }, 'Failed to dispatch webhook event');
+      logger.error(
+        { event: event.event, clinicId: event.clinicId, error },
+        'Failed to dispatch webhook event'
+      );
     }
   }
 

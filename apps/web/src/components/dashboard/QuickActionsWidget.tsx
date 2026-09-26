@@ -75,6 +75,20 @@ export function QuickActionsWidget({ actions = DEFAULT_ACTIONS }: QuickActionsWi
             </Link>
           );
         })}
+    <section aria-label="Quick actions" className="space-y-3">
+      <h2 className="px-1 text-sm font-semibold text-gray-700">Quick Actions</h2>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {actions.map((action) => (
+          <Link
+            key={action.label}
+            href={action.href}
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent p-3 text-sm font-medium transition-colors ${action.color}`}
+            title={action.label}
+          >
+            <span className="text-lg">{action.icon}</span>
+            <span className="text-center text-xs">{action.label}</span>
+          </Link>
+        ))}
       </div>
     </section>
   );

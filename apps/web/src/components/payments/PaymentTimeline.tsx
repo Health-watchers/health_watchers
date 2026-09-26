@@ -34,21 +34,16 @@ export function PaymentTimeline({
   return (
     <div className="space-y-4">
       {events.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"
-        >
+        <div key={item.label} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm font-semibold text-neutral-800">{item.label}</p>
           <p className="text-sm text-neutral-600">{item.detail}</p>
-          {item.date && (
-            <p className="text-xs text-neutral-500">{formatDateTime(item.date)}</p>
-          )}
+          {item.date && <p className="text-xs text-neutral-500">{formatDateTime(item.date)}</p>}
           {item.link && (
             <a
               href={item.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary-600 hover:underline text-xs"
+              className="text-xs text-primary-600 hover:underline"
             >
               View transaction
             </a>

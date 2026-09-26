@@ -74,7 +74,11 @@ export class AuthAnalyticsService {
   /**
    * Calculate anomaly score for login
    */
-  async calculateAnomalyScore(userId: string, currentIp: string, userAgent?: string): Promise<AnomalyScore> {
+  async calculateAnomalyScore(
+    userId: string,
+    currentIp: string,
+    userAgent?: string
+  ): Promise<AnomalyScore> {
     const user = await UserModel.findById(userId);
     if (!user || !user.loginHistory || user.loginHistory.length === 0) {
       return { score: 10, factors: ['new_user'], riskLevel: 'low' };
@@ -102,11 +106,7 @@ export class AuthAnalyticsService {
     }
 
     // 3. Check for new IP
-    const recentIps = new Set(
-      user.loginHistory
-        .slice(-20)
-        .map((e: any) => e.ip)
-    );
+    const recentIps = new Set(user.loginHistory.slice(-20).map((e: any) => e.ip));
     if (!recentIps.has(currentIp)) {
       factors.push('new_ip_address');
       score += 20;
@@ -149,8 +149,7 @@ export class AuthAnalyticsService {
       score += 25;
     }
 
-    const riskLevel =
-      score > 70 ? 'critical' : score > 50 ? 'high' : score > 25 ? 'medium' : 'low';
+    const riskLevel = score > 70 ? 'critical' : score > 50 ? 'high' : score > 25 ? 'medium' : 'low';
 
     return { score: Math.min(100, score), factors, riskLevel };
   }

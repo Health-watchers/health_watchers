@@ -207,7 +207,7 @@ export default function PatientDetailClient({
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <p className="text-6xl font-bold text-neutral-200">404</p>
             <p className="mt-4 text-lg font-semibold text-neutral-700">{labels.notFound}</p>
-            <Link href="/patients" className="text-primary-600 mt-6 text-sm hover:underline">
+            <Link href="/patients" className="mt-6 text-sm text-primary-600 hover:underline">
               ← {labels.back}
             </Link>
           </div>
@@ -450,37 +450,37 @@ function DemographicsCard({
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.systemId}
           </dt>
           <dd className="mt-0.5 font-mono text-neutral-900">{patient.systemId}</dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.dob}
           </dt>
           <dd className="mt-0.5 text-neutral-900">{formatDate(patient.dateOfBirth)}</dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.age}
           </dt>
           <dd className="mt-0.5 text-neutral-900">{calcAge(patient.dateOfBirth)}</dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.sex}
           </dt>
           <dd className="mt-0.5 text-neutral-900">{patient.sex}</dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.contact}
           </dt>
           <dd className="mt-0.5 text-neutral-900">{patient.contactNumber || 'N/A'}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {labels.address}
           </dt>
           <dd className="mt-0.5 text-neutral-900">{patient.address || 'N/A'}</dd>
@@ -557,7 +557,7 @@ function EncountersTabContent({
               )}
               {enc.aiSummary && (
                 <details className="mt-2">
-                  <summary className="text-primary-600 cursor-pointer text-xs font-medium hover:underline">
+                  <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:underline">
                     AI Summary
                   </summary>
                   <p className="mt-1 text-sm text-neutral-600">{enc.aiSummary}</p>
@@ -707,7 +707,7 @@ function AllergiesTabContent({
                 <button
                   type="submit"
                   disabled={allergySubmitting}
-                  className="bg-primary-600 hover:bg-primary-700 rounded px-4 py-2 text-sm text-white disabled:opacity-50"
+                  className="rounded bg-primary-600 px-4 py-2 text-sm text-white hover:bg-primary-700 disabled:opacity-50"
                 >
                   {allergySubmitting ? 'Saving...' : 'Save Allergy'}
                 </button>

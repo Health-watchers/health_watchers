@@ -26,10 +26,18 @@ interface PresenceContextType {
 
 const PresenceContext = createContext<PresenceContextType | undefined>(undefined);
 
-export function PresenceProvider({ children, token }: { children: React.ReactNode; token?: string }) {
+export function PresenceProvider({
+  children,
+  token,
+}: {
+  children: React.ReactNode;
+  token?: string;
+}) {
   const { socket } = useSocket(token);
   const [onlineUsers, setOnlineUsers] = useState<Map<string, UserPresence>>(new Map());
-  const [userStatus, setUserStatusLocal] = useState<'online' | 'idle' | 'away' | 'offline'>('online');
+  const [userStatus, setUserStatusLocal] = useState<'online' | 'idle' | 'away' | 'offline'>(
+    'online'
+  );
   const inactivityTimeout = React.useRef<NodeJS.Timeout>();
 
   // Listen for presence updates
@@ -120,9 +128,12 @@ export function PresenceProvider({ children, token }: { children: React.ReactNod
         clearTimeout(inactivityTimeout.current);
       }
 
-      inactivityTimeout.current = setTimeout(() => {
-        setUserStatus('idle');
-      }, 5 * 60 * 1000); // 5 minutes
+      inactivityTimeout.current = setTimeout(
+        () => {
+          setUserStatus('idle');
+        },
+        5 * 60 * 1000
+      ); // 5 minutes
     };
 
     window.addEventListener('mousemove', handleUserActivity);

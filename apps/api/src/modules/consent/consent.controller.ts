@@ -31,9 +31,13 @@ router.post(
   WRITE_ROLES,
   validateRequest({ body: grantConsentSchema }),
   async (req: Request, res: Response) => {
-   const { id: patientId } = req.params;
+    const { id: patientId } = req.params;
     const clinicId = req.user!.clinicId;
-    const { type, expiresAt, signatureData } = req.body as { type: ConsentType; expiresAt?: string; signatureData: string };
+    const { type, expiresAt, signatureData } = req.body as {
+      type: ConsentType;
+      expiresAt?: string;
+      signatureData: string;
+    };
 
     // Validate patientId is a legitimate ObjectId — prevents NoSQL injection via URL params
     if (!/^[a-f\d]{24}$/i.test(patientId)) {
@@ -41,8 +45,7 @@ router.post(
     }
     const template = CONSENT_TEMPLATES[type];
     const ipAddress =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress;
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
     const signedAt = new Date();
 
@@ -126,43 +129,39 @@ router.get('/patients/:id/consent', async (req: Request, res: Response) => {
 });
 
 // DELETE /patients/:id/consent/:type — withdraw consent
-router.delete(
-  '/patients/:id/consent/:type',
-  WRITE_ROLES,
-  async (req: Request, res: Response) => {
-     const { id: patientId, type } = req.params;
-    const clinicId = req.user!.clinicId;
+router.delete('/patients/:id/consent/:type', WRITE_ROLES, async (req: Request, res: Response) => {
+  const { id: patientId, type } = req.params;
+  const clinicId = req.user!.clinicId;
 
-    // Validate patientId is a legitimate ObjectId — prevents NoSQL injection via URL params
-    if (!/^[a-f\d]{24}$/i.test(patientId)) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
-    }
-
-    const consent = await ConsentModel.findOneAndUpdate(
-      { patientId, clinicId, type },
-      { status: 'withdrawn', withdrawnAt: new Date() },
-      { new: true }
-    );
-
-    if (!consent) {
-      return res.status(404).json({ error: 'NotFound', message: 'Consent record not found' });
-    }
-
-    await auditLog(
-      {
-        action: 'PATIENT_UPDATE',
-        resourceType: 'Consent',
-        resourceId: String(consent._id),
-        userId: req.user!.userId,
-        clinicId,
-        metadata: { event: 'consent_withdrawn', type, patientId },
-      },
-      req
-    );
-
-    res.json({ status: 'success', data: consent });
+  // Validate patientId is a legitimate ObjectId — prevents NoSQL injection via URL params
+  if (!/^[a-f\d]{24}$/i.test(patientId)) {
+    return res.status(400).json({ error: 'ValidationError', message: 'Invalid patient ID' });
   }
-);
+
+  const consent = await ConsentModel.findOneAndUpdate(
+    { patientId, clinicId, type },
+    { status: 'withdrawn', withdrawnAt: new Date() },
+    { new: true }
+  );
+
+  if (!consent) {
+    return res.status(404).json({ error: 'NotFound', message: 'Consent record not found' });
+  }
+
+  await auditLog(
+    {
+      action: 'PATIENT_UPDATE',
+      resourceType: 'Consent',
+      resourceId: String(consent._id),
+      userId: req.user!.userId,
+      clinicId,
+      metadata: { event: 'consent_withdrawn', type, patientId },
+    },
+    req
+  );
+
+  res.json({ status: 'success', data: consent });
+});
 
 // ── Consent versioning ────────────────────────────────────────────────────────
 
@@ -191,7 +190,9 @@ router.post(
   validateRequest({ body: createFormVersionSchema }),
   async (req: Request, res: Response) => {
     const clinicId = req.user!.clinicId;
-    const { type, version, content, effectiveDate } = req.body as z.infer<typeof createFormVersionSchema>;
+    const { type, version, content, effectiveDate } = req.body as z.infer<
+      typeof createFormVersionSchema
+    >;
 
     const form = await ConsentFormModel.create({
       clinicId,
@@ -249,7 +250,10 @@ router.get('/current-version', async (req: Request, res: Response) => {
     if (!template) {
       return res.status(404).json({ error: 'NotFound', message: 'Consent form not found' });
     }
-    return res.json({ status: 'success', data: { version: template.version, content: template.text, type } });
+    return res.json({
+      status: 'success',
+      data: { version: template.version, content: template.text, type },
+    });
   }
 
   return res.json({ status: 'success', data: form });
@@ -274,7 +278,9 @@ router.post(
     // For staff recording on behalf of a patient, patientId comes from the body (not supported here — use existing grant endpoint)
     const patientIdFromUser = (req.user as { patientId?: string }).patientId;
     if (!patientIdFromUser) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Only patients may use re-consent' });
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'Only patients may use re-consent' });
     }
 
     const signedAt = new Date();

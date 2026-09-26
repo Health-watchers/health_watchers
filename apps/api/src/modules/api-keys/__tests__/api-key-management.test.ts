@@ -36,8 +36,13 @@ describe('API Key Management', () => {
   describe('rotateApiKey', () => {
     it('should rotate key and return new raw key', async () => {
       const existing = {
-        _id: 'key1', name: 'Test Key', prefix: 'hw_oldpref',
-        scopes: ['patients:read'], expiresAt: null, clinicId: 'clinic1', isActive: true,
+        _id: 'key1',
+        name: 'Test Key',
+        prefix: 'hw_oldpref',
+        scopes: ['patients:read'],
+        expiresAt: null,
+        clinicId: 'clinic1',
+        isActive: true,
       };
       const rotated = { ...existing, prefix: 'hw_newpref', isActive: true };
 
@@ -56,12 +61,19 @@ describe('API Key Management', () => {
         })
       );
       expect(AuditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'API_KEY_ROTATE' }), req
+        expect.objectContaining({ action: 'API_KEY_ROTATE' }),
+        req
       );
     });
 
     it('should generate a different key on each rotation', async () => {
-      const existing = { _id: 'key1', name: 'K', prefix: 'hw_old', scopes: [], clinicId: 'clinic1' };
+      const existing = {
+        _id: 'key1',
+        name: 'K',
+        prefix: 'hw_old',
+        scopes: [],
+        clinicId: 'clinic1',
+      };
       const rotated = { ...existing, isActive: true, expiresAt: null };
 
       (ApiKeyModel.findOne as jest.Mock).mockReturnValue({ lean: lean(existing) });
@@ -105,7 +117,8 @@ describe('API Key Management', () => {
         expect.objectContaining({ data: expect.objectContaining({ isActive: false }) })
       );
       expect(AuditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'API_KEY_REVOKE' }), expect.anything()
+        expect.objectContaining({ action: 'API_KEY_REVOKE' }),
+        expect.anything()
       );
     });
   });
@@ -113,8 +126,13 @@ describe('API Key Management', () => {
   describe('createApiKey', () => {
     it('should return raw key only once and audit creation', async () => {
       const created = {
-        _id: 'newkey', name: 'My Key', prefix: 'hw_abc',
-        scopes: ['patients:read'], isActive: true, expiresAt: null, createdAt: new Date(),
+        _id: 'newkey',
+        name: 'My Key',
+        prefix: 'hw_abc',
+        scopes: ['patients:read'],
+        isActive: true,
+        expiresAt: null,
+        createdAt: new Date(),
       };
       (ApiKeyModel.create as jest.Mock).mockResolvedValue(created);
       (AuditService.log as jest.Mock).mockResolvedValue(undefined);
@@ -127,7 +145,8 @@ describe('API Key Management', () => {
       const data = (res.json as jest.Mock).mock.calls[0][0].data;
       expect(data.key).toMatch(/^hw_/);
       expect(AuditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'API_KEY_CREATE' }), expect.anything()
+        expect.objectContaining({ action: 'API_KEY_CREATE' }),
+        expect.anything()
       );
     });
 

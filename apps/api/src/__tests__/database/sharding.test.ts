@@ -85,7 +85,7 @@ describe('ShardingService', () => {
       const svc = ShardingService.getInstance();
       // Mark all shards except shard-4 as unavailable
       ['shard-1', 'shard-2', 'shard-3'].forEach((name) =>
-        svc.updateShardStatus(name, 'unavailable'),
+        svc.updateShardStatus(name, 'unavailable')
       );
 
       const result = svc.getShardForDocument('Patient', 'clinic-xyz');

@@ -33,7 +33,9 @@ export function PaymentInterface({
   onPaymentMethodSelect,
   onPaymentProcess,
 }: PaymentInterfaceProps) {
-  const [selectedMethod, setSelectedMethod] = useState<'card' | 'bank' | 'wallet' | 'insurance' | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<
+    'card' | 'bank' | 'wallet' | 'insurance' | null
+  >(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -91,9 +93,7 @@ export function PaymentInterface({
             </View>
           </View>
 
-          {description && (
-            <Text style={styles.description}>{description}</Text>
-          )}
+          {description && <Text style={styles.description}>{description}</Text>}
 
           <Text style={styles.methodsTitle}>Payment Method</Text>
 
@@ -203,30 +203,15 @@ interface PaymentMethodButtonProps {
   onPress: () => void;
 }
 
-function PaymentMethodButton({
-  icon,
-  label,
-  selected,
-  onPress,
-}: PaymentMethodButtonProps) {
+function PaymentMethodButton({ icon, label, selected, onPress }: PaymentMethodButtonProps) {
   return (
     <TouchableOpacity
-      style={[
-        styles.methodButton,
-        selected && styles.methodButtonSelected,
-      ]}
+      style={[styles.methodButton, selected && styles.methodButtonSelected]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <Text style={styles.methodIcon}>{icon}</Text>
-      <Text
-        style={[
-          styles.methodLabel,
-          selected && styles.methodLabelSelected,
-        ]}
-      >
-        {label}
-      </Text>
+      <Text style={[styles.methodLabel, selected && styles.methodLabelSelected]}>{label}</Text>
     </TouchableOpacity>
   );
 }

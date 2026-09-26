@@ -110,8 +110,9 @@ describe('Health Check Service', () => {
       const result = await runComprehensiveHealthCheck();
 
       expect(result.summary.total).toBe(Object.keys(result.services).length);
-      expect(result.summary.healthy + result.summary.degraded + result.summary.unhealthy)
-        .toBeLessThanOrEqual(result.summary.total);
+      expect(
+        result.summary.healthy + result.summary.degraded + result.summary.unhealthy
+      ).toBeLessThanOrEqual(result.summary.total);
     });
 
     it('should include system information', async () => {

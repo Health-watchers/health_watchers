@@ -112,11 +112,7 @@ export function MobileForm({
       <View key={field.name} style={styles.fieldContainer}>
         <Text style={styles.label}>{field.label}</Text>
         <TextInput
-          style={[
-            styles.input,
-            multiline && styles.textarea,
-            error && styles.fieldError,
-          ]}
+          style={[styles.input, multiline && styles.textarea, error && styles.fieldError]}
           placeholder={field.placeholder}
           value={formData[field.name]}
           onChangeText={(value) => handleChange(field.name, value)}

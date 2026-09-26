@@ -27,10 +27,7 @@ export class PayloadOptimizer {
     maxDepth: 10,
   };
 
-  optimizePayload(
-    data: any,
-    config?: OptimizationConfig
-  ): { data: any; metrics: PayloadMetrics } {
+  optimizePayload(data: any, config?: OptimizationConfig): { data: any; metrics: PayloadMetrics } {
     const startTime = performance.now();
     const mergedConfig = { ...this.defaultConfig, ...config };
 
@@ -55,11 +52,7 @@ export class PayloadOptimizer {
     return { data: optimizedData, metrics };
   }
 
-  optimizePayloadWithMetrics(
-    data: any,
-    res: Response,
-    config?: OptimizationConfig
-  ): any {
+  optimizePayloadWithMetrics(data: any, res: Response, config?: OptimizationConfig): any {
     const { data: optimized, metrics } = this.optimizePayload(data, config);
 
     res.setHeader('X-Payload-Original-Size', metrics.originalSize);
@@ -71,11 +64,7 @@ export class PayloadOptimizer {
     return optimized;
   }
 
-  private recursiveOptimize(
-    data: any,
-    config: OptimizationConfig,
-    depth: number
-  ): any {
+  private recursiveOptimize(data: any, config: OptimizationConfig, depth: number): any {
     if (data === null || data === undefined) {
       if (config.removeNullFields) return undefined;
       return data;
@@ -111,7 +100,11 @@ export class PayloadOptimizer {
           continue;
         }
 
-        if (Array.isArray(optimizedValue) && config.removeEmptyArrays && optimizedValue.length === 0) {
+        if (
+          Array.isArray(optimizedValue) &&
+          config.removeEmptyArrays &&
+          optimizedValue.length === 0
+        ) {
           continue;
         }
 

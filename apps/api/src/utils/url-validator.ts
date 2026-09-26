@@ -5,6 +5,7 @@ const BLOCKED_HOST_PATTERNS = [
   /^127\.\d+\.\d+\.\d+$/,
   /^169\.254\.\d+\.\d+$/,
   /^0\.0\.0\.0$/,
+  /^localhost$/i,
   /^::1$/,
   /^fc00:/i,
   /^fe80:/i,

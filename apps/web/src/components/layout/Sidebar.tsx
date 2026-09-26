@@ -78,6 +78,32 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'payments',
+    label: 'Lab Results',
+    href: '/lab-results',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 3v6.172a2 2 0 01-.586 1.414L4.293 14.707A2 2 0 005.707 18h12.586a2 2 0 001.414-3.293l-4.121-4.121A2 2 0 0115 9.172V3M8 3h8"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE'],
+          d="M9 3v6.5L4.2 18a2 2 0 001.7 3h12.2a2 2 0 001.7-3L15 9.5V3M8 3h8m-5 9h2"
+        />
+      </svg>
+    ),
+  },
+  {
+    label: 'Payments',
     href: '/payments',
     icon: (
       <svg
@@ -99,6 +125,28 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'appointments',
+    label: 'Billing',
+    href: '/billing',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
+    label: 'Appointments',
     href: '/appointments',
     icon: (
       <svg
@@ -119,6 +167,27 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'cds',
+    label: 'Schedules',
+    href: '/schedules',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ),
+  },
+  {
+    label: 'CDS',
     href: '/cds',
     icon: (
       <svg
@@ -179,6 +248,27 @@ const navItems: NavItem[] = [
   },
   {
     labelKey: 'settings',
+    label: 'Medications',
+    href: '/medications',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m0-18h10a2 2 0 012 2v14a2 2 0 01-2 2H9m0-18v18M13 8h4m-4 4h4m-4 4h4"
+        />
+      </svg>
+    ),
+  },
+  {
+    label: 'Settings',
     href: '/settings',
     icon: (
       <svg
@@ -207,6 +297,8 @@ const navItems: NavItem[] = [
   {
     labelKey: 'staff',
     href: '/settings/staff',
+    label: 'Compliance',
+    href: '/compliance',
     icon: (
       <svg
         className="h-5 w-5"
@@ -220,6 +312,7 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         />
       </svg>
     ),
@@ -228,6 +321,8 @@ const navItems: NavItem[] = [
   {
     labelKey: 'auditLog',
     href: '/audit-log',
+    label: 'Audit Log',
+    href: '/compliance/audit-logs',
     icon: (
       <svg
         className="h-5 w-5"
@@ -327,7 +422,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     >
       {/* Logo area */}
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-5 dark:border-neutral-700">
-        <span className="text-primary-500 text-lg font-bold tracking-tight">HealthWatchers</span>
+        <span className="text-lg font-bold tracking-tight text-primary-500">HealthWatchers</span>
       </div>
 
       {/* Nav items */}
@@ -354,7 +449,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                   'border-l-4',
                   isActive
-                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-500'
+                    ? 'border-primary-500 bg-primary-50 text-primary-500 dark:bg-primary-900/30'
                     : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
                 ].join(' ')}
               >

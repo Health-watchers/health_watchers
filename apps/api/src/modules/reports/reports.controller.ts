@@ -288,9 +288,7 @@ router.get(
 
     const successRow = report?.successRate?.[0];
     const successRate =
-      successRow?.total > 0
-        ? ((successRow.confirmed / successRow.total) * 100).toFixed(1)
-        : '0';
+      successRow?.total > 0 ? ((successRow.confirmed / successRow.total) * 100).toFixed(1) : '0';
 
     res.json({
       status: 'success',
@@ -441,11 +439,24 @@ router.get('/outcomes', async (req: Request, res: Response, next) => {
       ]),
       EncounterModel.aggregate([
         { $match: { ...dateFilter, followUpRequired: true } },
-        { $group: { _id: null, total: { $sum: 1 }, completed: { $sum: { $cond: ['$followUpCompleted', 1, 0] } } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            completed: { $sum: { $cond: ['$followUpCompleted', 1, 0] } },
+          },
+        },
       ]),
       EncounterModel.aggregate([
         { $match: { ...dateFilter, outcome: 'resolved', followUpDate: { $exists: true } } },
-        { $group: { _id: null, avgDays: { $avg: { $divide: [{ $subtract: ['$followUpDate', '$createdAt'] }, 86400000] } } } },
+        {
+          $group: {
+            _id: null,
+            avgDays: {
+              $avg: { $divide: [{ $subtract: ['$followUpDate', '$createdAt'] }, 86400000] },
+            },
+          },
+        },
       ]),
     ]);
 

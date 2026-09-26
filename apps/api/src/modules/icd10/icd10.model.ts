@@ -20,7 +20,10 @@ const icd10Schema = new Schema<IICD10Code>(
 );
 
 // Compound text index for full-text search on description and code
-icd10Schema.index({ description: 'text', code: 'text' }, { name: 'icd10_text_search', weights: { description: 10, code: 5 } });
+icd10Schema.index(
+  { description: 'text', code: 'text' },
+  { name: 'icd10_text_search', weights: { description: 10, code: 5 } }
+);
 // Prefix search on code
 icd10Schema.index({ code: 1 });
 

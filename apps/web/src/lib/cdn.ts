@@ -56,7 +56,9 @@ export const invalidateCache = async (paths: string[]): Promise<void> => {
         await invalidateFastlyCache(paths);
         break;
       default:
-        console.warn(`[CDN] Cache invalidation not implemented for provider: ${CDN_CONFIG.provider}`);
+        console.warn(
+          `[CDN] Cache invalidation not implemented for provider: ${CDN_CONFIG.provider}`
+        );
     }
   } catch (error) {
     console.error('[CDN] Cache invalidation failed:', error);
@@ -76,13 +78,13 @@ const invalidateCloudflareCache = async (paths: string[]): Promise<void> => {
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${CDN_CONFIG.apiKey}`,
+        Authorization: `Bearer ${CDN_CONFIG.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         files: paths.map((p) => `${CDN_CONFIG.url}${p}`),
       }),
-    },
+    }
   );
 
   if (!response.ok) {
@@ -123,7 +125,7 @@ const invalidateFastlyCache = async (paths: string[]): Promise<void> => {
  * Get cache control header based on asset type
  */
 export const getCacheControlHeader = (
-  filePath: string,
+  filePath: string
 ): { 'Cache-Control': string; 'Content-Type'?: string } => {
   // Immutable assets (hashed filenames)
   if (/\.[a-f0-9]{8,}\.(js|css|woff2?|ttf|eot)$/i.test(filePath)) {
@@ -200,7 +202,7 @@ const getCloudflareMetrics = async (): Promise<CDNMetrics | null> => {
  */
 export const getVersionedAssetUrl = (
   path: string,
-  version: string = webConfig.app.version,
+  version: string = webConfig.app.version
 ): string => {
   const cdnUrl = getCDNUrl(path);
   const separator = cdnUrl.includes('?') ? '&' : '?';

@@ -35,7 +35,7 @@ test.describe('Dashboard Flow', () => {
         .getByRole('link', { name: pattern })
         .or(page.getByRole('navigation').getByRole('link', { name: pattern }));
 
-      if (await link.count() > 0) {
+      if ((await link.count()) > 0) {
         await link.first().click();
         await expect(page).toHaveURL(new RegExp(href));
         await page.goBack();
@@ -51,7 +51,7 @@ test.describe('Dashboard Flow', () => {
       .getByRole('link', { name: /new patient/i })
       .or(page.getByRole('button', { name: /new patient/i }));
 
-    if (await newPatientBtn.count() > 0) {
+    if ((await newPatientBtn.count()) > 0) {
       await newPatientBtn.first().click();
       await expect(page).toHaveURL(/\/patients/);
     }

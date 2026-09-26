@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { CDSRuleModel, CDSAlert } from './cds-rule.model.js';
-import cdsRulesEngine from './cds-rules-engine.js';
+import { CDSRuleModel, CDSAlert } from './cds-rule.model';
+import cdsRulesEngine from './cds-rules-engine';
 import logger from '@api/utils/logger';
 import { Schema } from 'mongoose';
 

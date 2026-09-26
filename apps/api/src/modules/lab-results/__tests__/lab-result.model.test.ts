@@ -33,7 +33,15 @@ describe('LabResultModel', () => {
   it('stores structured result entries with an optional flag', async () => {
     const lab = new LabResultModel({
       ...baseDoc,
-      results: [{ parameter: 'Potassium', value: '7.0', unit: 'mmol/L', referenceRange: '3.5-5.0', flag: 'HH' }],
+      results: [
+        {
+          parameter: 'Potassium',
+          value: '7.0',
+          unit: 'mmol/L',
+          referenceRange: '3.5-5.0',
+          flag: 'HH',
+        },
+      ],
     });
     await expect(lab.validate()).resolves.toBeUndefined();
     expect(lab.results?.[0].flag).toBe('HH');
@@ -42,7 +50,9 @@ describe('LabResultModel', () => {
   it('rejects a result entry with an invalid flag', async () => {
     const lab = new LabResultModel({
       ...baseDoc,
-      results: [{ parameter: 'Glucose', value: '90', unit: 'mg/dL', referenceRange: '70-100', flag: 'X' }],
+      results: [
+        { parameter: 'Glucose', value: '90', unit: 'mg/dL', referenceRange: '70-100', flag: 'X' },
+      ],
     });
     await expect(lab.validate()).rejects.toThrow();
   });

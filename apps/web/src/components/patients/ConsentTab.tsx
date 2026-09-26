@@ -72,7 +72,7 @@ export function ConsentTab({ patientId, canEdit }: { patientId: string; canEdit:
               className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-4"
             >
               <div>
-                <p className="font-medium text-neutral-900 capitalize">{type.replace('_', ' ')}</p>
+                <p className="font-medium capitalize text-neutral-900">{type.replace('_', ' ')}</p>
                 {consent?.grantedAt && (
                   <p className="text-xs text-neutral-400">
                     {isGranted ? 'Granted' : 'Withdrawn'}{' '}
@@ -106,7 +106,7 @@ export function ConsentTab({ patientId, canEdit }: { patientId: string; canEdit:
                     <button
                       onClick={() => grant(type)}
                       disabled={granting === type}
-                      className="text-primary-600 text-xs hover:underline focus:outline-none disabled:opacity-50"
+                      className="text-xs text-primary-600 hover:underline focus:outline-none disabled:opacity-50"
                       aria-label={`Grant ${type} consent`}
                     >
                       Grant

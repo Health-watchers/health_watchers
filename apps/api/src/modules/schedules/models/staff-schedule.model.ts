@@ -1,4 +1,3 @@
-
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly';
@@ -25,11 +24,11 @@ const StaffScheduleSchema = new Schema<IStaffSchedule>(
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     isAvailable: { type: Boolean, required: true, default: true },
-    recurrence: { 
-      type: String, 
-      enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly'], 
-      required: true, 
-      default: 'none' 
+    recurrence: {
+      type: String,
+      enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly'],
+      required: true,
+      default: 'none',
     },
     recurrenceEndDate: { type: Date },
     notes: { type: String },

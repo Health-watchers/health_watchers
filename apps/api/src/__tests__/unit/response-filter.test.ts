@@ -1,4 +1,8 @@
-import { filterByRole, getFieldFilterRules, responseFilterMiddleware } from '../../middlewares/response-filter.middleware';
+import {
+  filterByRole,
+  getFieldFilterRules,
+  responseFilterMiddleware,
+} from '../../middlewares/response-filter.middleware';
 import { stripRestrictedFields, stripRestrictedFieldsDeep } from '../../utils/response.transformer';
 import { toAppointmentResponse } from '../../modules/appointments/appointments.transformer';
 import { toLabResultResponse } from '../../modules/lab-results/lab-results.transformer';
@@ -13,7 +17,7 @@ describe('Response Filter Middleware', () => {
     lastName: 'Doe',
     ssn: '123-45-6789',
     billingCode: 'CPT-99213',
-    invoiceAmount: 150.00,
+    invoiceAmount: 150.0,
     paymentDetails: { method: 'card', last4: '4242' },
     policyNumber: 'POL-999',
     groupNumber: 'GRP-111',
@@ -42,7 +46,7 @@ describe('Response Filter Middleware', () => {
       expect(filtered.ssn).toBeUndefined();
       expect(filtered.auditTrail).toBeUndefined();
       expect(filtered.billingCode).toBe('CPT-99213');
-      expect(filtered.invoiceAmount).toBe(150.00);
+      expect(filtered.invoiceAmount).toBe(150.0);
       expect(filtered.internalNotes).toBe('Follow up on lab results');
     });
 
@@ -80,7 +84,7 @@ describe('Response Filter Middleware', () => {
       const filtered = filterByRole(sensitiveData, 'SUPER_ADMIN') as Record<string, unknown>;
       expect(filtered.ssn).toBe('123-45-6789');
       expect(filtered.billingCode).toBe('CPT-99213');
-      expect(filtered.invoiceAmount).toBe(150.00);
+      expect(filtered.invoiceAmount).toBe(150.0);
       expect(filtered.paymentDetails).toEqual({ method: 'card', last4: '4242' });
       expect(filtered.policyNumber).toBe('POL-999');
       expect(filtered.internalNotes).toBe('Follow up on lab results');

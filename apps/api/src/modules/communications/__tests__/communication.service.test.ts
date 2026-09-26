@@ -22,9 +22,9 @@ describe('CommunicationService', () => {
     it('throws when the patient does not exist in the clinic', async () => {
       (PatientModel.findOne as jest.Mock).mockResolvedValue(null);
 
-      await expect(
-        service.logCommunication('p1', {} as any, user)
-      ).rejects.toThrow('Patient not found');
+      await expect(service.logCommunication('p1', {} as any, user)).rejects.toThrow(
+        'Patient not found'
+      );
 
       expect(CommunicationLogModel.create).not.toHaveBeenCalled();
     });

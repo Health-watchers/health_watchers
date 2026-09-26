@@ -30,9 +30,9 @@ describe('Business Metrics Service', () => {
   });
 
   describe('recordPaymentSuccessRate', () => {
-    it('should record payment success rate', () => {
+    it('should record payment success rate', async () => {
       recordPaymentSuccessRate(clinicId, 0.95);
-      const metrics = paymentSuccessRate.get();
+      const metrics = await paymentSuccessRate.get();
       expect(metrics.values).toContainEqual(
         expect.objectContaining({
           value: 0.95,
@@ -41,29 +41,29 @@ describe('Business Metrics Service', () => {
       );
     });
 
-    it('should clamp rate between 0 and 1', () => {
+    it('should clamp rate between 0 and 1', async () => {
       recordPaymentSuccessRate(clinicId, 1.5);
-      const metrics = paymentSuccessRate.get();
+      const metrics = await paymentSuccessRate.get();
       expect(metrics.values[0].value).toBe(1);
 
       recordPaymentSuccessRate(clinicId, -0.5);
-      const metricsAfter = paymentSuccessRate.get();
+      const metricsAfter = await paymentSuccessRate.get();
       expect(metricsAfter.values[0].value).toBe(0);
     });
   });
 
   describe('recordEncounterDuration', () => {
-    it('should record encounter duration', () => {
+    it('should record encounter duration', async () => {
       recordEncounterDuration(clinicId, 1800);
-      const metrics = encounterDurationSeconds.get();
+      const metrics = await encounterDurationSeconds.get();
       expect(metrics.values.length).toBeGreaterThan(0);
     });
   });
 
   describe('updateActiveUsers', () => {
-    it('should update active users count', () => {
+    it('should update active users count', async () => {
       updateActiveUsers(clinicId, 42);
-      const metrics = activeUsersTotal.get();
+      const metrics = await activeUsersTotal.get();
       expect(metrics.values).toContainEqual(
         expect.objectContaining({
           value: 42,
@@ -74,10 +74,10 @@ describe('Business Metrics Service', () => {
   });
 
   describe('recordApiKeyRequest', () => {
-    it('should record API key request', () => {
+    it('should record API key request', async () => {
       recordApiKeyRequest(apiKeyId, endpoint);
       recordApiKeyRequest(apiKeyId, endpoint);
-      const metrics = apiKeyRequestsTotal.get();
+      const metrics = await apiKeyRequestsTotal.get();
       expect(metrics.values).toContainEqual(
         expect.objectContaining({
           value: 2,
@@ -88,17 +88,17 @@ describe('Business Metrics Service', () => {
   });
 
   describe('recordStellarTransactionFee', () => {
-    it('should record Stellar transaction fee', () => {
+    it('should record Stellar transaction fee', async () => {
       recordStellarTransactionFee(clinicId, 'payment', 0.001);
-      const metrics = stellarTransactionFeeXlm.get();
+      const metrics = await stellarTransactionFeeXlm.get();
       expect(metrics.values.length).toBeGreaterThan(0);
     });
   });
 
   describe('updatePaymentSuccessRateFromCounts', () => {
-    it('should calculate success rate from counts', () => {
+    it('should calculate success rate from counts', async () => {
       updatePaymentSuccessRateFromCounts(clinicId, 95, 100);
-      const metrics = paymentSuccessRate.get();
+      const metrics = await paymentSuccessRate.get();
       expect(metrics.values).toContainEqual(
         expect.objectContaining({
           value: 0.95,
@@ -107,9 +107,9 @@ describe('Business Metrics Service', () => {
       );
     });
 
-    it('should handle zero initiated payments', () => {
+    it('should handle zero initiated payments', async () => {
       updatePaymentSuccessRateFromCounts(clinicId, 0, 0);
-      const metrics = paymentSuccessRate.get();
+      const metrics = await paymentSuccessRate.get();
       expect(metrics.values).toContainEqual(
         expect.objectContaining({
           value: 0,

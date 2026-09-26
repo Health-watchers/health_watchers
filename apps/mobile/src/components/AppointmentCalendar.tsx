@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, SafeAreaView } from 'react-native';
 import type { AppointmentData } from './types';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 interface AppointmentCalendarProps {
@@ -59,8 +62,7 @@ export function AppointmentCalendar({
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-      const isSelected =
-        date.toDateString() === selectedDate.toDateString();
+      const isSelected = date.toDateString() === selectedDate.toDateString();
       const hasAppointments = appointmentsForDate(date).length > 0;
 
       days.push(
@@ -77,17 +79,8 @@ export function AppointmentCalendar({
           }}
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
         >
-          <Text
-            style={[
-              styles.dayText,
-              isSelected && styles.selectedDayText,
-            ]}
-          >
-            {day}
-          </Text>
-          {hasAppointments && (
-            <View style={styles.appointmentIndicator} />
-          )}
+          <Text style={[styles.dayText, isSelected && styles.selectedDayText]}>{day}</Text>
+          {hasAppointments && <View style={styles.appointmentIndicator} />}
         </TouchableOpacity>
       );
     }
@@ -102,9 +95,7 @@ export function AppointmentCalendar({
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() =>
-            setCurrentDate(
-              new Date(currentDate.getFullYear(), currentDate.getMonth() - 1)
-            )
+            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
           }
           hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
         >
@@ -115,9 +106,7 @@ export function AppointmentCalendar({
         </Text>
         <TouchableOpacity
           onPress={() =>
-            setCurrentDate(
-              new Date(currentDate.getFullYear(), currentDate.getMonth() + 1)
-            )
+            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
           }
           hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
         >

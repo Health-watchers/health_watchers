@@ -1,0 +1,115 @@
+groups:
+  - name: disaster-recovery
+    rules:
+      # ── RPO ────────────────────────────────────────────────────────────────
+      - alert: DisasterRecoveryRPOBreached
+        expr: dr_rpo_age_seconds{source="oplog",region="primary"} > dr_rpo_target_seconds
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-dr
+        annotations:
+          summary: 'RPO breach — newest recovery point is {{ $value | humanizeDuration }} old'
+          description: >
+            Continuous backup ({{ $labels.source }}) has not produced a new
+            recovery point within the RPO target. Data loss on failover would
+            exceed the objective. Check the oplog backup CronJob.
+          runbook_url: 'https://github.com/health-watchers/health_watchers/blob/main/docs/runbooks/DR_DATABASE_RESTORE.md'
+
+      - alert: DisasterRecoveryReplicaOplogStale
+        expr: dr_rpo_age_seconds{source="oplog",region="replica"} > (dr_rpo_target_seconds * 3)
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'DR-region oplog copy is stale'
+          description: 'Cross-region replication lag for continuous backups exceeds 3x RPO.'
+
+      - alert: ReplicaSetReplicationLagHigh
+        expr: dr_replica_set_lag_seconds > dr_rpo_target_seconds
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'MongoDB replica-set lag {{ $value }}s exceeds RPO'
+          description: 'A secondary is behind the primary by more than the RPO target.'
+
+      # ── Backups ─────────────────────────────────────────────────────────────
+      - alert: FullBackupMissing
+        expr: dr_rpo_age_seconds{source="full",region="primary"} > 90000
+        for: 30m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: 'No successful full backup in ~25h'
+          description: 'The daily full backup has not completed. Investigate scripts/backup-mongodb.sh / backup workflow.'
+
+      - alert: GeoRedundantBackupMismatch
+        expr: dr_backup_replica_mismatch > 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: '{{ $value }} backup object(s) differ between regions'
+          description: >
+            ops/backup/geo-redundant-backup.sh found objects whose DR-region copy
+            does not match the primary. The geo-redundant copy is not trustworthy.
+
+      - alert: GeoRedundantBackupLagHigh
+        expr: dr_backup_replica_lag_seconds > 3600
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Cross-region backup replication lag > 1h'
+
+      - alert: BackupVerificationStale
+        expr: time() - backup_verification_last_success_timestamp_seconds > 691200
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Backup verification has not succeeded in 8 days'
+          description: 'The weekly restore-and-verify job is overdue. Backups may be unrestorable.'
+
+      # ── RTO / drills ───────────────────────────────────────────────────────
+      - alert: DisasterRecoveryRTORegressed
+        expr: dr_rto_seconds > dr_rto_target_seconds
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-dr
+        annotations:
+          summary: 'Measured RTO for {{ $labels.component }} exceeds target'
+          description: >
+            The last RTO test for {{ $labels.component }} took
+            {{ $value | humanizeDuration }}, over the objective. Recovery would
+            miss RTO today.
+
+      - alert: DisasterRecoveryDrillOverdue
+        expr: time() - dr_rto_test_timestamp_seconds{component="mongodb"} > 3456000
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'No DR drill / restore test in 40 days'
+          description: 'The monthly DR drill has not run. Trigger the dr-drill workflow.'
+
+      - alert: DataIntegrityCheckFailing
+        expr: dr_data_integrity_failures > 0
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: '{{ $value }} data-integrity check(s) failing on {{ $labels.db }}'
+          description: 'scripts/dr/verify-data-integrity.sh reported failures — possible corruption or bad restore.'

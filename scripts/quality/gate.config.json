@@ -1,0 +1,22 @@
+{
+  "coverage": {
+    "minPercent": 60,
+    "minFilesCovered": 1
+  },
+  "duplication": {
+    "maxPercent": 10,
+    "minTokens": 30
+  },
+  "maintainability": {
+    "minIndex": 65
+  },
+  "complexity": {
+    "maxAvgPerFunction": 8,
+    "maxHighRiskFunctions": 25,
+    "highRiskThreshold": 12
+  },
+  "score": {
+    "minOverall": 70,
+    "regressionTolerancePercent": 10
+  }
+}

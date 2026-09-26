@@ -27,6 +27,7 @@ Routes are organised into domain groups inside `src/routes/v1/index.ts`.
 |--------|-------------------------------|------------------------------|
 | *      | `/patients`                   | Patient records, photos      |
 | *      | `/patients/:id/immunizations` | Patient immunization records |
+| *      | `/immunizations`              | Conflicts, immunity status, analytics, lots, adverse events, recalls |
 | *      | `/encounters`                 | Clinical encounters          |
 | *      | `/encounter-templates`        | SOAP note templates          |
 | *      | `/appointments`               | Appointment scheduling       |

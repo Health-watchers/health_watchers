@@ -160,29 +160,26 @@ export function EncounterDocumentationForm({
     }
   }, [encounterId]);
 
-  const validateField = useCallback(
-    (fieldName: string, value: string): string => {
-      switch (fieldName) {
-        case 'bloodPressure':
-          if (!/^\d{2,3}\/\d{2}$/.test(value)) return FIELD_VALIDATION_MESSAGES.bloodPressure;
-          break;
-        case 'heartRate':
-          const hr = Number(value);
-          if (isNaN(hr) || hr < 40 || hr > 200) return FIELD_VALIDATION_MESSAGES.heartRate;
-          break;
-        case 'temperature':
-          const temp = Number(value);
-          if (isNaN(temp) || temp < 95 || temp > 106) return FIELD_VALIDATION_MESSAGES.temperature;
-          break;
-        case 'spo2':
-          const spo2 = Number(value);
-          if (isNaN(spo2) || spo2 < 88 || spo2 > 100) return FIELD_VALIDATION_MESSAGES.spo2;
-          break;
-      }
-      return '';
-    },
-    []
-  );
+  const validateField = useCallback((fieldName: string, value: string): string => {
+    switch (fieldName) {
+      case 'bloodPressure':
+        if (!/^\d{2,3}\/\d{2}$/.test(value)) return FIELD_VALIDATION_MESSAGES.bloodPressure;
+        break;
+      case 'heartRate':
+        const hr = Number(value);
+        if (isNaN(hr) || hr < 40 || hr > 200) return FIELD_VALIDATION_MESSAGES.heartRate;
+        break;
+      case 'temperature':
+        const temp = Number(value);
+        if (isNaN(temp) || temp < 95 || temp > 106) return FIELD_VALIDATION_MESSAGES.temperature;
+        break;
+      case 'spo2':
+        const spo2 = Number(value);
+        if (isNaN(spo2) || spo2 < 88 || spo2 > 100) return FIELD_VALIDATION_MESSAGES.spo2;
+        break;
+    }
+    return '';
+  }, []);
 
   const checkMedicationInteractions = useCallback(() => {
     const warnings: string[] = [];
@@ -234,7 +231,9 @@ export function EncounterDocumentationForm({
 
   const handleVitalChange = (key: keyof typeof formData.vitals, value: string) => {
     const error = validateField(key, value);
-    setValidationErrors((prev) => (error ? { ...prev, [key]: error } : { ...prev, [key]: undefined }));
+    setValidationErrors((prev) =>
+      error ? { ...prev, [key]: error } : { ...prev, [key]: undefined }
+    );
 
     setFormData((prev) => ({
       ...prev,
@@ -337,7 +336,9 @@ export function EncounterDocumentationForm({
           <h2 className="text-2xl font-bold text-gray-900">Encounter Documentation</h2>
           <p className="text-sm text-gray-600">Encounter ID: {encounterId}</p>
           {autoSaveTime && (
-            <p className="text-xs text-gray-500">Auto-saved at {autoSaveTime.toLocaleTimeString()}</p>
+            <p className="text-xs text-gray-500">
+              Auto-saved at {autoSaveTime.toLocaleTimeString()}
+            </p>
           )}
         </div>
 
@@ -387,7 +388,7 @@ export function EncounterDocumentationForm({
             <div className="grid gap-4 sm:grid-cols-2">
               {Object.entries(formData.vitals).map(([key, value]) => (
                 <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+                  <label className="mb-1 block text-sm font-medium capitalize text-gray-700">
                     {key === 'spo2' ? 'SpO2' : key.replace(/([A-Z])/g, ' $1')}
                   </label>
                   <input
@@ -454,9 +455,7 @@ export function EncounterDocumentationForm({
 
         {!sections.notes.isCollapsed && (
           <div className="border-t border-gray-200 p-4">
-            <p className="mb-2 text-xs text-gray-500">
-              Rich text editor with formatting support
-            </p>
+            <p className="mb-2 text-xs text-gray-500">Rich text editor with formatting support</p>
             <textarea
               value={formData.clinicalNotes}
               onChange={(e) => {
@@ -508,7 +507,10 @@ export function EncounterDocumentationForm({
 
             <div className="space-y-2">
               {formData.diagnosis.map((diag, idx) => (
-                <div key={idx} className="flex items-center justify-between rounded-lg bg-blue-50 p-3">
+                <div
+                  key={idx}
+                  className="flex items-center justify-between rounded-lg bg-blue-50 p-3"
+                >
                   <span className="text-sm text-gray-800">{diag}</span>
                   <button
                     type="button"
@@ -575,7 +577,7 @@ export function EncounterDocumentationForm({
               rows={4}
             />
 
-            <label className="mt-3 block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 mt-3 block text-sm font-medium text-gray-700">
               Follow-up Date (Optional)
             </label>
             <input

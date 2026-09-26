@@ -34,14 +34,23 @@ interface CollaborationContextType {
   documentVersion: number;
   startEditing: (resourceId: string, resourceType: string, color: string) => void;
   stopEditing: (resourceId: string, resourceType: string) => void;
-  updateCursor: (position: { line: number; column: number }, selection?: { start: number; end: number }) => void;
+  updateCursor: (
+    position: { line: number; column: number },
+    selection?: { start: number; end: number }
+  ) => void;
   sendEditOperation: (operation: Omit<EditOperation, 'id' | 'timestamp' | 'version'>) => void;
   requestSync: () => void;
 }
 
 const CollaborationContext = createContext<CollaborationContextType | undefined>(undefined);
 
-export function CollaborationProvider({ children, token }: { children: React.ReactNode; token?: string }) {
+export function CollaborationProvider({
+  children,
+  token,
+}: {
+  children: React.ReactNode;
+  token?: string;
+}) {
   const { socket } = useSocket(token);
   const [collaborators, setCollaborators] = useState<Map<string, Collaborator>>(new Map());
   const [isEditing, setIsEditing] = useState(false);

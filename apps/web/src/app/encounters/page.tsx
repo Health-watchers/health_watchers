@@ -138,6 +138,7 @@ export default function EncountersPage() {
           <div className="xl:col-span-2">
             <label htmlFor="search-q" className="sr-only">
               {t('filters.searchLabel')}
+              Search encounters
             </label>
             <div className="relative">
               <svg
@@ -167,6 +168,7 @@ export default function EncountersPage() {
           <div>
             <label htmlFor="filter-status" className="sr-only">
               {t('filters.statusLabel')}
+              Filter by status
             </label>
             <select
               id="filter-status"
@@ -186,6 +188,7 @@ export default function EncountersPage() {
           <div>
             <label htmlFor="filter-diagnosis" className="sr-only">
               {t('filters.diagnosisLabel')}
+              Filter by ICD-10 code
             </label>
             <input
               id="filter-diagnosis"
@@ -204,6 +207,7 @@ export default function EncountersPage() {
               className="mb-1 block text-xs font-medium text-gray-500"
             >
               {t('filters.from')}
+              From
             </label>
             <input
               id="filter-date-from"
@@ -221,6 +225,7 @@ export default function EncountersPage() {
               className="mb-1 block text-xs font-medium text-gray-500"
             >
               {t('filters.to')}
+              To
             </label>
             <input
               id="filter-date-to"
@@ -235,6 +240,7 @@ export default function EncountersPage() {
           <div>
             <label htmlFor="filter-sort" className="sr-only">
               {t('filters.sortLabel')}
+              Sort by
             </label>
             <select
               id="filter-sort"
@@ -299,6 +305,13 @@ export default function EncountersPage() {
                     t('doctor'),
                     t('date'),
                     t('actions'),
+                    'Patient',
+                    'Chief Complaint',
+                    'Diagnosis',
+                    'Status',
+                    'Doctor',
+                    'Date',
+                    'Actions',
                   ].map((h) => (
                     <th
                       key={h}
@@ -357,6 +370,12 @@ export default function EncountersPage() {
                     <td className="px-4 py-3 text-right">
                       <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
                         {t('viewDetails')}
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
+                      {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
+                        View details
                       </Link>
                     </td>
                   </tr>

@@ -9,7 +9,12 @@ import { addToDenylist } from '@api/services/token-denylist.service';
 import logger from '@api/utils/logger';
 
 export interface SuspiciousActivity {
-  type: 'multiple_failed_logins' | 'unusual_location' | 'rapid_requests' | 'impossible_travel' | 'new_device';
+  type:
+    | 'multiple_failed_logins'
+    | 'unusual_location'
+    | 'rapid_requests'
+    | 'impossible_travel'
+    | 'new_device';
   severity: 'low' | 'medium' | 'high' | 'critical';
   ip: string;
   userAgent?: string;
@@ -85,7 +90,12 @@ export class SessionInvalidationService {
     const timeSinceLastLogin = user.lastLoginAt ? Date.now() - user.lastLoginAt.getTime() : null;
 
     if (timeSinceLastLogin && timeSinceLastLogin < this.minSecsBetweenLocations * 1000) {
-      const distance = this.calculateDistance(lastLocation.lat, lastLocation.lng, currentLocation.lat, currentLocation.lng);
+      const distance = this.calculateDistance(
+        lastLocation.lat,
+        lastLocation.lng,
+        currentLocation.lat,
+        currentLocation.lng
+      );
       const requiredSpeed = distance / (timeSinceLastLogin / 1000 / 3600); // km/h
 
       // Speed > 900 km/h is impossible for human travel
@@ -152,9 +162,7 @@ export class SessionInvalidationService {
     if (!user) return;
 
     // Add all active refresh tokens to denylist
-    const refreshTokens = await UserModel.collection
-      .find({ userId, type: 'refresh' })
-      .toArray();
+    const refreshTokens = await UserModel.collection.find({ userId, type: 'refresh' }).toArray();
 
     for (const token of refreshTokens) {
       await addToDenylist(token._id.toString());
@@ -172,12 +180,7 @@ export class SessionInvalidationService {
   /**
    * Calculate distance between two coordinates (Haversine formula)
    */
-  private calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371; // Earth's radius in km
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;

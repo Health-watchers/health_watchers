@@ -62,7 +62,7 @@ router.post(
       const message = error instanceof Error ? error.message : 'Unknown error';
       res.status(500).json({ error: 'Health check failed', message });
     }
-  },
+  }
 );
 
 /**
@@ -111,7 +111,7 @@ router.get(
       const message = error instanceof Error ? error.message : 'Unknown error';
       res.status(500).json({ error: 'Failed to get balance report', message });
     }
-  },
+  }
 );
 
 /**

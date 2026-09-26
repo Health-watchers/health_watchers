@@ -125,7 +125,7 @@ export default function PortalEncountersPage() {
                       day: 'numeric',
                     })}
                     {encounter.type && (
-                      <span className="ml-2 text-gray-400 capitalize">· {encounter.type}</span>
+                      <span className="ml-2 capitalize text-gray-400">· {encounter.type}</span>
                     )}
                   </p>
                 </div>
@@ -152,7 +152,7 @@ export default function PortalEncountersPage() {
 
               {/* Expanded content */}
               {expandedId === encounter._id && (
-                <div className="space-y-4 border-t border-gray-100 px-5 pt-4 pb-5">
+                <div className="space-y-4 border-t border-gray-100 px-5 pb-5 pt-4">
                   {/* AI summary */}
                   <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
                     <div className="mb-2 flex items-center gap-2">
@@ -166,7 +166,7 @@ export default function PortalEncountersPage() {
                         {encounter.patientFriendlySummary}
                       </p>
                     ) : (
-                      <p className="text-sm text-gray-400 italic">
+                      <p className="text-sm italic text-gray-400">
                         Summary not yet available for this visit.
                       </p>
                     )}
@@ -178,7 +178,7 @@ export default function PortalEncountersPage() {
                   {/* Diagnosis */}
                   {encounter.diagnosis && encounter.diagnosis.length > 0 && (
                     <div>
-                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Diagnosis
                       </p>
                       <ul className="space-y-1">
@@ -195,7 +195,7 @@ export default function PortalEncountersPage() {
                   {/* Follow-up */}
                   {encounter.followUpDate && (
                     <div>
-                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Follow-up Date
                       </p>
                       <p className="text-sm text-gray-700">
@@ -210,7 +210,7 @@ export default function PortalEncountersPage() {
 
                   {/* Patient notes */}
                   <div>
-                    <p className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                       My Notes & Questions
                     </p>
                     {encounter.patientNotes.length > 0 ? (
@@ -241,7 +241,7 @@ export default function PortalEncountersPage() {
                         placeholder="Add a note or question about this visit…"
                         maxLength={1000}
                         rows={2}
-                        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         aria-label="Add a note or question"
                       />
                       <button

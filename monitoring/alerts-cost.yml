@@ -1,0 +1,132 @@
+groups:
+  - name: cost-optimization
+    rules:
+      # Metrics here come from the cost-report / analyze-utilization scripts
+      # (Prometheus textfile collector on a scheduled job) and from OpenCost /
+      # kube-state-metrics.
+
+      # ── Budgets ──────────────────────────────────────────────────────────
+      - alert: MonthlyBudgetAt80Percent
+        expr: >
+          (hw_cost_month_to_date_usd / on(env) hw_cost_budget_usd) > 0.80
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-cost
+        annotations:
+          summary: '{{ $labels.env }} at {{ $value | humanizePercentage }} of monthly budget'
+          description: 'Month-to-date spend for {{ $labels.env }} has passed 80% of budget.'
+
+      - alert: MonthlyBudgetExceeded
+        expr: >
+          (hw_cost_month_to_date_usd / on(env) hw_cost_budget_usd) > 1.0
+        for: 15m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-cost
+        annotations:
+          summary: '{{ $labels.env }} has EXCEEDED its monthly budget'
+          description: >
+            Non-prod environments auto-throttle at this point (ops/cost/budgets.json).
+            Prod pages Platform for manual review.
+
+      - alert: AccountSpendForecastOverGuardrail
+        expr: hw_cost_month_forecast_usd > hw_cost_budget_usd{env="account-total"}
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Forecast month-end spend exceeds the account guardrail'
+
+      # ── Utilization / right-sizing ──────────────────────────────────────
+      - alert: NodePoolUtilizationLow
+        expr: hw_cost_utilization_ratio{scope="nodes",resource="cpu"} < 0.80
+        for: 6h
+        labels:
+          severity: warning
+          team: platform
+          dashboard: hw-cost
+        annotations:
+          summary: 'Node CPU utilization {{ $value | humanizePercentage }} (< 80% target)'
+          description: >
+            Nodes are under-packed. Check Karpenter consolidation
+            (ops/cost/karpenter-nodepool-spot.yaml) and the right-sizing backlog.
+
+      - alert: WorkloadChronicallyOverProvisioned
+        expr: hw_cost_utilization_ratio{scope=~"deploy/.*"} < 0.35
+        for: 24h
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: '{{ $labels.scope }} using < 35% of its {{ $labels.resource }} request for 24h'
+          description: 'Right-sizing candidate — run scripts/cost/rightsizing-recommendations.sh.'
+
+      - alert: ClusterCPUOvercommitLow
+        expr: >
+          sum(kube_pod_container_resource_requests{resource="cpu"})
+            / sum(kube_node_status_allocatable{resource="cpu"}) < 0.5
+        for: 12h
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: 'Cluster CPU requests are < 50% of allocatable'
+          description: 'Room to scale in the node count or lower requests.'
+
+      # ── Commitments ─────────────────────────────────────────────────────
+      - alert: SavingsPlanUtilizationLow
+        expr: aws_savingsplans_utilization_percent < 95
+        for: 3d
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'Savings Plan utilization {{ $value }}% (< 95%)'
+          description: 'Paying for committed capacity that is not being used. Do not buy more; review ops/cost/reserved-capacity-plan.md.'
+
+      - alert: SavingsPlanCoverageLow
+        expr: aws_savingsplans_coverage_percent < 70
+        for: 7d
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: 'Only {{ $value }}% of eligible compute is covered by a commitment'
+          description: 'On-demand spend that could be discounted. Consider one more Savings Plan tranche.'
+
+      - alert: SavingsPlanExpiringSoon
+        expr: aws_savingsplans_days_to_expiry < 21
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'A Savings Plan expires in {{ $value }} days'
+
+      # ── Waste signals ──────────────────────────────────────────────────
+      - alert: UnusedResourceBacklogGrowing
+        expr: hw_cost_cleanup_candidates > 25
+        for: 1h
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: '{{ $value }} unused cloud resources detected'
+          description: 'Review the latest scripts/cost/cleanup-unused-resources.sh report and approve an --apply run.'
+
+      - alert: SpotInterruptionRateHigh
+        expr: >
+          sum(rate(karpenter_interruption_received_messages_total[1h])) > 5
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: 'High spot interruption rate'
+          description: >
+            Spot reclaims are frequent — diversify instance types in the spot
+            NodePool or shift a slice of capacity to on-demand.

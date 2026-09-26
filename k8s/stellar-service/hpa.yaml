@@ -1,17 +1,28 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: stellar-service
+  name: stellar-service-hpa
   namespace: health-watchers
   labels:
     app.kubernetes.io/name: health-watchers
     app.kubernetes.io/component: stellar-service
+    version: v1
+  annotations:
+    # Scaling policy: faster scale-up (30s stabilization) because blockchain operations
+    # are latency-sensitive and queuing requests is costly.
+    # Scale down conservatively (300s) to avoid dropping active Stellar connections.
+    # Lower CPU threshold (65%) due to XDR parsing and crypto operations causing spikes.
+    # Lower memory threshold (75%) since Stellar SDK keeps in-memory ledger caches.
+    scaling.policy/cpu-threshold: "65"
+    scaling.policy/memory-threshold: "75"
+    scaling.policy/scaleup-stabilization: "30s"
+    scaling.policy/scaledown-stabilization: "300s"
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
     name: stellar-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 5
   metrics:
     - type: Resource
@@ -19,31 +30,31 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 65
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 80
+          averageUtilization: 75
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
       policies:
         - type: Percent
-          value: 50
-          periodSeconds: 15
+          value: 100
+          periodSeconds: 30
         - type: Pods
-          value: 1
-          periodSeconds: 15
+          value: 2
+          periodSeconds: 30
       selectPolicy: Max
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
         - type: Percent
           value: 50
-          periodSeconds: 15
+          periodSeconds: 60
         - type: Pods
           value: 1
-          periodSeconds: 15
+          periodSeconds: 60
       selectPolicy: Min

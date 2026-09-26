@@ -22,7 +22,9 @@ export function EmptyState({ icon, title, description, action, className }: Empt
         </span>
       )}
       <p className="text-base font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>
-      {description && <p className="max-w-xs text-sm text-neutral-500 dark:text-neutral-400">{description}</p>}
+      {description && (
+        <p className="max-w-xs text-sm text-neutral-500 dark:text-neutral-400">{description}</p>
+      )}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

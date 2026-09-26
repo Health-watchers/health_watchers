@@ -101,13 +101,15 @@ export function AppointmentStatusManager({
       {/* Current status */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-gray-600">Status:</span>
-        <span className={`px-3 py-1 text-sm font-medium rounded-full ${STATUS_COLORS[appointment.status]}`}>
+        <span
+          className={`rounded-full px-3 py-1 text-sm font-medium ${STATUS_COLORS[appointment.status]}`}
+        >
           {appointment.status}
         </span>
       </div>
 
       {/* Appointment details */}
-      <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+      <div className="space-y-2 rounded-lg bg-gray-50 p-4">
         <p className="text-sm">
           <span className="font-medium text-gray-700">Date & Time:</span>{' '}
           <span className="text-gray-600">{formatDateTime(appointment.scheduledAt)}</span>
@@ -136,7 +138,7 @@ export function AppointmentStatusManager({
 
       {/* Error message */}
       {transitionError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {transitionError}
         </div>
       )}
@@ -144,14 +146,14 @@ export function AppointmentStatusManager({
       {/* Status transitions */}
       {allowedStatuses.length > 0 && (
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Update Status</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <p className="mb-2 text-sm font-medium text-gray-700">Update Status</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {allowedStatuses.map((status) => (
               <button
                 key={status}
                 onClick={() => handleStatusChange(status)}
                 disabled={isLoading}
-                className="px-3 py-2 text-xs font-medium border rounded-lg transition-colors hover:bg-blue-50 border-blue-300 text-blue-700"
+                className="rounded-lg border border-blue-300 px-3 py-2 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
               >
                 Mark as {status}
               </button>
@@ -161,48 +163,53 @@ export function AppointmentStatusManager({
       )}
 
       {/* Reschedule section */}
-      {!isPastAppointment && appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
-        <div className="border-t border-gray-200 pt-4">
-          {!showRescheduleForm ? (
-            <button
-              onClick={() => setShowRescheduleForm(true)}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              📅 Reschedule Appointment
-            </button>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="new-datetime" className="block text-sm font-medium text-gray-700 mb-2">
-                  New Date & Time
-                </label>
-                <input
-                  id="new-datetime"
-                  type="datetime-local"
-                  value={newDateTime}
-                  onChange={(e) => setNewDateTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+      {!isPastAppointment &&
+        appointment.status !== 'cancelled' &&
+        appointment.status !== 'completed' && (
+          <div className="border-t border-gray-200 pt-4">
+            {!showRescheduleForm ? (
+              <button
+                onClick={() => setShowRescheduleForm(true)}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                📅 Reschedule Appointment
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label
+                    htmlFor="new-datetime"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
+                    New Date & Time
+                  </label>
+                  <input
+                    id="new-datetime"
+                    type="datetime-local"
+                    value={newDateTime}
+                    onChange={(e) => setNewDateTime(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReschedule}
+                    disabled={isLoading}
+                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isLoading ? 'Updating...' : 'Update'}
+                  </button>
+                  <button
+                    onClick={() => setShowRescheduleForm(false)}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleReschedule}
-                  disabled={isLoading}
-                  className="flex-1 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isLoading ? 'Updating...' : 'Update'}
-                </button>
-                <button
-                  onClick={() => setShowRescheduleForm(false)}
-                  className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
       {/* Cancel section */}
       {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
@@ -215,19 +222,21 @@ export function AppointmentStatusManager({
               🗑️ Cancel Appointment
             </button>
           ) : (
-            <div className="space-y-3 bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-sm text-red-800 font-medium">Are you sure you want to cancel this appointment?</p>
+            <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-medium text-red-800">
+                Are you sure you want to cancel this appointment?
+              </p>
               <div className="flex gap-2">
                 <button
                   onClick={handleCancel}
                   disabled={isLoading}
-                  className="flex-1 px-3 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {isLoading ? 'Cancelling...' : 'Yes, Cancel'}
                 </button>
                 <button
                   onClick={() => setShowConfirmCancel(false)}
-                  className="flex-1 px-3 py-2 text-sm font-medium border border-red-300 text-red-700 rounded-lg hover:bg-red-100"
+                  className="flex-1 rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
                 >
                   No, Keep It
                 </button>

@@ -261,7 +261,7 @@ export const ROLE = {
   PATIENT: 'PATIENT',
 } as const;
 
-export type UserRole = typeof ROLE[keyof typeof ROLE];
+export type UserRole = (typeof ROLE)[keyof typeof ROLE];
 
 /** Roles that may write clinical records (encounters, patients, etc.). */
 export const WRITE_ROLES: UserRole[] = [ROLE.DOCTOR, ROLE.CLINIC_ADMIN, ROLE.SUPER_ADMIN];
@@ -335,7 +335,7 @@ export const AUDIT_ACTION = {
   API_KEY_REVOKED: 'api_key.revoked',
 } as const;
 
-export type AuditAction = typeof AUDIT_ACTION[keyof typeof AUDIT_ACTION];
+export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
 
 // ─── Job Schedules (cron expressions) ─────────────────────────────────────────
 

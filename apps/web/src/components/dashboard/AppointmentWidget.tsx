@@ -41,6 +41,13 @@ export function AppointmentWidget({ appointments, showViewAll = true }: Appointm
     >
       <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
         <h2 className="text-sm font-semibold text-neutral-700">{t('title')}</h2>
+      aria-label="Upcoming appointments widget"
+      className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm"
+    >
+      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+        <h2 className="text-sm font-semibold text-neutral-700">
+          Upcoming Appointments (Next 7 Days)
+        </h2>
         {showViewAll && (
           <Link href="/appointments" className="text-xs text-indigo-600 hover:underline">
             {t('viewAll')}
@@ -51,11 +58,13 @@ export function AppointmentWidget({ appointments, showViewAll = true }: Appointm
       {appointments.length === 0 ? (
         <div className="py-8 text-center">
           <p className="text-sm text-neutral-400">{t('empty')}</p>
+          <p className="text-sm text-neutral-400">No upcoming appointments</p>
           <Link
             href="/appointments"
             className="mt-3 inline-block text-xs text-indigo-600 hover:underline"
           >
             {t('schedule')}
+            Schedule an appointment
           </Link>
         </div>
       ) : (
@@ -81,6 +90,9 @@ export function AppointmentWidget({ appointments, showViewAll = true }: Appointm
                   <div className="text-xs">
                     {format.dateTime(time, { hour: '2-digit', minute: '2-digit' })}
                   </div>
+                  <div className="text-xs">
+                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
                 </div>
                 <div className="flex-1 truncate">
                   <p className="truncate font-medium text-neutral-800">
@@ -88,6 +100,8 @@ export function AppointmentWidget({ appointments, showViewAll = true }: Appointm
                   </p>
                   <p className="truncate text-xs text-neutral-500 capitalize">
                     {t('patientWithDoctor', { patient: patientName, doctor: doctorName })}
+                  <p className="truncate text-xs capitalize text-neutral-500">
+                    {patientName} with {doctorName}
                     {apt.chiefComplaint && ` — ${apt.chiefComplaint}`}
                   </p>
                 </div>
