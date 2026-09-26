@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useTranslations, useFormatter } from 'next-intl';
 import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
@@ -14,11 +15,12 @@ import { API_URL } from '@/lib/api';
 
 const API = `${API_URL}/api/v1`;
 
-function getEncounterErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unable to load encounters right now.';
-  if (error.message.includes('Failed to fetch')) {
-    return 'Unable to reach the server. Please check your connection and try again.';
-  }
+function getEncounterErrorMessage(
+  error: unknown,
+  messages: { loadError: string; networkError: string }
+): string {
+  if (!(error instanceof Error)) return messages.loadError;
+  if (error.message.includes('Failed to fetch')) return messages.networkError;
   return error.message;
 }
 
@@ -50,6 +52,9 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 export default function EncountersPage() {
+  const t = useTranslations('encounters');
+  const tStatus = useTranslations('status');
+  const format = useFormatter();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [page, setPage] = useState(1);
@@ -74,7 +79,7 @@ export default function EncountersPage() {
       throw new Error(body.message || `Error ${res.status}`);
     }
     setShowForm(false);
-    setToast({ message: 'Encounter created successfully.', type: 'success' });
+    setToast({ message: t('created'), type: 'success' });
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
   };
 
@@ -90,14 +95,17 @@ export default function EncountersPage() {
   };
 
   const hasActiveFilters = Object.entries(appliedFilters).some(
-    ([k, v]) => k !== 'sort' && v !== '',
+    ([k, v]) => k !== 'sort' && v !== ''
   );
 
   if (isLoading) return <TableSkeleton columns={5} rows={8} />;
   if (error)
     return (
       <ErrorMessage
-        message={getEncounterErrorMessage(error)}
+        message={getEncounterErrorMessage(error, {
+          loadError: t('loadError'),
+          networkError: t('networkError'),
+        })}
         onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() })}
       />
     );
@@ -107,18 +115,18 @@ export default function EncountersPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Encounters</h1>
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{t('title')}</h1>
         <button
           onClick={() => setShowForm(true)}
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
-          + New Encounter
+          {t('newEncounter')}
         </button>
       </div>
 
       {showForm && (
         <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">New Encounter</h2>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">{t('newEncounterTitle')}</h2>
           <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
         </div>
       )}
@@ -128,10 +136,12 @@ export default function EncountersPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {/* Full-text search */}
           <div className="xl:col-span-2">
-            <label htmlFor="search-q" className="sr-only">Search encounters</label>
+            <label htmlFor="search-q" className="sr-only">
+              {t('filters.searchLabel')}
+            </label>
             <div className="relative">
               <svg
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -147,46 +157,53 @@ export default function EncountersPage() {
                 value={filters.q}
                 onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
                 onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
-                placeholder="Search chief complaint or notes…"
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
+                placeholder={t('filters.searchPlaceholder')}
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pr-3 pl-9 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
               />
             </div>
           </div>
 
           {/* Status filter */}
           <div>
-            <label htmlFor="filter-status" className="sr-only">Filter by status</label>
+            <label htmlFor="filter-status" className="sr-only">
+              {t('filters.statusLabel')}
+            </label>
             <select
               id="filter-status"
               value={filters.status}
               onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
             >
-              <option value="">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-              <option value="follow-up">Follow-up</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="">{t('allStatus')}</option>
+              <option value="open">{tStatus('open')}</option>
+              <option value="closed">{tStatus('closed')}</option>
+              <option value="follow-up">{tStatus('follow-up')}</option>
+              <option value="cancelled">{tStatus('cancelled')}</option>
             </select>
           </div>
 
           {/* Diagnosis code filter */}
           <div>
-            <label htmlFor="filter-diagnosis" className="sr-only">Filter by ICD-10 code</label>
+            <label htmlFor="filter-diagnosis" className="sr-only">
+              {t('filters.diagnosisLabel')}
+            </label>
             <input
               id="filter-diagnosis"
               type="text"
               value={filters.diagnosisCode}
               onChange={(e) => setFilters((f) => ({ ...f, diagnosisCode: e.target.value }))}
-              placeholder="ICD-10 code (e.g. I24.9)"
+              placeholder={t('filters.diagnosisPlaceholder')}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
             />
           </div>
 
           {/* Date from */}
           <div>
-            <label htmlFor="filter-date-from" className="block text-xs font-medium text-gray-500 mb-1">
-              From
+            <label
+              htmlFor="filter-date-from"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
+              {t('filters.from')}
             </label>
             <input
               id="filter-date-from"
@@ -199,8 +216,11 @@ export default function EncountersPage() {
 
           {/* Date to */}
           <div>
-            <label htmlFor="filter-date-to" className="block text-xs font-medium text-gray-500 mb-1">
-              To
+            <label
+              htmlFor="filter-date-to"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
+              {t('filters.to')}
             </label>
             <input
               id="filter-date-to"
@@ -213,16 +233,18 @@ export default function EncountersPage() {
 
           {/* Sort */}
           <div>
-            <label htmlFor="filter-sort" className="sr-only">Sort by</label>
+            <label htmlFor="filter-sort" className="sr-only">
+              {t('filters.sortLabel')}
+            </label>
             <select
               id="filter-sort"
               value={filters.sort}
               onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as SortOption }))}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
             >
-              <option value="createdAt_desc">Newest first</option>
-              <option value="createdAt_asc">Oldest first</option>
-              <option value="patientName_asc">Patient name A–Z</option>
+              <option value="createdAt_desc">{t('filters.sortNewest')}</option>
+              <option value="createdAt_asc">{t('filters.sortOldest')}</option>
+              <option value="patientName_asc">{t('filters.sortPatientName')}</option>
             </select>
           </div>
         </div>
@@ -233,19 +255,19 @@ export default function EncountersPage() {
             onClick={applyFilters}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            Apply Filters
+            {t('filters.apply')}
           </button>
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
               className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Clear Filters
+              {t('filters.clear')}
             </button>
           )}
           {hasActiveFilters && (
             <span className="text-xs text-gray-500">
-              {total} result{total !== 1 ? 's' : ''} found
+              {t('filters.resultCount', { count: total })}
             </span>
           )}
         </div>
@@ -253,15 +275,13 @@ export default function EncountersPage() {
 
       {encounters.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-          <h2 className="text-lg font-semibold text-gray-900">No encounters found</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t('empty')}</h2>
           <p className="mt-2 text-sm text-gray-600">
-            {hasActiveFilters
-              ? 'Try adjusting your filters or clearing them to see all encounters.'
-              : 'Create your first encounter to get started.'}
+            {hasActiveFilters ? t('emptyFiltered') : t('emptyHint')}
           </p>
           {!hasActiveFilters && (
             <Button variant="primary" size="md" className="mt-5" onClick={() => setShowForm(true)}>
-              Create Encounter
+              {t('createEncounter')}
             </Button>
           )}
         </div>
@@ -271,11 +291,19 @@ export default function EncountersPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Patient', 'Chief Complaint', 'Diagnosis', 'Status', 'Doctor', 'Date', 'Actions'].map((h) => (
+                  {[
+                    t('patient'),
+                    t('chiefComplaint'),
+                    t('diagnosis'),
+                    t('status'),
+                    t('doctor'),
+                    t('date'),
+                    t('actions'),
+                  ].map((h) => (
                     <th
                       key={h}
                       scope="col"
-                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
+                      className="px-4 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase"
                     >
                       {h}
                     </th>
@@ -299,7 +327,9 @@ export default function EncountersPage() {
                         <span className="font-mono text-xs text-gray-600">{e.patientId}</span>
                       )}
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">{e.chiefComplaint}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">
+                      {e.chiefComplaint}
+                    </td>
                     <td className="px-4 py-3">
                       {e.diagnosis && e.diagnosis.length > 0 ? (
                         <span className="font-mono text-xs text-gray-600">
@@ -313,19 +343,20 @@ export default function EncountersPage() {
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[e.status] ?? 'bg-gray-100 text-gray-700'}`}
                       >
-                        {e.status}
+                        {tStatus.has(e.status) ? tStatus(e.status) : e.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{e.attendingDoctorId}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
-                      {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                      {e.attendingDoctorId}
+                    </td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap text-gray-500">
+                      {e.createdAt
+                        ? format.dateTime(new Date(e.createdAt), { dateStyle: 'medium' })
+                        : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/encounters/${e.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        View details
+                      <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
+                        {t('viewDetails')}
                       </Link>
                     </td>
                   </tr>
@@ -336,23 +367,21 @@ export default function EncountersPage() {
 
           {/* Pagination */}
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Page {page} of {totalPages} ({total} total)
-            </span>
+            <span>{t('pagination.summary', { page, totalPages, total })}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
               >
-                Previous
+                {t('pagination.previous')}
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
               >
-                Next
+                {t('pagination.next')}
               </button>
             </div>
           </div>

@@ -42,6 +42,11 @@ export const queryKeys = {
     list: (status?: string) => [...queryKeys.preAuth.all, 'list', status] as const,
     detail: (id: string) => [...queryKeys.preAuth.all, 'detail', id] as const,
   },
+  staff: {
+    all: ['staff'] as const,
+    lists: () => [...queryKeys.staff.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) => [...queryKeys.staff.lists(), filters] as const,
+  },
   communications: {
     all: ['communications'] as const,
     byPatient: (patientId: string, params?: Record<string, string>) =>

@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { type Patient, formatDate } from '@health-watchers/types';
+import { useTranslations, useFormatter } from 'next-intl';
+import { type Patient } from '@health-watchers/types';
 import {
   ErrorMessage,
   TableSkeleton,
@@ -17,20 +18,6 @@ import { usePatients, type PatientFilters } from '@/lib/queries/usePatients';
 import { SearchTips } from '@/components/patients/SearchTips';
 import { DuplicateDetectionWarning } from '@/components/patients/DuplicateDetectionWarning';
 
-interface Labels {
-  title: string;
-  loading: string;
-  empty: string;
-  id: string;
-  name: string;
-  dob: string;
-  sex: string;
-  contact: string;
-  search: string;
-  view: string;
-  registerNew: string;
-}
-
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 function riskVariant(level?: RiskLevel) {
@@ -41,7 +28,12 @@ function riskVariant(level?: RiskLevel) {
   return 'default';
 }
 
-const DEFAULT_FILTERS: PatientFilters & { city?: string; ageMin?: string; ageMax?: string; medicalHistory?: string } = {
+const DEFAULT_FILTERS: PatientFilters & {
+  city?: string;
+  ageMin?: string;
+  ageMax?: string;
+  medicalHistory?: string;
+} = {
   q: '',
   status: '',
   sex: '',
@@ -76,7 +68,16 @@ function calculateDOBFromAge(age: number, isMax = false): string {
   return `${year}-01-01`;
 }
 
-export default function PatientsClient({ labels }: { labels: Labels }) {
+export default function PatientsClient() {
+  const t = useTranslations('patients');
+  const tNew = useTranslations('patientNew');
+  const tStatus = useTranslations('status');
+  const format = useFormatter();
+  const formatDob = (value?: string | Date) =>
+    value ? format.dateTime(new Date(value), { dateStyle: 'medium', timeZone: 'UTC' }) : '';
+  const formatSex = (sex?: string) =>
+    sex && t.has(`filters.sexOptions.${sex}`) ? t(`filters.sexOptions.${sex}`) : (sex ?? '');
+  const formatRisk = (level: RiskLevel) => (tStatus.has(level) ? tStatus(level) : level);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<typeof DEFAULT_FILTERS>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<typeof DEFAULT_FILTERS>(DEFAULT_FILTERS);
@@ -87,7 +88,11 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const debounceTimer = useRef<NodeJS.Timeout>();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: patients = [], isLoading, error } = usePatients({
+  const {
+    data: patients = [],
+    isLoading,
+    error,
+  } = usePatients({
     ...appliedFilters,
     q: searchQuery,
   });
@@ -99,8 +104,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         if (history) {
           setSearchHistory(JSON.parse(history).slice(0, 10));
         }
-      } catch {
-      }
+      } catch {}
     };
     loadSearchHistory();
   }, []);
@@ -133,18 +137,28 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const exportToCSV = () => {
     if (patients.length === 0) return;
 
-    const headers = ['ID', 'First Name', 'Last Name', 'DOB', 'Sex', 'Contact', 'Risk Level'];
+    const headers = [
+      t('csv.id'),
+      t('csv.firstName'),
+      t('csv.lastName'),
+      t('csv.dob'),
+      t('csv.sex'),
+      t('csv.contact'),
+      t('csv.riskLevel'),
+    ];
     const rows = patients.map((p: Patient & { riskLevel?: string }) => [
       p.systemId || '',
       p.firstName || '',
       p.lastName || '',
-      formatDate(p.dateOfBirth) || '',
+      formatDob(p.dateOfBirth),
       p.sex || '',
       p.contactNumber || '',
       p.riskLevel || '',
     ]);
 
-    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell}"`).join(','))
+      .join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -180,7 +194,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50 sm:text-3xl">{labels.title}</h1>
+        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl dark:text-neutral-50">
+          {t('title')}
+        </h1>
         <div className="flex flex-wrap gap-2">
           {patients.length > 0 && (
             <Button
@@ -188,16 +204,16 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               variant="outline"
               className="inline-flex items-center gap-2 text-sm"
             >
-              📥 Export CSV
+              📥 {t('exportCsv')}
             </Button>
           )}
           <Link
             href="/patients/new"
             id="register-new-patient-btn"
-            className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:outline-none active:bg-primary-800"
+            className="bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-500 active:bg-primary-800 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <span aria-hidden="true">+</span>
-            {labels.registerNew}
+            {tNew('title')}
           </Link>
         </div>
       </div>
@@ -215,7 +231,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         <div className="p-5">
           <div className="mb-4">
             <label htmlFor="patient-search" className="sr-only">
-              {labels.search}
+              {t('search')}
             </label>
             <div className="relative">
               <input
@@ -226,19 +242,19 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 onChange={(e) => handleSearch(e.target.value)}
                 onFocus={() => setShowSearchHistory(true)}
                 onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
-                placeholder={`${labels.search} by name, ID, or medical condition`}
-                className="w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-700 placeholder-neutral-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-400 dark:focus:ring-primary-900/50"
-                aria-label={labels.search}
+                placeholder={t('searchPlaceholder')}
+                className="focus:border-primary-400 focus:ring-primary-100 dark:focus:ring-primary-900/50 w-full rounded-md border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-700 placeholder-neutral-500 focus:ring-2 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder-neutral-400"
+                aria-label={t('search')}
               />
-              <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-2">
+              <div className="absolute top-1/2 right-3 flex -translate-y-1/2 gap-2">
                 <SearchTips />
                 <span className="text-xs text-neutral-400">Ctrl+/</span>
               </div>
               {showSearchHistory && searchHistory.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                <div className="absolute top-full right-0 left-0 mt-1 rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
                   <div className="p-2">
                     <p className="px-2 py-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                      Recent Searches
+                      {t('recentSearches')}
                     </p>
                     {searchHistory.map((query) => (
                       <button
@@ -265,15 +281,18 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             aria-expanded={showAdvancedFilters}
           >
             <span aria-hidden="true">{showAdvancedFilters ? '▼' : '▶'}</span>
-            Advanced Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+            {t('filters.toggle')} {activeFilterCount > 0 && `(${activeFilterCount})`}
           </button>
 
           {showAdvancedFilters && (
             <div className="space-y-4 border-t border-gray-200 pt-4">
               <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
                 <div>
-                  <label htmlFor="filter-status" className="block text-xs font-semibold text-gray-500 uppercase">
-                    Status
+                  <label
+                    htmlFor="filter-status"
+                    className="block text-xs font-semibold text-gray-500 uppercase"
+                  >
+                    {t('filters.status')}
                   </label>
                   <select
                     id="filter-status"
@@ -281,16 +300,19 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                     onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                   >
-                    <option value="">All statuses</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="discharged">Discharged</option>
+                    <option value="">{t('filters.allStatuses')}</option>
+                    <option value="active">{tStatus('active')}</option>
+                    <option value="inactive">{tStatus('inactive')}</option>
+                    <option value="discharged">{tStatus('discharged')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label htmlFor="filter-sex" className="block text-xs font-semibold text-gray-500 uppercase">
-                    Gender
+                  <label
+                    htmlFor="filter-sex"
+                    className="block text-xs font-semibold text-gray-500 uppercase"
+                  >
+                    {t('filters.gender')}
                   </label>
                   <select
                     id="filter-sex"
@@ -298,59 +320,73 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                     onChange={(e) => setFilters((prev) => ({ ...prev, sex: e.target.value }))}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                   >
-                    <option value="">All</option>
-                    <option value="female">Female</option>
-                    <option value="male">Male</option>
-                    <option value="other">Other</option>
+                    <option value="">{t('filters.all')}</option>
+                    <option value="female">{t('filters.sexOptions.female')}</option>
+                    <option value="male">{t('filters.sexOptions.male')}</option>
+                    <option value="other">{t('filters.sexOptions.other')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label htmlFor="filter-city" className="block text-xs font-semibold text-gray-500 uppercase">
-                    City/Location
+                  <label
+                    htmlFor="filter-city"
+                    className="block text-xs font-semibold text-gray-500 uppercase"
+                  >
+                    {t('filters.city')}
                   </label>
                   <input
                     id="filter-city"
                     type="text"
                     value={filters.city}
                     onChange={(e) => setFilters((prev) => ({ ...prev, city: e.target.value }))}
-                    placeholder="e.g. New York"
+                    placeholder={t('filters.cityPlaceholder')}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="filter-condition" className="block text-xs font-semibold text-gray-500 uppercase">
-                    Medical Condition
+                  <label
+                    htmlFor="filter-condition"
+                    className="block text-xs font-semibold text-gray-500 uppercase"
+                  >
+                    {t('filters.condition')}
                   </label>
                   <input
                     id="filter-condition"
                     type="text"
                     value={filters.condition}
                     onChange={(e) => setFilters((prev) => ({ ...prev, condition: e.target.value }))}
-                    placeholder="e.g. hypertension"
+                    placeholder={t('filters.conditionPlaceholder')}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="filter-medical-history" className="block text-xs font-semibold text-gray-500 uppercase">
-                    Medical History
+                  <label
+                    htmlFor="filter-medical-history"
+                    className="block text-xs font-semibold text-gray-500 uppercase"
+                  >
+                    {t('filters.medicalHistory')}
                   </label>
                   <input
                     id="filter-medical-history"
                     type="text"
                     value={filters.medicalHistory}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, medicalHistory: e.target.value }))}
-                    placeholder="e.g. diabetes, asthma"
+                    onChange={(e) =>
+                      setFilters((prev) => ({ ...prev, medicalHistory: e.target.value }))
+                    }
+                    placeholder={t('filters.medicalHistoryPlaceholder')}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                   />
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
                   <div>
-                    <label htmlFor="filter-age-min" className="block text-xs font-semibold text-gray-500 uppercase">
-                      Age Min
+                    <label
+                      htmlFor="filter-age-min"
+                      className="block text-xs font-semibold text-gray-500 uppercase"
+                    >
+                      {t('filters.ageMin')}
                     </label>
                     <input
                       id="filter-age-min"
@@ -359,13 +395,16 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                       max="150"
                       value={filters.ageMin}
                       onChange={(e) => setFilters((prev) => ({ ...prev, ageMin: e.target.value }))}
-                      placeholder="Min age"
+                      placeholder={t('filters.ageMinPlaceholder')}
                       className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label htmlFor="filter-age-max" className="block text-xs font-semibold text-gray-500 uppercase">
-                      Age Max
+                    <label
+                      htmlFor="filter-age-max"
+                      className="block text-xs font-semibold text-gray-500 uppercase"
+                    >
+                      {t('filters.ageMax')}
                     </label>
                     <input
                       id="filter-age-max"
@@ -374,7 +413,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                       max="150"
                       value={filters.ageMax}
                       onChange={(e) => setFilters((prev) => ({ ...prev, ageMax: e.target.value }))}
-                      placeholder="Max age"
+                      placeholder={t('filters.ageMaxPlaceholder')}
                       className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
                     />
                   </div>
@@ -382,8 +421,11 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2">
                   <div>
-                    <label htmlFor="filter-dob-from" className="block text-xs font-semibold text-gray-500 uppercase">
-                      Birth Date From
+                    <label
+                      htmlFor="filter-dob-from"
+                      className="block text-xs font-semibold text-gray-500 uppercase"
+                    >
+                      {t('filters.dobFrom')}
                     </label>
                     <input
                       id="filter-dob-from"
@@ -394,8 +436,11 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                     />
                   </div>
                   <div>
-                    <label htmlFor="filter-dob-to" className="block text-xs font-semibold text-gray-500 uppercase">
-                      Birth Date To
+                    <label
+                      htmlFor="filter-dob-to"
+                      className="block text-xs font-semibold text-gray-500 uppercase"
+                    >
+                      {t('filters.dobTo')}
                     </label>
                     <input
                       id="filter-dob-to"
@@ -409,26 +454,32 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Button variant="primary" onClick={applyFilters} className="rounded-md px-4 py-2 text-sm">
-                  Apply filters
+                <Button
+                  variant="primary"
+                  onClick={applyFilters}
+                  className="rounded-md px-4 py-2 text-sm"
+                >
+                  {t('filters.apply')}
                 </Button>
-                <Button variant="outline" onClick={resetFilters} className="rounded-md px-4 py-2 text-sm">
-                  Clear all filters
+                <Button
+                  variant="outline"
+                  onClick={resetFilters}
+                  className="rounded-md px-4 py-2 text-sm"
+                >
+                  {t('filters.clear')}
                 </Button>
               </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-gray-200 bg-white px-5 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           {activeFilterCount > 0 && (
             <span className="text-sm text-gray-600">
-              {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}
+              {t('filters.activeCount', { count: activeFilterCount })}
             </span>
           )}
-          <p className="text-sm text-gray-500">
-            Showing {patients.length} patient{patients.length !== 1 ? 's' : ''}
-          </p>
+          <p className="text-sm text-gray-500">{t('showingCount', { count: patients.length })}</p>
         </div>
       </div>
 
@@ -436,7 +487,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         <TableSkeleton columns={7} rows={5} />
       ) : error ? (
         <ErrorMessage
-          message={error instanceof Error ? error.message : 'Failed to load patients.'}
+          message={error instanceof Error ? error.message : t('loadError')}
           onRetry={() => window.location.reload()}
         />
       ) : patients.length === 0 ? (
@@ -449,7 +500,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
               <span aria-hidden="true">+</span>
-              {labels.registerNew}
+              {tNew('title')}
             </Link>
           }
         />
@@ -458,7 +509,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="mb-3 flex items-center gap-3">
                   <PatientThumbnail
                     patientId={String(p._id)}
                     firstName={p.firstName}
@@ -466,43 +517,63 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                     thumbnailUrl={(p as any).thumbnailUrl}
                     size="md"
                   />
-                  <p className="font-medium text-gray-900">{p.firstName} {p.lastName}</p>
+                  <p className="font-medium text-gray-900">
+                    {p.firstName} {p.lastName}
+                  </p>
                 </div>
-                <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
+                <p className="text-xs tracking-wide text-gray-500 uppercase">{t('id')}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.dob}</p>
-                <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.sex}</p>
-                <p className="text-gray-700">{p.sex}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.contact}</p>
-                <p className="text-gray-700">{p.contactNumber || 'N/A'}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('dob')}</p>
+                <p className="text-gray-700">{formatDob(p.dateOfBirth)}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('sex')}</p>
+                <p className="text-gray-700">{formatSex(p.sex)}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('contact')}</p>
+                <p className="text-gray-700">{p.contactNumber || t('na')}</p>
                 {p.riskLevel && (
                   <div className="mt-2">
-                    <Badge variant={riskVariant(p.riskLevel)}>{p.riskLevel} risk</Badge>
+                    <Badge variant={riskVariant(p.riskLevel)}>
+                      {t('riskBadge', { level: formatRisk(p.riskLevel) })}
+                    </Badge>
                   </div>
                 )}
                 <Link
                   href={`/patients/${p._id}`}
                   className="mt-3 inline-block rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
                 >
-                  {labels.view}
+                  {t('view')}
                 </Link>
               </div>
             ))}
           </div>
 
           <div className="hidden overflow-x-auto md:block">
-            <table aria-label={labels.title} className="w-full border-collapse text-sm">
+            <table aria-label={t('title')} className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.id}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Photo</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.name}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.dob}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.sex}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.contact}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Risk</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.view}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('id')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('photo')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('name')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('dob')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('sex')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('contact')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('risk')}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {t('view')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -518,22 +589,27 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                         size="sm"
                       />
                     </td>
-                    <td className="border border-gray-200 px-4 py-2">{p.firstName} {p.lastName}</td>
-                    <td className="border border-gray-200 px-4 py-2">{formatDate(p.dateOfBirth)}</td>
-                    <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
-                    <td className="border border-gray-200 px-4 py-2">{p.contactNumber || 'N/A'}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {p.firstName} {p.lastName}
+                    </td>
+                    <td className="border border-gray-200 px-4 py-2">{formatDob(p.dateOfBirth)}</td>
+                    <td className="border border-gray-200 px-4 py-2">{formatSex(p.sex)}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {p.contactNumber || t('na')}
+                    </td>
                     <td className="border border-gray-200 px-4 py-2">
                       {p.riskLevel ? (
                         <Badge variant={riskVariant(p.riskLevel)}>
-                          {p.riskLevel}{p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
+                          {formatRisk(p.riskLevel)}
+                          {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
                         </Badge>
                       ) : (
-                        <span className="text-gray-400 text-xs">—</span>
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="border border-gray-200 px-4 py-2">
                       <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
-                        {labels.view}
+                        {t('view')}
                       </Link>
                     </td>
                   </tr>

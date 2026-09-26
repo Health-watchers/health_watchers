@@ -213,3 +213,57 @@ export enum ApiErrorCode {
   UNSUPPORTED_MEDIA_TYPE = 'UNSUPPORTED_MEDIA_TYPE',
   BAD_REQUEST = 'BAD_REQUEST',
 }
+
+// ─── Staff Management ─────────────────────────────────────────────────────────
+
+/** Roles that can be assigned to clinic staff accounts. */
+export const STAFF_ROLES = [
+  'SUPER_ADMIN',
+  'CLINIC_ADMIN',
+  'DOCTOR',
+  'NURSE',
+  'ASSISTANT',
+  'READ_ONLY',
+] as const;
+
+export type StaffRole = (typeof STAFF_ROLES)[number];
+
+/** Roles a CLINIC_ADMIN may invite or assign; SUPER_ADMIN may assign any role. */
+export const CLINIC_ADMIN_ASSIGNABLE_ROLES: readonly StaffRole[] = [
+  'DOCTOR',
+  'NURSE',
+  'ASSISTANT',
+  'READ_ONLY',
+];
+
+/** Validation for inviting a staff member (web invite form + API POST /users). */
+export const InviteStaffSchema = z.object({
+  fullName: z.string().trim().min(1, 'Full name is required').max(100, 'Full name is too long'),
+  email: z.string().trim().email('Invalid email address'),
+  role: z.enum(STAFF_ROLES),
+  clinicId: z.string().optional(),
+});
+
+export type InviteStaffInput = z.infer<typeof InviteStaffSchema>;
+
+/** Validation for updating a staff member (API PUT /users/:id). */
+export const UpdateStaffSchema = z.object({
+  fullName: z.string().trim().min(1).max(100).optional(),
+  role: z.enum(STAFF_ROLES).optional(),
+});
+
+export type UpdateStaffInput = z.infer<typeof UpdateStaffSchema>;
+
+/** Staff member as returned by GET /users. */
+export interface StaffMember {
+  id: string;
+  fullName: string;
+  email: string;
+  role: StaffRole;
+  clinicId: string;
+  isActive: boolean;
+  emailVerified?: boolean;
+  mfaEnabled?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}

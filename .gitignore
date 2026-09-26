@@ -264,3 +264,4 @@ benchmark-*.json
 *.repl.ts
 *.debug.ts
 scratch.*
+scripts/translation-report.json
