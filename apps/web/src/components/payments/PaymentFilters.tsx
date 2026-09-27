@@ -1,15 +1,11 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 
 export type StatusFilter = 'all' | 'pending' | 'confirmed' | 'completed' | 'failed';
 
-const STATUS_TABS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'failed', label: 'Failed' },
-];
+const STATUS_TABS: StatusFilter[] = ['all', 'pending', 'confirmed', 'failed'];
 
 interface PaymentFiltersProps {
   statusFilter: StatusFilter;
@@ -32,19 +28,24 @@ export function PaymentFilters({
   dateTo,
   onDateToChange,
 }: PaymentFiltersProps) {
+  const t = useTranslations('payments');
+  const tStatus = useTranslations('status');
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <Tabs value={statusFilter} onValueChange={(v) => onStatusChange(v as StatusFilter)}>
         <TabsList>
-          {STATUS_TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
+          {STATUS_TABS.map((value) => (
+            <TabsTrigger key={value} value={value}>
+              {value === 'all' ? t('all') : tStatus(value)}
             </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
 
       <div className="ml-auto flex items-center gap-2">
+        <label htmlFor="date-from" className="text-xs whitespace-nowrap text-neutral-500">
+          {t('from')}
         <label htmlFor="date-from" className="whitespace-nowrap text-xs text-neutral-500">
           From
         </label>
@@ -56,7 +57,7 @@ export function PaymentFilters({
           className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <label htmlFor="date-to" className="text-xs text-neutral-500">
-          To
+          {t('to')}
         </label>
         <input
           id="date-to"

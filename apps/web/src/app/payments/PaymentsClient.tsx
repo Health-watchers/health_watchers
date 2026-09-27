@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslations } from 'next-intl';
 import {
   ErrorMessage,
   Toast,
@@ -28,14 +29,13 @@ const API = `${API_URL}/api/v1`;
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const POLL_INTERVAL_MS = 5000;
 
-function getPaymentsErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unable to load payments right now.';
-  if (error.message.includes('Failed to fetch')) {
-    return 'Unable to reach the server. Please check your connection and try again.';
-  }
-  if (error.message.startsWith('Request failed')) {
-    return 'Unable to load payments right now. Please try again.';
-  }
+function getPaymentsErrorMessage(
+  error: unknown,
+  messages: { loadError: string; networkError: string }
+): string {
+  if (!(error instanceof Error)) return messages.loadError;
+  if (error.message.includes('Failed to fetch')) return messages.networkError;
+  if (error.message.startsWith('Request failed')) return messages.loadError;
   return error.message;
 }
 
@@ -61,6 +61,7 @@ type PaymentsTab = 'payments' | 'recurring' | 'batch';
 const TABS: PaymentsTab[] = ['payments', 'recurring', 'batch'];
 
 export default function PaymentsClient() {
+  const t = useTranslations('payments');
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState<PaymentsTab>('payments');
@@ -93,13 +94,13 @@ export default function PaymentsClient() {
     polledPayments.forEach((p) => {
       const prev = prevStatuses.current[p.id];
       if (prev === 'pending' && p.status === 'confirmed') {
-        setToast({ message: `Payment confirmed.`, type: 'success' });
+        setToast({ message: t('confirmed'), type: 'success' });
       } else if (prev === 'pending' && p.status === 'failed') {
-        setToast({ message: `Payment failed.`, type: 'error' });
+        setToast({ message: t('failedToast'), type: 'error' });
       }
       prevStatuses.current[p.id] = p.status;
     });
-  }, [polledPayments]);
+  }, [polledPayments, t]);
 
   const handleCreate = async (data: PaymentIntentData) => {
     const body: any = {
@@ -127,7 +128,7 @@ export default function PaymentsClient() {
       throw new Error(body.message ?? `Error ${res.status}`);
     }
     setShowForm(false);
-    setToast({ message: 'Payment intent created.', type: 'success' });
+    setToast({ message: t('created'), type: 'success' });
     queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() });
   };
 
@@ -141,7 +142,7 @@ export default function PaymentsClient() {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.message ?? `Error ${res.status}`);
     }
-    setToast({ message: 'Payment confirmed.', type: 'success' });
+    setToast({ message: t('confirmed'), type: 'success' });
     queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() });
   };
 
@@ -152,7 +153,7 @@ export default function PaymentsClient() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="mb-6 flex items-center justify-between">
-        <PageHeader title="Payments" />
+        <PageHeader title={t('title')} />
         <div className="flex items-center gap-3">
           {polling && (
             <span className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs text-yellow-700">
@@ -160,17 +161,46 @@ export default function PaymentsClient() {
                 className="h-2 w-2 animate-pulse rounded-full bg-yellow-400"
                 aria-hidden="true"
               />
-              Polling for updates…
+              {t('polling')}
             </span>
           )}
           <Button variant="outline" onClick={() => (window.location.href = '/invoices')}>
-            Invoices
+            {t('invoices')}
           </Button>
           <PaymentExportButton onError={(msg) => setToast({ message: msg, type: 'error' })} />
-          <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
+          <Button onClick={() => setShowForm(true)}>{t('newPayment')}</Button>
         </div>
       </div>
 
+      {(isLoading || pollingLoading) && !displayPayments.length && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 py-8 text-neutral-500"
+        >
+          <span
+            className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700"
+            aria-hidden="true"
+          />
+          <span>{t('loading')}</span>
+        </div>
+      )}
+
+      {error && (
+        <ErrorMessage
+          message={getPaymentsErrorMessage(error, {
+            loadError: t('loadError'),
+            networkError: t('networkError'),
+          })}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.payments.list() })}
+        />
+      )}
+
+      {!isLoading && !error && (
+        <SectionErrorBoundary name="payment panel">
+          <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        </SectionErrorBoundary>
+      )}
       <Tabs value={tab} onValueChange={changeTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="payments">Payments</TabsTrigger>
@@ -220,7 +250,7 @@ export default function PaymentsClient() {
         </TabsContent>
       </Tabs>
 
-      <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Intent">
+      <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title={t('newPaymentIntent')}>
         <PaymentIntentForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
       </SlideOver>
     </PageWrapper>
