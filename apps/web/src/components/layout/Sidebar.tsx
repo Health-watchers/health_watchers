@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
 import type { AppRole } from '@/context/AuthContext';
 
 interface NavItem {
-  label: string;
+  /** Key under `nav` in the message files */
+  labelKey: string;
   href: string;
   icon: React.ReactNode;
   roles?: AppRole[]; // undefined = visible to all
@@ -15,7 +17,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Dashboard',
+    labelKey: 'dashboard',
     href: '/',
     icon: (
       <svg
@@ -35,7 +37,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Patients',
+    labelKey: 'patients',
     href: '/patients',
     icon: (
       <svg
@@ -55,7 +57,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Encounters',
+    labelKey: 'encounters',
     href: '/encounters',
     icon: (
       <svg
@@ -75,6 +77,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    labelKey: 'payments',
     label: 'Lab Results',
     href: '/lab-results',
     icon: (
@@ -121,6 +124,7 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR'],
   },
   {
+    labelKey: 'appointments',
     label: 'Billing',
     href: '/billing',
     icon: (
@@ -162,6 +166,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    labelKey: 'cds',
     label: 'Schedules',
     href: '/schedules',
     icon: (
@@ -202,7 +207,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Immunizations',
+    labelKey: 'immunizations',
     href: '/immunizations',
     icon: (
       <svg
@@ -222,7 +227,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Documents',
+    labelKey: 'documents',
     href: '/documents',
     icon: (
       <svg
@@ -242,6 +247,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    labelKey: 'settings',
     label: 'Medications',
     href: '/medications',
     icon: (
@@ -289,6 +295,8 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
+    labelKey: 'staff',
+    href: '/settings/staff',
     label: 'Compliance',
     href: '/compliance',
     icon: (
@@ -303,6 +311,7 @@ const navItems: NavItem[] = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
+          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         />
       </svg>
@@ -310,6 +319,8 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
+    labelKey: 'auditLog',
+    href: '/audit-log',
     label: 'Audit Log',
     href: '/compliance/audit-logs',
     icon: (
@@ -331,7 +342,7 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
-    label: 'Reports',
+    labelKey: 'reports',
     href: '/reports',
     icon: (
       <svg
@@ -359,6 +370,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const { user } = useAuth();
   const sidebarRef = useRef<HTMLElement>(null);
@@ -405,7 +417,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const sidebarContent = (
     <nav
       ref={sidebarRef}
-      aria-label="Main navigation"
+      aria-label={t('mainNavigation')}
       className="bg-neutral-0 flex h-full w-60 flex-col border-r border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800"
     >
       {/* Logo area */}
@@ -416,8 +428,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Nav items */}
       <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" role="list">
         {visibleItems.map((item) => {
+          // Prefer the most specific match so /settings/staff doesn't also highlight /settings
           const isActive =
-            pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            pathname === item.href ||
+            (item.href !== '/' &&
+              pathname.startsWith(item.href) &&
+              !visibleItems.some(
+                (other) =>
+                  other.href.length > item.href.length &&
+                  other.href.startsWith(item.href) &&
+                  pathname.startsWith(other.href)
+              ));
           return (
             <li key={item.href}>
               <Link
@@ -433,7 +454,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 ].join(' ')}
               >
                 {item.icon}
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             </li>
           );
@@ -453,7 +474,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           className="fixed inset-0 z-40 md:hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="Navigation menu"
+          aria-label={t('navigationMenu')}
         >
           {/* Backdrop */}
           <div className="fixed inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
