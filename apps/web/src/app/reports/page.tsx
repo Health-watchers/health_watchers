@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { PageWrapper, PageHeader } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -75,7 +76,7 @@ function SimpleBarChart({
             <span className="w-24 shrink-0 truncate text-neutral-600">{item[labelKey]}</span>
             <div className="flex-1 rounded bg-neutral-100" aria-hidden="true">
               <div
-                className="h-5 rounded bg-primary-500 transition-all"
+                className="bg-primary-500 h-5 rounded transition-all"
                 style={{ width: `${(Number(item[valueKey]) / max) * 100}%` }}
               />
             </div>
@@ -128,6 +129,12 @@ export default function ReportsPage() {
         subtitle="Clinic performance overview"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/reports/surveys"
+              className="text-primary-600 hover:bg-primary-50 dark:text-primary-400 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-600"
+            >
+              Patient surveys →
+            </Link>
             {(['this_month', 'last_month', 'last_3_months'] as Period[]).map((p) => (
               <button
                 key={p}
@@ -257,7 +264,7 @@ export default function ReportsPage() {
             </h2>
             <button
               onClick={() => handleExport('patients')}
-              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export patients CSV"
             >
               Export CSV
@@ -284,7 +291,7 @@ export default function ReportsPage() {
             <h2 className="text-sm font-semibold text-neutral-900">Top Chief Complaints</h2>
             <button
               onClick={() => handleExport('encounters')}
-              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export encounters CSV"
             >
               Export CSV
@@ -311,7 +318,7 @@ export default function ReportsPage() {
             <h2 className="text-sm font-semibold text-neutral-900">Payment Volume by Month</h2>
             <button
               onClick={() => handleExport('payments')}
-              className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
+              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
               aria-label="Export payments CSV"
             >
               Export CSV

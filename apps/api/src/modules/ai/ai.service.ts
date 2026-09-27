@@ -768,3 +768,45 @@ ${safeText}`;
     throw new Error(`Failed to transcribe and correct: ${msg}`);
   }
 }
+
+const TRANSCRIBABLE_AUDIO_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+]);
+
+export function isTranscribableAudioType(mimeType: string): boolean {
+  return TRANSCRIBABLE_AUDIO_TYPES.has(mimeType.split(';')[0].trim().toLowerCase());
+}
+
+/**
+ * Verbatim speech-to-text for clinician dictation. Unlike transcribeAndCorrect this does not
+ * restructure the text — the editor inserts it where the clinician's cursor is, and shorthand
+ * expansion happens client-side.
+ */
+export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<string> {
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        data: audio.toString('base64'),
+        mimeType: mimeType.split(';')[0].trim().toLowerCase(),
+      },
+    },
+    {
+      text:
+        'Transcribe this clinical dictation verbatim. Keep medical abbreviations exactly as ' +
+        'spoken, add sentence punctuation, and return only the transcript text with no ' +
+        'commentary. If there is no speech, return an empty string.',
+    },
+  ]);
+
+  return result.response.text().trim();
+}

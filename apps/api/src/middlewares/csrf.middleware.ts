@@ -83,6 +83,19 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip CSRF check for auth endpoints (login/register) since no session exists yet,
+  // for CSP reports which are browser-generated with no user session, and for the
+  // inbound Stellar payment webhook, which is a server-to-server call authenticated by
+  // its own HMAC signature (X-Webhook-Signature) rather than a cookie session.
+  // Patient survey submissions come from an emailed link with no session and are
+  // authenticated by the survey's single-use 256-bit token.
+  if (
+    /^\/api\/v1\/surveys\/[a-f0-9]{64}\/submit$/.test(req.path) ||
+    req.path.startsWith('/api/v1/auth/login') ||
+    req.path.startsWith('/api/v1/auth/register') ||
+    req.path.startsWith('/api/v1/csp-report') ||
+    req.path.startsWith('/api/v1/webhooks/stellar-payment')
+  ) {
   // ── 3. Exempt paths bypass CSRF check ───────────────────────────────────────
   if (isExempt(req.path)) {
     return next();

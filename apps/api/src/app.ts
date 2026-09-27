@@ -212,7 +212,11 @@ app.use(csrfMiddleware);
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
 // Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports
-const MULTIPART_BYPASS = ['/api/v1/patients/import', '/api/v1/patients/'];
+const MULTIPART_BYPASS = [
+  '/api/v1/patients/import',
+  '/api/v1/patients/',
+  '/api/v1/ai/transcribe-audio',
+];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
     if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();

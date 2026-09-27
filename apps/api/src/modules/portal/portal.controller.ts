@@ -25,6 +25,7 @@ import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { portalMfaService } from './portal-mfa.service';
 import { smsOtpService } from './sms-otp.service';
 import { PortalMessageModel } from './models/portal-message.model';
+import { InboxThreadModel } from '../inbox/inbox-thread.model';
 import {
   portalMessageCreateSchema,
   portalMessageQuerySchema,
@@ -374,6 +375,12 @@ router.post(
       parentMessageId: parentMessageId ? new Types.ObjectId(parentMessageId) : undefined,
       attachments,
     });
+
+    // A new patient message re-opens a thread the care team had closed
+    await InboxThreadModel.updateOne(
+      { clinicId: message.clinicId, threadId: message.threadId, status: 'closed' },
+      { $set: { status: 'open', closedAt: null, closedBy: null } }
+    );
 
     const patientName =
       `${(patient as any).firstName || ''} ${(patient as any).lastName || ''}`.trim() || 'Patient';

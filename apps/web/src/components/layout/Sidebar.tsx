@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
 import type { AppRole } from '@/context/AuthContext';
+import { INBOX_ROLES, useInboxUnreadCount } from '@/hooks/useInbox';
 
 interface NavItem {
   /** Key under `nav` in the message files */
@@ -92,6 +93,32 @@ const navItems: NavItem[] = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
+          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+        />
+      </svg>
+    ),
+    roles: INBOX_ROLES,
+  },
+  {
+    label: 'Peer Review',
+    href: '/peer-reviews',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    roles: ['CLINIC_ADMIN', 'DOCTOR'],
           d="M9 3v6.172a2 2 0 01-.586 1.414L4.293 14.707A2 2 0 005.707 18h12.586a2 2 0 001.414-3.293l-4.121-4.121A2 2 0 0115 9.172V3M8 3h8"
         />
       </svg>
@@ -374,6 +401,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const sidebarRef = useRef<HTMLElement>(null);
+  const inboxUnread = useInboxUnreadCount();
 
   // Focus trap for mobile drawer
   useEffect(() => {
@@ -422,7 +450,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     >
       {/* Logo area */}
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-5 dark:border-neutral-700">
-        <span className="text-lg font-bold tracking-tight text-primary-500">HealthWatchers</span>
+        <span className="text-primary-500 text-lg font-bold tracking-tight">HealthWatchers</span>
       </div>
 
       {/* Nav items */}
