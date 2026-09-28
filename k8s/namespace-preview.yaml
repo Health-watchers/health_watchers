@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: health-watchers-preview
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/managed-by: kubectl
+    environment: preview
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: health-watchers-preview-quota
+  namespace: health-watchers-preview
+spec:
+  hard:
+    # Compute resources (minimal for PR previews)
+    requests.cpu: "2"           # Total CPU requests across all preview pods
+    requests.memory: 4Gi        # Total memory requests across all preview pods
+    limits.cpu: "4"             # Total CPU limits across all preview pods
+    limits.memory: 8Gi          # Total memory limits across all preview pods
+    
+    # Object counts (per preview environment)
+    pods: "10"                  # Maximum number of pods per preview
+    services: "5"               # Maximum number of services per preview
+    persistentvolumeclaims: "2" # Maximum number of PVCs per preview
+    
+    # Storage
+    requests.storage: 10Gi      # Total storage requests per preview
+
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: health-watchers-preview-limits
+  namespace: health-watchers-preview
+spec:
+  limits:
+    # Default limits for containers (conservative for previews)
+    - type: Container
+      default:
+        cpu: 250m              # Default CPU limit if not specified
+        memory: 256Mi          # Default memory limit if not specified
+      defaultRequest:
+        cpu: 100m              # Default CPU request if not specified
+        memory: 128Mi          # Default memory request if not specified
+      max:
+        cpu: "1"               # Maximum CPU a single container can request
+        memory: 1Gi            # Maximum memory a single container can request
+      min:
+        cpu: 50m               # Minimum CPU a container must request
+        memory: 64Mi           # Minimum memory a container must request
+      maxLimitRequestRatio:
+        cpu: "5"               # Max ratio between limit and request for CPU
+        memory: "4"            # Max ratio between limit and request for memory
+    
+    # Pod-level limits
+    - type: Pod
+      max:
+        cpu: "2"               # Maximum total CPU for all containers in a pod
+        memory: 2Gi            # Maximum total memory for all containers in a pod
+      min:
+        cpu: 50m               # Minimum total CPU for a pod
+        memory: 64Mi           # Minimum total memory for a pod
+    
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: 5Gi           # Maximum size for a single PVC
+      min:
+        storage: 1Gi           # Minimum size for a PVC

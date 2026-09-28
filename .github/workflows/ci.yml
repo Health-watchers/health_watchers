@@ -45,6 +45,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Turbo cache enables instant rebuilds when nothing changes
+      # Cache key includes check type and sha for precise cache hits
+      - name: Setup Turbo cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ matrix.check }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-${{ matrix.check }}-
+            ${{ runner.os }}-turbo-
+
       - name: TypeScript type checking
         if: matrix.check == 'typecheck'
         run: npm run typecheck
@@ -135,6 +146,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Turbo cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-mobile-${{ matrix.check }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-mobile-${{ matrix.check }}-
+            ${{ runner.os }}-turbo-mobile-
+            ${{ runner.os }}-turbo-
+
       - name: TypeScript type checking
         if: matrix.check == 'typecheck'
         run: npm run typecheck --workspace=mobile
@@ -222,6 +243,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Turbo cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-test-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-test-
+            ${{ runner.os }}-turbo-
+
       - name: Run API tests (unit + integration)
         run: npm test --workspace=api
         env:
@@ -287,8 +317,10 @@ jobs:
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
         with:
           path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          key: ${{ runner.os }}-turbo-build-${{ matrix.app }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-turbo-build-${{ matrix.app }}-
+            ${{ runner.os }}-turbo-build-
             ${{ runner.os }}-turbo-
 
       - name: Build ${{ matrix.app }}

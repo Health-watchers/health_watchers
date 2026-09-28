@@ -213,3 +213,54 @@ redis:
 # enforce NetworkPolicy (e.g. basic kubeadm without Calico/Cilium).
 networkPolicies:
   enabled: true
+
+# ── Resource Quotas ───────────────────────────────────────────────────────────
+# Namespace-level resource quotas prevent runaway pods from starving others.
+# Adjust these values based on your cluster capacity and expected workload.
+resourceQuota:
+  enabled: true
+  hard:
+    requests:
+      cpu: "8"              # Total CPU requests across all pods
+      memory: "16Gi"        # Total memory requests across all pods
+    limits:
+      cpu: "16"             # Total CPU limits across all pods
+      memory: "32Gi"        # Total memory limits across all pods
+    pods: "50"              # Maximum number of pods
+    services: "20"          # Maximum number of services
+    persistentvolumeclaims: "10"  # Maximum number of PVCs
+    requestsStorage: "100Gi"      # Total storage requests
+
+# ── Limit Ranges ──────────────────────────────────────────────────────────────
+# Default resource requests/limits applied to pods without explicit specs.
+# Prevents pods from being scheduled without resource constraints.
+limitRange:
+  enabled: true
+  container:
+    default:              # Applied if container has no limits
+      cpu: "500m"
+      memory: "512Mi"
+    defaultRequest:       # Applied if container has no requests
+      cpu: "100m"
+      memory: "128Mi"
+    max:                  # Maximum resources a single container can request
+      cpu: "4"
+      memory: "8Gi"
+    min:                  # Minimum resources a container must request
+      cpu: "50m"
+      memory: "64Mi"
+    maxLimitRequestRatio: # Max ratio between limit and request
+      cpu: "10"
+      memory: "4"
+  pod:
+    max:                  # Maximum total resources for all containers in a pod
+      cpu: "8"
+      memory: "16Gi"
+    min:                  # Minimum total resources for a pod
+      cpu: "50m"
+      memory: "64Mi"
+  pvc:
+    max:
+      storage: "50Gi"
+    min:
+      storage: "1Gi"
