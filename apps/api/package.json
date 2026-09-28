@@ -5,8 +5,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "ts-node-dev --respawn -r tsconfig-paths/register src/app.ts",
+    "dev:worker": "ts-node-dev --respawn -r tsconfig-paths/register src/worker.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "jest --passWithNoTests",
