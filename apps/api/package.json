@@ -22,7 +22,8 @@
     "migrate:up": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo up",
     "migrate:down": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo down",
     "migrate:status": "NODE_OPTIONS=\"--require ts-node/register\" migrate-mongo status",
-    "migrate:create": "migrate-mongo create"
+    "migrate:create": "migrate-mongo create",
+    "generate:openapi": "node scripts/generate-openapi.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
