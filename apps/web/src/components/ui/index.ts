@@ -1,4 +1,5 @@
 export { Button, type ButtonProps } from './Button';
+export { ShortcutHelpModal, type ShortcutGroup } from './ShortcutHelpModal';
 export { Input, type InputProps } from './Input';
 export { Select, type SelectProps, type SelectOption } from './Select';
 export { Card, CardHeader, CardTitle, CardContent } from './Card';

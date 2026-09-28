@@ -1,3 +1,9 @@
+/**
+ * queryKeys — centralised React Query key factory.
+ *
+ * All hooks in src/lib/queries/ import from here so invalidation is
+ * consistent everywhere.
+ */
 export const queryKeys = {
   patients: {
     all: ['patients'] as const,
@@ -48,6 +54,8 @@ export const queryKeys = {
   },
   staff: {
     all: ['staff'] as const,
+    lists: () => [...queryKeys.staff.all, 'list'] as const,
+    list: (filters: Record<string, unknown>) => [...queryKeys.staff.lists(), filters] as const,
   },
   invoices: {
     all: ['invoices'] as const,
@@ -59,10 +67,6 @@ export const queryKeys = {
     list: (status?: string) => [...queryKeys.preAuth.all, 'list', status] as const,
     detail: (id: string) => [...queryKeys.preAuth.all, 'detail', id] as const,
   },
-  staff: {
-    all: ['staff'] as const,
-    lists: () => [...queryKeys.staff.all, 'list'] as const,
-    list: (filters: Record<string, unknown>) => [...queryKeys.staff.lists(), filters] as const,
   waitlist: {
     all: ['waitlist'] as const,
     list: (status: string) => [...queryKeys.waitlist.all, 'list', status] as const,
@@ -88,5 +92,38 @@ export const queryKeys = {
     all: ['communications'] as const,
     byPatient: (patientId: string, params?: Record<string, string>) =>
       [...queryKeys.communications.all, 'patient', patientId, params] as const,
+  },
+  // ── New domains (Issue #1422) ────────────────────────────────────────────
+  appointments: {
+    all: ['appointments'] as const,
+    list: (filters?: Record<string, string>) =>
+      [...queryKeys.appointments.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.appointments.all, 'detail', id] as const,
+    byPatient: (patientId: string) =>
+      [...queryKeys.appointments.all, 'patient', patientId] as const,
+  },
+  immunizations: {
+    all: ['immunizations'] as const,
+    list: () => [...queryKeys.immunizations.all, 'list'] as const,
+    upcoming: () => [...queryKeys.immunizations.all, 'upcoming'] as const,
+    byPatient: (patientId: string) =>
+      [...queryKeys.immunizations.all, 'patient', patientId] as const,
+  },
+  referrals: {
+    all: ['referrals'] as const,
+    list: (status?: string) => [...queryKeys.referrals.all, 'list', status] as const,
+    detail: (id: string) => [...queryKeys.referrals.all, 'detail', id] as const,
+    byPatient: (patientId: string) => [...queryKeys.referrals.all, 'patient', patientId] as const,
+  },
+  reports: {
+    all: ['reports'] as const,
+    list: () => [...queryKeys.reports.all, 'list'] as const,
+    surveys: () => [...queryKeys.reports.all, 'surveys'] as const,
+  },
+  // ── Research Exports (Issue #1423) ───────────────────────────────────────
+  researchExports: {
+    all: ['research-exports'] as const,
+    list: () => [...queryKeys.researchExports.all, 'list'] as const,
+    detail: (jobId: string) => [...queryKeys.researchExports.all, 'detail', jobId] as const,
   },
 } as const;
