@@ -8,6 +8,8 @@ import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
 import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +105,13 @@ export default function NewEncounterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledPatientId = searchParams.get('patientId') ?? '';
+
+  // Track whether the form has been touched — used by the unsaved-changes guard.
+  const [isDirty, setIsDirty] = useState(false);
+  const { showModal, confirmLeave, cancelLeave, guardedPush } = useUnsavedChangesGuard(
+    isDirty,
+    'You have unsaved encounter data. Are you sure you want to leave?'
+  );
 
   // Patient selector
   const [patientQuery, setPatientQuery] = useState('');
@@ -403,6 +412,7 @@ export default function NewEncounterPage() {
       }
       const data = await res.json();
       const id = data.data?.id ?? data.data?._id;
+      setIsDirty(false);
       router.push(id ? `/encounters/${id}` : '/encounters');
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Submission failed');
@@ -519,6 +529,7 @@ export default function NewEncounterPage() {
                         fetchFullPatient(p._id);
                         setPatientHits([]);
                         setPatientQuery('');
+                        setIsDirty(true);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -526,6 +537,7 @@ export default function NewEncounterPage() {
                           fetchFullPatient(p._id);
                           setPatientHits([]);
                           setPatientQuery('');
+                          setIsDirty(true);
                         }
                       }}
                     >
@@ -555,7 +567,7 @@ export default function NewEncounterPage() {
             <Textarea
               label="Chief complaint"
               value={chiefComplaint}
-              onChange={(e) => setChiefComplaint(e.target.value)}
+              onChange={(e) => { setChiefComplaint(e.target.value); setIsDirty(true); }}
               maxLength={500}
               rows={3}
               placeholder="Describe the primary reason for this visit…"
@@ -798,7 +810,7 @@ export default function NewEncounterPage() {
             <Textarea
               label="Notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); setIsDirty(true); }}
               rows={6}
               maxLength={10000}
               placeholder="Clinical observations, history, examination findings…"
@@ -1036,17 +1048,22 @@ export default function NewEncounterPage() {
           >
             Save Draft
           </Button>
-          <Link
-            href={patientId ? `/patients/${patientId}` : '/encounters'}
+          <button
+            type="button"
             className="ml-auto rounded text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            onClick={(e) => {
-              if (!confirm('Discard this encounter?')) e.preventDefault();
-            }}
+            onClick={() => guardedPush(patientId ? `/patients/${patientId}` : '/encounters')}
           >
             Cancel
-          </Link>
+          </button>
         </div>
       </div>
+
+      {/* ── Unsaved Changes Modal ── */}
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onConfirm={confirmLeave}
+        onCancel={cancelLeave}
+      />
 
       {/* ── Dosage Calculator Modal ── */}
       <DosageCalculatorModal

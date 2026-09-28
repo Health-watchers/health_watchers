@@ -34,6 +34,7 @@ import {
   bulkExportLimiter,
   patientSearchLimiter,
   reportGenerationLimiter,
+  generalLimiter,
 } from '../../middlewares/rate-limit.middleware';
 import express from 'express';
 
@@ -110,6 +111,9 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
 
+// ── Public verification (#1426) ───────────────────────────────────────────────
+import immunizationVerifyRouter from '../../modules/immunizations/immunization-verify.routes';
+
 // ── Sharding (#1077) ──────────────────────────────────────────────────────────
 import shardingRouter from '../../routes/sharding';
 
@@ -119,6 +123,12 @@ import cdnHealthRouter from '../../routes/cdn/cdn-health';
 
 // ── Replication (#1080) ───────────────────────────────────────────────────────
 import replicationRouter from '../../routes/replication';
+
+// ── Missing routes (#1427) ────────────────────────────────────────────────────
+import researchRouter from '../../modules/research/research.routes';
+import encounterLazyLoadRouter from '../../modules/encounters/encounter-lazy-load.routes';
+import medicationHistoryRouter from '../../modules/medications/medication-history.routes';
+import dexTradeRouter from '../../modules/payments/dex/dex-trade.routes';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -139,6 +149,8 @@ v1Router.use('/patients', patientPhotoRoutes);
 v1Router.use('/patients', patientHealthLogRouter);
 v1Router.use('/patients/:id/immunizations', immunizationRoutes);
 v1Router.use('/encounters', encounterRoutes);
+// Lazy-load sub-routes (#1427) — on-demand relation loading for encounters
+v1Router.use('/encounters', encounterLazyLoadRouter);
 v1Router.use('/encounter-templates', encounterTemplateRoutes);
 v1Router.use('/appointments', appointmentRoutes);
 v1Router.use('/waitlist', waitlistRoutes);
@@ -157,6 +169,8 @@ v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
 v1Router.use('/reports', reportGenerationLimiter, analyticsRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
+// Portal medication history (#1427) — patient self-service prescription & refill access
+v1Router.use('/portal/medications', medicationHistoryRouter);
 v1Router.use('/schedules', scheduleRoutes);
 v1Router.use('/provider-scheduling', providerSchedulingRoutes);
 v1Router.use('/cds', cdsRoutes);
@@ -174,6 +188,8 @@ v1Router.use('/dashboard', dashboardRoutes);
 // ── Payments group ────────────────────────────────────────────────────────────
 v1Router.use('/payments', paymentLimiter, paymentsRouter);
 v1Router.use('/payments', reimbursementRoutes);
+// Stellar DEX trading (#1427) — submit and review DEX trade offers
+v1Router.use('/payments/dex', dexTradeRouter);
 v1Router.use('/invoices', invoiceRoutes);
 v1Router.use('/subscriptions', subscriptionRoutes);
 v1Router.use('/billing', billingRoutes);
@@ -203,9 +219,14 @@ v1Router.use('/notifications', notificationRoutes);
 v1Router.use('/notifications', notificationAdminRoutes);
 v1Router.use('/compliance', complianceRoutes);
 v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
+// Research data export (#1427) — SUPER_ADMIN only, anonymized dataset export
+v1Router.use('/research', generalLimiter, researchRouter);
 
 // ── Security (no auth, no CSRF) ───────────────────────────────────────────────
 v1Router.use('/csp-report', cspReportRoutes);
+
+// ── Public certificate verification (no auth) (#1426) ────────────────────────
+v1Router.use('/verify/immunization', immunizationVerifyRouter);
 
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);

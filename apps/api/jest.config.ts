@@ -22,6 +22,11 @@ const config: Config = {
       __dirname,
       '../../packages/anonymize/src/index.ts'
     ),
+    // Resolve the types workspace package — not symlinked into node_modules in CI.
+    '^@health-watchers/types$': path.resolve(
+      __dirname,
+      '../../packages/types/src/index.ts'
+    ),
     // Mock the rate-limit middleware so tests don't need redis installed.
     // Match both the @api alias and the resolved absolute path.
     '^@api/middlewares/rate-limit\\.middleware$': `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
