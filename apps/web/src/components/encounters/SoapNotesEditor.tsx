@@ -8,6 +8,8 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getSuggestions, expandShorthandInText } from '@/lib/medicalShorthand';
 import { useVoiceDictation, type VoiceDictation } from '@/hooks/useVoiceDictation';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 interface SoapNotes {
   subjective?: string;
@@ -21,6 +23,8 @@ interface Props {
   onChange: (notes: SoapNotes) => void;
   onAutoSave?: (notes: SoapNotes) => void;
   readOnly?: boolean;
+  /** Called with true the first time the user edits any SOAP section. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 const SOAP_TABS = [
@@ -375,11 +379,19 @@ function SoapTabEditor({
   );
 }
 
-export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false }: Props) {
+export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false, onDirtyChange }: Props) {
   const [activeTab, setActiveTab] = useState<keyof SoapNotes>('subjective');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const dictation = useVoiceDictation();
   const { stop: stopDictation } = dictation;
+
+  // Track dirty state internally so we can register the beforeunload guard.
+  // Also notify the parent via onDirtyChange if provided.
+  const [isDirty, setIsDirty] = useState(false);
+  const { showModal, confirmLeave, cancelLeave } = useUnsavedChangesGuard(
+    isDirty && !readOnly,
+    'You have unsaved SOAP notes. Are you sure you want to leave?'
+  );
 
   // Don't keep listening into a section the clinician can no longer see
   useEffect(() => {
@@ -394,6 +406,9 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false 
     const interval = setInterval(() => {
       setAutoSaveStatus('saving');
       onAutoSave(notesRef.current);
+      // After auto-save the notes are persisted, so the form is no longer dirty.
+      setIsDirty(false);
+      onDirtyChange?.(false);
       setTimeout(() => setAutoSaveStatus('saved'), 600);
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
     }, 30_000);
@@ -403,11 +418,16 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false 
   const handleTabChange = useCallback(
     (key: keyof SoapNotes, html: string) => {
       onChange({ ...notesRef.current, [key]: html });
+      if (!isDirty) {
+        setIsDirty(true);
+        onDirtyChange?.(true);
+      }
     },
-    [onChange]
+    [onChange, isDirty, onDirtyChange]
   );
 
   return (
+    <>
     <div className="border-secondary-200 overflow-hidden rounded-lg border">
       {/* Tab bar */}
       <div className="border-secondary-200 bg-secondary-50 flex border-b">
@@ -483,5 +503,15 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false 
         </div>
       )}
     </div>
+
+      {/* ── Unsaved Changes Modal ── */}
+      {!readOnly && (
+        <UnsavedChangesModal
+          isOpen={showModal}
+          onConfirm={confirmLeave}
+          onCancel={cancelLeave}
+        />
+      )}
+    </>
   );
 }
