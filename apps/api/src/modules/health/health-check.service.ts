@@ -5,7 +5,7 @@ import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getErrorMetrics } from '../../middlewares/error.middleware';
-import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
+import { getClusterJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 import logger from '../../utils/logger';
 
 export type ServiceStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
@@ -170,8 +170,8 @@ function checkMemory(): ServiceCheck {
   return { status: 'healthy', details: { percentage } };
 }
 
-function checkBackgroundJobs(): ServiceCheck {
-  const expiration = getJobStatus();
+async function checkBackgroundJobs(): Promise<ServiceCheck> {
+  const expiration = await getClusterJobStatus();
   const intervalSeconds = CHECK_INTERVAL_MS / 1000;
   const stalledThreshold = intervalSeconds * 2;
   const isStalled =
@@ -227,7 +227,7 @@ export async function runComprehensiveHealthCheck(): Promise<ComprehensiveHealth
     checkStellar(),
     Promise.resolve(checkGemini()),
     Promise.resolve(checkMemory()),
-    Promise.resolve(checkBackgroundJobs()),
+    checkBackgroundJobs(),
     Promise.resolve(checkErrorRate()),
   ]);
 

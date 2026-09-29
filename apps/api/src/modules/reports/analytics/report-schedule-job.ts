@@ -1,7 +1,7 @@
 /**
  * #1251 — Scheduled report worker.
  *
- * Every `TICK_MS` the worker claims schedules whose `nextRunAt` is due, runs
+ * Every minute (the `report-schedule` job in the JobRegistry) the worker claims schedules whose `nextRunAt` is due, runs
  * the underlying query for the schedule's rolling window, records a
  * {@link ReportRunModel} entry and notifies recipients. Claiming uses an
  * atomic `findOneAndUpdate` that bumps `nextRunAt` forward so multiple API
@@ -19,9 +19,7 @@ import {
 import { runQuery, type QueryDefinition } from './query-builder.service';
 import { getReportTemplate } from './report-templates';
 
-const TICK_MS = 60_000;
 const BATCH = 20;
-let timer: ReturnType<typeof setInterval> | null = null;
 
 function scheduleToQuery(schedule: IReportSchedule): QueryDefinition {
   const to = new Date();
@@ -118,22 +116,4 @@ export async function processDueReportSchedules(now: Date = new Date()): Promise
   }
 
   return processed;
-}
-
-export function startReportScheduleJob(): void {
-  if (timer) return;
-  timer = setInterval(() => {
-    processDueReportSchedules().catch((err) =>
-      logger.error({ err }, '[report-schedule] tick failed')
-    );
-  }, TICK_MS);
-  logger.info('[report-schedule] worker started');
-}
-
-export function stopReportScheduleJob(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-    logger.info('[report-schedule] worker stopped');
-  }
 }

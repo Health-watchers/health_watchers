@@ -163,25 +163,3 @@ export async function runRetentionSweep(now: Date = new Date()): Promise<SweepRe
   }
   return result;
 }
-
-// ── Periodic job ───────────────────────────────────────────────────────────
-
-const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
-let timer: NodeJS.Timeout | null = null;
-
-export function startRetentionSweepJob(): void {
-  if (timer) return;
-  runRetentionSweep().catch((err) => logger.error({ err }, 'initial retention sweep failed'));
-  timer = setInterval(() => {
-    runRetentionSweep().catch((err) => logger.error({ err }, 'retention sweep failed'));
-  }, SWEEP_INTERVAL_MS);
-  if (typeof timer.unref === 'function') timer.unref();
-  logger.info('document retention sweep job started');
-}
-
-export function stopRetentionSweepJob(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-}

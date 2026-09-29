@@ -1,5 +1,6 @@
 import { PaymentRecordModel } from '../models/payment-record.model';
 import logger from '@api/utils/logger';
+import { isJobActive } from '@api/jobs/job-state';
 import {
   paymentExpirationJobErrorsTotal,
   paymentExpirationJobLastRunExpired,
@@ -17,11 +18,10 @@ import {
  * Runs every 5 minutes to check for expired payments.
  */
 
-export const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+export const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes — matches the `payment-expiration` job cron
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000; // 1s, doubles each attempt (1s → 2s → 4s)
 
-let expirationJobInterval: NodeJS.Timeout | null = null;
 let lastSuccessfulRunAt: Date | null = null;
 let consecutiveFailures = 0;
 
@@ -149,39 +149,6 @@ export async function runExpirationJobTick(): Promise<void> {
   }
 }
 
-// ── Job lifecycle ─────────────────────────────────────────────────────────────
-
-/**
- * Start the background job that periodically expires old pending payments
- */
-export function startPaymentExpirationJob(): void {
-  if (expirationJobInterval) {
-    logger.warn('[payment-expiration-job] already running');
-    return;
-  }
-
-  logger.info(
-    `[payment-expiration-job] starting (interval=${CHECK_INTERVAL_MS / 1000}s, maxRetries=${MAX_RETRIES})`
-  );
-
-  // Run immediately on startup
-  runExpirationJobTick();
-
-  // Then run periodically
-  expirationJobInterval = setInterval(() => runExpirationJobTick(), CHECK_INTERVAL_MS);
-}
-
-/**
- * Stop the background job
- */
-export function stopPaymentExpirationJob(): void {
-  if (expirationJobInterval) {
-    clearInterval(expirationJobInterval);
-    expirationJobInterval = null;
-    logger.info('[payment-expiration-job] stopped');
-  }
-}
-
 /**
  * Returns the current runtime status of the expiration job.
  * Used by the /health/jobs endpoint and internal monitoring.
@@ -192,18 +159,31 @@ export function getJobStatus(): {
   consecutiveFailures: number;
 } {
   return {
-    running: expirationJobInterval !== null,
+    running: isJobActive('payment-expiration'),
     lastSuccessfulRunAt,
     consecutiveFailures,
   };
+}
+
+/**
+ * Like getJobStatus(), but `lastSuccessfulRunAt` reflects the most recent
+ * successful run on *any* replica. With the distributed scheduler (#1433) the
+ * tick may run on another pod, so this process's own timestamp can be stale.
+ */
+export async function getClusterJobStatus(): Promise<ReturnType<typeof getJobStatus>> {
+  const local = getJobStatus();
+  // Lazy import keeps BullMQ/Redis out of this module's load path.
+  const { jobRegistry } = await import('@api/jobs/job-registry');
+  const shared = await jobRegistry.lastSuccessAt('payment-expiration');
+  const lastSuccessfulRunAt =
+    shared && (!local.lastSuccessfulRunAt || shared > local.lastSuccessfulRunAt)
+      ? shared
+      : local.lastSuccessfulRunAt;
+  return { ...local, lastSuccessfulRunAt };
 }
 
 /** @internal — only for use in unit tests */
 export function _resetStateForTesting(): void {
   lastSuccessfulRunAt = null;
   consecutiveFailures = 0;
-}
-
-export function isPaymentExpirationJobRunning(): boolean {
-  return expirationJobInterval !== null;
 }

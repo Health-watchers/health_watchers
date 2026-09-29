@@ -56,10 +56,7 @@ import { createNotification } from '../notifications/notification.service';
 import { sendMail } from '@api/utils/mailer';
 import { emitToUser } from '@api/realtime/socket';
 import logger from '@api/utils/logger';
-import {
-  startAppointmentReminderJob,
-  stopAppointmentReminderJob,
-} from './appointment-reminder-job';
+import { sendAppointmentReminders } from './appointment-reminder-job';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -118,66 +115,26 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  stopAppointmentReminderJob();
   jest.useRealTimers();
 });
 
 // ── Helpers to mock find with results ─────────────────────────────────────────
 
-function mockFindReturning(appointments: unknown[]) {
+/** The first find() is the 24h-window query, the second the 1h-window query. */
+function mockFindReturning(appointments: unknown[], appointments1h: unknown[] = []) {
+  let call = 0;
   (AppointmentModel.find as jest.Mock).mockImplementation(() => {
+    const result = call++ === 0 ? appointments : appointments1h;
     const chain = {
       populate: jest.fn().mockReturnThis(),
     };
     return Object.assign(chain, {
       then: (resolve: (v: unknown[]) => void, reject?: (e: unknown) => void) =>
-        Promise.resolve(appointments).then(resolve, reject),
-      catch: (reject: (e: unknown) => void) => Promise.resolve(appointments).catch(reject),
+        Promise.resolve(result).then(resolve, reject),
+      catch: (reject: (e: unknown) => void) => Promise.resolve(result).catch(reject),
     });
   });
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// startAppointmentReminderJob — timer behaviour
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('startAppointmentReminderJob — timer behaviour', () => {
-  it('is idempotent: calling start twice does not create two intervals', async () => {
-    startAppointmentReminderJob();
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
-    // find is called once on first start (immediate run), not twice
-    // Two starts → still just one immediate invocation
-    const callCount = (AppointmentModel.find as jest.Mock).mock.calls.length;
-    expect(callCount).toBeLessThanOrEqual(2); // at most one batch of two queries
-  });
-
-  it('schedules the job to run again after 15 minutes', async () => {
-    startAppointmentReminderJob();
-    // Drain immediate run
-    await jest.runAllTimersAsync();
-    const afterFirst = (AppointmentModel.find as jest.Mock).mock.calls.length;
-
-    // Advance 15 minutes
-    jest.advanceTimersByTime(15 * 60 * 1000);
-    await jest.runAllTimersAsync();
-
-    expect((AppointmentModel.find as jest.Mock).mock.calls.length).toBeGreaterThan(afterFirst);
-  });
-
-  it('stopAppointmentReminderJob clears the interval', async () => {
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
-    stopAppointmentReminderJob();
-    const countAfterStop = (AppointmentModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(15 * 60 * 1000);
-    await jest.runAllTimersAsync();
-
-    // No new calls after stop
-    expect((AppointmentModel.find as jest.Mock).mock.calls.length).toBe(countAfterStop);
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // sendAppointmentReminders — 24h window
@@ -188,8 +145,7 @@ describe('sendAppointmentReminders — 24h window', () => {
     const appt = makeAppointment({ reminderSent24h: false });
     mockFindReturning([appt]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(createNotification).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'appointment_reminder' })
@@ -201,8 +157,7 @@ describe('sendAppointmentReminders — 24h window', () => {
     const appt = makeAppointment({ reminderSent24h: false });
     mockFindReturning([appt]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(AppointmentModel.updateOne).toHaveBeenCalledWith(
       { _id: appt._id },
@@ -214,8 +169,7 @@ describe('sendAppointmentReminders — 24h window', () => {
     const appt = makeAppointment();
     mockFindReturning([appt]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     // createNotification called twice (once for doctor, once for patient)
     expect(createNotification).toHaveBeenCalledTimes(2);
@@ -236,8 +190,7 @@ describe('notification preferences', () => {
       .mockReturnValueOnce(makeUserPrefs(false)) // doctor
       .mockReturnValueOnce(makeUserPrefs(true)); // patient
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     // Only one notification (for the patient), not two
     expect(createNotification).toHaveBeenCalledTimes(1);
@@ -253,8 +206,7 @@ describe('notification preferences', () => {
       .mockReturnValueOnce(makeUserPrefs(true)) // doctor
       .mockReturnValueOnce(makeUserPrefs(false)); // patient opts out
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     // Only doctor gets notified
     expect(createNotification).toHaveBeenCalledTimes(1);
@@ -270,8 +222,7 @@ describe('notification preferences', () => {
       .mockReturnValueOnce(makeUserPrefs(false))
       .mockReturnValueOnce(makeUserPrefs(false));
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(createNotification).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
@@ -287,8 +238,7 @@ describe('edge cases', () => {
     const appt = makeAppointment({ doctorId: null });
     mockFindReturning([appt]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(createNotification).not.toHaveBeenCalled();
   });
@@ -297,8 +247,7 @@ describe('edge cases', () => {
     const appt = makeAppointment({ patientId: null });
     mockFindReturning([appt]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(createNotification).not.toHaveBeenCalled();
   });
@@ -310,15 +259,13 @@ describe('edge cases', () => {
       throw new Error('socket not ready');
     });
 
-    startAppointmentReminderJob();
-    await expect(jest.runAllTimersAsync()).resolves.not.toThrow();
+    await expect(sendAppointmentReminders()).resolves.not.toThrow();
   });
 
   it('handles zero upcoming appointments gracefully', async () => {
     mockFindReturning([]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(createNotification).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
@@ -329,8 +276,7 @@ describe('edge cases', () => {
     const appt2 = makeAppointment({ _id: 'appt-2' });
     mockFindReturning([appt1, appt2]);
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     // 2 appointments × 2 recipients = 4 notification calls
     expect(createNotification).toHaveBeenCalledTimes(4);
@@ -345,8 +291,7 @@ describe('edge cases', () => {
         Promise.reject(new Error('DB down')).catch(reject),
     }));
 
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     expect(logger.error).toHaveBeenCalled();
   });
@@ -362,8 +307,7 @@ describe('fixed-clock window assertions', () => {
     jest.setSystemTime(fixedNow);
 
     mockFindReturning([]);
-    startAppointmentReminderJob();
-    await jest.runAllTimersAsync();
+    await sendAppointmentReminders();
 
     // Verify AppointmentModel.find was called with a $lte close to now + 24h
     const [firstCallArgs] = (AppointmentModel.find as jest.Mock).mock.calls;

@@ -6,7 +6,7 @@ import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getErrorMetrics } from '../../middlewares/error.middleware';
-import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
+import { getClusterJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 import { currentTraceId } from '../../utils/tracer';
 import { getRequestId } from '../../utils/request-id';
 
@@ -130,8 +130,8 @@ router.get('/ready', async (req: Request, res: Response) => {
 /**
  * GET /health/jobs - Background job health status
  */
-router.get('/jobs', (_req: Request, res: Response) => {
-  const expiration = getJobStatus();
+router.get('/jobs', async (_req: Request, res: Response) => {
+  const expiration = await getClusterJobStatus();
   const intervalSeconds = CHECK_INTERVAL_MS / 1000;
   const stalledThresholdSeconds = intervalSeconds * 2;
 

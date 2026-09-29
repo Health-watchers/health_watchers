@@ -14,9 +14,7 @@ import logger from '../../utils/logger';
 import { createNotification } from '../notifications/notification.service';
 import { ApiKeyModel } from './models/api-key.model';
 
-const TICK_MS = 60 * 60 * 1000; // hourly
 const EXPIRY_WARNING_DAYS = 7;
-let timer: ReturnType<typeof setInterval> | null = null;
 
 export interface LifecycleSweepResult {
   deactivated: number;
@@ -78,29 +76,4 @@ export async function sweepApiKeyLifecycle(now: Date = new Date()): Promise<Life
     logger.info(result, '[api-key-lifecycle] sweep complete');
   }
   return result;
-}
-
-export function startApiKeyLifecycleJob(): void {
-  if (timer) return;
-  // Kick once shortly after boot, then hourly.
-  setTimeout(() => {
-    sweepApiKeyLifecycle().catch((err) =>
-      logger.error({ err }, '[api-key-lifecycle] initial sweep failed')
-    );
-  }, 30_000).unref();
-  timer = setInterval(() => {
-    sweepApiKeyLifecycle().catch((err) =>
-      logger.error({ err }, '[api-key-lifecycle] sweep failed')
-    );
-  }, TICK_MS);
-  timer.unref?.();
-  logger.info('[api-key-lifecycle] worker started');
-}
-
-export function stopApiKeyLifecycleJob(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-    logger.info('[api-key-lifecycle] worker stopped');
-  }
 }

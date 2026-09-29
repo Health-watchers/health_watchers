@@ -36,7 +36,7 @@ export function trackConnections(server: Server): () => void {
 }
 
 export interface ShutdownDeps {
-  stopJobs: (() => void)[];
+  stopJobs: (() => void | Promise<void>)[];
   timeoutMs?: number;
 }
 
@@ -56,7 +56,7 @@ export function registerGracefulShutdown(server: Server, deps: ShutdownDeps): vo
       logger.info('HTTP server closed — all in-flight requests completed');
 
       try {
-        for (const stop of stopJobs) stop();
+        for (const stop of stopJobs) await stop();
         logger.info('Background jobs stopped');
 
         await mongoose.connection.close();
