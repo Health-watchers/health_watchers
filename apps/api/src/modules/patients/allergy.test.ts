@@ -139,6 +139,11 @@ jest.mock('@api/modules/patients/models/patient-counter.model', () => ({
   PatientCounterModel: { findOneAndUpdate: jest.fn().mockResolvedValue({ value: 1 }) },
 }));
 
+// ── Outbox (#1432): mocked models cannot open a transaction ───────────────────
+jest.mock('@api/modules/outbox/outbox.service', () =>
+  require('@api/modules/outbox/__tests__/inline-outbox').inlineOutboxService
+);
+
 // ── Encounter model mock ──────────────────────────────────────────────────────
 const mockEncounterCreate = jest.fn();
 jest.mock('@api/modules/encounters/encounter.model', () => ({
@@ -301,14 +306,14 @@ describe('POST /api/v1/encounters — allergy check', () => {
   it('allows encounter when no allergy match', async () => {
     const { PatientModel } = require('@api/modules/patients/models/patient.model');
     PatientModel.findById.mockResolvedValueOnce({ allergies: [mockAllergy] });
-    mockEncounterCreate.mockResolvedValueOnce({
+    mockEncounterCreate.mockImplementationOnce(async () => [{
       ...baseEncounter,
       _id: '507f1f77bcf86cd799430099',
       prescriptions: [{ medication: 'Ibuprofen', dosage: '400mg', frequency: 'BID' }],
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    }]);
 
     const res = await request(app)
       .post('/api/v1/encounters')
@@ -323,7 +328,7 @@ describe('POST /api/v1/encounters — allergy check', () => {
   it('allows encounter when allergy override is provided with reason', async () => {
     const { PatientModel } = require('@api/modules/patients/models/patient.model');
     PatientModel.findById.mockResolvedValueOnce({ allergies: [mockAllergy] });
-    mockEncounterCreate.mockResolvedValueOnce({
+    mockEncounterCreate.mockImplementationOnce(async () => [{
       ...baseEncounter,
       _id: '507f1f77bcf86cd799430098',
       prescriptions: [
@@ -340,7 +345,7 @@ describe('POST /api/v1/encounters — allergy check', () => {
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    }]);
 
     const res = await request(app)
       .post('/api/v1/encounters')
@@ -363,13 +368,13 @@ describe('POST /api/v1/encounters — allergy check', () => {
   });
 
   it('allows encounter with no prescriptions regardless of allergies', async () => {
-    mockEncounterCreate.mockResolvedValueOnce({
+    mockEncounterCreate.mockImplementationOnce(async () => [{
       ...baseEncounter,
       _id: '507f1f77bcf86cd799430097',
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    }]);
 
     const res = await request(app)
       .post('/api/v1/encounters')

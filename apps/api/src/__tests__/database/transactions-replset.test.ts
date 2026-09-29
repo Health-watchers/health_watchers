@@ -33,6 +33,7 @@ jest.mock('@api/modules/webhooks/webhook.service', () => ({
 }));
 jest.mock('@api/services/metrics.service', () => ({
   paymentsConfirmedTotal: { inc: () => undefined },
+  register: new (jest.requireActual('prom-client').Registry)(),
 }));
 jest.mock('@api/modules/payments/services/xlm-rate.service', () => ({
   getCurrentXLMRate: () => Promise.resolve({ rateUSD: 0.1 }),
@@ -57,6 +58,7 @@ import {
 } from '@api/modules/invoices/invoice-counter.model';
 import { createNumberedInvoice } from '@api/modules/invoices/invoice-numbering.service';
 import { emitToClinic } from '@api/realtime/socket';
+import { OutboxEventModel } from '@api/modules/outbox/outbox-event.model';
 import { buildPayment } from '../factories/payment.factory';
 
 let testDb: ReplSetTestDb;
@@ -72,6 +74,7 @@ beforeAll(async () => {
     PaymentRecordModel,
     InvoiceModel,
     InvoiceCounterModel,
+    OutboxEventModel,
   ] as mongoose.Model<any>[];
   await Promise.all(models.map((m) => m.init()));
   await Promise.all(models.map((m) => m.createCollection().catch(() => undefined)));
@@ -316,7 +319,9 @@ describe('Payment confirmation (transactional)', () => {
     const inv = (await InvoiceModel.findById(invoice._id).lean())!;
     expect(inv.status).toBe('sent');
     expect(inv.paidTxHash).toBeUndefined();
-    // Post-commit side effects must not fire for a rolled-back confirmation
+    // Post-commit side effects must not fire for a rolled-back confirmation:
+    // the outbox event (#1432) is rolled back with the payment.
+    expect(await OutboxEventModel.countDocuments({ type: 'payment.confirmed' })).toBe(0);
     expect(emitToClinic).not.toHaveBeenCalled();
   });
 
@@ -338,7 +343,8 @@ describe('Payment confirmation (transactional)', () => {
     // The invoice records the same tx hash as the single winning confirmation
     expect(inv.status).toBe('paid');
     expect(inv.paidTxHash).toBe(p.txHash);
-    expect(emitToClinic).toHaveBeenCalledTimes(1);
+    // Exactly one outbox event, committed with the winning confirmation (#1432)
+    expect(await OutboxEventModel.countDocuments({ type: 'payment.confirmed' })).toBe(1);
   });
 });
 

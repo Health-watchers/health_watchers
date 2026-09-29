@@ -278,6 +278,7 @@ describe('JOB_DEFINITIONS', () => {
         'api-key-lifecycle',
         'notification-dispatch',
         'immunization-compliance',
+        'outbox-relay',
       ])
     );
   });

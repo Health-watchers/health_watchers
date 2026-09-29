@@ -44,6 +44,7 @@ function outboundHeaders(
     'X-Webhook-Id': String((delivery as any)._id ?? ''),
     'X-Webhook-Event': delivery.event,
     'X-Webhook-Attempt': String((delivery.attempts ?? 0) + 1),
+    ...(delivery.eventId ? { 'X-Webhook-Event-Id': delivery.eventId } : {}),
   };
 }
 
@@ -66,7 +67,16 @@ export interface EnqueueOptions {
   isTest?: boolean;
   /** Skip the per-webhook rate limiter (used by the "send test" endpoint). */
   bypassRateLimit?: boolean;
+  /**
+   * #1432 — outbox event id. Makes the call idempotent per (eventId, webhook)
+   * and sends it as `X-Webhook-Event-Id` so consumers can de-duplicate.
+   */
+  eventId?: string;
 }
+
+/** Crash-recovery lease: if the process dies before the first attempt, the
+ *  retry worker picks the delivery up once this passes. */
+const OUTBOX_DELIVERY_LEASE_MS = 2 * 60_000;
 
 export async function enqueueWebhookDelivery(
   webhookId: string,
@@ -76,6 +86,11 @@ export async function enqueueWebhookDelivery(
   payload: Record<string, any>,
   options: EnqueueOptions = {}
 ): Promise<DeliveryDoc> {
+  if (options.eventId) {
+    const existing = await WebhookDeliveryModel.findOne({ eventId: options.eventId, webhookId });
+    if (existing) return existing;
+  }
+
   const { valid, reason } = validateWebhookUrl(url);
   if (!valid) {
     const delivery = await WebhookDeliveryModel.create({
@@ -130,15 +145,31 @@ export async function enqueueWebhookDelivery(
     logger.debug({ err, webhookId }, 'Webhook template/rate-limit pre-processing skipped');
   }
 
-  const delivery = await WebhookDeliveryModel.create({
-    webhookId,
-    event,
-    url,
-    payload: finalPayload,
-    status: 'pending',
-    attempts: 0,
-    isTest: !!options.isTest,
-  });
+  let delivery: DeliveryDoc;
+  try {
+    delivery = await WebhookDeliveryModel.create({
+      webhookId,
+      event,
+      url,
+      payload: finalPayload,
+      status: 'pending',
+      attempts: 0,
+      isTest: !!options.isTest,
+      ...(options.eventId
+        ? {
+            eventId: options.eventId,
+            nextRetryAt: new Date(Date.now() + OUTBOX_DELIVERY_LEASE_MS),
+          }
+        : {}),
+    });
+  } catch (err) {
+    // Lost a race with another relay for the same (eventId, webhook).
+    if (options.eventId && (err as { code?: number }).code === 11000) {
+      const existing = await WebhookDeliveryModel.findOne({ eventId: options.eventId, webhookId });
+      if (existing) return existing;
+    }
+    throw err;
+  }
 
   setImmediate(() => {
     executeDelivery(delivery, secret).catch((error) => {
@@ -149,7 +180,7 @@ export async function enqueueWebhookDelivery(
   return delivery;
 }
 
-async function executeDelivery(delivery: IWebhookDelivery, signature: string): Promise<void> {
+async function executeDelivery(delivery: IWebhookDelivery, secret: string): Promise<void> {
   const webhook = await WebhookModel.findById(delivery.webhookId);
   const maxAttempts = webhook?.retryConfig?.maxRetries ?? 3;
   const initialDelay = webhook?.retryConfig?.initialDelayMs ?? 1000;

@@ -79,6 +79,7 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
     'X-Webhook-Id': String(delivery._id),
     'X-Webhook-Event': delivery.event,
     'X-Webhook-Attempt': String(delivery.attempts + 1),
+    ...(delivery.eventId ? { 'X-Webhook-Event-Id': delivery.eventId } : {}),
   };
   const startedAt = Date.now();
 

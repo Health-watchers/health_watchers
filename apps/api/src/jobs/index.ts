@@ -22,6 +22,7 @@ import { processDueReportSchedules } from '@api/modules/reports/analytics/report
 import { sweepApiKeyLifecycle } from '@api/modules/api-keys/api-key-lifecycle-job';
 import { processDueDeliveries } from '@api/modules/notifications/notification-dispatch-job';
 import { runImmunizationComplianceJob } from '@api/modules/immunizations/immunization-compliance-job';
+import { relayPendingOutboxEvents } from '@api/modules/outbox/outbox.relay';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -119,6 +120,12 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     cron: '0 2 * * *',
     description: 'Flag overdue immunizations for every active clinic',
     handler: runImmunizationComplianceJob,
+  },
+  {
+    name: 'outbox-relay',
+    cron: '*/5 * * * * *',
+    description: 'Deliver pending transactional outbox events (#1432)',
+    handler: () => relayPendingOutboxEvents(),
   },
 ];
 

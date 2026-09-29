@@ -36,6 +36,8 @@ export interface IWebhookDelivery {
   responseBody?: string;
   durationMs?: number;
   isTest?: boolean;
+  /** #1432 — outbox event id; deliveries are unique per (eventId, webhookId). */
+  eventId?: string;
   createdAt: Date;
 }
 
@@ -108,11 +110,17 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     responseBody: { type: String },
     durationMs: { type: Number },
     isTest: { type: Boolean, default: false },
+    eventId: { type: String },
   },
   { timestamps: true, versionKey: false }
 );
 
 webhookDeliverySchema.index({ status: 1, nextRetryAt: 1 });
+// #1432 — an outbox event is handed to each webhook at most once.
+webhookDeliverySchema.index(
+  { eventId: 1, webhookId: 1 },
+  { unique: true, partialFilterExpression: { eventId: { $type: 'string' } } }
+);
 webhookDeliverySchema.index({ webhookId: 1, status: 1 });
 webhookDeliverySchema.index({ webhookId: 1, createdAt: -1 });
 

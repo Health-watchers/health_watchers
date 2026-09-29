@@ -47,7 +47,12 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { appointmentRoutes } from '../modules/appointments/appointments.controller';
 import { AppointmentModel } from '../modules/appointments/appointment.model';
-import { startTestDb, stopTestDb, clearDb, TestDb } from './helpers/test-db';
+import {
+  startReplSetTestDb,
+  stopReplSetTestDb,
+  clearDb,
+  ReplSetTestDb,
+} from './helpers/test-db';
 import {
   createClinicWithAdmin,
   createPatient,
@@ -77,11 +82,11 @@ async function setup() {
 const tomorrow = () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
 describe('appointment scheduling integration flows', () => {
-  let testDb: TestDb;
+  let testDb: ReplSetTestDb; // appointment writes + outbox events run in a transaction (#1432)
   let app: express.Express;
 
   beforeAll(async () => {
-    testDb = await startTestDb();
+    testDb = await startReplSetTestDb();
     app = buildApp();
   });
 
@@ -90,7 +95,7 @@ describe('appointment scheduling integration flows', () => {
   });
 
   afterAll(async () => {
-    await stopTestDb(testDb);
+    await stopReplSetTestDb(testDb);
   });
 
   describe('POST /api/v1/appointments', () => {
