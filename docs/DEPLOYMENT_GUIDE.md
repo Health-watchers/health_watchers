@@ -139,18 +139,83 @@ docker run -d \
 
 ## Docker Compose Deployment
 
+Docker Compose configurations have been unified with profiles for easier management.
+
+### Available Profiles
+
+| Profile | Services | Use Case |
+|---------|----------|----------|
+| `core` | API, web, stellar-service, MongoDB, Redis, Jaeger | Development, basic setup |
+| `dev-tools` | mongo-express | Database management UI |
+| `monitoring` | Prometheus, Grafana, AlertManager, node-exporter | Metrics and alerts |
+| `elk` | Elasticsearch, Logstash, Kibana | Centralized logging |
+| `replica` | MongoDB replica set (3 nodes + arbiter) | HA testing/production |
+
 ### Quick Start (Development)
 
+Start core services:
+
 ```bash
-# Start all services
-docker-compose -f docker-compose.dev.yml up -d
+# Start API, web, stellar-service, MongoDB, Redis, Jaeger
+docker compose --profile core up -d
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f
+docker compose logs -f
 
-# Stop all services
-docker-compose -f docker-compose.dev.yml down
+# Stop services
+docker compose --profile core down
 ```
+
+### Development with Database UI
+
+```bash
+# Start core + mongo-express
+docker compose --profile core --profile dev-tools up -d
+
+# Access mongo-express at http://localhost:8081
+```
+
+### With Monitoring Stack
+
+```bash
+# Start core + Prometheus, Grafana, AlertManager
+docker compose --profile core --profile monitoring up -d
+
+# Access:
+# - Grafana: http://localhost:3003 (admin/admin)
+# - Prometheus: http://localhost:9090
+# - AlertManager: http://localhost:9093
+```
+
+### With ELK Logging
+
+```bash
+# Start core + ELK stack
+docker compose --profile core --profile elk up -d
+
+# Access Kibana at http://localhost:5601
+# Username: elastic
+# Password: check ELASTIC_PASSWORD in .env (default: changeme)
+```
+
+### Production Deployment
+
+Use the production override file:
+
+```bash
+# Deploy with production settings
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d
+
+# Ensure all production environment variables are set in .env
+```
+
+Production differences:
+- Uses production Dockerfiles (`Dockerfile.prod`)
+- No hot-reload volume mounts
+- Stricter restart policies (`restart: always`)
+- Redis with authentication
+- Healthchecks enabled
+- Resource limits enforced
 
 ### Production Deployment
 
@@ -555,7 +620,10 @@ initContainers:
 
 **Start the monitoring stack:**
 ```bash
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose --profile monitoring up -d
+
+# Or combine with core services
+docker compose --profile core --profile monitoring up -d
 ```
 
 This starts Prometheus (`:9090`), Grafana (`:3003`), and Alertmanager (`:9093`).

@@ -1,59 +1,31 @@
 version: '3.8'
 
+# ============================================================
+# Health Watchers — Unified Docker Compose Configuration
+#
+# This compose file consolidates all services with profiles:
+# - core: Essential services (API, web, stellar-service, MongoDB, Redis)
+# - dev-tools: Development utilities (Jaeger, mongo-express)
+# - monitoring: Prometheus, Grafana, AlertManager
+# - elk: Elasticsearch, Logstash, Kibana
+# - replica: MongoDB replica set (replaces standalone MongoDB)
+# - stellar: Stellar-specific services (if any additional ones exist)
+#
+# Usage:
+#   docker compose --profile core up                    # Start core services
+#   docker compose --profile core --profile dev-tools up # Core + dev tools
+#   docker compose --profile monitoring up              # Just monitoring stack
+#
+# See README.md for detailed usage examples.
+# ============================================================
+
 services:
-  jaeger:
-    image: jaegertracing/all-in-one:1.57
-    container_name: health-watchers-jaeger
-    restart: unless-stopped
-    ports:
-      - '16686:16686' # Jaeger UI
-      - '4318:4318' # OTLP HTTP receiver
-    environment:
-      COLLECTOR_OTLP_ENABLED: 'true'
-
-  prometheus:
-    image: prom/prometheus:v2.51.2
-    container_name: health-watchers-prometheus
-    restart: unless-stopped
-    ports:
-      - '9090:9090'
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - ./monitoring/alerts-payments.yml:/etc/prometheus/alerts-payments.yml:ro
-      - ./monitoring/alerts-security.yml:/etc/prometheus/alerts-security.yml:ro
-      - ./monitoring/alerts-business.yml:/etc/prometheus/alerts-business.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    environment:
-      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
-      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
-    depends_on:
-      - api
-
-  grafana:
-    image: grafana/grafana:10.4.2
-    container_name: health-watchers-grafana
-    restart: unless-stopped
-    ports:
-      - '3003:3000'
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_USERS_ALLOW_SIGN_UP: 'false'
-      GF_SERVER_ROOT_URL: http://localhost:3003
-    depends_on:
-      - prometheus
+  # ══════════════════════════════════════════════════════════════════════════
+  # CORE SERVICES
+  # ══════════════════════════════════════════════════════════════════════════
 
   mongodb:
+    profiles: ["core"]
     image: mongo:7.0
     container_name: health-watchers-mongodb
     restart: unless-stopped
@@ -71,8 +43,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - health-watchers-network
+
+  redis:
+    profiles: ["core"]
+    image: redis:7.2-alpine
+    container_name: health-watchers-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - health-watchers-network
 
   api:
+    profiles: ["core"]
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -81,10 +73,13 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: development
       API_PORT: 3001
       MONGO_URI: mongodb://admin:password123@mongodb:27017/health_watchers?authSource=admin
+      REDIS_URL: redis://redis:6379
       JWT_ACCESS_TOKEN_SECRET: dev-access-token-secret-change-in-production
       JWT_REFRESH_TOKEN_SECRET: dev-refresh-token-secret-change-in-production
       STELLAR_NETWORK: testnet
@@ -103,8 +98,11 @@ services:
       - /app/node_modules
       - /app/apps/api/node_modules
     command: npm run dev --workspace=api
+    networks:
+      - health-watchers-network
 
   web:
+    profiles: ["core"]
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -125,8 +123,11 @@ services:
       - /app/apps/web/node_modules
       - /app/apps/web/.next
     command: npm run dev --workspace=web
+    networks:
+      - health-watchers-network
 
   stellar-service:
+    profiles: ["core", "stellar"]
     build:
       context: .
       dockerfile: apps/stellar-service/Dockerfile
@@ -149,15 +150,563 @@ services:
       - /app/node_modules
       - /app/apps/stellar-service/node_modules
     command: npm run dev --workspace=stellar-service
+    networks:
+      - health-watchers-network
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # DEV TOOLS
+  # ══════════════════════════════════════════════════════════════════════════
+
+  jaeger:
+    profiles: ["core", "dev-tools"]
+    image: jaegertracing/all-in-one:1.57
+    container_name: health-watchers-jaeger
+    restart: unless-stopped
+    ports:
+      - '16686:16686' # Jaeger UI
+      - '4318:4318'   # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    networks:
+      - health-watchers-network
+
+  mongo-express:
+    profiles: ["dev-tools"]
+    image: mongo-express:latest
+    container_name: health-watchers-mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - '8081:8081'
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password123@mongodb:27017/
+      ME_CONFIG_BASICAUTH: 'false'
+    networks:
+      - health-watchers-network
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MONITORING STACK
+  # ══════════════════════════════════════════════════════════════════════════
+
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v2.51.2
+    container_name: health-watchers-prometheus
+    restart: unless-stopped
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/alerts-payments.yml:/etc/prometheus/alerts-payments.yml:ro
+      - ./monitoring/alerts-security.yml:/etc/prometheus/alerts-security.yml:ro
+      - ./monitoring/alerts-business.yml:/etc/prometheus/alerts-business.yml:ro
+      - ./monitoring/alerts-database-replication.yml:/etc/prometheus/alerts-database-replication.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    environment:
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
+      TZ: UTC
+    networks:
+      - health-watchers-network
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9090/-/healthy']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  alertmanager:
+    profiles: ["monitoring"]
+    image: prom/alertmanager:v0.27.0
+    container_name: health-watchers-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+      - '--log.level=info'
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/config.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - '9093:9093'
+    environment:
+      TZ: UTC
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9093/-/healthy']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:10.4.2
+    container_name: health-watchers-grafana
+    restart: unless-stopped
+    ports:
+      - '3003:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3003}
+      GF_INSTALL_PLUGINS: 'grafana-piechart-panel,grafana-worldmap-panel'
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SECURITY_DISABLE_GRAVATAR: 'true'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_LOG_LEVEL: 'warn'
+      TZ: UTC
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  node-exporter:
+    profiles: ["monitoring"]
+    image: prom/node-exporter:v1.7.0
+    container_name: health-watchers-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|snap)($|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    ports:
+      - '9100:9100'
+    networks:
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9100/metrics']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # ELK STACK
+  # ══════════════════════════════════════════════════════════════════════════
+
+  elasticsearch:
+    profiles: ["elk"]
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: health-watchers-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - xpack.security.authc.api_key.enabled=true
+      - xpack.monitoring.collection.enabled=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - TZ=UTC
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./logging/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    networks:
+      - health-watchers-logging
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >
+          curl -sf -u elastic:${ELASTIC_PASSWORD:-changeme}
+          http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s
+          | grep -vq '"status":"red"'
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+
+  logstash:
+    profiles: ["elk"]
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: health-watchers-logstash
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./logging/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logging/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    ports:
+      - '5000:5000/udp'
+      - '5000:5000/tcp'
+      - '5044:5044'
+      - '9600:9600'
+    environment:
+      LS_JAVA_OPTS: '-Xmx512m -Xms512m'
+      ELASTICSEARCH_HOSTS: 'http://elasticsearch:9200'
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      XPACK_MONITORING_ENABLED: 'true'
+      XPACK_MONITORING_ELASTICSEARCH_HOSTS: 'http://elasticsearch:9200'
+      XPACK_MONITORING_ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      XPACK_MONITORING_ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      TZ: UTC
+    networks:
+      - health-watchers-logging
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://localhost:9600/?pretty']
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  kibana:
+    profiles: ["elk"]
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: health-watchers-kibana
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+      XPACK_SECURITY_ENABLED: 'true'
+      XPACK_MONITORING_UI_ENABLED: 'true'
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:-a-32-character-encryption-key!!}
+      TZ: UTC
+    volumes:
+      - ./logging/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - kibana_data:/usr/share/kibana/data
+    ports:
+      - '5601:5601'
+    networks:
+      - health-watchers-logging
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - "curl -sf -u elastic:${ELASTIC_PASSWORD:-changeme} http://localhost:5601/api/status | grep -v '\"overall\":{\"level\":\"critical\"'"
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
+  elk-setup:
+    profiles: ["elk"]
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: health-watchers-elk-setup
+    restart: 'no'
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: ${ELASTICSEARCH_USERNAME:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:-changeme}
+    volumes:
+      - ./logging/setup-elk.sh:/setup-elk.sh:ro
+      - ./logging/elasticsearch/ilm-policy.json:/etc/elk/ilm-policy.json:ro
+      - ./logging/elasticsearch/index-templates.json:/etc/elk/index-templates.json:ro
+      - ./logging/kibana/dashboards-export.ndjson:/etc/elk/dashboards-export.ndjson:ro
+    command: bash /setup-elk.sh
+    networks:
+      - health-watchers-logging
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MONGODB REPLICA SET
+  # ══════════════════════════════════════════════════════════════════════════
+
+  mongodb-keyfile-init:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-keyfile-init
+    restart: 'no'
+    command: >
+      bash -c "
+        if [ ! -f /data/keyfile/mongodb-keyfile ]; then
+          openssl rand -base64 756 > /data/keyfile/mongodb-keyfile &&
+          chmod 400 /data/keyfile/mongodb-keyfile &&
+          chown 999:999 /data/keyfile/mongodb-keyfile &&
+          echo 'Keyfile created';
+        else
+          echo 'Keyfile already exists';
+        fi
+      "
+    volumes:
+      - mongodb_keyfile:/data/keyfile
+    networks:
+      - health-watchers-db
+
+  mongodb-primary:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-primary
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+      MONGO_INITDB_DATABASE: health_watchers
+    command: >
+      mongod
+        --replSet rs0
+        --bind_ip_all
+        --auth
+        --keyFile /data/keyfile/mongodb-keyfile
+        --oplogSize 1024
+        --wiredTigerCacheSizeGB 1
+    volumes:
+      - mongodb_primary_data:/data/db
+      - mongodb_keyfile:/data/keyfile:ro
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./k8s/mongodb-replica-set-init.js:/scripts/replica-set-init.js:ro
+    ports:
+      - '27017:27017'
+    depends_on:
+      - mongodb-keyfile-init
+    healthcheck:
+      test: >
+        echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin
+        -u ${MONGO_ROOT_USERNAME:-admin} -p ${MONGO_ROOT_PASSWORD:-password123} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - health-watchers-db
+
+  mongodb-secondary-1:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-secondary-1
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+    command: >
+      mongod
+        --replSet rs0
+        --bind_ip_all
+        --auth
+        --keyFile /data/keyfile/mongodb-keyfile
+        --oplogSize 1024
+        --wiredTigerCacheSizeGB 1
+    volumes:
+      - mongodb_secondary_1_data:/data/db
+      - mongodb_keyfile:/data/keyfile:ro
+    ports:
+      - '27018:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: >
+        echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin
+        -u ${MONGO_ROOT_USERNAME:-admin} -p ${MONGO_ROOT_PASSWORD:-password123} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - health-watchers-db
+
+  mongodb-secondary-2:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-secondary-2
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+    command: >
+      mongod
+        --replSet rs0
+        --bind_ip_all
+        --auth
+        --keyFile /data/keyfile/mongodb-keyfile
+        --oplogSize 1024
+        --wiredTigerCacheSizeGB 1
+    volumes:
+      - mongodb_secondary_2_data:/data/db
+      - mongodb_keyfile:/data/keyfile:ro
+    ports:
+      - '27019:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: >
+        echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin
+        -u ${MONGO_ROOT_USERNAME:-admin} -p ${MONGO_ROOT_PASSWORD:-password123} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - health-watchers-db
+
+  mongodb-arbiter:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-arbiter
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+    command: >
+      mongod
+        --replSet rs0
+        --bind_ip_all
+        --auth
+        --keyFile /data/keyfile/mongodb-keyfile
+    volumes:
+      - mongodb_arbiter_data:/data/db
+      - mongodb_keyfile:/data/keyfile:ro
+    ports:
+      - '27020:27017'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    healthcheck:
+      test: >
+        echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin
+        -u ${MONGO_ROOT_USERNAME:-admin} -p ${MONGO_ROOT_PASSWORD:-password123} --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - health-watchers-db
+
+  mongodb-replica-init:
+    profiles: ["replica"]
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-replica-init
+    restart: 'no'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+      mongodb-secondary-1:
+        condition: service_healthy
+      mongodb-secondary-2:
+        condition: service_healthy
+      mongodb-arbiter:
+        condition: service_healthy
+    volumes:
+      - ./k8s/mongodb-replica-set-init.js:/scripts/replica-set-init.js:ro
+    command: >
+      mongosh mongodb-primary:27017/admin
+        -u ${MONGO_ROOT_USERNAME:-admin}
+        -p ${MONGO_ROOT_PASSWORD:-password123}
+        /scripts/replica-set-init.js
+    networks:
+      - health-watchers-db
+
+  mongodb-exporter:
+    profiles: ["replica", "monitoring"]
+    image: percona/mongodb_exporter:0.40.0
+    container_name: health-watchers-mongodb-exporter
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: >-
+        mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-password123}@mongodb-primary:27017/admin?authSource=admin&replicaSet=rs0
+    ports:
+      - '9216:9216'
+    command:
+      - '--mongodb.uri=mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-password123}@mongodb-primary:27017/admin?authSource=admin&replicaSet=rs0'
+      - '--collect-all'
+      - '--compatible-mode'
+      - '--log.level=warn'
+    depends_on:
+      mongodb-primary:
+        condition: service_healthy
+    networks:
+      - health-watchers-db
+      - health-watchers-monitoring
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:9216/metrics']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ══════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ══════════════════════════════════════════════════════════════════════════
 
 volumes:
   mongodb_data:
+    driver: local
+  redis_data:
     driver: local
   prometheus_data:
     driver: local
   grafana_data:
     driver: local
+  alertmanager_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  kibana_data:
+    driver: local
+  # Replica set volumes
+  mongodb_primary_data:
+    driver: local
+  mongodb_secondary_1_data:
+    driver: local
+  mongodb_secondary_2_data:
+    driver: local
+  mongodb_arbiter_data:
+    driver: local
+  mongodb_keyfile:
+    driver: local
+
+# ══════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ══════════════════════════════════════════════════════════════════════════
 
 networks:
-  default:
-    name: health-watchers-network
+  health-watchers-network:
+    driver: bridge
+  health-watchers-monitoring:
+    driver: bridge
+  health-watchers-logging:
+    driver: bridge
+  health-watchers-db:
+    driver: bridge
