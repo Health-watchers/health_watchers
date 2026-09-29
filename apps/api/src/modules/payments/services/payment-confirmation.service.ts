@@ -52,27 +52,42 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
   }
   const usdEquivalent = (parseFloat(payment.amount) * parseFloat(exchangeRate)).toFixed(2);
 
-  const updated = await PaymentRecordModel.findByIdAndUpdate(
-    payment._id,
-    { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
-    { new: true }
-  );
+  // The payment status transition and the linked invoice update are committed
+  // in a single transaction: if either write fails, neither is persisted. The
+  // status filter makes the transition idempotent under concurrent confirms —
+  // only one caller can move the payment out of its unconfirmed state.
+  const { InvoiceModel } = await import('../../invoices/invoice.model');
+  // Assigned inside the transaction callback; the cast stops TS narrowing it to null.
+  let updated = null as ConfirmPaymentResult['payment'];
+  const session = await PaymentRecordModel.startSession();
+  try {
+    await session.withTransaction(async () => {
+      updated = await PaymentRecordModel.findOneAndUpdate(
+        { _id: payment._id, status: { $ne: 'confirmed' } },
+        { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
+        { new: true, session }
+      );
+      if (!updated) return;
 
-  if (!updated) return { status: 'not_found' };
+      await InvoiceModel.findOneAndUpdate(
+        { paymentIntentId: intentId, status: { $ne: 'paid' } },
+        { status: 'paid', paidAt: new Date(), paidTxHash: txHash },
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!updated) {
+    // Lost a race with a concurrent confirmation of the same intent
+    const current = await PaymentRecordModel.findById(payment._id);
+    if (current?.status === 'confirmed') return { status: 'already_confirmed', payment: current };
+    return { status: 'not_found' };
+  }
 
   logger.info({ intentId, txHash }, 'payment-confirmation-service: payment confirmed');
   paymentsConfirmedTotal.inc({ currency: updated.assetCode ?? 'XLM' });
-
-  // Update linked invoice
-  try {
-    const { InvoiceModel } = await import('../../invoices/invoice.model');
-    await InvoiceModel.findOneAndUpdate(
-      { paymentIntentId: intentId, status: { $ne: 'paid' } },
-      { status: 'paid', paidAt: new Date(), paidTxHash: txHash }
-    );
-  } catch {
-    /* non-critical */
-  }
 
   const clinicId = String(updated.clinicId);
 

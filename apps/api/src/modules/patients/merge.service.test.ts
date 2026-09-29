@@ -1,5 +1,5 @@
 import mongoose, { Types } from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { PatientMergeService } from '../merge.service';
 import { PatientModel } from '../models/patient.model';
 import { MergeLogModel } from '../models/merge-log.model';
@@ -7,7 +7,8 @@ import { EncounterModel } from '@api/modules/encounters/encounter.model';
 import { AuditLogModel } from '@api/modules/audit/audit.model';
 import * as mailer from '@api/utils/mailer';
 
-let mongod: MongoMemoryServer;
+// Transactions require a replica set — a standalone mongod rejects them.
+let replSet: MongoMemoryReplSet;
 
 const clinicId = new Types.ObjectId().toString();
 const userId = new Types.ObjectId().toString();
@@ -28,13 +29,15 @@ function makePatient(overrides = {}) {
 }
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
+  replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  await mongoose.connect(replSet.getUri());
 });
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongod.stop();
+  await replSet.stop();
 });
 
 afterEach(async () => {

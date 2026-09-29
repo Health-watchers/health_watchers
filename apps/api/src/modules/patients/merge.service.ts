@@ -30,25 +30,36 @@ export class PatientMergeService {
       throw new Error('Patients must belong to the same clinic');
     if ((duplicate as any).isDuplicate) throw new Error('Patient has already been merged');
 
-    // Snapshot before any mutation
-    const mergeLog = await MergeLogModel.create({
-      primaryId: new Types.ObjectId(primaryId),
-      duplicateId: new Types.ObjectId(duplicateId),
-      clinicId: new Types.ObjectId(clinicId),
-      mergedBy: new Types.ObjectId(userId),
-      primarySnapshot: primary,
-      duplicateSnapshot: duplicate,
-    });
-
+    // The merge log, encounter re-parenting and both patient updates are
+    // written in a single transaction so a mid-operation failure leaves no
+    // partial writes (e.g. an orphaned merge log or half-moved encounters).
+    let mergeLogId!: Types.ObjectId;
     const session = await PatientModel.startSession();
     try {
       await session.withTransaction(async () => {
-        // Re-fetch mutable docs inside transaction
-        const [primaryDoc, duplicateDoc] = await Promise.all([
-          PatientModel.findById(primaryId).session(session),
-          PatientModel.findById(duplicateId).session(session),
-        ]);
+        // Re-fetch mutable docs inside transaction. Run sequentially: parallel
+        // operations on one transactional session are not supported.
+        const primaryDoc = await PatientModel.findById(primaryId).session(session);
+        const duplicateDoc = await PatientModel.findById(duplicateId).session(session);
         if (!primaryDoc || !duplicateDoc) throw new Error('Documents disappeared mid-transaction');
+        // Guard against a concurrent merge that committed after the pre-check
+        if ((duplicateDoc as any).isDuplicate) throw new Error('Patient has already been merged');
+
+        // Snapshot before any mutation
+        const [mergeLog] = await MergeLogModel.create(
+          [
+            {
+              primaryId: new Types.ObjectId(primaryId),
+              duplicateId: new Types.ObjectId(duplicateId),
+              clinicId: new Types.ObjectId(clinicId),
+              mergedBy: new Types.ObjectId(userId),
+              primarySnapshot: primaryDoc.toObject(),
+              duplicateSnapshot: duplicateDoc.toObject(),
+            },
+          ],
+          { session }
+        );
+        mergeLogId = mergeLog!._id as Types.ObjectId;
 
         // Re-parent encounters
         await EncounterModel.updateMany(
@@ -88,7 +99,7 @@ export class PatientMergeService {
       resourceType: 'Patient',
       resourceId: primaryId,
       metadata: {
-        mergeLogId: String(mergeLog._id),
+        mergeLogId: String(mergeLogId),
         duplicateId,
         primaryName: `${primary.firstName} ${primary.lastName}`,
         duplicateName: `${duplicate.firstName} ${duplicate.lastName}`,
@@ -104,13 +115,13 @@ export class PatientMergeService {
         <ul>
           <li><strong>Primary:</strong> ${primary.firstName} ${primary.lastName} (${primaryId})</li>
           <li><strong>Merged (deactivated):</strong> ${duplicate.firstName} ${duplicate.lastName} (${duplicateId})</li>
-          <li><strong>Merge log ID:</strong> ${mergeLog._id}</li>
+          <li><strong>Merge log ID:</strong> ${mergeLogId}</li>
         </ul>
         <p>If this merge was incorrect, use the merge log ID to unmerge via the API.</p>
       `,
     }).catch((err) => logger.warn({ err }, 'Failed to send merge notification email'));
 
-    return { mergeLogId: String(mergeLog._id), primaryId, duplicateId };
+    return { mergeLogId: String(mergeLogId), primaryId, duplicateId };
   }
 
   /**

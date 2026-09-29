@@ -70,7 +70,7 @@ jest.mock('@api/modules/payments/services/stellar-client', () => ({
 }));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import express from 'express';
 import request from 'supertest';
@@ -133,18 +133,21 @@ function validTx(
 }
 
 // ── MongoDB Memory Server lifecycle ──────────────────────────────────────────
-let mongod: MongoMemoryServer;
+// Payment confirmation runs in a transaction, which requires a replica set.
+let replSet: MongoMemoryReplSet;
 let app: express.Express;
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
+  replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  await mongoose.connect(replSet.getUri());
   app = buildApp();
 });
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongod.stop();
+  await replSet.stop();
 });
 
 afterEach(async () => {

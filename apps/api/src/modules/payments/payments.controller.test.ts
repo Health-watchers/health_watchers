@@ -61,11 +61,22 @@ jest.mock('@api/utils/logger', () => ({
 jest.mock('@api/modules/payments/models/payment-record.model', () => ({
   PaymentRecordModel: {
     findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
     findByIdAndUpdate: jest.fn(),
+    findById: jest.fn(),
     create: jest.fn(),
     countDocuments: jest.fn(),
     find: jest.fn(),
+    // confirmPayment runs its writes in a transaction; run the callback inline.
+    startSession: jest.fn().mockResolvedValue({
+      withTransaction: (fn: () => Promise<unknown>) => fn(),
+      endSession: jest.fn(),
+    }),
   },
+}));
+
+jest.mock('@api/modules/invoices/invoice.model', () => ({
+  InvoiceModel: { findOneAndUpdate: jest.fn().mockResolvedValue(null) },
 }));
 
 jest.mock('@api/modules/payments/services/stellar-client', () => ({
@@ -114,6 +125,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     jest.clearAllMocks();
     (PaymentRecordModel.findOne as jest.Mock).mockReset();
     (PaymentRecordModel.findByIdAndUpdate as jest.Mock).mockReset();
+    (PaymentRecordModel.findOneAndUpdate as jest.Mock).mockReset();
     (stellarClient.verifyTransaction as jest.Mock).mockReset();
   });
 
@@ -131,7 +143,7 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
         success: true,
       },
     });
-    (PaymentRecordModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({
+    (PaymentRecordModel.findOneAndUpdate as jest.Mock).mockResolvedValue({
       ...pendingPayment,
       status: 'confirmed',
       txHash: 'valid-tx',
@@ -146,10 +158,10 @@ describe('PATCH /api/v1/payments/:intentId/confirm', () => {
     expect(res.body.status).toBe('success');
     expect(res.body.data.status).toBe('confirmed');
 
-    expect(PaymentRecordModel.findByIdAndUpdate).toHaveBeenCalledWith(
-      pendingPayment._id,
+    expect(PaymentRecordModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: pendingPayment._id, status: { $ne: 'confirmed' } },
       expect.objectContaining({ status: 'confirmed', txHash: 'valid-tx' }),
-      { new: true }
+      expect.objectContaining({ new: true, session: expect.anything() })
     );
   });
 

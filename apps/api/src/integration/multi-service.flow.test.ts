@@ -94,7 +94,12 @@ import { AppointmentModel } from '../modules/appointments/appointment.model';
 import { PaymentRecordModel } from '../modules/payments/models/payment-record.model';
 import { PatientModel } from '../modules/patients/models/patient.model';
 import { stellarClient } from '../modules/payments/services/stellar-client';
-import { startTestDb, stopTestDb, clearDb, TestDb } from './helpers/test-db';
+import {
+  startReplSetTestDb,
+  stopReplSetTestDb,
+  clearDb,
+  ReplSetTestDb,
+} from './helpers/test-db';
 import { createClinicWithAdmin, createUser } from './helpers/factories';
 
 function buildApp() {
@@ -110,11 +115,11 @@ function buildApp() {
 const DESTINATION = 'GDESTINATION123456789012345678901234567890123456';
 
 describe('multi-service end-to-end workflow', () => {
-  let testDb: TestDb;
+  let testDb: ReplSetTestDb; // payment confirmation runs in a transaction
   let app: express.Express;
 
   beforeAll(async () => {
-    testDb = await startTestDb();
+    testDb = await startReplSetTestDb();
     app = buildApp();
   });
 
@@ -124,7 +129,7 @@ describe('multi-service end-to-end workflow', () => {
   });
 
   afterAll(async () => {
-    await stopTestDb(testDb);
+    await stopReplSetTestDb(testDb);
   });
 
   it('runs clinic → login → patient → appointment → payment end to end', async () => {
