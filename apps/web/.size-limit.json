@@ -1,0 +1,44 @@
+[
+  {
+    "name": "/ (home)",
+    "path": ".next/static/chunks/pages/index*.js",
+    "limit": "120 kB",
+    "gzip": true
+  },
+  {
+    "name": "/login",
+    "path": ".next/static/chunks/pages/login*.js",
+    "limit": "100 kB",
+    "gzip": true
+  },
+  {
+    "name": "/patients",
+    "path": ".next/static/chunks/pages/patients*.js",
+    "limit": "150 kB",
+    "gzip": true
+  },
+  {
+    "name": "/portal/dashboard",
+    "path": ".next/static/chunks/pages/portal*.js",
+    "limit": "150 kB",
+    "gzip": true
+  },
+  {
+    "name": "react-vendors chunk",
+    "path": ".next/static/chunks/react-vendors*.js",
+    "limit": "160 kB",
+    "gzip": true
+  },
+  {
+    "name": "tanstack chunk",
+    "path": ".next/static/chunks/tanstack*.js",
+    "limit": "80 kB",
+    "gzip": true
+  },
+  {
+    "name": "vendors chunk",
+    "path": ".next/static/chunks/vendors*.js",
+    "limit": "320 kB",
+    "gzip": true
+  }
+]

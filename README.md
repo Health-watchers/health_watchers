@@ -3,6 +3,9 @@
 > **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
 
 [![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
+[![Docs](https://github.com/OWNER/health-watchers/actions/workflows/docs.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/docs.yml)
+[![Docs Site](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://OWNER.github.io/health-watchers/)
+[![Lighthouse CI](https://github.com/OWNER/health-watchers/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/lighthouse.yml)
 [![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=alert_status&token=)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=coverage)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)[![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)

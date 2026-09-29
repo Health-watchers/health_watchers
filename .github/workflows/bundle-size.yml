@@ -1,0 +1,164 @@
+name: Bundle Size Analysis
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  bundle-size:
+    name: Analyze Next.js Bundle Size
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web app dependencies
+        run: npm ci
+        working-directory: apps/web
+
+      # ── Build with @next/bundle-analyzer ─────────────────────────────────────
+      # ANALYZE=true triggers the bundle analyzer plugin (added to next.config.js).
+      # The plugin writes per-route JSON stats to .next/analyze/ which the
+      # size-limit step reads to compute first-load JS sizes.
+      - name: Build Next.js with bundle analyzer
+        run: npm run build:analyze
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+          ANALYZE: true
+          SENTRY_UPLOAD_ENABLED: false
+
+      # ── Check per-route JS budget with size-limit ─────────────────────────────
+      # size-limit reads .size-limit.json and exits non-zero when any route
+      # exceeds its budget.  This is the gate that fails CI.
+      - name: Check first-load JS size budgets
+        id: size_check
+        run: npx size-limit --json > /tmp/size-limit-output.json 2>&1; echo "exit_code=$?" >> $GITHUB_OUTPUT
+        working-directory: apps/web
+        continue-on-error: true  # Collect output before deciding to fail
+
+      - name: Upload bundle stats as artifact
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: bundle-stats-${{ github.run_id }}
+          path: |
+            apps/web/.next/analyze/
+            /tmp/size-limit-output.json
+          retention-days: 30
+
+      # ── PR comment with size diff ─────────────────────────────────────────────
+      - name: Post bundle size comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let sizeLimitData = [];
+            try {
+              const raw = fs.readFileSync('/tmp/size-limit-output.json', 'utf8');
+              // size-limit --json output is either a JSON array or mixed stdout
+              const jsonStart = raw.indexOf('[');
+              if (jsonStart !== -1) {
+                sizeLimitData = JSON.parse(raw.slice(jsonStart));
+              }
+            } catch (e) {
+              console.log('Could not parse size-limit JSON:', e.message);
+            }
+
+            const exitCode = '${{ steps.size_check.outputs.exit_code }}';
+            const overBudget = exitCode !== '0';
+
+            const emoji = (passed) => passed ? '✅' : '❌';
+            const formatSize = (bytes) => {
+              if (bytes === undefined || bytes === null) return 'N/A';
+              const kb = bytes / 1024;
+              return kb >= 1024
+                ? `${(kb / 1024).toFixed(2)} MB`
+                : `${kb.toFixed(1)} kB`;
+            };
+
+            let table = '';
+            if (sizeLimitData.length > 0) {
+              const rows = sizeLimitData.map(entry => {
+                const passed = !entry.failed;
+                const diff = entry.diff !== undefined
+                  ? ` (${entry.diff > 0 ? '+' : ''}${formatSize(entry.diff)})`
+                  : '';
+                return `| ${emoji(passed)} | \`${entry.name}\` | ${formatSize(entry.size)} / ${formatSize(entry.limit)}${diff} |`;
+              });
+
+              table = [
+                '',
+                '| Status | Route | Size / Budget |',
+                '|--------|-------|---------------|',
+                ...rows,
+              ].join('\n');
+            } else {
+              table = '\n_Bundle stats not available — check the **bundle-stats** artifact._';
+            }
+
+            const header = overBudget
+              ? '## 📦 Bundle Size — ❌ Budget Exceeded'
+              : '## 📦 Bundle Size — ✅ Within Budget';
+
+            const body = [
+              header,
+              '',
+              '> Key-route first-load JS budgets (see `.size-limit.json`).',
+              table,
+              '',
+              `> Full report in the **bundle-stats-${{ github.run_id }}** artifact.`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('📦 Bundle Size')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # ── Fail the job if any route exceeded its budget ────────────────────────
+      - name: Fail CI on budget exceeded
+        if: steps.size_check.outputs.exit_code != '0'
+        run: |
+          echo "❌ First-load JS budget exceeded for one or more routes."
+          echo "Review the bundle-stats artifact and the PR comment for details."
+          exit 1
