@@ -1,6 +1,7 @@
 {
   "name": "health-watchers-monorepo",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "workspaces": [
     "apps/api",
     "packages/config",
@@ -14,13 +15,14 @@
     "husky": "^9.0.0",
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.6.14",
-    "turbo": "latest"
+    "turbo": "2.3.3"
   },
   "scripts": {
     "prepare": "husky",
-    "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:diagrams": "mkdir -p docs/diagrams/export && for f in docs/diagrams/*.mmd; do mmdc -i \"$f\" -o \"docs/diagrams/export/$(basename \"$f\" .mmd).svg\"; done",

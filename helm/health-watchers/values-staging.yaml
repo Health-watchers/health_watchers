@@ -45,3 +45,34 @@ ingress:
 
 secrets:
   useExternalSecrets: false
+
+# ── Resource Quotas (Staging) ─────────────────────────────────────────────────
+# Reduced quotas for staging environment
+resourceQuota:
+  enabled: true
+  hard:
+    requests:
+      cpu: "4"              # Half of production
+      memory: "8Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+    pods: "30"
+    services: "15"
+    persistentvolumeclaims: "5"
+    requestsStorage: "50Gi"
+
+# ── Limit Ranges (Staging) ────────────────────────────────────────────────────
+limitRange:
+  enabled: true
+  container:
+    max:
+      cpu: "2"              # Lower max for staging
+      memory: "4Gi"
+  pod:
+    max:
+      cpu: "4"
+      memory: "8Gi"
+  pvc:
+    max:
+      storage: "20Gi"

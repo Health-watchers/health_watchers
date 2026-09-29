@@ -4,3 +4,79 @@ metadata:
   name: {{ .Values.global.namespace }}
   labels:
     {{- include "health-watchers.labels" . | nindent 4 }}
+
+---
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "health-watchers.fullname" . }}-quota
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: {{ .Values.resourceQuota.hard.requests.cpu | quote }}
+    requests.memory: {{ .Values.resourceQuota.hard.requests.memory | quote }}
+    limits.cpu: {{ .Values.resourceQuota.hard.limits.cpu | quote }}
+    limits.memory: {{ .Values.resourceQuota.hard.limits.memory | quote }}
+    
+    # Object counts
+    pods: {{ .Values.resourceQuota.hard.pods | quote }}
+    services: {{ .Values.resourceQuota.hard.services | quote }}
+    persistentvolumeclaims: {{ .Values.resourceQuota.hard.persistentvolumeclaims | quote }}
+    
+    # Storage
+    requests.storage: {{ .Values.resourceQuota.hard.requestsStorage | quote }}
+{{- end }}
+
+---
+{{- if .Values.limitRange.enabled }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ include "health-watchers.fullname" . }}-limits
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: {{ .Values.limitRange.container.default.cpu | quote }}
+        memory: {{ .Values.limitRange.container.default.memory | quote }}
+      defaultRequest:
+        cpu: {{ .Values.limitRange.container.defaultRequest.cpu | quote }}
+        memory: {{ .Values.limitRange.container.defaultRequest.memory | quote }}
+      max:
+        cpu: {{ .Values.limitRange.container.max.cpu | quote }}
+        memory: {{ .Values.limitRange.container.max.memory | quote }}
+      min:
+        cpu: {{ .Values.limitRange.container.min.cpu | quote }}
+        memory: {{ .Values.limitRange.container.min.memory | quote }}
+      {{- if .Values.limitRange.container.maxLimitRequestRatio }}
+      maxLimitRequestRatio:
+        cpu: {{ .Values.limitRange.container.maxLimitRequestRatio.cpu | quote }}
+        memory: {{ .Values.limitRange.container.maxLimitRequestRatio.memory | quote }}
+      {{- end }}
+    
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: {{ .Values.limitRange.pod.max.cpu | quote }}
+        memory: {{ .Values.limitRange.pod.max.memory | quote }}
+      min:
+        cpu: {{ .Values.limitRange.pod.min.cpu | quote }}
+        memory: {{ .Values.limitRange.pod.min.memory | quote }}
+    
+    {{- if .Values.limitRange.pvc }}
+    # PVC limits
+    - type: PersistentVolumeClaim
+      max:
+        storage: {{ .Values.limitRange.pvc.max.storage | quote }}
+      min:
+        storage: {{ .Values.limitRange.pvc.min.storage | quote }}
+    {{- end }}
+{{- end }}
