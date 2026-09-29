@@ -154,6 +154,12 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           >
             Edit Record
           </button>
+          <button
+            onClick={() => window.open(`/encounters/${encodeURIComponent(encounter.id)}/print`, '_blank', 'noopener,noreferrer')}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+          >
+            Print Visit Summary
+          </button>
         </div>
       </div>
 

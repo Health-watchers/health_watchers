@@ -1,0 +1,16 @@
+{{- if and .Values.api.enabled .Values.api.worker.enabled .Values.api.worker.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-worker-pdb
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-worker
+spec:
+  minAvailable: {{ .Values.api.worker.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: api-worker
+  unhealthyPodEvictionPolicy: AlwaysAllow
+{{- end }}

@@ -39,36 +39,11 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 - npm 10.9.2
 - Docker and Docker Compose
 
-### Quick Start — MongoDB only (recommended for local dev)
+### Quick Start with Docker Compose Profiles
 
-No local MongoDB installation required. Spin up just the database:
+We've consolidated all Docker Compose configurations into a single file with profiles. Choose what you need:
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/OWNER/health-watchers.git
-cd health-watchers
-
-# 2. Copy environment configuration
-cp .env.example .env
-
-# 3. Start MongoDB (and optional mongo-express UI on :8081)
-docker-compose -f docker-compose.dev.yml up -d
-
-# 4. Install dependencies and start the API
-npm install
-npm run dev --workspace=api
-```
-
-The default `MONGO_URI=mongodb://localhost:27017/health_watchers` in `.env.example` connects directly to the containerized MongoDB — no credentials needed for local dev.
-
-To stop:
-```bash
-docker-compose -f docker-compose.dev.yml down
-```
-
-### 5-Minute Quickstart — Full Stack with Docker Compose
-
-Runs all services (API, web, stellar-service, MongoDB) in containers:
+#### Core Services Only (Recommended for Development)
 
 ```bash
 # 1. Clone the repository
@@ -78,18 +53,77 @@ cd health-watchers
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start all services
-docker-compose up -d
+# 3. Start core services (API, web, MongoDB, Redis, Jaeger)
+docker compose --profile core up -d
 
 # 4. Access the application
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
+# Jaeger UI: http://localhost:16686
 ```
 
-To stop all services:
+#### With Development Tools
+
 ```bash
-docker-compose down
+# Start core + mongo-express (database UI on :8081)
+docker compose --profile core --profile dev-tools up -d
 ```
+
+#### With Monitoring Stack
+
+```bash
+# Start core + Prometheus, Grafana, AlertManager
+docker compose --profile core --profile monitoring up -d
+
+# Grafana: http://localhost:3003 (admin/admin)
+# Prometheus: http://localhost:9090
+```
+
+#### Full Stack with ELK Logging
+
+```bash
+# Start core + Elasticsearch, Logstash, Kibana
+docker compose --profile core --profile elk up -d
+
+# Kibana: http://localhost:5601
+```
+
+#### MongoDB Replica Set (High Availability)
+
+```bash
+# Use replica profile instead of core (which has standalone MongoDB)
+docker compose --profile replica --profile dev-tools up -d
+
+# Update MONGO_URI in .env:
+# MONGO_URI=mongodb://admin:password123@mongodb-primary:27017,mongodb-secondary-1:27017,mongodb-secondary-2:27017/health_watchers?replicaSet=rs0&authSource=admin
+```
+
+#### Production Deployment
+
+```bash
+# Use production overrides
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d
+
+# Ensure all production secrets are set in .env
+```
+
+To stop services:
+```bash
+docker compose --profile core down
+# or
+docker compose down  # stops all running services
+```
+
+### Available Profiles
+
+| Profile | Services | Use Case |
+|---------|----------|----------|
+| `core` | API, web, stellar-service, MongoDB, Redis, Jaeger | Development, basic setup |
+| `dev-tools` | mongo-express | Database management UI |
+| `monitoring` | Prometheus, Grafana, AlertManager, node-exporter | Metrics and alerts |
+| `elk` | Elasticsearch, Logstash, Kibana | Centralized logging |
+| `replica` | MongoDB replica set (3 nodes + arbiter) | HA testing |
+| `stellar` | Stellar-specific services | Blockchain development |
 
 ### Manual Setup
 

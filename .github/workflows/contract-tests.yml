@@ -16,19 +16,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+      
       - name: Install dependencies
         run: npm ci
+      
       - name: Run consumer contract tests
         run: npm run test:contract:consumer
+      
+      - name: Upload pact files as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-files
+          path: pacts/*.json
+      
       - name: Publish consumer contracts to broker
+        if: success()
         run: |
           npx pact-broker publish ./pacts \
             --consumer-app-version=${{ github.sha }} \
             --branch=${{ github.ref_name }} \
+            --tag=${{ github.ref_name }} \
+            --tag=${{ github.sha }} \
             --broker-base-url=${{ env.PACT_BROKER_BASE_URL }} \
             --broker-token=${{ env.PACT_BROKER_TOKEN }}
 
@@ -38,50 +53,142 @@ jobs:
     needs: consumer-contract-tests
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+      
       - name: Install dependencies
         run: npm ci
+      
+      - name: Download pact files
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-files
+          path: pacts/
+      
       - name: Verify provider against broker contracts
         run: npm run test:contract:provider
         env:
           PACT_PROVIDER_VERSION: ${{ github.sha }}
           PACT_PROVIDER_BRANCH: ${{ github.ref_name }}
+          PACT_PROVIDER_TAG: ${{ github.ref_name }}
+      
+      - name: Record provider verification results
+        if: always()
+        run: |
+          npx pact-broker record-deployment \
+            --pacticipant health-watchers-api \
+            --version=${{ github.sha }} \
+            --environment=${{ github.ref_name == 'main' && 'production' || 'staging' }} \
+            --broker-base-url=${{ env.PACT_BROKER_BASE_URL }} \
+            --broker-token=${{ env.PACT_BROKER_TOKEN }} \
+            || echo "Warning: Failed to record deployment"
 
   can-i-deploy:
     name: Breaking Change Detection
     runs-on: ubuntu-latest
     needs: provider-verification
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
-      - name: Check for breaking changes before merge
+      
+      - name: Check if safe to deploy (web consumer)
+        id: web-deploy-check
         run: |
           npx pact-broker can-i-deploy \
             --pacticipant health-watchers-web \
             --version=${{ github.sha }} \
-            --to-environment=production \
+            --to-environment=${{ github.base_ref == 'main' && 'production' || 'staging' }} \
             --broker-base-url=${{ env.PACT_BROKER_BASE_URL }} \
-            --broker-token=${{ env.PACT_BROKER_TOKEN }}
+            --broker-token=${{ env.PACT_BROKER_TOKEN }} \
+            --output json \
+            > can-i-deploy-web.json
+        continue-on-error: true
+      
+      - name: Check if safe to deploy (API provider)
+        id: api-deploy-check
+        run: |
+          npx pact-broker can-i-deploy \
+            --pacticipant health-watchers-api \
+            --version=${{ github.sha }} \
+            --to-environment=${{ github.base_ref == 'main' && 'production' || 'staging' }} \
+            --broker-base-url=${{ env.PACT_BROKER_BASE_URL }} \
+            --broker-token=${{ env.PACT_BROKER_TOKEN }} \
+            --output json \
+            > can-i-deploy-api.json
+        continue-on-error: true
+      
+      - name: Comment PR with contract status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let webResult = 'N/A';
+            let apiResult = 'N/A';
+            
+            try {
+              if (fs.existsSync('can-i-deploy-web.json')) {
+                const webData = JSON.parse(fs.readFileSync('can-i-deploy-web.json', 'utf8'));
+                webResult = webData.summary?.deployable ? '✅ Safe' : '❌ Breaking';
+              }
+            } catch (e) {}
+            
+            try {
+              if (fs.existsSync('can-i-deploy-api.json')) {
+                const apiData = JSON.parse(fs.readFileSync('can-i-deploy-api.json', 'utf8'));
+                apiResult = apiData.summary?.deployable ? '✅ Safe' : '❌ Breaking';
+              }
+            } catch (e) {}
+            
+            const body = `## 🔄 Contract Testing Results
+            
+            | Service | Deployment Safety |
+            |---------|-------------------|
+            | Web Consumer | ${webResult} |
+            | API Provider | ${apiResult} |
+            
+            **Branch:** \`${{ github.ref_name }}\`
+            **Commit:** \`${{ github.sha }}\`
+            
+            ${webResult.includes('❌') || apiResult.includes('❌') ? 
+              '⚠️ **Warning:** This PR may introduce breaking changes to the API contract.' : 
+              '✅ No breaking contract changes detected.'}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+      
+      - name: Fail if breaking changes detected
+        if: steps.web-deploy-check.outcome == 'failure' || steps.api-deploy-check.outcome == 'failure'
+        run: |
+          echo "❌ Breaking contract changes detected. Please review the contract changes."
+          exit 1
 
   contract-report:
     name: Publish Contract Dashboard Report
     runs-on: ubuntu-latest
-    needs: can-i-deploy
+    needs: [consumer-contract-tests, provider-verification]
     if: always()
     steps:
       - uses: actions/checkout@v4
+      
       - name: Generate contract matrix report
         run: |
-          npx pact-broker create-webhook \
-            --broker-base-url=${{ env.PACT_BROKER_BASE_URL }} \
-            --broker-token=${{ env.PACT_BROKER_TOKEN }} \
-            || true
           curl -sf "${PACT_BROKER_BASE_URL}/dashboard" \
             -H "Authorization: Bearer ${PACT_BROKER_TOKEN}" \
-            -o contract-report.html
+            -o contract-report.html || echo "Failed to fetch dashboard"
+      
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: contract-dashboard-report
           path: contract-report.html
+          if-no-files-found: ignore

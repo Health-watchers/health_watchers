@@ -35,6 +35,59 @@ api:
   pdb:
     enabled: true
     minAvailable: 1
+  # Worker configuration for background jobs
+  worker:
+    enabled: false  # Set to true to enable worker pods
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    pdb:
+      enabled: true
+      minAvailable: 1
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+    readinessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 15
+    # KEDA autoscaling based on Redis queue depth
+    keda:
+      enabled: false  # Requires KEDA operator installed in cluster
+      pollingInterval: 15
+      cooldownPeriod: 300
+      minReplicas: 1
+      maxReplicas: 10
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        percentValue: 50
+        podsValue: 1
+      scaleUp:
+        stabilizationWindowSeconds: 60
+        percentValue: 100
+        podsValue: 4
+      # BullMQ queue triggers - adjust queue names to match your setup
+      triggers:
+        - listName: "bull:payment-expiration:wait"
+          listLength: "5"
+          activationListLength: "1"
+          databaseIndex: "0"
+        - listName: "bull:reconciliation:wait"
+          listLength: "5"
+          activationListLength: "1"
+          databaseIndex: "0"
+        - listName: "bull:notification-dispatch:wait"
+          listLength: "10"
+          activationListLength: "1"
+          databaseIndex: "0"
+        - listName: "bull:webhook-retry:wait"
+          listLength: "10"
+          activationListLength: "1"
+          databaseIndex: "0"
   livenessProbe:
     path: /health/live
     initialDelaySeconds: 15

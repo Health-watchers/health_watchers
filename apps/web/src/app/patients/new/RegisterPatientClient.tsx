@@ -9,6 +9,8 @@ import { PatientSchema, type PatientInput } from '@health-watchers/types';
 import { Button, Input, Textarea, Spinner, toast } from '@/components/ui';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors, isSubmitting, isValid, isDirty },
   } = useForm<PatientInput>({
     resolver: zodResolver(PatientSchema),
@@ -62,6 +65,13 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
 
   const sexValue = watch('sex');
   const isDisabled = isSubmitting;
+
+  // Unsaved-changes guard: use react-hook-form's isDirty flag so we know when
+  // the user has touched at least one field.
+  const { showModal, confirmLeave, cancelLeave, guardedPush } = useUnsavedChangesGuard(
+    isDirty,
+    'You have unsaved patient data. Are you sure you want to leave?'
+  );
 
   const onSubmit = async (data: PatientInput) => {
     setApiError(null);
@@ -88,6 +98,10 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
       const newId: string = result?.data?._id ?? result?._id ?? '';
 
       toast.success(labels.successToast);
+
+      // Reset form so isDirty becomes false — prevents the unsaved-changes guard
+      // from showing a modal after a successful submission.
+      reset();
 
       if (newId) {
         router.push(`/patients/${newId}`);
@@ -267,7 +281,7 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
               variant="outline"
               size="md"
               disabled={isDisabled}
-              onClick={() => router.push('/patients')}
+              onClick={() => guardedPush('/patients')}
               className="flex-1"
               id="cancel-register-patient"
             >
@@ -295,6 +309,13 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
           </div>
         </form>
       </div>
+
+      {/* ── Unsaved Changes Modal ── */}
+      <UnsavedChangesModal
+        isOpen={showModal}
+        onConfirm={confirmLeave}
+        onCancel={cancelLeave}
+      />
     </main>
   );
 }

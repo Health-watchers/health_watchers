@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-worker
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: api-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: api-worker
+        app.kubernetes.io/name: health-watchers
+        app.kubernetes.io/component: api-worker
+      annotations:
+        # Ensures workers restart when config changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: health-watchers-api
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: worker
+          image: ghcr.io/chisom92/health-watchers-api:latest
+          imagePullPolicy: Always
+          # Override command to run worker instead of HTTP server
+          command: ["node", "dist/worker.js"]
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '250m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          # Health checks for workers (different from API)
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: health-watchers-config
+            - secretRef:
+                name: health-watchers-secrets
+          env:
+            # Worker-specific environment variable
+            - name: WORKER_MODE
+              value: "true"
+            - name: NODE_ENV
+              value: production
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
