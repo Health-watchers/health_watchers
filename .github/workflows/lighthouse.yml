@@ -1,0 +1,191 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  lighthouse:
+    name: Lighthouse Performance & Accessibility Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web app dependencies
+        run: npm ci
+        working-directory: apps/web
+
+      - name: Install docs app dependencies
+        run: npm ci
+        working-directory: apps/docs
+
+      # Build the Next.js app in production mode so Lighthouse scores reflect
+      # the real production bundle — not a slow dev-mode build.
+      - name: Build Next.js app
+        run: npm run build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+          # Disable Sentry source-map uploads in CI to keep the build fast
+          SENTRY_UPLOAD_ENABLED: false
+
+      - name: Start API server (seeded)
+        run: npm run dev &
+        working-directory: apps/api
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_lhci
+          JWT_ACCESS_TOKEN_SECRET: lhci-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: lhci-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: development
+          PORT: 3001
+
+      - name: Seed CI test users
+        run: npm run seed || echo "No seed script — using auth bypass token"
+        working-directory: apps/api
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_lhci
+        continue-on-error: true
+
+      - name: Start Next.js production server
+        run: npm start &
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          PORT: 3000
+
+      - name: Wait for servers to be ready
+        run: npx wait-on http://localhost:3001/health http://localhost:3000 --timeout 60000
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.14.x
+
+      - name: Run Lighthouse CI
+        run: lhci autorun
+        env:
+          # Pass the CI token if you have a Lighthouse CI server configured
+          LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}
+          # Auth-bypass header so authenticated pages are reachable in CI.
+          # Set LHCI_AUTH_TOKEN in repo secrets; the API must accept
+          # 'X-LHCI-Auth: <token>' and return a seeded session cookie.
+          LHCI_AUTH_TOKEN: ${{ secrets.LHCI_AUTH_TOKEN }}
+
+      - name: Upload Lighthouse reports as artifact
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: lighthouse-reports-${{ github.run_id }}
+          path: .lighthouseci/
+          retention-days: 30
+
+      # Post a human-readable summary as a PR comment so reviewers see scores
+      # without leaving GitHub. Uses the JSON reports written by lhci autorun.
+      - name: Post Lighthouse summary comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const lhDir = '.lighthouseci';
+            if (!fs.existsSync(lhDir)) {
+              console.log('No Lighthouse results directory found.');
+              return;
+            }
+
+            const jsonFiles = fs.readdirSync(lhDir)
+              .filter(f => f.endsWith('.json') && f.startsWith('lhr-'));
+
+            if (jsonFiles.length === 0) {
+              console.log('No Lighthouse JSON reports found.');
+              return;
+            }
+
+            const emoji = (score) => {
+              if (score >= 0.9) return '🟢';
+              if (score >= 0.8) return '🟡';
+              return '🔴';
+            };
+
+            const pct = (score) => `${Math.round(score * 100)}`;
+
+            const rows = jsonFiles.map(file => {
+              const report = JSON.parse(
+                fs.readFileSync(path.join(lhDir, file), 'utf8')
+              );
+              const url = new URL(report.finalUrl).pathname;
+              const perf  = report.categories.performance.score;
+              const a11y  = report.categories.accessibility.score;
+              const bp    = report.categories['best-practices'].score;
+              const seo   = report.categories.seo.score;
+
+              // Flag rows that violate our thresholds
+              const perfFail = perf < 0.80;
+              const a11yFail = a11y < 0.95;
+
+              return `| \`${url}\` | ${emoji(perf)} ${pct(perf)}${perfFail ? ' ❌' : ''} | ${emoji(a11y)} ${pct(a11y)}${a11yFail ? ' ❌' : ''} | ${emoji(bp)} ${pct(bp)} | ${emoji(seo)} ${pct(seo)} |`;
+            });
+
+            const body = [
+              '## 🏠 Lighthouse CI Results',
+              '',
+              '> Thresholds: Performance ≥ 80 · Accessibility ≥ 95',
+              '',
+              '| Route | Performance | Accessibility | Best Practices | SEO |',
+              '|-------|-------------|---------------|----------------|-----|',
+              ...rows,
+              '',
+              `> 🟢 ≥ 90 · 🟡 80–89 · 🔴 < 80 — full report in the **lighthouse-reports-${{ github.run_id }}** artifact`,
+            ].join('\n');
+
+            // Update existing bot comment instead of posting a new one every run
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('🏠 Lighthouse CI Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

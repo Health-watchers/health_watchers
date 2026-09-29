@@ -8,6 +8,20 @@ on:
 
 env:
   NODE_VERSION: 20
+  # ── Turborepo Remote Cache ──────────────────────────────────────────────────
+  # Set TURBO_TOKEN and TURBO_TEAM as repository secrets to enable Vercel's
+  # hosted remote cache (https://vercel.com/docs/monorepos/turborepo).
+  #
+  # Alternative — self-hosted cache (ducktors/turborepo-remote-cache):
+  #   TURBO_API: https://your-cache-server.example.com
+  #   TURBO_TOKEN: <your-token>
+  #   TURBO_TEAM: health-watchers
+  #
+  # When the secrets are absent the value expands to an empty string and Turbo
+  # silently falls back to the local filesystem cache (.turbo/), so the pipeline
+  # keeps working in forks and pre-secret environments without any changes.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
   # Stage 0: Lint workflow files

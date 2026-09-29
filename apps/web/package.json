@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "NEXT_DISABLE_LOCKFILE_PATCHING=1 next dev",
     "build": "next build && npm run analyze:bundle",
+    "build:analyze": "ANALYZE=true next build && npm run analyze:bundle",
     "start": "next start",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
@@ -50,6 +51,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^14.2.35",
     "@axe-core/playwright": "^4.10.1",
     "@babel/core": "^7.29.0",
     "@playwright/test": "^1.62.1",
@@ -70,6 +72,8 @@
     "fast-check": "^4.7.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "@size-limit/preset-app": "^11.1.6",
+    "size-limit": "^11.1.6"
   }
 }

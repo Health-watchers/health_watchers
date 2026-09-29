@@ -4,6 +4,12 @@ const withNextIntl = createNextIntlPlugin('./i18n.ts');
 /** @type {import('next').NextConfig} */
 const path = require('path');
 const { withSentryConfig } = require('@sentry/nextjs');
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  // Set ANALYZE=true to open the bundle treemap in the browser (or write it
+  // to disk in CI when no display is available).
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false, // never auto-open in CI
+});
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
@@ -177,7 +183,7 @@ const nextConfig = {
 
 process.env.NEXT_DISABLE_LOCKFILE_PATCHING = '1';
 
-module.exports = withSentryConfig(withNextIntl(nextConfig), {
+module.exports = withSentryConfig(withBundleAnalyzer(withNextIntl(nextConfig)), {
   silent: true,
   widenClientFileUpload: true,
   hideSourceMaps: true,
