@@ -1,0 +1,77 @@
+name: Nightly Full Test Suite
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  full-test-suite:
+    name: Full Test Suite (All Packages)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run all tests with coverage
+        run: npx turbo run test:coverage --concurrency=2
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
+          API_PORT: 3001
+      
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            apps/*/coverage/
+            packages/*/coverage/
+          retention-days: 30
+      
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "# 🌙 Nightly Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f apps/api/coverage/coverage-summary.json ]; then
+            API_COV=$(node -e "const c=require('./apps/api/coverage/coverage-summary.json'); console.log(c.total.lines.pct)")
+            echo "**API Coverage:** ${API_COV}%" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f apps/web/coverage/coverage-summary.json ]; then
+            WEB_COV=$(node -e "const c=require('./apps/web/coverage/coverage-summary.json'); console.log(c.total.lines.pct)")
+            echo "**Web Coverage:** ${WEB_COV}%" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ *Nightly test suite FAILED*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
+        continue-on-error: true

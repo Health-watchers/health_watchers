@@ -12,4 +12,25 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.stories.tsx',
+    '!src/**/__tests__/**',
+    '!src/**/*.test.{ts,tsx}',
+  ],
+  coverageThresholds: {
+    global: {
+      statements: 60,
+      branches: 55,
+      functions: 60,
+      lines: 60,
+    },
+    './src/components/ui/': {
+      statements: 80,
+      branches: 75,
+      functions: 80,
+      lines: 80,
+    },
+  },
 };
