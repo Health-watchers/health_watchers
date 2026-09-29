@@ -5,7 +5,7 @@
  * files can run in parallel across Jest workers without sharing data. The
  * binary is cached at ~/.cache/mongodb-binaries, so no network is needed.
  */
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet, MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
 export interface TestDb {
@@ -24,6 +24,35 @@ export async function startTestDb(): Promise<TestDb> {
 export async function stopTestDb(testDb: TestDb): Promise<void> {
   await mongoose.disconnect();
   await testDb.mongod.stop();
+}
+
+export interface ReplSetTestDb {
+  replSet: MongoMemoryReplSet;
+  uri: string;
+}
+
+/**
+ * Start a single-node in-memory replica set and connect Mongoose to it.
+ *
+ * A standalone mongod rejects multi-document transactions, so any suite that
+ * exercises `session.withTransaction` (patient merge, payment confirmation,
+ * invoice numbering) must use this instead of `startTestDb`. WiredTiger is
+ * required because the in-memory storage engine does not support transactions.
+ */
+export async function startReplSetTestDb(): Promise<ReplSetTestDb> {
+  const replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  await replSet.waitUntilRunning();
+  const uri = replSet.getUri();
+  await mongoose.connect(uri);
+  return { replSet, uri };
+}
+
+/** Disconnect Mongoose and stop the in-memory replica set. */
+export async function stopReplSetTestDb(testDb: ReplSetTestDb): Promise<void> {
+  await mongoose.disconnect();
+  await testDb.replSet.stop();
 }
 
 /**

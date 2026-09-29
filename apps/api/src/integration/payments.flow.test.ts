@@ -80,7 +80,12 @@ import request from 'supertest';
 import { paymentRoutes } from '../modules/payments/payments.controller';
 import { PaymentRecordModel } from '../modules/payments/models/payment-record.model';
 import { stellarClient } from '../modules/payments/services/stellar-client';
-import { startTestDb, stopTestDb, clearDb, TestDb } from './helpers/test-db';
+import {
+  startReplSetTestDb,
+  stopReplSetTestDb,
+  clearDb,
+  ReplSetTestDb,
+} from './helpers/test-db';
 import { createClinicWithAdmin, makeAccessToken } from './helpers/factories';
 
 function buildApp() {
@@ -116,11 +121,11 @@ function validTx(memo: string, amount = '10.00') {
 }
 
 describe('payment processing integration flows', () => {
-  let testDb: TestDb;
+  let testDb: ReplSetTestDb; // payment confirmation runs in a transaction
   let app: express.Express;
 
   beforeAll(async () => {
-    testDb = await startTestDb();
+    testDb = await startReplSetTestDb();
     app = buildApp();
   });
 
@@ -130,7 +135,7 @@ describe('payment processing integration flows', () => {
   });
 
   afterAll(async () => {
-    await stopTestDb(testDb);
+    await stopReplSetTestDb(testDb);
   });
 
   describe('POST /api/v1/payments/intent', () => {

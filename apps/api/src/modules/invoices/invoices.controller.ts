@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import QRCode from 'qrcode';
 import { Types } from 'mongoose';
 import { InvoiceModel } from './invoice.model';
-import { nextInvoiceNumber } from './invoice-counter.model';
+import { createNumberedInvoice } from './invoice-numbering.service';
 import { generateInvoicePDF } from './invoice-pdf.service';
 import { ClinicModel } from '../clinics/clinic.model';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
@@ -151,11 +151,7 @@ router.post(
       lineItems as { description: string; quantity: number; unitPrice: string }[]
     );
 
-    const invoiceNumber = await nextInvoiceNumber(req.user!.clinicId);
-    const stellarMemo = invoiceNumber; // use invoice number as memo
-
-    const invoice = await InvoiceModel.create({
-      invoiceNumber,
+    const invoice = await createNumberedInvoice(req.user!.clinicId, {
       clinicId: new Types.ObjectId(req.user!.clinicId),
       patientId: new Types.ObjectId(patientId),
       encounterId: encounterId ? new Types.ObjectId(encounterId) : undefined,
@@ -164,7 +160,6 @@ router.post(
       total,
       currency: resolvedCurrency,
       dueDate: new Date(dueDate),
-      stellarMemo,
       stellarDestination: destination,
     });
 
