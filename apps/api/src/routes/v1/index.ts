@@ -44,6 +44,7 @@ import { userRoutes } from '../../modules/users/users.controller';
 import { userManagementRoutes } from '../../modules/users/user-management.controller';
 
 // ── Clinical ──────────────────────────────────────────────────────────────────
+import { deprecated, V1_SUNSET_DATE } from '../../middlewares/api-versioning.middleware';
 import { patientRoutes } from '../../modules/patients/patients.controller';
 import { medicalHistoryRoutes } from '../../modules/patients/medical-history.controller';
 import { patientPhotoRoutes } from '../../modules/patients/photo.controller';
@@ -143,6 +144,8 @@ v1Router.use('/users', userRoutes);
 
 // ── Clinical group ────────────────────────────────────────────────────────────
 v1Router.use('/patients/search', patientSearchLimiter);
+// #1434 — the patient list has a v2 successor (cursor pagination, sparse fieldsets).
+v1Router.get('/patients', deprecated(V1_SUNSET_DATE, '/api/v2/patients'));
 v1Router.use('/patients', patientRoutes);
 v1Router.use('/patients', medicalHistoryRoutes);
 v1Router.use('/patients', patientPhotoRoutes);

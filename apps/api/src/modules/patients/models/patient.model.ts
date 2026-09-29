@@ -169,6 +169,12 @@ const patientSchema = new Schema<PatientDocument>(
 patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
 // #1069 — Patient list query: clinicId + isActive filter used with query hint
 patientSchema.index({ clinicId: 1, isActive: 1 }, { name: 'clinicId_1_isActive_1' });
+// #1434 — v2 keyset pagination: newest first with _id tie-breaker, so any page
+// is a single index seek (no skip).
+patientSchema.index(
+  { clinicId: 1, isActive: 1, createdAt: -1, _id: -1 },
+  { name: 'patients_clinicId_isActive_createdAt_id' }
+);
 patientSchema.index(
   { firstName: 'text', lastName: 'text', searchName: 'text', systemId: 'text' },
   {

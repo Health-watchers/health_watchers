@@ -20,6 +20,94 @@
       }
     },
     "schemas": {
+      "V2Patient": {
+        "type": "object",
+        "description": "Patient in the v2 list. With `fields`, only the requested properties are present.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "systemId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string"
+          },
+          "sex": {
+            "type": "string",
+            "enum": ["M", "F", "O"]
+          },
+          "contactNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "riskLevel": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"],
+            "nullable": true
+          },
+          "riskScore": {
+            "type": "number",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "photoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "V2Error": {
+        "type": "object",
+        "required": ["success", "version", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "version": {
+            "type": "string",
+            "example": "2.0"
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -128,6 +216,142 @@
     }
   ],
   "paths": {
+    "/patients": {
+      "servers": [
+        {
+          "url": "/api/v2",
+          "description": "API v2"
+        }
+      ],
+      "get": {
+        "summary": "List patients (v2) — cursor pagination and sparse fieldsets",
+        "description": "Successor of `GET /api/v1/patients`, which now returns `Deprecation`, `Sunset` and `Link: </api/v2/patients>; rel=\"successor-version\"` headers. Results are ordered newest first. Follow `links.next` (or pass `meta.nextCursor` as `cursor`) to fetch the next page; every page costs one index seek, so deep pages are as fast as the first.",
+        "tags": ["Patients"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque cursor from `meta.nextCursor`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset, e.g. `id,firstName,lastName`. Unknown fields return 400.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "id,firstName,lastName,riskLevel"
+          },
+          {
+            "name": "clinicId",
+            "in": "query",
+            "description": "SUPER_ADMIN only — list another clinic's patients.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["success", "version", "items", "meta", "links"],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "2.0"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/V2Patient"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "fields": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "self": {
+                          "type": "string"
+                        },
+                        "next": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query, unknown field or malformed cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          }
+        }
+      }
+    },
     "/payments/fee-estimate": {
       "get": {
         "summary": "Get Stellar network fee statistics",
