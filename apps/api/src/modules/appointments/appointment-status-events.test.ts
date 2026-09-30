@@ -57,8 +57,9 @@ jest.mock('../../services/socket.service', () => ({
 }));
 
 // ── Outbox (#1432): run in-process so socket events are published inline ──────
-jest.mock('@api/modules/outbox/outbox.service', () =>
-  require('@api/modules/outbox/__tests__/inline-outbox').inlineOutboxService
+jest.mock(
+  '@api/modules/outbox/outbox.service',
+  () => require('@api/modules/outbox/__tests__/inline-outbox').inlineOutboxService
 );
 
 // ── Realtime socket helper mock (used by video routes) ────────────────────────

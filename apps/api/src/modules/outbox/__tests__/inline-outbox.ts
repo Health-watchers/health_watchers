@@ -20,7 +20,8 @@ function publishSockets(event: OutboxEventInput): void {
       const { SocketService } = require('@api/services/socket.service');
       const service = SocketService.getInstance();
       if (!service) continue;
-      if (target.room === 'appointment') service.emitAppointmentUpdate(target.id, target.event, data);
+      if (target.room === 'appointment')
+        service.emitAppointmentUpdate(target.id, target.event, data);
       else if (target.room === 'clinic') service.emitToClinic(target.id, target.event, data);
       else service.emitToUser(target.id, target.event, data);
     } else {

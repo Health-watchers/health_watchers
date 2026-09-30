@@ -77,9 +77,8 @@ function toV2Patient(doc: Record<string, unknown>, fields: string[]): Record<str
     riskScore: doc.riskScore ?? null,
     isActive: doc.isActive ?? true,
   };
-  const out: Record<string, unknown> = {};
-  for (const field of fields) out[field] = withExtras[field] ?? null;
-  return out;
+  const source = new Map(Object.entries(withExtras));
+  return Object.fromEntries(fields.map((field) => [field, source.get(field) ?? null]));
 }
 
 patientRoutes.get(
@@ -89,14 +88,19 @@ patientRoutes.get(
     if (!parsed.success) {
       return res
         .status(400)
-        .json(v2Error('ValidationError', 'Invalid query parameters', { issues: parsed.error.issues }));
+        .json(
+          v2Error('ValidationError', 'Invalid query parameters', { issues: parsed.error.issues })
+        );
     }
     const { limit, cursor, fields: fieldsParam } = parsed.data;
 
     // Sparse fieldsets — reject unknown fields rather than silently dropping them.
     let fields = PATIENT_FIELD_CONFIG.defaultFields;
     if (fieldsParam) {
-      const { valid, invalidFields } = fieldSelector.validateRequestedFields('patient', fieldsParam);
+      const { valid, invalidFields } = fieldSelector.validateRequestedFields(
+        'patient',
+        fieldsParam
+      );
       if (!valid) {
         return res.status(400).json(
           v2Error('InvalidFields', `Unknown fields: ${invalidFields.join(', ')}`, {
@@ -126,10 +130,11 @@ patientRoutes.get(
     }
 
     // Always fetch the sort keys so the next cursor can be built.
-    const projection: Record<string, 1> = { _id: 1, createdAt: 1 };
-    for (const field of fields) {
-      if (field !== 'id') projection[field] = 1;
-    }
+    const projection: Record<string, 1> = Object.fromEntries([
+      ['_id', 1],
+      ['createdAt', 1],
+      ...fields.filter((field) => field !== 'id').map((field) => [field, 1]),
+    ]);
 
     const docs = await PatientModel.find(filter)
       .select(projection)

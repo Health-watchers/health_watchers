@@ -174,9 +174,8 @@ export async function deliverOutboxEvent(eventId: string): Promise<IOutboxEvent[
   const newlyDelivered: string[] = [];
   let failure: unknown;
 
-  for (let i = 0; i < event.targets.length; i++) {
+  for (const [i, target] of event.targets.entries()) {
     if (delivered.has(String(i))) continue;
-    const target = event.targets[i];
     try {
       const keys = await publishTarget(event, target, i, delivered);
       keys.forEach((k) => delivered.add(k));
@@ -242,7 +241,9 @@ export async function refreshOutboxMetrics(now: Date = new Date()): Promise<void
   ]);
   outboxPendingEvents.set(pending);
   outboxLagSeconds.set(
-    oldest?.createdAt ? Math.max(0, (now.getTime() - new Date(oldest.createdAt).getTime()) / 1000) : 0
+    oldest?.createdAt
+      ? Math.max(0, (now.getTime() - new Date(oldest.createdAt).getTime()) / 1000)
+      : 0
   );
 }
 

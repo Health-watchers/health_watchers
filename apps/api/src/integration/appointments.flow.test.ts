@@ -47,12 +47,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { appointmentRoutes } from '../modules/appointments/appointments.controller';
 import { AppointmentModel } from '../modules/appointments/appointment.model';
-import {
-  startReplSetTestDb,
-  stopReplSetTestDb,
-  clearDb,
-  ReplSetTestDb,
-} from './helpers/test-db';
+import { startReplSetTestDb, stopReplSetTestDb, clearDb, ReplSetTestDb } from './helpers/test-db';
 import {
   createClinicWithAdmin,
   createPatient,

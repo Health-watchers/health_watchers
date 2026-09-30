@@ -93,7 +93,7 @@ function resolveEnabled(def: JobDefinition, env: NodeJS.ProcessEnv): boolean {
   return raw === undefined ? true : !['false', '0', 'no', 'off'].includes(raw.toLowerCase());
 }
 
-const statsKey = (name: string) => `hw:jobs:stats:${name}`;
+const statsKey = (name: string): string => `hw:jobs:stats:${name}`;
 
 /** Redis reads use maxRetriesPerRequest=null (BullMQ requirement) and would
  *  otherwise wait forever while Redis is down. */

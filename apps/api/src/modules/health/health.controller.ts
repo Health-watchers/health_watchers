@@ -6,7 +6,10 @@ import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getErrorMetrics } from '../../middlewares/error.middleware';
-import { getClusterJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
+import {
+  getClusterJobStatus,
+  CHECK_INTERVAL_MS,
+} from '../payments/services/payment-expiration-job';
 import { currentTraceId } from '../../utils/tracer';
 import { getRequestId } from '../../utils/request-id';
 

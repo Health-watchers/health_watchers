@@ -14,13 +14,27 @@ export interface V2ListMeta {
   [key: string]: unknown;
 }
 
-export function v2List<T>(req: Request, items: T[], meta: V2ListMeta) {
+export interface V2ListResponse<T> {
+  success: true;
+  version: '2.0';
+  items: T[];
+  meta: V2ListMeta & { requestId?: string };
+  links: { self: string; next: string | null };
+}
+
+export interface V2ErrorResponse {
+  success: false;
+  version: '2.0';
+  error: { code: string; message: string } & Record<string, unknown>;
+}
+
+export function v2List<T>(req: Request, items: T[], meta: V2ListMeta): V2ListResponse<T> {
   const self = `${req.baseUrl}${req.path === '/' ? '' : req.path}`;
   const next = meta.nextCursor ? new URLSearchParams(req.query as Record<string, string>) : null;
-  if (next) next.set('cursor', meta.nextCursor!);
+  if (next && meta.nextCursor) next.set('cursor', meta.nextCursor);
   return {
-    success: true as const,
-    version: '2.0' as const,
+    success: true,
+    version: '2.0',
     items,
     meta: { ...meta, requestId: req.requestId ?? (req.headers['x-request-id'] as string) },
     links: {
@@ -30,6 +44,10 @@ export function v2List<T>(req: Request, items: T[], meta: V2ListMeta) {
   };
 }
 
-export function v2Error(code: string, message: string, details?: Record<string, unknown>) {
-  return { success: false as const, version: '2.0' as const, error: { code, message, ...details } };
+export function v2Error(
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+): V2ErrorResponse {
+  return { success: false, version: '2.0', error: { code, message, ...details } };
 }

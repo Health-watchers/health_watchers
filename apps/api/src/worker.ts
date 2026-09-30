@@ -28,7 +28,7 @@ async function startWorker(): Promise<void> {
     await startJobScheduler();
     logger.info({ jobs: JOB_DEFINITIONS.map((j) => j.name) }, '✅ Job scheduler started');
 
-    const shutdown = async (signal: string) => {
+    const shutdown = async (signal: string): Promise<void> => {
       logger.info(`${signal} received — stopping job scheduler`);
       try {
         await stopJobScheduler();

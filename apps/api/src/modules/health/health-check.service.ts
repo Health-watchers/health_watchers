@@ -5,7 +5,10 @@ import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getErrorMetrics } from '../../middlewares/error.middleware';
-import { getClusterJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
+import {
+  getClusterJobStatus,
+  CHECK_INTERVAL_MS,
+} from '../payments/services/payment-expiration-job';
 import logger from '../../utils/logger';
 
 export type ServiceStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';

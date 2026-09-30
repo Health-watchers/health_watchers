@@ -91,7 +91,9 @@ describe('GET /api/v2/patients', () => {
       `/api/v2/patients?cursor=${encodeURIComponent(res.body.meta.nextCursor)}`
     );
     // Newest first
-    expect(res.body.items[0].systemId).toBe(`HW-${CLINIC_A.slice(-6)}-${String(TOTAL_A - 1).padStart(6, '0')}`);
+    expect(res.body.items[0].systemId).toBe(
+      `HW-${CLINIC_A.slice(-6)}-${String(TOTAL_A - 1).padStart(6, '0')}`
+    );
     // PHI is decrypted in the response
     expect(res.body.items[0].dateOfBirth).toBe('1990-01-01');
   });

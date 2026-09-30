@@ -64,7 +64,14 @@ async function main(): Promise<void> {
 
   console.log(
     JSON.stringify(
-      { replicas, seconds, executions: runs.length, ticks: perSlot.size, duplicates, executingPids: pids.size },
+      {
+        replicas,
+        seconds,
+        executions: runs.length,
+        ticks: perSlot.size,
+        duplicates,
+        executingPids: pids.size,
+      },
       null,
       2
     )

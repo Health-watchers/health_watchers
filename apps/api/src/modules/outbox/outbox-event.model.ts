@@ -72,7 +72,7 @@ const outboxEventSchema = new Schema<IOutboxEvent>(
       default: 'pending',
     },
     attempts: { type: Number, default: 0 },
-    nextAttemptAt: { type: Date, default: () => new Date() },
+    nextAttemptAt: { type: Date, default: (): Date => new Date() },
     lockedUntil: { type: Date, default: null },
     lastError: { type: String },
     deliveredAt: { type: Date },

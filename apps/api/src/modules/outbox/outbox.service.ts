@@ -73,9 +73,7 @@ export function dispatchCommittedOutboxEvents(eventIds: string[]): void {
   setImmediate(() => {
     // Lazy import breaks the service → relay → webhook → service import cycle.
     import('./outbox.relay')
-      .then(({ deliverOutboxEvent }) =>
-        Promise.all(eventIds.map((id) => deliverOutboxEvent(id)))
-      )
+      .then(({ deliverOutboxEvent }) => Promise.all(eventIds.map((id) => deliverOutboxEvent(id))))
       .catch((err) =>
         logger.warn({ err, eventIds }, '[outbox] fast-path delivery failed — sweep will retry')
       );

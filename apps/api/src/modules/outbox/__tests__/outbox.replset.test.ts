@@ -30,7 +30,11 @@ jest.mock('axios', () => ({
 
 import axios from 'axios';
 import { register } from '@api/services/metrics.service';
-import { startReplSetTestDb, stopReplSetTestDb, ReplSetTestDb } from '../../../integration/helpers/test-db';
+import {
+  startReplSetTestDb,
+  stopReplSetTestDb,
+  ReplSetTestDb,
+} from '../../../integration/helpers/test-db';
 import { emitToClinic } from '@api/realtime/socket';
 import { createNotification } from '@api/modules/notifications/notification.service';
 import { PaymentRecordModel } from '@api/modules/payments/models/payment-record.model';
@@ -77,7 +81,13 @@ beforeAll(async () => {
   // not what this suite is about, so only build the ones it relies on.
   mongoose.set('autoIndex', false);
   testDb = await startReplSetTestDb();
-  for (const model of [PaymentRecordModel, InvoiceModel, UserModel, WebhookModel, WebhookEventLogModel]) {
+  for (const model of [
+    PaymentRecordModel,
+    InvoiceModel,
+    UserModel,
+    WebhookModel,
+    WebhookEventLogModel,
+  ]) {
     await model.createCollection();
   }
   await OutboxEventModel.syncIndexes();
@@ -95,9 +105,14 @@ beforeEach(async () => {
   postMock.mockResolvedValue({ status: 200, data: 'ok' });
   notifyMock.mockResolvedValue({});
   await Promise.all(
-    [OutboxEventModel, PaymentRecordModel, InvoiceModel, WebhookModel, WebhookDeliveryModel, WebhookEventLogModel].map(
-      (m) => m.deleteMany({})
-    )
+    [
+      OutboxEventModel,
+      PaymentRecordModel,
+      InvoiceModel,
+      WebhookModel,
+      WebhookDeliveryModel,
+      WebhookEventLogModel,
+    ].map((m) => m.deleteMany({}))
   );
 });
 
@@ -292,7 +307,10 @@ describe('deliverOutboxEvent', () => {
   });
 
   it('reports outbox lag and backlog', async () => {
-    await seedEvent({ createdAt: new Date(Date.now() - 90_000), nextAttemptAt: new Date(Date.now() + 60_000) });
+    await seedEvent({
+      createdAt: new Date(Date.now() - 90_000),
+      nextAttemptAt: new Date(Date.now() + 60_000),
+    });
     await refreshOutboxMetrics();
     expect(await gaugeValue('outbox_pending_events')).toBe(1);
     expect(await gaugeValue('outbox_lag_seconds')).toBeGreaterThanOrEqual(89);

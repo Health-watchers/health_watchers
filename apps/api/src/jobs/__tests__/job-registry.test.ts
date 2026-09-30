@@ -103,7 +103,12 @@ describe('JobRegistry.start', () => {
 
   it('uses JOB_<NAME>_CRON to override the schedule', async () => {
     const { registry } = makeRegistry({ JOB_XLM_RATE_CRON: '*/10 * * * *' });
-    registry.register({ name: 'xlm-rate', cron: '*/5 * * * *', description: '', handler: jest.fn() });
+    registry.register({
+      name: 'xlm-rate',
+      cron: '*/5 * * * *',
+      description: '',
+      handler: jest.fn(),
+    });
 
     await registry.start();
 
@@ -117,7 +122,12 @@ describe('JobRegistry.start', () => {
 
   it('removes the scheduler of a job disabled with JOB_<NAME>_ENABLED=false', async () => {
     const { registry } = makeRegistry({ JOB_WEBHOOK_RETRY_ENABLED: 'false' });
-    registry.register({ name: 'webhook-retry', cron: '* * * * *', description: '', handler: jest.fn() });
+    registry.register({
+      name: 'webhook-retry',
+      cron: '* * * * *',
+      description: '',
+      handler: jest.fn(),
+    });
     registry.register({ name: 'other', cron: '* * * * *', description: '', handler: jest.fn() });
 
     await registry.start();
@@ -220,7 +230,12 @@ describe('JobRegistry.execute', () => {
 describe('JobRegistry.list', () => {
   it('reports cron, enabled flag, last run, next run and failure counts', async () => {
     const { registry, redis } = makeRegistry({ JOB_BETA_ENABLED: 'false' });
-    registry.register({ name: 'alpha', cron: '*/5 * * * *', description: 'Alpha', handler: jest.fn() });
+    registry.register({
+      name: 'alpha',
+      cron: '*/5 * * * *',
+      description: 'Alpha',
+      handler: jest.fn(),
+    });
     registry.register({ name: 'beta', cron: '0 * * * *', description: 'Beta', handler: jest.fn() });
     redis.hashes.set('hw:jobs:stats:alpha', {
       lastRunAt: '2026-09-29T10:00:00.000Z',
