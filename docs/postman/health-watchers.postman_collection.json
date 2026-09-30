@@ -45,6 +45,184 @@
   ],
   "item": [
     {
+      "name": "FHIR R4",
+      "description": "Read-only FHIR R4 API (#1435). Set `fhir_api_key` to a clinic API key with `patient/*.read`.",
+      "item": [
+        {
+          "name": "CapabilityStatement",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/r4/metadata",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "r4", "metadata"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('CapabilityStatement', () => pm.expect(pm.response.json().resourceType).to.eql('CapabilityStatement'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Patient by identifier",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{fhir_api_key}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/r4/Patient?identifier={{patient_system_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "r4", "Patient"],
+              "query": [
+                {
+                  "key": "identifier",
+                  "value": "{{patient_system_id}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('searchset Bundle', () => pm.expect(b.type).to.eql('searchset'));",
+                  "if (b.entry && b.entry.length) pm.environment.set('fhir_patient_id', b.entry[0].resource.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read Patient",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{fhir_api_key}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/r4/Patient/{{fhir_patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "r4", "Patient", "{{fhir_patient_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Search Encounters for patient",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{fhir_api_key}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/r4/Encounter?patient=Patient/{{fhir_patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "r4", "Encounter"],
+              "query": [
+                {
+                  "key": "patient",
+                  "value": "Patient/{{fhir_patient_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search vital signs for patient",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{fhir_api_key}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/r4/Observation?patient=Patient/{{fhir_patient_id}}&category=vital-signs",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "r4", "Observation"],
+              "query": [
+                {
+                  "key": "patient",
+                  "value": "Patient/{{fhir_patient_id}}"
+                },
+                {
+                  "key": "category",
+                  "value": "vital-signs"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth",
       "item": [
         {

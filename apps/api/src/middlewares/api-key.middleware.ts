@@ -110,7 +110,9 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
   (req as any).apiKey = context;
 
   // Update lastUsedAt + usage tracking (fire-and-forget)
-  ApiKeyModel.findByIdAndUpdate(apiKey._id, { lastUsedAt: new Date() }).exec();
+  Promise.resolve(
+    ApiKeyModel.findByIdAndUpdate(apiKey._id, { lastUsedAt: new Date() }).exec()
+  ).catch(() => undefined);
   trackApiKeyUsage(context.id, context.clinicId, req.path, 'request');
 
   return next();

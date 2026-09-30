@@ -25,7 +25,19 @@ export type ApiKeyScope =
   | 'encounters:write'
   | 'payments:read'
   | 'payments:write'
-  | 'lab-results:write';
+  | 'lab-results:write'
+  // #1435 — SMART-on-FHIR style read scopes for the /fhir/r4 API
+  | 'patient/*.read'
+  | 'patient/Patient.read'
+  | 'patient/Encounter.read'
+  | 'patient/Observation.read';
+
+export const FHIR_SCOPES = [
+  'patient/*.read',
+  'patient/Patient.read',
+  'patient/Encounter.read',
+  'patient/Observation.read',
+] as const satisfies readonly ApiKeyScope[];
 
 export const ALL_SCOPES: ApiKeyScope[] = [
   'patients:read',
@@ -35,6 +47,7 @@ export const ALL_SCOPES: ApiKeyScope[] = [
   'payments:read',
   'payments:write',
   'lab-results:write',
+  ...FHIR_SCOPES,
 ];
 
 export type ApiKeyEnvironment = 'live' | 'test';

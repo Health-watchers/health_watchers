@@ -32,6 +32,7 @@ import {
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { startJobScheduler, stopJobScheduler } from './jobs';
 import { jobsAdminRouter } from './jobs/jobs-admin.controller';
+import { fhirRouter } from './modules/fhir/fhir.router';
 import { warmCache, registerWarmup } from './services/cache.service';
 
 // ── #1071 Cache warm-up registrations ─────────────────────────────────────────
@@ -218,6 +219,9 @@ app.use('/api/v2', rateLimitMonitor);
 app.use('/api/v2', generalLimiter);
 app.use('/api/v2', responseFilterMiddleware);
 app.use('/api/v2', v2Router);
+
+// ── FHIR R4 read API (#1435) — clinic API keys with patient/*.read scopes ─────
+app.use('/fhir/r4', generalLimiter, fhirRouter);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 // Mounted at root level to comply with Stellar federation protocol standards

@@ -13,3 +13,6 @@ apps/api/src/modules/appointments/appointments.controller.ts
 apps/api/src/modules/auth/refresh-token-rotation.test.ts
 apps/web/src/components/ui/Toast.tsx
 scripts/seed.ts
+
+# Generated verbatim from the official HL7 FHIR R4 schema (scripts/fhir/extract-r4-schema.js)
+apps/api/src/modules/fhir/__tests__/fixtures/

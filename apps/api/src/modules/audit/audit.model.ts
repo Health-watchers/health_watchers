@@ -59,7 +59,8 @@ export type AuditAction =
   | 'TELEHEALTH_RECORDING_CONSENT'
   | 'TELEHEALTH_RECORDING_START'
   | 'TELEHEALTH_RECORDING_STOP'
-  | 'TELEHEALTH_SESSION_ARCHIVE';
+  | 'TELEHEALTH_SESSION_ARCHIVE'
+  | 'FHIR_ACCESS';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -142,6 +143,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'TELEHEALTH_RECORDING_START',
         'TELEHEALTH_RECORDING_STOP',
         'TELEHEALTH_SESSION_ARCHIVE',
+        'FHIR_ACCESS',
       ],
       index: true,
     },
