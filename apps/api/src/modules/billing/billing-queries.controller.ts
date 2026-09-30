@@ -4,39 +4,71 @@ import { EncounterModel } from '../encounters/encounter.model';
 import { InvoiceModel } from '../invoices/invoice.model';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { buildAgingReport } from './billing-aging';
+import { paginate, parsePagination } from '@api/utils/paginate';
 
-/** Encounters with no billing codes assigned yet. */
+const BILLING_SORT_FIELDS: Record<string, Record<string, 1 | -1>> = {
+  date_asc: { 'billing.billedAt': 1, createdAt: 1 },
+  date_desc: { 'billing.billedAt': -1, createdAt: -1 },
+  amount_asc: { 'billing.totalFee': 1, createdAt: -1 },
+  amount_desc: { 'billing.totalFee': -1, createdAt: -1 },
+};
+const DEFAULT_SORT = BILLING_SORT_FIELDS.date_desc;
+
+/** Encounters with no billing codes assigned yet — paginated + sortable. */
 export async function getUnbilledEncounters(req: Request, res: Response) {
   const { clinicId } = req.user!;
 
-  const encounters = await EncounterModel.find({
-    clinicId,
-    'billing.billingStatus': 'unbilled',
-  })
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .populate('patientId', 'firstName lastName systemId')
-    .populate('attendingDoctorId', 'fullName')
-    .lean();
+  const pagination = parsePagination(req.query as Record<string, unknown>);
+  if (!pagination) {
+    return res.status(400).json({ success: false, message: 'Invalid pagination: limit must be 1–100' });
+  }
+  const sortKey = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'date_desc';
+  const sort = BILLING_SORT_FIELDS[sortKey] ?? DEFAULT_SORT;
 
-  return res.json({ success: true, data: encounters });
+  const { data: encounters, meta } = await paginate(
+    EncounterModel as any,
+    { clinicId, 'billing.billingStatus': 'unbilled' },
+    pagination.page,
+    pagination.limit,
+    sort,
+    { hint: 'clinicId_1_billingStatus_1_date_1' }
+  );
+
+  // Populate patient and doctor info
+  await EncounterModel.populate(encounters, [
+    { path: 'patientId', select: 'firstName lastName systemId' },
+    { path: 'attendingDoctorId', select: 'fullName' },
+  ]);
+
+  return res.json({ success: true, data: encounters, meta });
 }
 
-/** Encounters whose claims were denied by the payer. */
+/** Encounters whose claims were denied by the payer — paginated + sortable. */
 export async function getDeniedEncounters(req: Request, res: Response) {
   const { clinicId } = req.user!;
 
-  const encounters = await EncounterModel.find({
-    clinicId,
-    'billing.billingStatus': 'denied',
-  })
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .populate('patientId', 'firstName lastName systemId')
-    .populate('attendingDoctorId', 'fullName')
-    .lean();
+  const pagination = parsePagination(req.query as Record<string, unknown>);
+  if (!pagination) {
+    return res.status(400).json({ success: false, message: 'Invalid pagination: limit must be 1–100' });
+  }
+  const sortKey = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'date_desc';
+  const sort = BILLING_SORT_FIELDS[sortKey] ?? DEFAULT_SORT;
 
-  return res.json({ success: true, data: encounters });
+  const { data: encounters, meta } = await paginate(
+    EncounterModel as any,
+    { clinicId, 'billing.billingStatus': 'denied' },
+    pagination.page,
+    pagination.limit,
+    sort,
+    { hint: 'clinicId_1_billingStatus_1_date_1' }
+  );
+
+  await EncounterModel.populate(encounters, [
+    { path: 'patientId', select: 'firstName lastName systemId' },
+    { path: 'attendingDoctorId', select: 'fullName' },
+  ]);
+
+  return res.json({ success: true, data: encounters, meta });
 }
 
 /** Aging report: unbilled encounters bucketed by days since service. */

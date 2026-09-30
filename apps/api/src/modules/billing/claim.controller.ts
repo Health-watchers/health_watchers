@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { InsuranceClaimModel, CLAIM_STATUSES, type ClaimStatus } from './claim.model';
 import { buildCms1500, buildEdi837 } from './claim-builder';
 import { EncounterModel } from '../encounters/encounter.model';
+import { auditLog } from '../audit/audit.service';
+import { WebhookModel } from '../webhooks/webhook.model';
+import { enqueueWebhookDelivery } from '../webhooks/webhook.service';
 
 const objectId = (v: string) => (Types.ObjectId.isValid(v) ? new Types.ObjectId(v) : null);
 
@@ -23,6 +26,41 @@ async function syncEncounterStatus(
   if (billingStatus === 'billed') update['billing.billedAt'] = new Date();
   if (claimId) update['billing.insuranceClaimId'] = claimId;
   await EncounterModel.updateOne({ _id: encounterId }, { $set: update }).catch(() => undefined);
+}
+
+/**
+ * Dispatch a webhook event to all registered webhooks for the clinic that
+ * subscribe to this event. Errors are silenced — webhooks must never break the
+ * main request flow.
+ */
+async function dispatchClaimWebhook(
+  clinicId: string,
+  event: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    const webhooks = await WebhookModel.find({
+      clinicId,
+      events: event,
+      isActive: true,
+    })
+      .select('_id url secret')
+      .lean();
+
+    await Promise.all(
+      webhooks.map((wh) =>
+        enqueueWebhookDelivery(
+          String(wh._id),
+          event,
+          wh.url,
+          wh.secret,
+          payload
+        ).catch(() => undefined)
+      )
+    );
+  } catch {
+    // Non-fatal — webhook dispatch failures must not interrupt claims processing
+  }
 }
 
 /**
@@ -73,6 +111,19 @@ export async function generateClaim(req: Request, res: Response) {
     });
 
     await syncEncounterStatus(encounterId, 'billed', String(claim._id));
+
+    await auditLog(
+      {
+        action: 'CREATE',
+        resourceType: 'InsuranceClaim',
+        resourceId: String(claim._id),
+        userId: req.user?.userId,
+        clinicId,
+        outcome: 'SUCCESS',
+        metadata: { encounterId, patientId, cptCodes, totalAmount: claim.totalAmount },
+      },
+      req
+    );
 
     return res.status(201).json({ success: true, data: claim });
   } catch (err: any) {
@@ -176,6 +227,39 @@ export async function submitClaims(req: Request, res: Response) {
 
   const submitted = eligibleIds.map(String);
   const skipped = parsed.data.claimIds.filter((id) => !submitted.includes(id));
+
+  // Audit log for bulk submission
+  for (const claimId of submitted) {
+    await auditLog(
+      {
+        action: 'UPDATE',
+        resourceType: 'InsuranceClaim',
+        resourceId: claimId,
+        userId: req.user?.userId,
+        clinicId: req.user!.clinicId,
+        outcome: 'SUCCESS',
+        metadata: { statusChange: 'draft → submitted' },
+      },
+      req
+    );
+  }
+
+  // Dispatch claim.submitted webhook events
+  await Promise.all(
+    submitted.map(async (claimId) => {
+      const claim = await InsuranceClaimModel.findById(claimId).lean();
+      if (claim) {
+        await dispatchClaimWebhook(String(claim.clinicId), 'claim.submitted', {
+          claimId,
+          patientId: String(claim.patientId),
+          clinicId: String(claim.clinicId),
+          totalAmount: claim.totalAmount,
+          submittedAt: new Date().toISOString(),
+        });
+      }
+    })
+  );
+
   return res.json({ success: true, data: { submitted, skipped } });
 }
 
@@ -206,6 +290,28 @@ export async function denyClaim(req: Request, res: Response) {
     return res.status(404).json({ success: false, message: 'Submitted claim not found' });
   }
   await syncEncounterStatus(claim.encounterId, 'denied');
+
+  await auditLog(
+    {
+      action: 'UPDATE',
+      resourceType: 'InsuranceClaim',
+      resourceId: String(claim._id),
+      userId: req.user?.userId,
+      clinicId: String(claim.clinicId),
+      outcome: 'SUCCESS',
+      metadata: { statusChange: `${claim.status} → rejected`, reason: parsed.data.reason },
+    },
+    req
+  );
+
+  await dispatchClaimWebhook(String(claim.clinicId), 'claim.denied', {
+    claimId: String(claim._id),
+    patientId: String(claim.patientId),
+    clinicId: String(claim.clinicId),
+    denialReason: parsed.data.reason,
+    deniedAt: new Date().toISOString(),
+  });
+
   return res.json({ success: true, data: claim });
 }
 
@@ -272,6 +378,22 @@ export async function resubmitClaim(req: Request, res: Response) {
   await claim.save();
   await syncEncounterStatus(claim.encounterId, 'billed');
 
+  await auditLog(
+    {
+      action: 'UPDATE',
+      resourceType: 'InsuranceClaim',
+      resourceId: String(claim._id),
+      userId: req.user?.userId,
+      clinicId: String(claim.clinicId),
+      outcome: 'SUCCESS',
+      metadata: {
+        statusChange: 'rejected → resubmitted',
+        resubmissionCount: claim.resubmissionCount,
+      },
+    },
+    req
+  );
+
   return res.json({ success: true, data: claim });
 }
 
@@ -298,6 +420,20 @@ export async function writeOffClaim(req: Request, res: Response) {
     { new: true }
   );
   if (!claim) return res.status(404).json({ success: false, message: 'Open claim not found' });
+
+  await auditLog(
+    {
+      action: 'UPDATE',
+      resourceType: 'InsuranceClaim',
+      resourceId: String(claim._id),
+      userId: req.user?.userId,
+      clinicId: String(claim.clinicId),
+      outcome: 'SUCCESS',
+      metadata: { statusChange: `${claim.status} → written_off`, reason: parsed.data.reason },
+    },
+    req
+  );
+
   return res.json({ success: true, data: claim });
 }
 
