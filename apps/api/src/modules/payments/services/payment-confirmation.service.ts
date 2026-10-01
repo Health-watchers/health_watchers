@@ -1,11 +1,11 @@
 import logger from '@api/utils/logger';
 import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
-import { emitToClinic } from '@api/realtime/socket';
-import { createNotification } from '@api/modules/notifications/notification.service';
 import { UserModel } from '@api/modules/auth/models/user.model';
 import { PaymentRecordModel } from '../models/payment-record.model';
-import { WebhookModel } from '@api/modules/webhooks/webhook.model';
-import { enqueueWebhookDelivery } from '@api/modules/webhooks/webhook.service';
+import {
+  recordOutboxEvent,
+  dispatchCommittedOutboxEvents,
+} from '@api/modules/outbox/outbox.service';
 import { paymentsConfirmedTotal } from '@api/services/metrics.service';
 import { getCurrentXLMRate } from './xlm-rate.service';
 
@@ -24,6 +24,10 @@ export interface ConfirmPaymentResult {
 /**
  * Confirm a payment record and dispatch all post-confirmation side-effects:
  * email, WebSocket, in-app notification, invoice update, outbound webhooks, metrics.
+ *
+ * The WebSocket event, admin notifications and outbound webhooks are written
+ * to the transactional outbox in the same transaction as the status change
+ * (#1432), so a crash after commit can no longer lose them.
  */
 export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<ConfirmPaymentResult> {
   const { intentId, txHash, allowAlreadyConfirmed = false } = opts;
@@ -57,6 +61,14 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
   // status filter makes the transition idempotent under concurrent confirms —
   // only one caller can move the payment out of its unconfirmed state.
   const { InvoiceModel } = await import('../../invoices/invoice.model');
+  const clinicId = String(payment.clinicId);
+  const admins = await UserModel.find({
+    clinicId,
+    role: { $in: ['CLINIC_ADMIN', 'SUPER_ADMIN'] },
+  })
+    .select('_id')
+    .lean();
+  let outboxEventId: string | null = null;
   // Assigned inside the transaction callback; the cast stops TS narrowing it to null.
   let updated = null as ConfirmPaymentResult['payment'];
   const session = await PaymentRecordModel.startSession();
@@ -74,6 +86,49 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
         { status: 'paid', paidAt: new Date(), paidTxHash: txHash },
         { session }
       );
+
+      outboxEventId = await recordOutboxEvent(
+        {
+          type: 'payment.confirmed',
+          aggregateType: 'PaymentRecord',
+          aggregateId: String(updated._id),
+          clinicId,
+          payload: {
+            paymentId: String(updated._id),
+            intentId,
+            amount: updated.amount,
+            assetCode: updated.assetCode,
+            destination: updated.destination,
+            txHash,
+            usdEquivalent,
+            confirmedAt: updated.confirmedAt,
+          },
+          targets: [
+            { kind: 'webhook', event: 'payment.confirmed' },
+            {
+              kind: 'socket',
+              room: 'clinic',
+              id: clinicId,
+              event: 'payment:confirmed',
+              data: {
+                paymentId: String(updated._id),
+                txHash,
+                amount: updated.amount,
+                assetCode: updated.assetCode,
+              },
+            },
+            {
+              kind: 'notification',
+              userIds: admins.map((a) => String(a._id)),
+              notificationType: 'payment_confirmed',
+              title: 'Payment Confirmed',
+              message: `Payment of ${updated.amount} ${updated.assetCode} confirmed on Stellar.`,
+              metadata: { intentId, txHash, amount: updated.amount },
+            },
+          ],
+        },
+        session
+      );
     });
   } finally {
     await session.endSession();
@@ -88,16 +143,7 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
 
   logger.info({ intentId, txHash }, 'payment-confirmation-service: payment confirmed');
   paymentsConfirmedTotal.inc({ currency: updated.assetCode ?? 'XLM' });
-
-  const clinicId = String(updated.clinicId);
-
-  // Emit WebSocket event to clinic
-  emitToClinic(clinicId, 'payment:confirmed', {
-    paymentId: String(updated._id),
-    txHash,
-    amount: updated.amount,
-    assetCode: updated.assetCode,
-  });
+  if (outboxEventId) dispatchCommittedOutboxEvents([outboxEventId]);
 
   // Send email to clinic admin
   try {
@@ -105,57 +151,6 @@ export async function confirmPayment(opts: ConfirmPaymentOptions): Promise<Confi
     const clinic = await ClinicModel.findById(clinicId).lean();
     if (clinic?.email) {
       sendPaymentConfirmationEmail(clinic.email, updated.amount, updated.assetCode, txHash);
-    }
-  } catch {
-    /* non-critical */
-  }
-
-  // Create in-app notifications for clinic admins
-  try {
-    const admins = await UserModel.find({
-      clinicId,
-      role: { $in: ['CLINIC_ADMIN', 'SUPER_ADMIN'] },
-    })
-      .select('_id')
-      .lean();
-    for (const admin of admins) {
-      createNotification({
-        userId: admin._id,
-        clinicId,
-        type: 'payment_confirmed',
-        title: 'Payment Confirmed',
-        message: `Payment of ${updated.amount} ${updated.assetCode} confirmed on Stellar.`,
-        metadata: { intentId, txHash, amount: updated.amount },
-      }).catch(() => {
-        /* non-critical */
-      });
-    }
-  } catch {
-    /* non-critical */
-  }
-
-  // Dispatch outbound webhooks registered for this clinic
-  try {
-    const webhooks = await WebhookModel.find({
-      clinicId,
-      events: 'payment.confirmed',
-      isActive: true,
-    });
-    for (const wh of webhooks) {
-      enqueueWebhookDelivery(String(wh._id), 'payment.confirmed', wh.url, wh.secret, {
-        event: 'payment.confirmed',
-        data: {
-          intentId,
-          amount: updated.amount,
-          assetCode: updated.assetCode,
-          destination: updated.destination,
-          txHash,
-          usdEquivalent,
-          confirmedAt: updated.confirmedAt,
-        },
-      }).catch(() => {
-        /* non-critical */
-      });
     }
   } catch {
     /* non-critical */

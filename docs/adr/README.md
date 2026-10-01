@@ -48,6 +48,7 @@ An ADR documents a significant architectural decision — what was decided, why,
 | [ADR-018](ADR-018-consent-management.md) | Consent Management and Versioning | Accepted | 2024-06-18 |
 | [ADR-019](ADR-019-ai-risk-stratification.md) | AI-Powered Risk Stratification | Accepted | 2024-06-25 |
 | [ADR-020](ADR-020-rate-limiting-throttling.md) | Rate Limiting and Throttling | Accepted | 2024-07-01 |
+| [ADR-021](ADR-021-transactional-outbox.md) | Transactional Outbox for Domain Events | Accepted | 2026-09-29 |
 
 ---
 
@@ -73,6 +74,7 @@ An ADR documents a significant architectural decision — what was decided, why,
 ### Data
 - [ADR-005](ADR-005-data-modeling.md) — MongoDB document model, ESR indexes, TTL, migrations
 - [ADR-006](ADR-006-caching-strategy.md) — Redis cache, graceful fallback, SCAN invalidation, warm-up
+- [ADR-021](ADR-021-transactional-outbox.md) — Transactional outbox, at-least-once webhooks/notifications/socket events
 
 ### Features
 - [ADR-013](ADR-013-i18n-multi-language.md) — next-intl, 5 locales, CI translation check

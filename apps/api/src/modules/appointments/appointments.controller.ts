@@ -15,7 +15,8 @@ import {
   doctorIdParamsSchema,
   videoStartSchema,
 } from './appointments.validation';
-import { SocketService } from '../../services/socket.service';
+import { withOutboxTransaction, OutboxEventInput } from '../outbox/outbox.service';
+import type { OutboxTarget } from '../outbox/outbox-event.model';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
@@ -58,39 +59,64 @@ async function hasConflict(
   });
 }
 
-async function emitAppointmentStatusChange(
+const STATUS_SOCKET_EVENTS: Record<string, string> = {
+  confirmed: 'appointment:confirmed',
+  cancelled: 'appointment:cancelled',
+  rescheduled: 'appointment:rescheduled',
+  patient_arrived: 'appointment:patient_arrived',
+};
+
+const STATUS_WEBHOOK_EVENTS: Record<string, string> = {
+  scheduled: 'appointment.created',
+  cancelled: 'appointment.cancelled',
+};
+
+/**
+ * Build the outbox event for an appointment status change (#1432): the
+ * Socket.IO updates to the appointment and clinic rooms plus, for creation and
+ * cancellation, the outbound webhook. Returns null when nothing is published.
+ */
+function appointmentStatusEvent(
   appointmentId: string,
   status: string,
   appointment: any,
-  additionalData?: any
-) {
-  try {
-    const socketService = SocketService.getInstance();
-    const eventMap = {
-      confirmed: 'appointment:confirmed',
-      cancelled: 'appointment:cancelled',
-      rescheduled: 'appointment:rescheduled',
-      patient_arrived: 'appointment:patient_arrived',
-    };
-
-    const event = eventMap[status as keyof typeof eventMap];
-    if (event) {
-      socketService.emitAppointmentUpdate(appointmentId, event, {
-        appointment,
-        ...additionalData,
-      });
-
-      // Also emit to clinic for staff notifications
-      socketService.emitToClinic(appointment.clinicId.toString(), event, {
-        appointmentId,
-        appointment,
-        ...additionalData,
-      });
-    }
-  } catch (error) {
-    // Log error but don't fail the request
-    console.error('Failed to emit socket event:', error);
+  additionalData?: Record<string, unknown>
+): OutboxEventInput | null {
+  const clinicId = String(appointment.clinicId);
+  const targets: OutboxTarget[] = [];
+  const socketEvent = STATUS_SOCKET_EVENTS[status];
+  if (socketEvent) {
+    targets.push(
+      {
+        kind: 'socket',
+        via: 'socket-service',
+        room: 'appointment',
+        id: appointmentId,
+        event: socketEvent,
+        data: { appointment, ...additionalData },
+      },
+      {
+        kind: 'socket',
+        via: 'socket-service',
+        room: 'clinic',
+        id: clinicId,
+        event: socketEvent,
+        data: { appointmentId, appointment, ...additionalData },
+      }
+    );
   }
+  const webhookEvent = STATUS_WEBHOOK_EVENTS[status];
+  if (webhookEvent) targets.push({ kind: 'webhook', event: webhookEvent });
+  if (targets.length === 0) return null;
+
+  return {
+    type: `appointment.${status}`,
+    aggregateType: 'Appointment',
+    aggregateId: appointmentId,
+    clinicId,
+    payload: { appointmentId, status, appointment, ...additionalData },
+    targets,
+  };
 }
 
 // ── POST /appointments/:id/check-in ───────────────────────────────────────────
@@ -175,22 +201,24 @@ appointmentRoutes.post(
         });
       }
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        { 
-          status: 'patient_arrived',
-          checkedInAt: new Date(),
-        },
-        { new: true, runValidators: true }
-      ).lean();
-
-      // Emit real-time event
-      await emitAppointmentStatusChange(
-        req.params.id,
-        'patient_arrived',
-        updated!,
-        { checkedInAt: updated?.checkedInAt }
-      );
+      // The status change and its real-time event commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          {
+            status: 'patient_arrived',
+            checkedInAt: new Date(),
+          },
+          { new: true, runValidators: true, session }
+        ).lean();
+        const event =
+          doc &&
+          appointmentStatusEvent(req.params.id, 'patient_arrived', doc, {
+            checkedInAt: doc.checkedInAt,
+          });
+        if (event) await emit(event);
+        return doc;
+      });
 
       // Create notification for staff
       await NotificationModel.create({
@@ -609,19 +637,27 @@ appointmentRoutes.post(
         });
       }
 
-      const appointment = await AppointmentModel.create({
-        patientId,
-        doctorId,
-        clinicId,
-        scheduledAt: start,
-        duration: duration ?? 30,
-        type,
-        chiefComplaint,
-        notes,
+      // The appointment and its `appointment.created` webhook commit together (#1432).
+      const appointment = await withOutboxTransaction(async (session, emit) => {
+        const [doc] = await AppointmentModel.create(
+          [
+            {
+              patientId,
+              doctorId,
+              clinicId,
+              scheduledAt: start,
+              duration: duration ?? 30,
+              type,
+              chiefComplaint,
+              notes,
+            },
+          ],
+          { session }
+        );
+        const event = appointmentStatusEvent(doc._id.toString(), 'scheduled', doc.toObject());
+        if (event) await emit(event);
+        return doc;
       });
-
-      // Emit appointment created event
-      await emitAppointmentStatusChange(appointment._id.toString(), 'scheduled', appointment);
 
       // Create notification for doctor
       await NotificationModel.create({
@@ -751,16 +787,31 @@ appointmentRoutes.put(
         }
       }
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
-        { new: true, runValidators: true },
-      ).lean();
+      const statusChanged = !!status && status !== existing.status;
+      const rescheduled = !!scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime();
 
-      // Emit real-time events for status changes
-      if (status && status !== existing.status) {
-        await emitAppointmentStatusChange(req.params.id, status, updated);
-        
+      // The update and its real-time events commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
+          { new: true, runValidators: true, session },
+        ).lean();
+        if (!doc) return doc;
+        const events = [
+          statusChanged ? appointmentStatusEvent(req.params.id, status, doc) : null,
+          rescheduled
+            ? appointmentStatusEvent(req.params.id, 'rescheduled', doc, {
+                oldScheduledAt: existing.scheduledAt.toISOString(),
+                newScheduledAt: newStart.toISOString(),
+              })
+            : null,
+        ];
+        for (const event of events) if (event) await emit(event);
+        return doc;
+      });
+
+      if (statusChanged) {
         // Create notification
         await NotificationModel.create({
           userId: existing.patientId,
@@ -773,14 +824,6 @@ appointmentRoutes.put(
             oldStatus: existing.status,
             newStatus: status,
           },
-        });
-      }
-
-      // Emit rescheduled event if time changed
-      if (scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime()) {
-        await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
-          oldScheduledAt: existing.scheduledAt.toISOString(),
-          newScheduledAt: newStart.toISOString(),
         });
       }
 
@@ -867,21 +910,27 @@ appointmentRoutes.delete(
 
       const { cancellationReason } = req.body;
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        {
-          status: 'cancelled',
-          cancelledBy: new Types.ObjectId(userId),
-          cancelledAt: new Date(),
-          cancellationReason,
-        },
-        { new: true },
-      ).lean();
-
-      // Emit real-time cancellation event
-      await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
-        cancelledBy: userId,
-        cancellationReason,
+      // The cancellation, its real-time event and the `appointment.cancelled`
+      // webhook commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          {
+            status: 'cancelled',
+            cancelledBy: new Types.ObjectId(userId),
+            cancelledAt: new Date(),
+            cancellationReason,
+          },
+          { new: true, session },
+        ).lean();
+        const event =
+          doc &&
+          appointmentStatusEvent(req.params.id, 'cancelled', doc, {
+            cancelledBy: userId,
+            cancellationReason,
+          });
+        if (event) await emit(event);
+        return doc;
       });
 
       // Create notifications for both patient and doctor

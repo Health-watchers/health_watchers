@@ -1,4 +1,5 @@
 import logger from '@api/utils/logger';
+import { isJobActive } from '@api/jobs/job-state';
 import {
   xlmRateFetchErrorsTotal,
   xlmRateLastValueUsd,
@@ -16,9 +17,8 @@ import { refreshXLMRate, getCurrentXLMRate, STALENESS_THRESHOLD_MS } from './xlm
  * alerting can fire when the rate feed stops updating.
  */
 
-export const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+export const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes — matches the `xlm-rate` job cron
 
-let rateJobInterval: NodeJS.Timeout | null = null;
 let lastSuccessfulFetchAt: Date | null = null;
 let consecutiveFailures = 0;
 
@@ -70,27 +70,6 @@ export async function runRateJobTick(now: Date = new Date()): Promise<void> {
   }
 }
 
-export function startXLMRateJob(): void {
-  if (rateJobInterval) {
-    logger.warn('[xlm-rate-job] already running');
-    return;
-  }
-  logger.info(`[xlm-rate-job] starting (interval=${REFRESH_INTERVAL_MS / 1000}s)`);
-
-  // Fetch immediately on startup so the cache is warm.
-  runRateJobTick();
-
-  rateJobInterval = setInterval(() => runRateJobTick(), REFRESH_INTERVAL_MS);
-}
-
-export function stopXLMRateJob(): void {
-  if (rateJobInterval) {
-    clearInterval(rateJobInterval);
-    rateJobInterval = null;
-    logger.info('[xlm-rate-job] stopped');
-  }
-}
-
 /**
  * Returns whether the cached rate is currently stale (older than the staleness
  * threshold). Used by the exchange-rate endpoint and monitoring.
@@ -106,14 +85,10 @@ export function getRateJobStatus(): {
   consecutiveFailures: number;
 } {
   return {
-    running: rateJobInterval !== null,
+    running: isJobActive('xlm-rate'),
     lastSuccessfulFetchAt,
     consecutiveFailures,
   };
-}
-
-export function isXLMRateJobRunning(): boolean {
-  return rateJobInterval !== null;
 }
 
 /** @internal — only for use in unit tests */

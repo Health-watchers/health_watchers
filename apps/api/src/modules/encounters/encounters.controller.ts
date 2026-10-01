@@ -26,6 +26,7 @@ import { UserModel } from '../auth/models/user.model';
 import { auditLog } from '../audit/audit.service';
 import crypto from 'crypto';
 import { emitToClinic } from '@api/realtime/socket';
+import { withOutboxTransaction } from '../outbox/outbox.service';
 import { encountersCreatedTotal } from '../../services/metrics.service';
 import cdsRulesEngine from '../cds/cds-rules-engine';
 import { EncounterValidationService } from './encounter-validation.service';
@@ -372,11 +373,29 @@ router.post(
           );
       }
     }
-    const doc = await EncounterModel.create(req.body);
-
-    emitToClinic(req.user!.clinicId, 'encounter:created', {
-      encounterId: String(doc._id),
-      patientId: String(doc.patientId),
+    // The encounter and its `encounter:created` socket event + `encounter.created`
+    // webhook commit together (#1432).
+    const doc = await withOutboxTransaction(async (session, emit) => {
+      const [created] = await EncounterModel.create([req.body], { session });
+      const payload = { encounterId: String(created._id), patientId: String(created.patientId) };
+      await emit({
+        type: 'encounter.created',
+        aggregateType: 'Encounter',
+        aggregateId: payload.encounterId,
+        clinicId: String(req.user!.clinicId),
+        payload,
+        targets: [
+          {
+            kind: 'socket',
+            room: 'clinic',
+            id: String(req.user!.clinicId),
+            event: 'encounter:created',
+            data: payload,
+          },
+          { kind: 'webhook', event: 'encounter.created' },
+        ],
+      });
+      return created;
     });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
@@ -566,12 +585,38 @@ router.patch(
       }
     }
 
-    const doc = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
+    // The update and its `encounter:updated` socket event + `encounter.updated`
+    // webhook commit together (#1432).
+    const doc = await withOutboxTransaction(async (session, emit) => {
+      const updated = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
+        new: true,
+        runValidators: true,
+        session,
+      });
+      const payload = {
+        encounterId: req.params.id,
+        patientId: updated ? String(updated.patientId) : undefined,
+        fields: Object.keys(updateData),
+      };
+      await emit({
+        type: 'encounter.updated',
+        aggregateType: 'Encounter',
+        aggregateId: req.params.id,
+        clinicId: String(req.user!.clinicId),
+        payload,
+        targets: [
+          {
+            kind: 'socket',
+            room: 'clinic',
+            id: String(req.user!.clinicId),
+            event: 'encounter:updated',
+            data: { encounterId: req.params.id },
+          },
+          { kind: 'webhook', event: 'encounter.updated' },
+        ],
+      });
+      return updated;
     });
-
-    emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
     // Trigger survey if encounter is being closed
     if (updateData.status === 'closed' && (encounter.status as string) !== 'closed') {
       await triggerSurveyAfterEncounter(req.params.id, doc!);

@@ -8,12 +8,9 @@ import { setNotificationRetryQueueDepth } from '@api/monitoring/custom-metrics';
  *   - releases scheduled deliveries once their `scheduledFor` time passes
  *   - retries failed deliveries whose `nextRetryAt` is due (exponential backoff)
  *
- * Runs on a fixed interval, mirroring the other jobs wired up in app.ts.
+ * Scheduled through the JobRegistry (`notification-dispatch`, every 30s).
  */
-export const CHECK_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 200;
-
-let jobInterval: NodeJS.Timeout | null = null;
 
 export async function processDueDeliveries(now = new Date()): Promise<number> {
   const due = await NotificationDeliveryModel.find({
@@ -52,32 +49,4 @@ export async function processDueDeliveries(now = new Date()): Promise<number> {
   }
 
   return processed;
-}
-
-export function startNotificationDispatchJob(): void {
-  if (jobInterval) {
-    logger.warn('[notification-dispatch-job] already running');
-    return;
-  }
-  logger.info(`[notification-dispatch-job] starting (interval=${CHECK_INTERVAL_MS / 1000}s)`);
-  processDueDeliveries().catch((err) =>
-    logger.error({ err }, '[notification-dispatch-job] initial run failed')
-  );
-  jobInterval = setInterval(() => {
-    processDueDeliveries().catch((err) =>
-      logger.error({ err }, '[notification-dispatch-job] tick failed')
-    );
-  }, CHECK_INTERVAL_MS);
-}
-
-export function stopNotificationDispatchJob(): void {
-  if (jobInterval) {
-    clearInterval(jobInterval);
-    jobInterval = null;
-    logger.info('[notification-dispatch-job] stopped');
-  }
-}
-
-export function isNotificationDispatchJobRunning(): boolean {
-  return jobInterval !== null;
 }

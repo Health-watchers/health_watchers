@@ -30,57 +30,9 @@ import {
   acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
-import {
-  startPaymentExpirationJob,
-  stopPaymentExpirationJob,
-} from './modules/payments/services/payment-expiration-job';
-import {
-  startReconciliationJob,
-  stopReconciliationJob,
-} from './modules/payments/services/reconciliation-job';
-import {
-  startRiskRecalculationJob,
-  stopRiskRecalculationJob,
-} from './modules/patients/risk-recalculation-job';
-import {
-  startBalanceMonitoringJob,
-  stopBalanceMonitoringJob,
-} from './modules/payments/services/balance-monitoring-job';
-import {
-  startWaitlistExpiryJob,
-  stopWaitlistExpiryJob,
-} from './modules/appointments/waitlist-expiry-job';
-import {
-  startAppointmentReminderJob,
-  stopAppointmentReminderJob,
-} from './modules/appointments/appointment-reminder-job';
-import {
-  startClaimableExpiryNotificationJob,
-  stopClaimableExpiryNotificationJob,
-} from './modules/payments/services/claimable-expiry-notification-job';
-import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
-import { startMfaGracePeriodJob, stopMfaGracePeriodJob } from './modules/auth/mfa-grace-period-job';
-import {
-  startRetentionSweepJob,
-  stopRetentionSweepJob,
-} from './modules/documents/document-retention.service';
-import { startRetryWorker, stopRetryWorker } from './modules/webhooks/retry-worker';
-import {
-  startFollowUpReminderJob,
-  stopFollowUpReminderJob,
-} from './modules/encounters/follow-up-reminder-job';
-import {
-  startReportScheduleJob,
-  stopReportScheduleJob,
-} from './modules/reports/analytics/report-schedule-job';
-import {
-  startApiKeyLifecycleJob,
-  stopApiKeyLifecycleJob,
-} from './modules/api-keys/api-key-lifecycle-job';
-import {
-  startNotificationDispatchJob,
-  stopNotificationDispatchJob,
-} from './modules/notifications/notification-dispatch-job';
+import { startJobScheduler, stopJobScheduler } from './jobs';
+import { jobsAdminRouter } from './jobs/jobs-admin.controller';
+import { fhirRouter } from './modules/fhir/fhir.router';
 import { warmCache, registerWarmup } from './services/cache.service';
 
 // ── #1071 Cache warm-up registrations ─────────────────────────────────────────
@@ -268,6 +220,9 @@ app.use('/api/v2', generalLimiter);
 app.use('/api/v2', responseFilterMiddleware);
 app.use('/api/v2', v2Router);
 
+// ── FHIR R4 read API (#1435) — clinic API keys with patient/*.read scopes ─────
+app.use('/fhir/r4', generalLimiter, fhirRouter);
+
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 // Mounted at root level to comply with Stellar federation protocol standards
 app.use('/.well-known', federationRouter);
@@ -278,6 +233,7 @@ app.use('/api/v2', migrationStatusRouter);
 app.use('/api/v2', errorAnalyticsRouter);
 app.use('/api/v2', rateLimitConfigRouter);
 app.use('/api/v2', cacheDebugRouter);
+app.use('/api/v2', jobsAdminRouter);
 
 setupSwagger(app);
 
@@ -319,22 +275,12 @@ async function startServer() {
   initSocket(server);
   logger.info('Socket.IO initialised');
 
-  startPaymentExpirationJob();
-  startReconciliationJob();
-  startRiskRecalculationJob();
-  startBalanceMonitoringJob();
-  startWaitlistExpiryJob();
-  startAppointmentReminderJob();
-  startClaimableExpiryNotificationJob();
-  startXLMRateJob();
+  // #1433 — every background job runs through the distributed BullMQ scheduler:
+  // each schedule executes once per tick across all replicas.
+  startJobScheduler().catch((err) => logger.error({ err }, '[job-registry] failed to start'));
   initializeBackupMetrics().catch((err) =>
     logger.warn({ err }, 'Failed to load initial backup metrics')
   );
-  startMfaGracePeriodJob();
-  startFollowUpReminderJob();
-  startRetryWorker();
-  startRetentionSweepJob();
-  startNotificationDispatchJob();
 
   // #1071 — Register per-clinic patient-list cache warmup entries now that the
   // DB pool is ready, then warm all registered keys that are currently cold.
@@ -393,21 +339,7 @@ async function startServer() {
   }, 15_000);
 
   registerGracefulShutdown(server, {
-    stopJobs: [
-      stopPaymentExpirationJob,
-      stopReconciliationJob,
-      stopRiskRecalculationJob,
-      stopBalanceMonitoringJob,
-      stopWaitlistExpiryJob,
-      stopAppointmentReminderJob,
-      stopClaimableExpiryNotificationJob,
-      stopXLMRateJob,
-      stopMfaGracePeriodJob,
-      stopFollowUpReminderJob,
-      stopRetryWorker,
-      stopRetentionSweepJob,
-      stopNotificationDispatchJob,
-    ],
+    stopJobs: [stopJobScheduler],
   });
 }
 

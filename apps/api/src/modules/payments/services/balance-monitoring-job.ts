@@ -15,8 +15,6 @@ import { emitToClinic } from '@api/realtime/socket';
 import { clinicXlmBalanceGauge } from '@api/services/metrics.service';
 import logger from '@api/utils/logger';
 
-const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-
 // Configurable thresholds: env vars override database settings when present
 const ENV_LOW_THRESHOLD = process.env.BALANCE_LOW_THRESHOLD
   ? parseFloat(process.env.BALANCE_LOW_THRESHOLD)
@@ -24,8 +22,6 @@ const ENV_LOW_THRESHOLD = process.env.BALANCE_LOW_THRESHOLD
 const ENV_CRITICAL_THRESHOLD = process.env.BALANCE_CRITICAL_THRESHOLD
   ? parseFloat(process.env.BALANCE_CRITICAL_THRESHOLD)
   : null;
-
-let monitoringJobInterval: NodeJS.Timeout | null = null;
 
 /** Midnight UTC date for daily snapshot deduplication */
 function todayUtc(): Date {
@@ -220,34 +216,4 @@ export async function runBalanceMonitoring(): Promise<void> {
       )
     )
   );
-}
-
-export function startBalanceMonitoringJob(): void {
-  if (monitoringJobInterval) {
-    logger.warn('Balance monitoring job is already running');
-    return;
-  }
-
-  logger.info(`Starting balance monitoring job (every ${CHECK_INTERVAL_MS / 60000}m)`);
-
-  // Run immediately on startup
-  runBalanceMonitoring().catch((err) =>
-    logger.error({ err }, 'Initial balance monitoring check failed')
-  );
-
-  monitoringJobInterval = setInterval(() => {
-    runBalanceMonitoring().catch((err) => logger.error({ err }, 'Balance monitoring job failed'));
-  }, CHECK_INTERVAL_MS);
-}
-
-export function stopBalanceMonitoringJob(): void {
-  if (monitoringJobInterval) {
-    clearInterval(monitoringJobInterval);
-    monitoringJobInterval = null;
-    logger.info('Balance monitoring job stopped');
-  }
-}
-
-export function isBalanceMonitoringJobRunning(): boolean {
-  return monitoringJobInterval !== null;
 }

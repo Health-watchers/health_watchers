@@ -41,11 +41,7 @@ import { WaitlistModel } from './waitlist.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { AppointmentModel } from './appointment.model';
 import logger from '@api/utils/logger';
-import {
-  expireWaitlistEntries,
-  startWaitlistExpiryJob,
-  stopWaitlistExpiryJob,
-} from './waitlist-expiry-job';
+import { expireWaitlistEntries } from './waitlist-expiry-job';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -96,7 +92,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  stopWaitlistExpiryJob();
   jest.useRealTimers();
 });
 
@@ -171,55 +166,6 @@ describe('expireWaitlistEntries — core logic', () => {
 
     // Should NOT throw
     await expect(expireWaitlistEntries()).resolves.toBe(2);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// startWaitlistExpiryJob — timer behaviour
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('startWaitlistExpiryJob — timer behaviour', () => {
-  it('runs immediately on start', async () => {
-    startWaitlistExpiryJob();
-    await jest.runAllTimersAsync();
-    expect(WaitlistModel.find).toHaveBeenCalled();
-  });
-
-  it('is idempotent — calling start twice does not add a second interval', async () => {
-    startWaitlistExpiryJob();
-    startWaitlistExpiryJob();
-    await jest.runAllTimersAsync();
-    const callsAfterTwoStarts = (WaitlistModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(15 * 60 * 1000);
-    await jest.runAllTimersAsync();
-
-    // Only one interval should tick
-    const callsAfterOneTick = (WaitlistModel.find as jest.Mock).mock.calls.length;
-    expect(callsAfterOneTick).toBeLessThanOrEqual(callsAfterTwoStarts + 1);
-  });
-
-  it('re-runs every 15 minutes', async () => {
-    startWaitlistExpiryJob();
-    await jest.runAllTimersAsync();
-    const initialCalls = (WaitlistModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(15 * 60 * 1000);
-    await jest.runAllTimersAsync();
-
-    expect((WaitlistModel.find as jest.Mock).mock.calls.length).toBeGreaterThan(initialCalls);
-  });
-
-  it('stopWaitlistExpiryJob prevents future ticks', async () => {
-    startWaitlistExpiryJob();
-    await jest.runAllTimersAsync();
-    stopWaitlistExpiryJob();
-    const countAfterStop = (WaitlistModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(15 * 60 * 1000);
-    await jest.runAllTimersAsync();
-
-    expect((WaitlistModel.find as jest.Mock).mock.calls.length).toBe(countAfterStop);
   });
 });
 

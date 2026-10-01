@@ -29,6 +29,15 @@ export interface DispatchOptions {
   event: WebhookEventType;
   data: Record<string, any>;
   metadata?: Record<string, any>;
+  /** #1432 — outbox event id: makes dispatch idempotent per webhook. */
+  eventId?: string;
+}
+
+export interface DispatchResult {
+  /** Active webhooks subscribed to the event. */
+  total: number;
+  succeeded: number;
+  failed: number;
 }
 
 interface EventFilter {
@@ -55,24 +64,25 @@ function shouldDispatch(clinicId: string, event: string): boolean {
   return true;
 }
 
-export async function dispatchWebhookEvent(options: DispatchOptions): Promise<void>;
+export async function dispatchWebhookEvent(options: DispatchOptions): Promise<DispatchResult>;
 export async function dispatchWebhookEvent(
   clinicId: string,
   event: string,
   data: Record<string, any>
-): Promise<void>;
+): Promise<DispatchResult>;
 export async function dispatchWebhookEvent(
   clinicIdOrOptions: string | DispatchOptions,
   event?: string,
   data?: Record<string, any>
-): Promise<void> {
+): Promise<DispatchResult> {
   let clinicId: string;
   let eventType: string;
   let payload: Record<string, any>;
   let metadata: Record<string, any> | undefined;
+  let eventId: string | undefined;
 
   if (typeof clinicIdOrOptions === 'object') {
-    ({ clinicId, event: eventType, data: payload, metadata } = clinicIdOrOptions);
+    ({ clinicId, event: eventType, data: payload, metadata, eventId } = clinicIdOrOptions);
   } else {
     clinicId = clinicIdOrOptions;
     eventType = event!;
@@ -81,7 +91,7 @@ export async function dispatchWebhookEvent(
 
   if (!shouldDispatch(clinicId, eventType)) {
     logger.debug({ clinicId, event: eventType }, 'Webhook event skipped by filter');
-    return;
+    return { total: 0, succeeded: 0, failed: 0 };
   }
 
   const webhooks = await WebhookModel.find({
@@ -92,10 +102,11 @@ export async function dispatchWebhookEvent(
 
   if (webhooks.length === 0) {
     logger.debug({ clinicId, event: eventType }, 'No active webhooks for event');
-    return;
+    return { total: 0, succeeded: 0, failed: 0 };
   }
 
   const eventPayload = {
+    ...(eventId ? { eventId } : {}),
     event: eventType,
     data: payload,
     ...(metadata ? { metadata } : {}),
@@ -109,17 +120,28 @@ export async function dispatchWebhookEvent(
         eventType,
         wh.url,
         wh.secret,
-        eventPayload
+        eventPayload,
+        { eventId }
       );
 
-      await WebhookEventLogModel.create({
+      const logEntry = {
         clinicId,
         webhookId: wh._id,
         event: eventType,
         payload: eventPayload,
         status: 'dispatched',
         deliveryId: delivery?._id,
-      });
+      };
+      if (eventId && delivery?._id) {
+        // Outbox retries re-run dispatch; log each delivery only once.
+        await WebhookEventLogModel.updateOne(
+          { deliveryId: delivery._id },
+          { $setOnInsert: logEntry },
+          { upsert: true }
+        );
+      } else {
+        await WebhookEventLogModel.create(logEntry);
+      }
 
       return String(wh._id);
     })
@@ -132,6 +154,7 @@ export async function dispatchWebhookEvent(
     { clinicId, event: eventType, total: webhooks.length, succeeded, failed },
     'Webhook event dispatched'
   );
+  return { total: webhooks.length, succeeded, failed };
 }
 
 export async function dispatchBulkEvents(

@@ -33,12 +33,7 @@ jest.mock('@api/utils/logger', () => ({
 import { UserModel } from '../auth/models/user.model';
 import { sendMfaGracePeriodReminderEmail } from '@api/lib/email.service';
 import logger from '@api/utils/logger';
-import {
-  runMfaGracePeriodReminderTick,
-  startMfaGracePeriodJob,
-  stopMfaGracePeriodJob,
-  CHECK_INTERVAL_MS,
-} from './mfa-grace-period-job';
+import { runMfaGracePeriodReminderTick } from './mfa-grace-period-job';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +63,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  stopMfaGracePeriodJob();
   jest.useRealTimers();
 });
 
@@ -169,49 +163,6 @@ describe('runMfaGracePeriodReminderTick — core logic', () => {
       expect.objectContaining({ userId: user.id, days: 3 }),
       expect.any(String)
     );
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// startMfaGracePeriodJob — timer behaviour
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('startMfaGracePeriodJob — timer behaviour', () => {
-  it('runs an initial tick immediately on start', async () => {
-    startMfaGracePeriodJob();
-    await jest.runAllTimersAsync();
-    expect(UserModel.find).toHaveBeenCalled();
-  });
-
-  it('is idempotent — calling start twice warns and does not add a second interval', () => {
-    startMfaGracePeriodJob();
-    startMfaGracePeriodJob();
-    expect(logger.warn).toHaveBeenCalledWith('[mfa-grace-period-job] already running');
-  });
-
-  it('schedules re-runs every 24 hours (CHECK_INTERVAL_MS)', async () => {
-    expect(CHECK_INTERVAL_MS).toBe(24 * 60 * 60 * 1000);
-
-    startMfaGracePeriodJob();
-    await jest.runAllTimersAsync();
-    const initialCalls = (UserModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(CHECK_INTERVAL_MS);
-    await jest.runAllTimersAsync();
-
-    expect((UserModel.find as jest.Mock).mock.calls.length).toBeGreaterThan(initialCalls);
-  });
-
-  it('stopMfaGracePeriodJob prevents future ticks', async () => {
-    startMfaGracePeriodJob();
-    await jest.runAllTimersAsync();
-    stopMfaGracePeriodJob();
-    const callsAfterStop = (UserModel.find as jest.Mock).mock.calls.length;
-
-    jest.advanceTimersByTime(CHECK_INTERVAL_MS);
-    await jest.runAllTimersAsync();
-
-    expect((UserModel.find as jest.Mock).mock.calls.length).toBe(callsAfterStop);
   });
 });
 

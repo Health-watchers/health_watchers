@@ -13,6 +13,12 @@
   ],
   "components": {
     "securitySchemes": {
+      "apiKeyBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "hw_ API key",
+        "description": "Clinic API key (`hw_\u2026`) with SMART-style scopes: `patient/*.read` or `patient/<Type>.read`. `Authorization: ApiKey hw_\u2026` is also accepted."
+      },
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
@@ -20,6 +26,174 @@
       }
     },
     "schemas": {
+      "FhirOperationOutcome": {
+        "type": "object",
+        "required": ["resourceType", "issue"],
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "enum": ["OperationOutcome"]
+          },
+          "issue": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "severity": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "diagnostics": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "FhirBundle": {
+        "type": "object",
+        "required": ["resourceType", "type"],
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "enum": ["Bundle"]
+          },
+          "type": {
+            "type": "string",
+            "enum": ["searchset"]
+          },
+          "total": {
+            "type": "integer"
+          },
+          "link": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "relation": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "entry": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fullUrl": {
+                  "type": "string"
+                },
+                "resource": {
+                  "type": "object"
+                },
+                "search": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "V2Patient": {
+        "type": "object",
+        "description": "Patient in the v2 list. With `fields`, only the requested properties are present.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "systemId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string"
+          },
+          "sex": {
+            "type": "string",
+            "enum": ["M", "F", "O"]
+          },
+          "contactNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "riskLevel": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"],
+            "nullable": true
+          },
+          "riskScore": {
+            "type": "number",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "photoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "V2Error": {
+        "type": "object",
+        "required": ["success", "version", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "version": {
+            "type": "string",
+            "example": "2.0"
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -128,6 +302,561 @@
     }
   ],
   "paths": {
+    "/metadata": {
+      "servers": [
+        {
+          "url": "/fhir/r4",
+          "description": "FHIR R4 read API"
+        }
+      ],
+      "get": {
+        "summary": "FHIR CapabilityStatement",
+        "tags": ["FHIR R4"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "CapabilityStatement",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resourceType": {
+                      "type": "string",
+                      "enum": ["CapabilityStatement"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Patient/{id}": {
+      "servers": [
+        {
+          "url": "/fhir/r4",
+          "description": "FHIR R4 read API"
+        }
+      ],
+      "get": {
+        "summary": "Read a FHIR Patient",
+        "tags": ["FHIR R4"],
+        "security": [
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patient",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resourceType": {
+                      "type": "string",
+                      "enum": ["Patient"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found in the API key's clinic",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "API key lacks the patient/<Type>.read (or patient/*.read) scope",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "API key rate limit exceeded",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Patient": {
+      "servers": [
+        {
+          "url": "/fhir/r4",
+          "description": "FHIR R4 read API"
+        }
+      ],
+      "get": {
+        "summary": "Search FHIR Patients",
+        "tags": ["FHIR R4"],
+        "security": [
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "query",
+            "description": "`[system|]value`; system is https://healthwatchers.com/patient-id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "_count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "_cursor",
+            "in": "query",
+            "description": "Opaque — follow Bundle.link[relation=next] instead of building it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "searchset Bundle with self/next paging links",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirBundle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid search parameter",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "API key lacks the patient/<Type>.read (or patient/*.read) scope",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "API key rate limit exceeded",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Encounter": {
+      "servers": [
+        {
+          "url": "/fhir/r4",
+          "description": "FHIR R4 read API"
+        }
+      ],
+      "get": {
+        "summary": "Search FHIR Encounters for a patient",
+        "tags": ["FHIR R4"],
+        "security": [
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "patient",
+            "in": "query",
+            "required": true,
+            "description": "`Patient/<id>` or `<id>`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "_count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "_cursor",
+            "in": "query",
+            "description": "Opaque — follow Bundle.link[relation=next] instead of building it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "searchset Bundle with self/next paging links",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirBundle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/invalid patient parameter",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "API key lacks the patient/<Type>.read (or patient/*.read) scope",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "API key rate limit exceeded",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Observation": {
+      "servers": [
+        {
+          "url": "/fhir/r4",
+          "description": "FHIR R4 read API"
+        }
+      ],
+      "get": {
+        "summary": "Search vital-sign Observations for a patient",
+        "tags": ["FHIR R4"],
+        "security": [
+          {
+            "apiKeyBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "patient",
+            "in": "query",
+            "required": true,
+            "description": "`Patient/<id>` or `<id>`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "`vital-signs` (only category available)",
+            "schema": {
+              "type": "string",
+              "example": "vital-signs"
+            }
+          },
+          {
+            "name": "_count",
+            "in": "query",
+            "description": "Encounters per page; each contributes its vital signs",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "_cursor",
+            "in": "query",
+            "description": "Opaque — follow Bundle.link[relation=next] instead of building it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "searchset Bundle with self/next paging links",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirBundle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/invalid patient parameter",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "API key lacks the patient/<Type>.read (or patient/*.read) scope",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "API key rate limit exceeded",
+            "content": {
+              "application/fhir+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FhirOperationOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/patients": {
+      "servers": [
+        {
+          "url": "/api/v2",
+          "description": "API v2"
+        }
+      ],
+      "get": {
+        "summary": "List patients (v2) — cursor pagination and sparse fieldsets",
+        "description": "Successor of `GET /api/v1/patients`, which now returns `Deprecation`, `Sunset` and `Link: </api/v2/patients>; rel=\"successor-version\"` headers. Results are ordered newest first. Follow `links.next` (or pass `meta.nextCursor` as `cursor`) to fetch the next page; every page costs one index seek, so deep pages are as fast as the first.",
+        "tags": ["Patients"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque cursor from `meta.nextCursor`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset, e.g. `id,firstName,lastName`. Unknown fields return 400.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "id,firstName,lastName,riskLevel"
+          },
+          {
+            "name": "clinicId",
+            "in": "query",
+            "description": "SUPER_ADMIN only — list another clinic's patients.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["success", "version", "items", "meta", "links"],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "2.0"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/V2Patient"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "fields": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "self": {
+                          "type": "string"
+                        },
+                        "next": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query, unknown field or malformed cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          }
+        }
+      }
+    },
     "/payments/fee-estimate": {
       "get": {
         "summary": "Get Stellar network fee statistics",

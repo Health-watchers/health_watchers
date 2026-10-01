@@ -31,7 +31,6 @@
     "src/modules/export/export.service.ts",
     "src/modules/payments/services/fee-optimizer.service.ts",
     "src/utils/email-queue.ts",
-    "src/modules/immunizations/immunization-compliance-job.ts",
     "src/services/metrics-integration-examples.ts"
   ]
 }

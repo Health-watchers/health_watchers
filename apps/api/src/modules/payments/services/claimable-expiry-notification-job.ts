@@ -5,10 +5,6 @@ import { sendClaimableExpiryEmail } from '@api/lib/email.service';
 import { emitToUser } from '@api/realtime/socket';
 import logger from '@api/utils/logger';
 
-export const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-
-let jobInterval: NodeJS.Timeout | null = null;
-
 /**
  * Find claimable balances expiring within the next 24 hours that haven't
  * had a notification sent yet, notify the patient, and mark the flag.
@@ -92,35 +88,4 @@ export async function sendClaimableExpiryNotifications(): Promise<number> {
   }
 
   return notified;
-}
-
-export function startClaimableExpiryNotificationJob(): void {
-  if (jobInterval) {
-    logger.warn('[claimable-expiry-job] already running');
-    return;
-  }
-
-  logger.info(`[claimable-expiry-job] starting (interval=${CHECK_INTERVAL_MS / 60000}m)`);
-
-  sendClaimableExpiryNotifications().catch((err) =>
-    logger.error({ err }, '[claimable-expiry-job] initial run failed')
-  );
-
-  jobInterval = setInterval(() => {
-    sendClaimableExpiryNotifications().catch((err) =>
-      logger.error({ err }, '[claimable-expiry-job] tick failed')
-    );
-  }, CHECK_INTERVAL_MS);
-}
-
-export function stopClaimableExpiryNotificationJob(): void {
-  if (jobInterval) {
-    clearInterval(jobInterval);
-    jobInterval = null;
-    logger.info('[claimable-expiry-job] stopped');
-  }
-}
-
-export function isClaimableExpiryNotificationJobRunning(): boolean {
-  return jobInterval !== null;
 }

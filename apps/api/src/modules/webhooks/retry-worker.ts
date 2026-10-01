@@ -79,6 +79,7 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
     'X-Webhook-Id': String(delivery._id),
     'X-Webhook-Event': delivery.event,
     'X-Webhook-Attempt': String(delivery.attempts + 1),
+    ...(delivery.eventId ? { 'X-Webhook-Event-Id': delivery.eventId } : {}),
   };
   const startedAt = Date.now();
 
@@ -150,52 +151,35 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
   }
 }
 
-let retryTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * Re-attempt pending webhook deliveries whose `nextRetryAt` has passed.
+ * Scheduled through the JobRegistry (`webhook-retry`, every 30s).
+ */
+export async function processDueWebhookRetries(now: Date = new Date()): Promise<number> {
+  const dueDeliveries = await WebhookDeliveryModel.find({
+    status: 'pending',
+    nextRetryAt: { $lte: now },
+  }).limit(50);
 
-export function startRetryWorker(intervalMs = 30000): void {
-  if (retryTimer) {
-    logger.warn('Retry worker already running');
-    return;
-  }
+  if (dueDeliveries.length === 0) return 0;
 
-  retryTimer = setInterval(async () => {
-    try {
-      const dueDeliveries = await WebhookDeliveryModel.find({
-        status: 'pending',
-        nextRetryAt: { $lte: new Date() },
-      }).limit(50);
+  logger.info({ count: dueDeliveries.length }, 'Processing pending webhook retries');
 
-      if (dueDeliveries.length === 0) return;
-
-      logger.info({ count: dueDeliveries.length }, 'Processing pending webhook retries');
-
-      for (const delivery of dueDeliveries) {
-        const webhook = await import('./webhook.model').then((m) =>
-          m.WebhookModel.findById(delivery.webhookId)
-        );
-        if (!webhook) {
-          delivery.status = 'dead';
-          delivery.error = 'Webhook not found';
-          await delivery.save();
-          continue;
-        }
-
-        retryDelivery(String(delivery._id), webhook).catch((err) => {
-          logger.error({ deliveryId: String(delivery._id), error: err }, 'Retry worker error');
-        });
-      }
-    } catch (error) {
-      logger.error({ error }, 'Retry worker tick failed');
+  for (const delivery of dueDeliveries) {
+    const webhook = await import('./webhook.model').then((m) =>
+      m.WebhookModel.findById(delivery.webhookId)
+    );
+    if (!webhook) {
+      delivery.status = 'dead';
+      delivery.error = 'Webhook not found';
+      await delivery.save();
+      continue;
     }
-  }, intervalMs);
 
-  logger.info({ intervalMs }, 'Webhook retry worker started');
-}
-
-export function stopRetryWorker(): void {
-  if (retryTimer) {
-    clearInterval(retryTimer);
-    retryTimer = null;
-    logger.info('Webhook retry worker stopped');
+    retryDelivery(String(delivery._id), webhook).catch((err) => {
+      logger.error({ deliveryId: String(delivery._id), error: err }, 'Retry worker error');
+    });
   }
+
+  return dueDeliveries.length;
 }

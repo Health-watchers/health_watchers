@@ -56,6 +56,12 @@ jest.mock('../../services/socket.service', () => ({
   },
 }));
 
+// ── Outbox (#1432): run in-process so socket events are published inline ──────
+jest.mock(
+  '@api/modules/outbox/outbox.service',
+  () => require('@api/modules/outbox/__tests__/inline-outbox').inlineOutboxService
+);
+
 // ── Realtime socket helper mock (used by video routes) ────────────────────────
 jest.mock('@api/realtime/socket', () => ({
   emitToUser: jest.fn(),
@@ -298,11 +304,8 @@ describe('DELETE /api/v1/appointments/:id (cancel)', () => {
 describe('POST /api/v1/appointments (create)', () => {
   it('does not emit a status event for the unmapped scheduled status', async () => {
     mockCountDocuments.mockResolvedValue(0);
-    mockCreate.mockResolvedValue({
-      ...baseAppointment,
-      _id: new Types.ObjectId(APPT_ID),
-      status: 'scheduled',
-    });
+    const created = { ...baseAppointment, _id: new Types.ObjectId(APPT_ID), status: 'scheduled' };
+    mockCreate.mockResolvedValue([{ ...created, toObject: () => created }]);
 
     const res = await request(app).post('/api/v1/appointments').send({
       patientId: PATIENT_ID,
