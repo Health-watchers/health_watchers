@@ -19,9 +19,9 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
   const { open: openPalette } = useCommandPalette();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 dark:border-neutral-700 dark:bg-neutral-800">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-neutral-200 bg-white px-4 dark:border-neutral-700 dark:bg-neutral-800">
       {/* Left: hamburger (mobile) + logo */}
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onMenuClick}
@@ -44,7 +44,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
           </svg>
         </button>
 
-        <span className="text-primary-500 text-base font-bold md:hidden">HealthWatchers</span>
+        <span className="text-primary-500 truncate text-base font-bold md:hidden">HealthWatchers</span>
       </div>
 
       {/* Center: Command Palette trigger (hidden on mobile, replaced by ⌘K shortcut) */}
@@ -75,7 +75,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
       </button>
 
       {/* Right: clinic switcher + language + theme + notifications + avatar + logout */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <ClinicSwitcher />
         <LanguageSwitcher current={locale} />
         <ThemeToggle />
@@ -91,7 +91,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <button
           type="button"
           onClick={logout}
-          className="text-sm text-neutral-500 hover:text-neutral-800 focus:underline focus:outline-none dark:text-neutral-400 dark:hover:text-neutral-100"
+          className="whitespace-nowrap text-sm text-neutral-500 hover:text-neutral-800 focus:underline focus:outline-none dark:text-neutral-400 dark:hover:text-neutral-100"
         >
           Logout
         </button>

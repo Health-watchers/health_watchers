@@ -481,8 +481,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
                 ].join(' ')}
               >
-                {item.icon}
-                {t(item.labelKey)}
+                <span className="shrink-0">{item.icon}</span>
+                <span className="min-w-0 break-words">{t(item.labelKey)}</span>
               </Link>
             </li>
           );

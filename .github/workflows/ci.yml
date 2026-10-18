@@ -291,10 +291,10 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
-      - name: Generate coverage report
-        if: github.event_name == 'push'
+      # Enforces each workspace's coverageThreshold (jest.config.*): a drop
+      # below the configured levels fails the job.
+      - name: Check API coverage thresholds
         run: npm run test:coverage --workspace=api
-        continue-on-error: true
         env:
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
           JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
@@ -302,14 +302,35 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
-      - name: Upload coverage to Codecov
-        if: matrix.node-version == 20 && github.event_name == 'push'
+      # apps/web is not part of the root npm workspaces, so install it in place.
+      - name: Install web dependencies
+        run: npm install --no-package-lock --no-audit --no-fund
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Check web coverage thresholds
+        run: npm run test:coverage
+        working-directory: apps/web
+
+      - name: Upload API coverage to Codecov
+        if: always() && matrix.node-version == 20
         uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./apps/api/coverage/coverage-final.json
-          flags: unittests
-          name: codecov-umbrella
+          flags: api
+          name: api
+          fail_ci_if_error: false
+
+      - name: Upload web coverage to Codecov
+        if: always() && matrix.node-version == 20
+        uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./apps/web/coverage/coverage-final.json
+          flags: web
+          name: web
           fail_ci_if_error: false
 
   # Stage 4: Build
@@ -634,6 +655,25 @@ jobs:
           name: visual-regression-report
           path: |
             apps/web/playwright-visual-report/
+          retention-days: 30
+
+      # Pseudo-locale (en-XA) pass: accented + 40 % longer strings expose
+      # truncation, overflow and hard-coded literals. The dev server started
+      # above generates messages/en-XA.json via the web `predev` script.
+      - name: Run pseudo-locale visual pass
+        run: npm run test:pseudo
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          E2E_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          E2E_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      - name: Upload pseudo-locale screenshots
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: pseudo-locale-screenshots
+          path: apps/web/pseudo-locale-report/
           retention-days: 30
 
       # On push to main, upload the updated snapshots too so they can be

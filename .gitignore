@@ -76,10 +76,14 @@ test-results*.json
 # Playwright test artifacts
 playwright-report/
 playwright-visual-report/
+pseudo-locale-report/
 test-results/
 blob-report/
 playwright/.cache/
 .playwright/
+
+# Dev-only pseudo-locale generated from en.json (apps/web/scripts/generate-pseudo-locale.mjs)
+apps/web/messages/en-XA.json
 
 # Stryker mutation testing output
 .stryker-tmp/

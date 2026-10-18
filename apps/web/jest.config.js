@@ -19,18 +19,20 @@ module.exports = {
     '!src/**/__tests__/**',
     '!src/**/*.test.{ts,tsx}',
   ],
-  coverageThresholds: {
+  coverageReporters: ['text', 'lcov', 'json'],
+  // Floors set at current coverage so CI fails if it drops; raise as tests are added.
+  coverageThreshold: {
     global: {
-      statements: 60,
-      branches: 55,
-      functions: 60,
-      lines: 60,
+      statements: 7,
+      branches: 7,
+      functions: 7,
+      lines: 7,
     },
     './src/components/ui/': {
-      statements: 80,
-      branches: 75,
-      functions: 80,
-      lines: 80,
+      statements: 55,
+      branches: 55,
+      functions: 49,
+      lines: 55,
     },
   },
 };
