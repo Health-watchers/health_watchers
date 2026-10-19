@@ -12,6 +12,8 @@ import { CosignatureWorkflow } from './CosignatureWorkflow';
 import type { EncounterRecord } from './EncounterTable';
 import { usePreAuths } from '@/lib/queries/usePreAuth';
 import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
+import { usePatients } from '@/lib/queries/usePatients';
+import { useEncounters } from '@/lib/queries/useEncounters';
 
 interface SoapNotes {
   subjective?: string;
@@ -40,6 +42,8 @@ interface EncounterDetailData extends Omit<EncounterRecord, 'status'> {
   versionHistory?: EncounterVersion[];
   documents?: EncounterDocument[];
   cosignatureStatus?: string;
+  /** ISO timestamp of the last server-side update — used for conflict detection */
+  updatedAt?: string;
 }
 
 interface EncounterDetailProps {
@@ -79,17 +83,34 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Fetch patients & encounters for @mention suggestions (best-effort)
+  const { data: patients = [] } = usePatients({});
+  const { data: encountersPage } = useEncounters(1, 50);
+  const mentionItems = [
+    ...patients.map((p) => ({
+      id: p._id,
+      label: `${p.firstName} ${p.lastName}`,
+      type: 'patient' as const,
+    })),
+    ...(encountersPage?.data ?? []).map((e) => ({
+      id: e.id,
+      label: e.chiefComplaint ?? e.id,
+      type: 'encounter' as const,
+    })),
+  ];
+
   useEffect(() => {
     setSoapNotes(encounter.soapNotes ?? {});
   }, [encounter.soapNotes]);
 
-  const saveSoapNotes = async () => {
-    setIsSaving(true);
+  /** Shared save logic used by both the manual button and auto-save */
+  const persistSoapNotes = async (notes: SoapNotes, silent = false) => {
+    if (!silent) setIsSaving(true);
     try {
       const res = await fetchWithAuth(`${API_V1}/encounters/${encodeURIComponent(encounter.id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ soapNotes }),
+        body: JSON.stringify({ soapNotes: notes }),
       });
 
       if (!res.ok) {
@@ -97,17 +118,22 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
         throw new Error(body.message || `Save failed (${res.status})`);
       }
 
-      setToast({ message: 'SOAP notes saved successfully.', type: 'success' });
-      setIsEditing(false);
+      if (!silent) {
+        setToast({ message: 'SOAP notes saved successfully.', type: 'success' });
+        setIsEditing(false);
+      }
     } catch (error) {
       setToast({
         message: error instanceof Error ? error.message : 'Unable to save SOAP notes.',
         type: 'error',
       });
     } finally {
-      setIsSaving(false);
+      if (!silent) setIsSaving(false);
     }
   };
+
+  const saveSoapNotes = () => persistSoapNotes(soapNotes, false);
+  const handleAutoSave = (notes: SoapNotes) => persistSoapNotes(notes, true);
 
   return (
     <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm">
@@ -167,7 +193,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
       <AiSummaryCard
         encounterId={encounter.id}
         patientName={encounter.patientName}
-        initialSummary={encounter.aiSummary}
+        {...(encounter.aiSummary !== undefined ? { initialSummary: encounter.aiSummary } : {})}
         tags={['clinical-insight', 'encounter-summary']}
       />
 
@@ -200,7 +226,9 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">SOAP Notes</h3>
+              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase">
+                SOAP Notes
+              </h3>
               {isEditing && (
                 <button
                   onClick={saveSoapNotes}
@@ -212,7 +240,16 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
               )}
             </div>
             {isEditing ? (
-              <SoapNotesEditor value={soapNotes} onChange={setSoapNotes} />
+              <SoapNotesEditor
+                value={soapNotes}
+                onChange={setSoapNotes}
+                onAutoSave={handleAutoSave}
+                {...(encounter.updatedAt !== undefined
+                  ? { serverLastUpdatedAt: encounter.updatedAt }
+                  : {})}
+                mentionItems={mentionItems}
+                encounterId={encounter.id}
+              />
             ) : (
               <SoapNotesView soapNotes={soapNotes} />
             )}
@@ -244,7 +281,9 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">Version history</h3>
+            <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
+              Version history
+            </h3>
             <VersionHistory
               encounterId={encounter.id}
               versions={encounter.versionHistory ?? []}
@@ -258,28 +297,33 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">Associated documents</h3>
+            <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
+              Associated documents
+            </h3>
             {encounter.documents?.length ? (
               <ul className="space-y-2">
                 {encounter.documents.map((doc) => (
-                  <li key={doc.id} className="rounded-md border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors">
+                  <li
+                    key={doc.id}
+                    className="rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <a
                           href={doc.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm font-medium text-blue-600 hover:underline block"
+                          className="block text-sm font-medium text-blue-600 hover:underline"
                         >
                           {doc.title}
                         </a>
-                        <p className="text-xs text-gray-500 mt-1">{doc.type}</p>
+                        <p className="mt-1 text-xs text-gray-500">{doc.type}</p>
                       </div>
                       <a
                         href={doc.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 whitespace-nowrap"
+                        className="rounded bg-blue-100 px-2 py-1 text-xs whitespace-nowrap text-blue-700 hover:bg-blue-200"
                       >
                         Download
                       </a>
@@ -293,7 +337,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+            <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
               Cosignature Workflow
             </h3>
             <CosignatureWorkflow
@@ -324,17 +368,22 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
 
           {encounterPreAuths.length > 0 && (
             <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
                 Insurance Pre-Authorizations
               </h3>
               <ul className="space-y-2">
                 {encounterPreAuths.map((pa) => (
-                  <li key={pa._id} className="rounded-md border border-gray-200 bg-white p-3 space-y-1">
+                  <li
+                    key={pa._id}
+                    className="space-y-1 rounded-md border border-gray-200 bg-white p-3"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
                       <PreAuthStatusBadge status={pa.status} />
                     </div>
-                    <p className="text-xs text-gray-500">{pa.insuranceProvider} · {pa.estimatedAmount} XLM</p>
+                    <p className="text-xs text-gray-500">
+                      {pa.insuranceProvider} · {pa.estimatedAmount} XLM
+                    </p>
                     {pa.preAuthNumber && (
                       <p className="text-xs text-gray-500">Pre-auth #: {pa.preAuthNumber}</p>
                     )}
