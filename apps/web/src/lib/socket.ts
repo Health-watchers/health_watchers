@@ -75,6 +75,12 @@ class SocketManager {
       console.log('Patient arrived:', data);
       window.dispatchEvent(new CustomEvent('appointment:patient_arrived', { detail: data }));
     });
+
+    // Notification events — dispatch custom DOM event so NotificationBell can react
+    this.socket.on('notification:new', (data) => {
+      console.log('New notification:', data);
+      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
+    });
   }
 
   // Join appointment room for real-time updates
@@ -93,6 +99,21 @@ class SocketManager {
 }
 
 export const socketManager = new SocketManager();
+
+/**
+ * Get (or create) the singleton Socket.IO socket for a given token.
+ * Used by useRealtimeUpdates and useLazyRealtimeUpdates.
+ */
+export function getSocket(token: string) {
+  return socketManager.connect(token);
+}
+
+/**
+ * Disconnect the singleton Socket.IO socket.
+ */
+export function disconnectSocket() {
+  socketManager.disconnect();
+}
 
 // React hook for using Socket.IO
 export function useSocket(token?: string) {

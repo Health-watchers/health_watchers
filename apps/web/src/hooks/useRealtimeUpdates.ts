@@ -9,6 +9,10 @@ import { queryKeys } from '@/lib/queryKeys';
  * Subscribes to Socket.IO real-time events and invalidates the relevant
  * React Query caches so lists refresh automatically.
  *
+ * Also dispatches custom DOM events (e.g. `notification:new`) so that
+ * components like NotificationBell can react without needing direct access
+ * to the query client.
+ *
  * @param accessToken - JWT access token from the auth cookie / context
  */
 export function useRealtimeUpdates(accessToken: string | null) {
@@ -39,7 +43,17 @@ export function useRealtimeUpdates(accessToken: string | null) {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
     });
 
+    /**
+     * notification:new — invalidate notification list + bump unread count optimistically.
+     * The socket.ts SocketManager also dispatches a DOM CustomEvent so that
+     * NotificationBell (which may not use this hook) can react immediately.
+     */
     socket.on('notification:new', () => {
+      // Bump unread count by 1 optimistically, then re-fetch to reconcile
+      queryClient.setQueryData<number>(
+        queryKeys.notifications.unreadCount(),
+        (old) => (old ?? 0) + 1
+      );
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     });
 
