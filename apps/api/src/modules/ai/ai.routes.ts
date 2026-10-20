@@ -33,6 +33,8 @@ import {
   updateTriageStatus,
 } from './triage.service';
 import { populationHealthRoutes } from './population-health.controller';
+import multer from 'multer';
+import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
 
 const router = Router();
 
@@ -895,6 +897,95 @@ router.post(
         });
       }
       return res.status(500).json({ error: 'InternalServerError' });
+    }
+  }
+);
+
+// ── Voice dictation (#1419) ──────────────────────────────────────────────────
+
+async function getClinicAiSettings(clinicId: string) {
+  const settings = await ClinicSettingsModel.findOne({ clinicId }, { ai: 1 }).lean();
+  const enabled = Boolean(settings?.ai?.enabled);
+  return {
+    enabled,
+    // Dictation needs both the clinic-wide AI switch and the dictation-specific opt-in
+    voiceDictation: enabled && Boolean(settings?.ai?.voiceDictation),
+  };
+}
+
+// GET /api/v1/ai/settings — lets clinical UIs know which AI features the clinic has enabled
+router.get('/settings', authenticate, async (req: Request, res: Response) => {
+  try {
+    const settings = await getClinicAiSettings(req.user!.clinicId);
+    return res.json({
+      status: 'success',
+      data: { ...settings, serviceAvailable: isAIServiceAvailable() },
+    });
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Failed to load AI settings');
+    return res.status(500).json({ error: 'InternalServerError' });
+  }
+});
+
+const DICTATION_MAX_BYTES = 10 * 1024 * 1024; // ~10 min of opus audio
+const dictationUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: DICTATION_MAX_BYTES, files: 1 },
+});
+
+// POST /api/v1/ai/transcribe-audio — multipart field `audio`
+// Audio is forwarded to the external AI provider, so the clinic must have opted in.
+router.post(
+  '/transcribe-audio',
+  authenticate,
+  requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const settings = await getClinicAiSettings(req.user!.clinicId);
+      if (!settings.voiceDictation) {
+        return res.status(403).json({
+          error: 'AIDisabled',
+          message: 'Voice dictation via AI transcription is not enabled for this clinic.',
+        });
+      }
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      await new Promise<void>((resolve, reject) =>
+        dictationUpload.single('audio')(req, res, (err) => (err ? reject(err) : resolve()))
+      );
+
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file || file.size === 0) {
+        return res
+          .status(400)
+          .json({ error: 'ValidationError', message: 'An `audio` file is required' });
+      }
+
+      const { isTranscribableAudioType, transcribeAudio } = await import('./ai.service');
+      if (!isTranscribableAudioType(file.mimetype)) {
+        return res
+          .status(415)
+          .json({ error: 'UnsupportedMediaType', message: 'Unsupported audio format' });
+      }
+
+      const text = await transcribeAudio(file.buffer, file.mimetype);
+      return res.json({ status: 'success', data: { text } });
+    } catch (error: unknown) {
+      if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+        return res
+          .status(413)
+          .json({ error: 'FileTooLarge', message: 'Recording is too long — keep it under 10 MB.' });
+      }
+      logger.error({ err: error }, 'Audio transcription error');
+      return res.status(502).json({
+        error: 'AIUnavailable',
+        message: 'Transcription service is temporarily unavailable',
+      });
     }
   }
 );

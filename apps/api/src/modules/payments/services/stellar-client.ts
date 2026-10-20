@@ -75,7 +75,11 @@ class StellarClient {
         return res;
       },
       (error) => {
-        const cfg = (error.config ?? {}) as { metadata?: { start: number }; method?: string; url?: string };
+        const cfg = (error.config ?? {}) as {
+          metadata?: { start: number };
+          method?: string;
+          url?: string;
+        };
         const start = cfg.metadata?.start;
         logger.error(
           {
@@ -170,13 +174,13 @@ class StellarClient {
    */
   async transferBalance(
     fromPublicKey: string,
-    toPublicKey: string,
+    toPublicKey: string
   ): Promise<{ transferred: boolean; amount?: string; hash?: string }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.post(
       '/transfer',
       { fromPublicKey, toPublicKey },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     return response.data;
   }
@@ -210,13 +214,13 @@ class StellarClient {
   async issueRefund(
     toPublicKey: string,
     amount: string,
-    memo: string,
+    memo: string
   ): Promise<{ transactionHash: string; dryRun?: boolean }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.post(
       '/refund',
       { toPublicKey, amount, memo },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     return response.data;
   }
@@ -225,12 +229,14 @@ class StellarClient {
    * Wrap an inner transaction in a platform-sponsored fee bump tx
    * Calls the stellar-service POST /fee-bump endpoint
    */
-  async sponsorFeeBump(innerXdr: string): Promise<{ xdr: string; hash: string; feeStroops: number }> {
+  async sponsorFeeBump(
+    innerXdr: string
+  ): Promise<{ xdr: string; hash: string; feeStroops: number }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
     const response = await this.client.post(
       '/fee-bump',
       { innerXdr },
-      { headers: { Authorization: `Bearer ${secret}` } },
+      { headers: { Authorization: `Bearer ${secret}` } }
     );
     const { success: _s, ...data } = response.data;
     return data;
@@ -248,11 +254,9 @@ class StellarClient {
     memo?: string;
   }): Promise<{ balanceId: string; txHash?: string; dryRun?: boolean }> {
     const secret = process.env.STELLAR_SERVICE_SECRET;
-    const response = await this.client.post(
-      '/claimable-balance',
-      params,
-      { headers: { Authorization: `Bearer ${secret}` } }
-    );
+    const response = await this.client.post('/claimable-balance', params, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
     return response.data;
   }
 

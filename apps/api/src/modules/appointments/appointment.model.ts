@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { APPOINTMENT_STATUSES, type AppointmentStatus } from '@health-watchers/types';
 
 export interface IAppointment extends Document {
   patientId: mongoose.Types.ObjectId;
@@ -7,7 +8,7 @@ export interface IAppointment extends Document {
   scheduledAt: Date;
   duration: number; // minutes (default 30)
   type: 'consultation' | 'follow-up' | 'procedure' | 'emergency';
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
+  status: AppointmentStatus;
   chiefComplaint?: string;
   notes?: string;
   encounterId?: mongoose.Types.ObjectId;
@@ -41,7 +42,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     },
     status: {
       type: String,
-      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show', 'patient_arrived'],
+      enum: APPOINTMENT_STATUSES,
       default: 'scheduled',
     },
     chiefComplaint: { type: String },

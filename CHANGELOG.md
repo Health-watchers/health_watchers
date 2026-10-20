@@ -103,3 +103,42 @@ API-Version: 1.0
 ```
 
 Use the `deprecated(sunsetDate, successorUrl)` middleware from `src/middlewares/versioning.middleware.ts` to mark endpoints as deprecated.
+
+---
+
+## Implementation History
+
+Feature batches previously tracked in standalone root-level summary files. Design notes and runbooks for these features now live in [`docs/`](./docs/README.md).
+
+### Right-to-Erasure, Feature Flags, Bulk Operations, and QR Check-in
+- #1440 — Right-to-erasure workflow (GDPR/NDPR) with pseudonymization of PHI
+- #1441 — Feature-flag service
+- #1442 — Bulk appointment reschedule and cancel (with dry-run)
+- #1443 — QR-code patient self check-in
+
+### OpenAPI Generation, Push Notifications, Report Scheduling, and DEX Trading
+- #1444 — OpenAPI docs generated from Zod schemas
+- #1445 — Device token registration for push notifications
+- #1446 — Scheduled report delivery by email
+- #1447 — DEX trade controller (Stellar XLM ⇄ USDC)
+
+### Stellar Integration: SEP-10, SEP-24, Soroban Escrow, Local Network
+- #1448 — SEP-10 web authentication for patient wallets
+- #1449 — SEP-24 anchor integration for NGN fiat on/off-ramp
+- #1450 — Soroban escrow contract
+- #1451 — Local Stellar network in Docker Compose
+
+### Stellar Payments: Muxed Accounts, SEP-7, Payment Stream, Trustlines
+- #1452 — Muxed accounts for per-patient payment attribution
+- #1453 — SEP-7 payment request URIs
+- #1454 — Persisted Horizon payment-stream cursor
+- #1455 — Trustline management for USDC and other assets
+
+### Secrets Scanning
+- #1050 — Gitleaks scanning in CI and pre-commit hooks, history scan, and remediation guide ([`docs/SECURITY_REMEDIATION.md`](./docs/SECURITY_REMEDIATION.md#secrets-leak-remediation))
+
+### Performance and Infrastructure
+- #954 — CDN integration ([`docs/CDN_CACHING_STRATEGY.md`](./docs/CDN_CACHING_STRATEGY.md))
+- #955 — Frontend code splitting optimization
+- #956 — MongoDB replication optimization ([`docs/REPLICATION_OPTIMIZATION.md`](./docs/REPLICATION_OPTIMIZATION.md))
+- #957 — Auto-scaling configuration ([`docs/AUTO_SCALING_GUIDE.md`](./docs/AUTO_SCALING_GUIDE.md))

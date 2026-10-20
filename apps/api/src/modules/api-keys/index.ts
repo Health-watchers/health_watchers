@@ -13,32 +13,36 @@ export {
 } from './models/api-key.model';
 export { ApiKeyUsageModel, IApiKeyUsage } from './models/api-key-usage.model';
 
-// Middleware
-export { authenticateApiKey, validateApiKeyScopes } from './api-key.middleware';
+// Middleware (consolidated in middlewares/ for shared use across modules)
+export {
+  authenticateApiKey,
+  validateApiKeyScopes,
+  requireScope,
+  type ApiKeyContext,
+  trackApiKeyUsage,
+} from '../../middlewares/api-key.middleware';
 
-// Controllers
+// Controllers (consolidated from api-keys.controller.ts)
 export {
   createApiKey,
   listApiKeys,
-  getApiKey,
   updateApiKey,
   revokeApiKey,
+  rotateApiKey,
   getApiKeyUsage,
-  getAvailableScopes,
-} from './api-key.controller';
+  getApiKeyAnalytics,
+} from './api-keys.controller';
 
-// Routes
-export { default as apiKeyRoutes } from './api-key.routes';
+// Routes (consolidated from api-keys.routes.ts)
+export { default as apiKeyRoutes } from './api-keys.routes';
 
-// Validation
+// Validation (consolidated in api-keys.schema.ts)
 export {
-  createApiKeySchema,
-  updateApiKeySchema,
-  listApiKeysSchema,
-  type CreateApiKeyDto,
-  type UpdateApiKeyDto,
-  type ListApiKeysQuery,
-} from './api-key.validation';
+  createApiKeyBody,
+  updateApiKeyBody,
+  rotateApiKeyBody,
+  revokeApiKeyBody,
+} from './api-keys.schema';
 
 // Constants
 export {

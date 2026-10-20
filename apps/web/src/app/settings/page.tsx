@@ -9,21 +9,15 @@ import { Skeleton } from '@/components/ui';
 import SettingsClient from './SettingsClient';
 import ClinicSettingsClient from './ClinicSettingsClient';
 
-const ApiKeyManager = dynamic(
-  () => import('@/components/settings/ApiKeyManager'),
-  {
-    loading: () => <Skeleton className="h-64 w-full rounded-lg" />,
-    ssr: false,
-  }
-);
+const ApiKeyManager = dynamic(() => import('@/components/settings/ApiKeyManager'), {
+  loading: () => <Skeleton className="h-64 w-full rounded-lg" />,
+  ssr: false,
+});
 
-const WebhookManager = dynamic(
-  () => import('@/components/settings/WebhookManager'),
-  {
-    loading: () => <Skeleton className="h-64 w-full rounded-lg" />,
-    ssr: false,
-  }
-);
+const WebhookManager = dynamic(() => import('@/components/settings/WebhookManager'), {
+  loading: () => <Skeleton className="h-64 w-full rounded-lg" />,
+  ssr: false,
+});
 
 export default function SettingsPage() {
   return (

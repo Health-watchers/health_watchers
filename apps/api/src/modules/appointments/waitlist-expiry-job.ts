@@ -3,9 +3,6 @@ import { notifyNextOnWaitlist } from '../appointments/waitlist.service';
 import { AppointmentModel } from '../appointments/appointment.model';
 import logger from '@api/utils/logger';
 
-const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-let jobInterval: NodeJS.Timeout | null = null;
-
 export async function expireWaitlistEntries(): Promise<number> {
   const now = new Date();
 
@@ -43,23 +40,4 @@ export async function expireWaitlistEntries(): Promise<number> {
 
   logger.info({ count: expired.length }, 'Waitlist: expired notified entries');
   return expired.length;
-}
-
-export function startWaitlistExpiryJob(): void {
-  if (jobInterval) return;
-  expireWaitlistEntries().catch((err) =>
-    logger.error({ err }, 'Waitlist expiry initial run failed')
-  );
-  jobInterval = setInterval(() => {
-    expireWaitlistEntries().catch((err) => logger.error({ err }, 'Waitlist expiry job failed'));
-  }, CHECK_INTERVAL_MS);
-  logger.info('Waitlist expiry job started');
-}
-
-export function stopWaitlistExpiryJob(): void {
-  if (jobInterval) {
-    clearInterval(jobInterval);
-    jobInterval = null;
-    logger.info('Waitlist expiry job stopped');
-  }
 }

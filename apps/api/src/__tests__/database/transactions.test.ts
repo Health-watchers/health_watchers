@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { PatientModel } from '@api/modules/patients/models/patient.model';
 import { EncounterModel } from '@api/modules/encounters/encounter.model';
 import { PaymentRecordModel } from '@api/modules/payments/models/payment-record.model';
@@ -13,11 +13,15 @@ jest.mock('@api/utils/logger', () => ({
   default: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
-let mongod: MongoMemoryServer;
+let replSet: MongoMemoryReplSet;
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create({ instance: { replSet: 'rs0' } });
-  await mongoose.connect(mongod.getUri());
+  // A standalone mongod started with a replSet name is never initiated and
+  // rejects transactions; MongoMemoryReplSet initiates a real replica set.
+  replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  await mongoose.connect(replSet.getUri());
   await PatientModel.ensureIndexes();
   await EncounterModel.ensureIndexes();
   await PaymentRecordModel.ensureIndexes();
@@ -25,7 +29,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongod.stop();
+  await replSet.stop();
 });
 
 afterEach(async () => {
@@ -44,7 +48,13 @@ describe('Database Transactions (ACID)', () => {
       await session.withTransaction(async () => {
         const patient = await PatientModel.create([buildPatient({ clinicId })], { session });
         await EncounterModel.create(
-          [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient[0]!._id as mongoose.Types.ObjectId })],
+          [
+            buildEncounter({
+              clinicId,
+              attendingDoctorId: doctorId,
+              patientId: patient[0]!._id as mongoose.Types.ObjectId,
+            }),
+          ],
           { session }
         );
       });
@@ -84,7 +94,9 @@ describe('Database Transactions (ACID)', () => {
 
       await expect(
         session.withTransaction(async () => {
-          await PaymentRecordModel.create([{ ...buildPayment(), intentId: payment.intentId }], { session });
+          await PaymentRecordModel.create([{ ...buildPayment(), intentId: payment.intentId }], {
+            session,
+          });
         })
       ).rejects.toThrow();
 
@@ -99,7 +111,9 @@ describe('Database Transactions (ACID)', () => {
       const patient = buildPatient({ clinicId });
       await PatientModel.create(patient);
 
-      await expect(PatientModel.create({ ...buildPatient({ clinicId }), systemId: patient.systemId })).rejects.toThrow();
+      await expect(
+        PatientModel.create({ ...buildPatient({ clinicId }), systemId: patient.systemId })
+      ).rejects.toThrow();
 
       const count = await PatientModel.countDocuments({ systemId: patient.systemId });
       expect(count).toBe(1);
@@ -134,7 +148,7 @@ describe('Database Transactions (ACID)', () => {
       session.endSession();
 
       await mongoose.disconnect();
-      await mongoose.connect(mongod.getUri());
+      await mongoose.connect(replSet.getUri());
 
       const count = await PatientModel.countDocuments({ clinicId });
       expect(count).toBe(1);
@@ -151,11 +165,22 @@ describe('Database Transactions (ACID)', () => {
       await session.withTransaction(async () => {
         const [patient] = await PatientModel.create([buildPatient({ clinicId })], { session });
         const [encounter] = await EncounterModel.create(
-          [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient!._id as mongoose.Types.ObjectId })],
+          [
+            buildEncounter({
+              clinicId,
+              attendingDoctorId: doctorId,
+              patientId: patient!._id as mongoose.Types.ObjectId,
+            }),
+          ],
           { session }
         );
         await PaymentRecordModel.create(
-          [buildPayment({ clinicId: clinicStr, encounterId: (encounter!._id as mongoose.Types.ObjectId).toString() })],
+          [
+            buildPayment({
+              clinicId: clinicStr,
+              encounterId: (encounter!._id as mongoose.Types.ObjectId).toString(),
+            }),
+          ],
           { session }
         );
       });
@@ -180,7 +205,13 @@ describe('Database Transactions (ACID)', () => {
         session.withTransaction(async () => {
           const [patient] = await PatientModel.create([buildPatient({ clinicId })], { session });
           await EncounterModel.create(
-            [buildEncounter({ clinicId, attendingDoctorId: doctorId, patientId: patient!._id as mongoose.Types.ObjectId })],
+            [
+              buildEncounter({
+                clinicId,
+                attendingDoctorId: doctorId,
+                patientId: patient!._id as mongoose.Types.ObjectId,
+              }),
+            ],
             { session }
           );
           await PaymentRecordModel.create(

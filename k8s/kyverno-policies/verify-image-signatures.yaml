@@ -1,0 +1,169 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Security, Supply Chain
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that all container images are signed with cosign using keyless OIDC.
+      Images must be signed by GitHub Actions from the health-watchers repository.
+      This policy prevents unsigned or untrusted images from running in the cluster.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-api-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - health-watchers
+                - health-watchers-*
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: health-watchers-api
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/*/health-watchers-api*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/*/.github/workflows/docker-build.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          
+    - name: verify-web-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - health-watchers
+                - health-watchers-*
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: health-watchers-web
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/*/health-watchers-web*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/*/.github/workflows/docker-build.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+
+    - name: verify-stellar-service-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - health-watchers
+                - health-watchers-*
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: health-watchers-stellar-service
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/*/health-watchers-stellar-service*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/*/.github/workflows/docker-build.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-sbom-attestations
+  annotations:
+    policies.kyverno.io/title: Verify SBOM Attestations
+    policies.kyverno.io/category: Security, Supply Chain
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that all container images have SBOM attestations signed with cosign.
+      This ensures software bill of materials are available for vulnerability tracking.
+spec:
+  validationFailureAction: Audit  # Audit mode - logs but doesn't block
+  background: true
+  webhookTimeoutSeconds: 30
+  failurePolicy: Ignore
+  rules:
+    - name: check-sbom-attestation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - health-watchers
+                - health-watchers-*
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/*/health-watchers-*"
+          attestations:
+            - predicateType: https://spdx.dev/Document
+              attestors:
+                - count: 1
+                  entries:
+                    - keyless:
+                        subject: "https://github.com/*/.github/workflows/docker-build.yml@refs/heads/main"
+                        issuer: "https://token.actions.githubusercontent.com"
+                        rekor:
+                          url: https://rekor.sigstore.dev
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: allow-unsigned-images-in-preview
+  annotations:
+    policies.kyverno.io/title: Allow Unsigned Images in Preview Environments
+    policies.kyverno.io/category: Security, Supply Chain
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/description: >-
+      Exempts PR preview environments from signature verification requirements.
+      Preview environments use PR-specific image tags that may not be signed.
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+    - name: exempt-preview-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - health-watchers-pr-*
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - health-watchers
+                - health-watchers-staging
+      validate:
+        message: "Preview environment - image signature verification bypassed"
+        pattern:
+          metadata:
+            labels:
+              preview: "true"

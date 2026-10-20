@@ -4,20 +4,29 @@ on:
   schedule:
     # Full backup daily at 2 AM UTC
     - cron: '0 2 * * *'
-    # Incremental backup every 6 hours
-    - cron: '0 2,8,14,20 * * *'
+    # Oplog archive every 5 minutes for PITR
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
+      backup_type:
+        description: 'Backup type to run'
+        type: choice
+        options:
+          - full
+          - oplog
+          - both
+        default: both
       verify:
         description: 'Run restore verification after backup'
         type: boolean
         default: false
 
 jobs:
-  backup:
-    name: Backup MongoDB
+  full-backup:
+    name: Full MongoDB Backup
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event.schedule == '0 2 * * *' || github.event.inputs.backup_type == 'full' || github.event.inputs.backup_type == 'both'
 
     steps:
       - name: Checkout
@@ -60,9 +69,56 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚨 Backup failed on ${new Date().toISOString().split('T')[0]}`,
-              body: `The scheduled MongoDB backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              title: `🚨 Full Backup failed on ${new Date().toISOString().split('T')[0]}`,
+              body: `The scheduled MongoDB full backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               labels: ['backup', 'incident'],
+            });
+
+  oplog-backup:
+    name: MongoDB Oplog Archive (PITR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.schedule == '*/5 * * * *' || github.event.inputs.backup_type == 'oplog' || github.event.inputs.backup_type == 'both'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install mongodump
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-database-tools
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Archive oplog segment
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          OPLOG_INTERVAL_SECONDS: 300
+        run: bash scripts/backup-mongodb-oplog.sh
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Oplog Archive failed on ${new Date().toISOString()}`,
+              body: `The scheduled MongoDB oplog archive (PITR) failed.\n\nThis affects Point-in-Time Recovery capability.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['backup', 'pitr', 'incident'],
             });
 
   weekly-verify:

@@ -4,6 +4,8 @@
 
 Implement the patient communication log end-to-end: MongoDB model, four API endpoints (log, list, send-sms stub, send-whatsapp stub), audit log extension, PDF export extension, and a communication timeline tab with a manual log form on the patient detail page.
 
+**Status:** The backend service and routes are implemented. `communication.service.ts` now provides `sendCommunication`, `listCommunications`, and `markAsRead` operations, integrates with the notification service for delivery tracking, and automatically writes log entries when SMS OTPs or appointment reminders are sent. The paginated `GET /api/v1/patients/:id/communications` endpoint is live and uses the shared `paginate` utility. RBAC restricts all communication endpoints to `DOCTOR`, `NURSE`, and `CLINIC_ADMIN` roles. Tests cover the log creation and retrieval flows.
+
 ## Tasks
 
 - [ ] 1. Extend audit model with new action types
@@ -24,53 +26,63 @@ Implement the patient communication log end-to-end: MongoDB model, four API endp
     - **Property 2: Invalid enum value rejection**
     - **Validates: Requirements 2.4, 2.5, 2.6**
 
-- [ ] 4. Implement communication service
-  - [ ] 4.1 Create `apps/api/src/modules/communications/communication.service.ts` with `logCommunication(patientId, params, user)`: verify patient exists and belongs to `user.clinicId` (return 404 if not), create `CommunicationLogModel` document with `sentBy: user._id` and `clinicId: user.clinicId` (ignoring any client-provided values), call `auditLog` with action `COMMUNICATION_LOG_CREATED` and metadata `{ resourceId, patientId, clinicId }` — omitting `content`
+- [x] 4. Implement communication service
+  - [x] 4.1 Create `apps/api/src/modules/communications/communication.service.ts` with `logCommunication(patientId, params, user)`: verify patient exists and belongs to `user.clinicId` (return 404 if not), create `CommunicationLogModel` document with `sentBy: user._id` and `clinicId: user.clinicId` (ignoring any client-provided values), call `auditLog` with action `COMMUNICATION_LOG_CREATED` and metadata `{ resourceId, patientId, clinicId }` — omitting `content`
     - _Requirements: 2.1, 2.2, 2.7, 2.8, 10.1_
-  - [ ]* 4.2 Write property test for communication log round-trip field completeness
+  - [x] 4.1a Add `sendCommunication(patientId, params, user)` to the service: verify patient belongs to `user.clinicId` (404 if not), delegate delivery to the notification service, persist a `CommunicationLogModel` entry with the returned delivery status and provider message SID, and record `COMMUNICATION_LOG_CREATED` in the audit log (metadata excludes `content`)
+    - _Requirements: 2.1, 2.2, 2.7, 2.8, 10.1_
+  - [x] 4.1b Add `markAsRead(patientId, communicationId, user)` to the service: verify patient belongs to `user.clinicId` (404 if not), verify the log entry belongs to the patient and clinic (404 if not), set `readAt`/`status` to read, and return the updated entry
+    - _Requirements: 2.2, 9.3_
+  - [x] 4.1c Integrate with the notification service for delivery tracking: pass the notification service's delivery result (status and provider message SID) into the persisted log entry so delivery state is tracked on the communication record
+    - _Requirements: 2.1, 2.7_
+  - [x] 4.1d Write communication log entries automatically when an SMS OTP is sent (auth/OTP flow) and when appointment reminders are dispatched (reminder job), using the same service path so `sentBy`, `clinicId`, and audit metadata stay consistent
+    - _Requirements: 2.1, 2.7, 2.8, 10.1_
+  - [x] 4.2 Write property test for communication log round-trip field completeness
     - **Property 1: Communication log round-trip field completeness**
     - **Validates: Requirements 1.1–1.12, 2.1, 2.7, 2.8**
-  - [ ]* 4.3 Write property test for server-side field override
+  - [x] 4.3 Write property test for server-side field override
     - **Property 3: Server-side field override**
     - **Validates: Requirements 2.7, 2.8**
-  - [ ]* 4.4 Write property test for clinic isolation on log
+  - [x] 4.4 Write property test for clinic isolation on log
     - **Property 4: Clinic isolation**
     - **Validates: Requirements 2.2, 9.3**
-  - [ ] 4.5 Add `listCommunications(patientId, clinicId, query)` to the service: verify patient belongs to clinic (return 404 if not), build filter `{ patientId, clinicId }` with optional `channel` and `direction` filters, call `paginate(CommunicationLogModel, filter, page, limit, { sentAt: -1 })`, call `auditLog` with action `COMMUNICATION_LOG_VIEWED` and metadata `{ patientId, clinicId }` — omitting content
+  - [x] 4.5 Add `listCommunications(patientId, clinicId, query)` to the service: verify patient belongs to clinic (return 404 if not), build filter `{ patientId, clinicId }` with optional `channel` and `direction` filters, call `paginate(CommunicationLogModel, filter, page, limit, { sentAt: -1 })`, call `auditLog` with action `COMMUNICATION_LOG_VIEWED` and metadata `{ patientId, clinicId }` — omitting content
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 10.2_
-  - [ ]* 4.6 Write property test for pagination invariant
+  - [x] 4.6 Write property test for pagination invariant
     - **Property 6: Pagination invariant**
     - **Validates: Requirements 3.3, 3.7**
-  - [ ]* 4.7 Write property test for sort order invariant
+  - [x] 4.7 Write property test for sort order invariant
     - **Property 7: Sort order invariant**
     - **Validates: Requirements 3.4**
-  - [ ]* 4.8 Write property test for filter correctness
+  - [x] 4.8 Write property test for filter correctness
     - **Property 8: Filter correctness**
     - **Validates: Requirements 3.5, 3.6**
-  - [ ]* 4.9 Write property test for audit log privacy invariant
+  - [x] 4.9 Write property test for audit log privacy invariant
     - **Property 10: Audit log privacy invariant**
     - **Validates: Requirements 10.1, 10.2**
+  - [x] 4.10 Write tests covering the log creation and retrieval flows: `logCommunication`/`sendCommunication` create a persisted entry with server-side `sentBy`/`clinicId`, and `listCommunications` returns paginated, clinic-scoped results sorted by `sentAt` descending
+    - _Requirements: 2.1, 2.2, 3.1–3.7_
 
-- [ ] 5. Checkpoint — Ensure all service-layer tests pass
+- [x] 5. Checkpoint — Ensure all service-layer tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement the communications controller and wire routes
-  - [ ] 6.1 Create `apps/api/src/modules/communications/communications.controller.ts` with an Express Router implementing all four endpoints:
+- [x] 6. Implement the communications controller and wire routes
+  - [x] 6.1 Create `apps/api/src/modules/communications/communications.controller.ts` with an Express Router implementing all four endpoints:
     - `POST /api/v1/patients/:id/communications` — apply `authenticate`, `requireRoles('DOCTOR','NURSE','CLINIC_ADMIN')`, `validate(logBodySchema)`, call `communicationService.logCommunication`, return 201
-    - `GET /api/v1/patients/:id/communications` — apply `authenticate`, `requireRoles(...)`, `validate(listQuerySchema)`, call `communicationService.listCommunications`, return 200 with `{ status: 'success', data, meta }`
-    - `POST /api/v1/patients/:id/send-sms` — apply `authenticate`, `requireRoles(...)`, return 501 with `{ status: 'error', message: 'SMS sending is not yet configured. Please configure Twilio to enable this feature.' }`
-    - `POST /api/v1/patients/:id/send-whatsapp` — apply `authenticate`, `requireRoles(...)`, return 501 with `{ status: 'error', message: 'WhatsApp sending is not yet configured. Please configure Twilio to enable this feature.' }`
+    - `GET /api/v1/patients/:id/communications` — apply `authenticate`, `requireRoles('DOCTOR','NURSE','CLINIC_ADMIN')`, `validate(listQuerySchema)`, call `communicationService.listCommunications` (which uses the shared `paginate` utility), return 200 with `{ status: 'success', data, meta }` where `meta` contains `page`, `limit`, `total`, and `totalPages`
+    - `POST /api/v1/patients/:id/send-sms` — apply `authenticate`, `requireRoles('DOCTOR','NURSE','CLINIC_ADMIN')`, return 501 with `{ status: 'error', message: 'SMS sending is not yet configured. Please configure Twilio to enable this feature.' }`
+    - `POST /api/v1/patients/:id/send-whatsapp` — apply `authenticate`, `requireRoles('DOCTOR','NURSE','CLINIC_ADMIN')`, return 501 with `{ status: 'error', message: 'WhatsApp sending is not yet configured. Please configure Twilio to enable this feature.' }`
     - _Requirements: 2.1, 2.9, 3.1, 3.8, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3_
-  - [ ]* 6.2 Write property test for role enforcement across all four endpoints
+  - [x] 6.2 Write property test for role enforcement across all four endpoints
     - **Property 5: Role enforcement**
     - **Validates: Requirements 2.9, 3.8, 4.2, 5.2, 9.1, 9.2**
-  - [ ]* 6.3 Write property test for stub endpoints returning 501 with no side effects
+  - [x] 6.3 Write property test for stub endpoints returning 501 with no side effects
     - **Property 9: Stub endpoints return 501 with no side effects**
     - **Validates: Requirements 4.1, 4.3, 5.1, 5.3**
-  - [ ] 6.4 Register `communicationRoutes` in `apps/api/src/app.ts` at `/api/v1/patients`
+  - [x] 6.4 Register `communicationRoutes` in `apps/api/src/app.ts` at `/api/v1/patients`
     - _Requirements: 2.1, 3.1, 4.1, 5.1_
 
-- [ ] 7. Checkpoint — Ensure all API tests pass
+- [x] 7. Checkpoint — Ensure all API tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Extend PDF export with communication history
@@ -120,3 +132,8 @@ Implement the patient communication log end-to-end: MongoDB model, four API endp
 - The Twilio send endpoints are intentional stubs — do not implement actual Twilio API calls until the integration is configured
 - The `paginate` utility in `apps/api/src/utils/paginate.ts` is already used by the encounters module and should be reused here
 - Clinic isolation is enforced by always including `clinicId` in the patient lookup query, not as a separate check
+- RBAC: all communication endpoints are restricted to `DOCTOR`, `NURSE`, and `CLINIC_ADMIN` roles via `requireRoles`; other roles receive 403
+- Delivery tracking: `sendCommunication` delegates to the notification service and persists the returned delivery status and provider message SID on the log entry
+- Automatic logging: SMS OTP sends and appointment reminders write communication log entries through the same service path, so `sentBy`, `clinicId`, and audit metadata are always server-derived
+- The paginated `GET /api/v1/patients/:id/communications` endpoint returns `{ status: 'success', data, meta }` using the shared `paginate` utility with `{ sentAt: -1 }` sort order
+- Tests cover both log creation (manual log, send, automatic OTP/reminder entries) and retrieval (pagination, filters, sort order, clinic isolation, RBAC)

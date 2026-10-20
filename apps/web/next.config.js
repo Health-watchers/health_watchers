@@ -4,6 +4,12 @@ const withNextIntl = createNextIntlPlugin('./i18n.ts');
 /** @type {import('next').NextConfig} */
 const path = require('path');
 const { withSentryConfig } = require('@sentry/nextjs');
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  // Set ANALYZE=true to open the bundle treemap in the browser (or write it
+  // to disk in CI when no display is available).
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false, // never auto-open in CI
+});
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
@@ -36,7 +42,13 @@ const nextConfig = {
   transpilePackages: ['@health-watchers/types'],
   experimental: {
     missingSuspenseWithCSRBailout: false,
-    optimizePackageImports: ['recharts', '@tanstack/react-query', 'lucide-react'],
+    optimizePackageImports: [
+      'recharts',
+      '@tanstack/react-query',
+      'lucide-react',
+      'clsx',
+      'tailwind-merge',
+    ],
   },
   // CDN Configuration
   basePath: '',
@@ -57,7 +69,7 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 31536000, // 1 year for optimized images
   },
-  // Enable compression
+  // Enable compression and gzip
   compress: true,
   // Powering down optimizations in production
   swcMinify: true,
@@ -90,10 +102,10 @@ const nextConfig = {
         runtimeChunk: 'single',
         splitChunks: {
           chunks: 'all',
-          maxInitialRequests: 25,
-          maxAsyncRequests: 25,
-          minSize: 20000,
-          maxSize: 244000,
+          maxInitialRequests: 30,
+          maxAsyncRequests: 30,
+          minSize: 15000,
+          maxSize: 200000,
           cacheGroups: {
             ...config.optimization?.splitChunks?.cacheGroups,
             default: {
@@ -111,21 +123,21 @@ const nextConfig = {
             recharts: {
               test: /[\\/]node_modules[\\/]recharts/,
               name: 'recharts',
-              chunks: 'all',
+              chunks: 'async',
               priority: 20,
               enforce: true,
             },
             sentry: {
               test: /[\\/]node_modules[\\/]@sentry/,
               name: 'sentry',
-              chunks: 'all',
+              chunks: 'async',
               priority: 20,
               enforce: true,
             },
             socketio: {
               test: /[\\/]node_modules[\\/]socket.io-client/,
               name: 'socketio',
-              chunks: 'all',
+              chunks: 'async',
               priority: 20,
               enforce: true,
             },
@@ -144,14 +156,25 @@ const nextConfig = {
               reuseExistingChunk: true,
             },
             ui: {
-              test: /[\\/]src[\\/](components|ui)[\\/]/,
+              test: /[\\/]src[\\/](components)[\\/]/,
               name: 'ui',
               chunks: 'async',
               priority: 5,
+              minChunks: 2,
+              reuseExistingChunk: true,
+            },
+            tui: {
+              test: /[\\/]src[\\/]components[\\/](forms|tables|charts)[\\/]/,
+              name: 'feature-ui',
+              chunks: 'async',
+              priority: 8,
+              minChunks: 2,
               reuseExistingChunk: true,
             },
           },
         },
+        usedExports: true,
+        sideEffects: false,
       };
     }
     return config;
@@ -160,7 +183,7 @@ const nextConfig = {
 
 process.env.NEXT_DISABLE_LOCKFILE_PATCHING = '1';
 
-module.exports = withSentryConfig(withNextIntl(nextConfig), {
+module.exports = withSentryConfig(withBundleAnalyzer(withNextIntl(nextConfig)), {
   silent: true,
   widenClientFileUpload: true,
   hideSourceMaps: true,

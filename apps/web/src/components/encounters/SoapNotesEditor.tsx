@@ -5,18 +5,11 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import CharacterCount from '@tiptap/extension-character-count';
 import Placeholder from '@tiptap/extension-placeholder';
-import Mention from '@tiptap/extension-mention';
-import {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-  createRef,
-  forwardRef,
-  useImperativeHandle,
-} from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { getSuggestions } from '@/lib/medicalShorthand';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { getSuggestions, expandShorthandInText } from '@/lib/medicalShorthand';
+import { useVoiceDictation, type VoiceDictation } from '@/hooks/useVoiceDictation';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,12 +34,8 @@ interface Props {
   /** Called on auto-save (every 30 s) and on Ctrl+S */
   onAutoSave?: (notes: SoapNotes) => void;
   readOnly?: boolean;
-  /** Pass the server's lastUpdatedAt ISO string for conflict detection */
-  serverLastUpdatedAt?: string;
-  /** Provide recent patients / encounters for @mention suggestions */
-  mentionItems?: MentionItem[];
-  /** Current encounter id — used to detect remote changes */
-  encounterId?: string;
+  /** Called with true the first time the user edits any SOAP section. */
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,16 +65,7 @@ const SOAP_TABS = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// EditorToolbar
-// ---------------------------------------------------------------------------
-
-interface EditorToolbarProps {
-  editor: Editor;
-  onSave?: () => void;
-}
-
-function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
+function EditorToolbar({ editor, children }: { editor: Editor; children?: React.ReactNode }) {
   const btn = (active: boolean) =>
     `px-2 py-1 rounded text-xs font-medium border transition-colors ${
       active
@@ -171,203 +151,130 @@ function EditorToolbar({ editor, onSave }: EditorToolbarProps) {
       >
         1. List
       </button>
-      <span className="text-secondary-300 mx-1">|</span>
-
-      <button
-        type="button"
-        aria-label="Blockquote"
-        title="Blockquote"
-        className={btn(editor.isActive('blockquote'))}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-      >
-        ❝
-      </button>
-
-      {onSave !== undefined && (
-        <>
-          <span className="text-secondary-300 mx-1">|</span>
-          <button
-            type="button"
-            aria-label="Save (Ctrl+S)"
-            title="Save (Ctrl+S)"
-            className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
-            onClick={onSave}
-          >
-            💾 Save
-          </button>
-        </>
-      )}
+      {children}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// MentionList — keyboard-navigable list rendered in a floating container
-// ---------------------------------------------------------------------------
-
-interface MentionListHandle {
-  onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+function formatElapsed(secs: number): string {
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-interface MentionListProps {
-  items: MentionItem[];
-  command: (item: MentionItem) => void;
-}
+function DictationButton({
+  sectionKey,
+  sectionLabel,
+  dictation,
+  onFinal,
+}: {
+  sectionKey: string;
+  sectionLabel: string;
+  dictation: VoiceDictation;
+  onFinal: (text: string) => void;
+}) {
+  const { availability, status, activeKey, elapsed } = dictation;
+  const isActive = activeKey === sectionKey;
+  const recording = isActive && (status === 'recording' || status === 'starting');
+  const transcribing = isActive && status === 'transcribing';
+  const busyElsewhere =
+    !isActive && (status === 'recording' || status === 'starting' || status === 'transcribing');
+  const tooltipId = `dictation-tip-${sectionKey}`;
 
-const MentionList = forwardRef<MentionListHandle, MentionListProps>(function MentionList(
-  { items, command },
-  ref
-) {
-  const [selected, setSelected] = useState(0);
-
-  useImperativeHandle(ref, () => ({
-    onKeyDown({ event }) {
-      if (event.key === 'ArrowUp') {
-        setSelected((s) => (s - 1 + Math.max(items.length, 1)) % Math.max(items.length, 1));
-        return true;
-      }
-      if (event.key === 'ArrowDown') {
-        setSelected((s) => (s + 1) % Math.max(items.length, 1));
-        return true;
-      }
-      if (event.key === 'Enter') {
-        const item = items[selected];
-        if (item) command(item);
-        return true;
-      }
-      return false;
-    },
-  }));
-
-  if (!items.length) {
+  if (!availability.available) {
+    // Disabled buttons don't emit hover events in every browser, so the tooltip sits on a wrapper
     return (
-      <div className="border-secondary-200 text-secondary-500 rounded-md border bg-white p-2 text-xs shadow-lg">
-        No matches
-      </div>
+      <span className="ml-auto inline-flex" title={availability.reason ?? undefined}>
+        <button
+          type="button"
+          disabled
+          aria-describedby={tooltipId}
+          className="border-secondary-300 text-secondary-400 flex cursor-not-allowed items-center gap-1 rounded border bg-white px-2 py-1 text-xs opacity-60"
+        >
+          <MicIcon /> Dictate
+        </button>
+        <span id={tooltipId} className="sr-only">
+          {availability.reason}
+        </span>
+      </span>
     );
   }
 
   return (
-    <div className="border-secondary-200 max-h-48 overflow-y-auto rounded-md border bg-white shadow-lg">
-      {items.map((item, i) => (
-        <button
-          key={item.id}
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            command(item);
-          }}
-          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-            i === selected
-              ? 'bg-primary-50 text-primary-700'
-              : 'text-secondary-700 hover:bg-secondary-50'
-          }`}
-        >
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${
-              item.type === 'patient' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-            }`}
-          >
-            {item.type === 'patient' ? 'PT' : 'ENC'}
+    <button
+      type="button"
+      disabled={busyElsewhere || transcribing}
+      onClick={() => (recording ? dictation.stop() : dictation.start(sectionKey, onFinal))}
+      aria-pressed={recording}
+      aria-label={
+        recording ? `Stop dictating into ${sectionLabel}` : `Dictate into ${sectionLabel}`
+      }
+      title={
+        availability.engine === 'upload'
+          ? 'Recording is transcribed by your clinic’s AI service when you stop'
+          : 'Speak to insert text at the cursor'
+      }
+      className={[
+        'ml-auto flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        recording
+          ? 'border-red-600 bg-red-600 text-white hover:bg-red-700'
+          : 'border-secondary-300 text-secondary-700 hover:bg-secondary-50 bg-white',
+      ].join(' ')}
+    >
+      {recording ? (
+        <>
+          <span className="relative flex h-2 w-2" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
           </span>
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </div>
+          Stop · {formatElapsed(elapsed)}
+        </>
+      ) : transcribing ? (
+        <>Transcribing…</>
+      ) : (
+        <>
+          <MicIcon /> Dictate
+        </>
+      )}
+    </button>
   );
-});
-
-// ---------------------------------------------------------------------------
-// Build Mention Tiptap extension with a fixed-position React portal popup
-// ---------------------------------------------------------------------------
-
-function buildMentionExtension(allItems: MentionItem[]) {
-  return Mention.configure({
-    HTMLAttributes: {
-      class:
-        'inline-flex items-center rounded bg-primary-50 px-1 py-0.5 text-xs font-medium text-primary-700 ring-1 ring-primary-200',
-    },
-    suggestion: {
-      items: ({ query }: { query: string }) =>
-        allItems
-          .filter((item) => item.label.toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 10),
-
-      render: () => {
-        const container = document.createElement('div');
-        container.style.cssText = 'position:fixed;z-index:9999;min-width:200px;max-width:320px;';
-        document.body.appendChild(container);
-
-        const listRef = createRef<MentionListHandle>();
-        let root: Root | null = null;
-
-        return {
-          onStart(props: {
-            clientRect?: (() => DOMRect | null) | null;
-            items: MentionItem[];
-            command: (item: MentionItem) => void;
-          }) {
-            const rect = props.clientRect?.();
-            if (rect) {
-              container.style.top = `${rect.bottom + 4}px`;
-              container.style.left = `${rect.left}px`;
-            }
-            root = createRoot(container);
-            root.render(<MentionList ref={listRef} items={props.items} command={props.command} />);
-          },
-
-          onUpdate(props: {
-            clientRect?: (() => DOMRect | null) | null;
-            items: MentionItem[];
-            command: (item: MentionItem) => void;
-          }) {
-            const rect = props.clientRect?.();
-            if (rect) {
-              container.style.top = `${rect.bottom + 4}px`;
-              container.style.left = `${rect.left}px`;
-            }
-            root?.render(<MentionList ref={listRef} items={props.items} command={props.command} />);
-          },
-
-          onKeyDown(props: { event: KeyboardEvent }) {
-            if (props.event.key === 'Escape') {
-              container.style.display = 'none';
-              return true;
-            }
-            return listRef.current?.onKeyDown(props) ?? false;
-          },
-
-          onExit() {
-            root?.unmount();
-            container.remove();
-          },
-        };
-      },
-    },
-  });
 }
 
-// ---------------------------------------------------------------------------
-// SoapTabEditor — one rich-text editor per SOAP tab
-// ---------------------------------------------------------------------------
-
-interface SoapTabEditorProps {
-  content: string;
-  placeholder: string;
-  onChange: (html: string) => void;
-  onSave?: () => void;
-  readOnly?: boolean;
-  mentionItems?: MentionItem[];
+function MicIcon() {
+  return (
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0V12a3 3 0 01-3 3z"
+      />
+    </svg>
+  );
 }
 
 function SoapTabEditor({
+  sectionKey,
+  sectionLabel,
   content,
   placeholder,
   onChange,
   onSave,
   readOnly,
-  mentionItems = [],
-}: SoapTabEditorProps) {
+  dictation,
+}: {
+  sectionKey: string;
+  sectionLabel: string;
+  content: string;
+  placeholder: string;
+  onChange: (html: string) => void;
+  readOnly?: boolean;
+  dictation?: VoiceDictation;
+}) {
   const [suggestions, setSuggestions] = useState<Array<{ abbr: string; expansion: string }>>([]);
   const [suggestionPos, setSuggestionPos] = useState({ top: 0, left: 0 });
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -440,19 +347,67 @@ function SoapTabEditor({
     setSuggestions([]);
   };
 
+  // Dictated text goes in at the cursor (or replaces the selection) as a plain text node —
+  // never parsed as HTML — after shorthand expansion.
+  const insertDictation = (raw: string) => {
+    if (!editor || editor.isDestroyed) return;
+    const text = expandShorthandInText(raw);
+    const { from } = editor.state.selection;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 1), from, ' ');
+    const needsSpace = before !== '' && !/\s$/.test(before);
+    editor
+      .chain()
+      .focus()
+      .insertContent({ type: 'text', text: `${needsSpace ? ' ' : ''}${text}` })
+      .run();
+  };
+
+  const isDictating =
+    !!dictation &&
+    dictation.activeKey === sectionKey &&
+    (dictation.status === 'recording' || dictation.status === 'transcribing');
+
   const charCount = editor?.storage.characterCount?.characters() ?? 0;
 
   return (
     <div ref={wrapperRef} className="relative">
-      {editor !== null && !readOnly && (
-        <EditorToolbar editor={editor} {...(onSave !== undefined ? { onSave } : {})} />
+      {editor && !readOnly && (
+        <EditorToolbar editor={editor}>
+          {dictation && (
+            <DictationButton
+              sectionKey={sectionKey}
+              sectionLabel={sectionLabel}
+              dictation={dictation}
+              onFinal={insertDictation}
+            />
+          )}
+        </EditorToolbar>
       )}
       <EditorContent
         editor={editor}
         className="prose prose-sm min-h-[140px] max-w-none px-4 py-3 focus-within:outline-none"
       />
-
-      {/* Medical shorthand autocomplete dropdown */}
+      {isDictating && (
+        <div
+          className="flex items-start gap-2 border-t border-red-100 bg-red-50/60 px-4 py-2 text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="mt-1.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-600"
+            aria-hidden="true"
+          />
+          <span className="text-secondary-400 italic">
+            {dictation!.interim ||
+              (dictation!.status === 'transcribing'
+                ? 'Transcribing…'
+                : dictation!.availability.engine === 'upload'
+                  ? 'Recording — text is inserted when you stop.'
+                  : 'Listening…')}
+          </span>
+        </div>
+      )}
+      {/* Shorthand autocomplete dropdown */}
       {suggestions.length > 0 && (
         <div
           className="border-secondary-200 absolute z-50 rounded-md border bg-white shadow-lg"
@@ -484,215 +439,24 @@ function SoapTabEditor({
   );
 }
 
-// ---------------------------------------------------------------------------
-// VoiceTranscription — Web Speech API (browser-only)
-// ---------------------------------------------------------------------------
-
-// Web Speech API type declarations (not in standard TS lib)
-interface SpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  [index: number]: SpeechRecognitionAlternative | undefined;
-}
-
-interface SpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  [index: number]: SpeechRecognitionResult | undefined;
-}
-
-interface SpeechRecognitionEvent extends Event {
-  readonly resultIndex: number;
-  readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-  readonly message: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-interface SpeechRecognitionConstructor {
-  new (): SpeechRecognitionInstance;
-}
-
-// Extend Window for cross-browser SpeechRecognition
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
-interface VoiceTranscriptionProps {
-  onTranscript: (text: string) => void;
-}
-
-function VoiceTranscription({ onTranscript }: VoiceTranscriptionProps) {
-  const [listening, setListening] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const finalRef = useRef('');
-
-  const isSupported =
-    typeof window !== 'undefined' &&
-    (window.SpeechRecognition !== undefined || window.webkitSpeechRecognition !== undefined);
-
-  const startListening = useCallback(() => {
-    if (!isSupported) {
-      setVoiceError('Speech recognition not supported in this browser.');
-      return;
-    }
-    setVoiceError(null);
-    finalRef.current = '';
-
-    const SpeechRecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (SpeechRecognitionCtor === undefined) return;
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result !== undefined && result.isFinal) {
-          const alt = result[0];
-          if (alt !== undefined) {
-            finalRef.current += alt.transcript + ' ';
-          }
-        } else if (result !== undefined) {
-          const alt = result[0];
-          if (alt !== undefined) {
-            interim += alt.transcript;
-          }
-        }
-      }
-      onTranscript(finalRef.current + interim);
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      setVoiceError(`Voice error: ${event.error}`);
-      setListening(false);
-    };
-
-    recognition.onend = () => {
-      setListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setListening(true);
-  }, [isSupported, onTranscript]);
-
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
-
-  return (
-    <div className="flex items-center gap-2">
-      {voiceError !== null && <span className="text-xs text-red-500">{voiceError}</span>}
-      <button
-        type="button"
-        title={
-          !isSupported
-            ? 'Voice transcription not supported in this browser'
-            : listening
-              ? 'Stop recording'
-              : 'Start voice transcription (populates current tab)'
-        }
-        disabled={!isSupported}
-        onClick={listening ? stopListening : startListening}
-        className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
-          listening
-            ? 'animate-pulse border-red-300 bg-red-50 text-red-700'
-            : isSupported
-              ? 'border-secondary-200 text-secondary-600 hover:border-secondary-300 hover:bg-secondary-50'
-              : 'border-secondary-200 text-secondary-400 cursor-not-allowed opacity-50'
-        }`}
-      >
-        🎤 {listening ? 'Stop' : 'Voice'}
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ConflictBanner — shown when a remote edit is detected
-// ---------------------------------------------------------------------------
-
-function ConflictBanner({ onReload, onDismiss }: { onReload: () => void; onDismiss: () => void }) {
-  return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-yellow-50 px-4 py-2 text-sm text-yellow-800 ring-1 ring-yellow-300"
-    >
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true">⚠️</span>
-        <span>
-          <strong>Conflict detected —</strong> this encounter was edited by another user. Reload to
-          get the latest version or continue editing to overwrite.
-        </span>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <button
-          type="button"
-          onClick={onReload}
-          className="rounded bg-yellow-600 px-2 py-1 text-xs font-medium text-white hover:bg-yellow-700"
-        >
-          Reload
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="rounded border border-yellow-400 px-2 py-1 text-xs font-medium text-yellow-700 hover:bg-yellow-100"
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main SoapNotesEditor
-// ---------------------------------------------------------------------------
-
-export function SoapNotesEditor({
-  value,
-  onChange,
-  onAutoSave,
-  readOnly = false,
-  serverLastUpdatedAt,
-  mentionItems = [],
-  encounterId,
-}: Props) {
+export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false, onDirtyChange }: Props) {
   const [activeTab, setActiveTab] = useState<keyof SoapNotes>('subjective');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [conflictDetected, setConflictDetected] = useState(false);
+  const dictation = useVoiceDictation();
+  const { stop: stopDictation } = dictation;
+
+  // Track dirty state internally so we can register the beforeunload guard.
+  // Also notify the parent via onDirtyChange if provided.
+  const [isDirty, setIsDirty] = useState(false);
+  const { showModal, confirmLeave, cancelLeave } = useUnsavedChangesGuard(
+    isDirty && !readOnly,
+    'You have unsaved SOAP notes. Are you sure you want to leave?'
+  );
+
+  // Don't keep listening into a section the clinician can no longer see
+  useEffect(() => {
+    stopDictation();
+  }, [activeTab, stopDictation]);
   const notesRef = useRef<SoapNotes>(value);
   notesRef.current = value;
 
@@ -715,8 +479,16 @@ export function SoapNotesEditor({
 
   // Auto-save interval (every 30 seconds)
   useEffect(() => {
-    if (readOnly || onAutoSave === undefined) return;
-    const interval = setInterval(triggerSave, 30_000);
+    if (readOnly || !onAutoSave) return;
+    const interval = setInterval(() => {
+      setAutoSaveStatus('saving');
+      onAutoSave(notesRef.current);
+      // After auto-save the notes are persisted, so the form is no longer dirty.
+      setIsDirty(false);
+      onDirtyChange?.(false);
+      setTimeout(() => setAutoSaveStatus('saved'), 600);
+      setTimeout(() => setAutoSaveStatus('idle'), 3000);
+    }, 30_000);
     return () => clearInterval(interval);
   }, [readOnly, onAutoSave, triggerSave]);
 
@@ -754,8 +526,12 @@ export function SoapNotesEditor({
   const handleTabChange = useCallback(
     (key: keyof SoapNotes, html: string) => {
       onChange({ ...notesRef.current, [key]: html });
+      if (!isDirty) {
+        setIsDirty(true);
+        onDirtyChange?.(true);
+      }
     },
-    [onChange]
+    [onChange, isDirty, onDirtyChange]
   );
 
   // ------------------------------------------------------------------
@@ -771,35 +547,10 @@ export function SoapNotesEditor({
   );
 
   return (
-    <div className="space-y-2">
-      {/* Conflict banner */}
-      {conflictDetected && !readOnly && (
-        <ConflictBanner
-          onReload={() => window.location.reload()}
-          onDismiss={() => setConflictDetected(false)}
-        />
-      )}
-
-      <div className="border-secondary-200 overflow-hidden rounded-lg border">
-        {/* SOAP tab bar */}
-        <div className="border-secondary-200 bg-secondary-50 flex border-b">
-          {SOAP_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'border-primary-600 text-primary-700 border-b-2 bg-white'
-                  : 'text-secondary-600 hover:text-secondary-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Editors — all mounted, inactive ones are hidden to preserve state */}
+    <>
+    <div className="border-secondary-200 overflow-hidden rounded-lg border">
+      {/* Tab bar */}
+      <div className="border-secondary-200 bg-secondary-50 flex border-b">
         {SOAP_TABS.map((tab) => (
           <div key={tab.key} className={activeTab === tab.key ? 'block' : 'hidden'}>
             <SoapTabEditor
@@ -813,32 +564,71 @@ export function SoapNotesEditor({
           </div>
         ))}
 
-        {/* Footer: auto-save status + voice transcription button */}
-        {!readOnly && (
-          <div className="border-secondary-100 bg-secondary-50 flex items-center justify-between border-t px-4 py-2">
-            <div className="text-xs">
-              {autoSaveStatus === 'saving' && (
-                <span className="flex items-center gap-1.5 text-yellow-600">
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
-                  Saving…
-                </span>
-              )}
-              {autoSaveStatus === 'saved' && (
-                <span className="flex items-center gap-1.5 text-green-600">
-                  <span>✓</span> Saved
-                </span>
-              )}
-              {autoSaveStatus === 'idle' && (
-                <span className="text-secondary-400">
-                  Auto-saves every 30 s · Ctrl+S to save now · @ to mention
-                </span>
-              )}
-            </div>
+      {/* Active tab editor */}
+      {SOAP_TABS.map((tab) => (
+        <div key={tab.key} className={activeTab === tab.key ? 'block' : 'hidden'}>
+          <SoapTabEditor
+            sectionKey={tab.key}
+            sectionLabel={tab.label.split(' — ')[1] ?? tab.label}
+            dictation={readOnly ? undefined : dictation}
+            content={value[tab.key] ?? ''}
+            placeholder={tab.placeholder}
+            onChange={(html) => handleTabChange(tab.key, html)}
+            readOnly={readOnly}
+          />
+        </div>
+      ))}
 
-            <VoiceTranscription onTranscript={handleVoiceTranscript} />
+      {/* Dictation problems (permission denied, network, transcription failure) */}
+      {!readOnly && dictation.error && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
+        >
+          <div>
+            <p className="font-medium">{dictation.error}</p>
+            {dictation.status === 'denied' && (
+              <p className="text-xs text-red-700">
+                To dictate, allow microphone access for this site in your browser’s address bar or
+                site settings, then try again.
+              </p>
+            )}
           </div>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={dictation.dismissError}
+            className="shrink-0 text-xs font-medium underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Auto-save indicator */}
+      {!readOnly && (
+        <div className="border-secondary-100 bg-secondary-50 flex items-center justify-between border-t px-4 py-2">
+          <div className="text-secondary-400 text-xs">
+            {autoSaveStatus === 'saving' && <span className="text-yellow-600">Saving…</span>}
+            {autoSaveStatus === 'saved' && <span className="text-green-600">Auto-saved</span>}
+            {autoSaveStatus === 'idle' && <span>Auto-saves every 30s</span>}
+          </div>
+          {dictation.availability.available && (
+            <span className="text-secondary-400 text-xs">
+              Dictation expands shorthand automatically (e.g. “SOB” → “Shortness of breath”)
+            </span>
+          )}
+        </div>
+      )}
     </div>
+
+      {/* ── Unsaved Changes Modal ── */}
+      {!readOnly && (
+        <UnsavedChangesModal
+          isOpen={showModal}
+          onConfirm={confirmLeave}
+          onCancel={cancelLeave}
+        />
+      )}
+    </>
   );
 }

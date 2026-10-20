@@ -99,7 +99,9 @@ jest.mock('@api/lib/email.service', () => ({
 jest.mock('@api/modules/auth/models/user.model', () => ({
   UserModel: {
     updateMany: jest.fn().mockResolvedValue({}),
-    findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ email: 'admin@test.com' }) }),
+    findOne: jest
+      .fn()
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue({ email: 'admin@test.com' }) }),
   },
 }));
 
@@ -226,7 +228,7 @@ describe('POST /api/v1/clinics/:id/keypair/rotate', () => {
 
     expect(rotateClinicKeypair).toHaveBeenCalledWith(
       CLINIC_ID,
-      expect.objectContaining({ stellarNetwork: 'testnet' }),
+      expect.objectContaining({ stellarNetwork: 'testnet' })
     );
   });
 
@@ -242,7 +244,7 @@ describe('POST /api/v1/clinics/:id/keypair/rotate', () => {
         resourceId: CLINIC_ID,
         metadata: expect.objectContaining({ newPublicKey: 'GNEWKEY', keyVersion: 2 }),
       }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -255,7 +257,7 @@ describe('POST /api/v1/clinics/:id/keypair/rotate', () => {
       'admin@test.com',
       'Test Clinic',
       'GNEWKEY',
-      2,
+      2
     );
   });
 

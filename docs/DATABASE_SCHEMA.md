@@ -20,6 +20,7 @@ Health Watchers uses MongoDB with Mongoose. All schema changes are version-contr
 - [Supporting Collections](#supporting-collections)
 - [Collection Relationships](#collection-relationships)
 - [Index Strategy](#index-strategy)
+- [Connection Pooling & Resilience](#connection-pooling--resilience)
 - [Migration Guide](#migration-guide)
 
 ---
@@ -442,6 +443,36 @@ The following principles guide index design across all collections:
 
 ---
 
+## Connection Pooling & Resilience
+
+The Mongoose connection is configured in `apps/api/src/config/db.ts` (used by `app.ts` — a second, simpler `lib/db.ts` exists but is unused and should not be imported from new code).
+
+**Pool configuration** — all overridable via environment variables (defaults shown):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MONGODB_POOL_SIZE` | `10` | Maximum connections in the pool (`maxPoolSize`) |
+| `MONGODB_MIN_POOL_SIZE` | `2` | Minimum connections kept warm (`minPoolSize`, capped at `MONGODB_POOL_SIZE`) |
+| `MONGODB_MAX_CONNECTING` | `2` | Max connections being established concurrently |
+| `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | `5000` | How long to wait for a usable server before failing |
+| `MONGODB_SOCKET_TIMEOUT_MS` | `45000` | Idle socket timeout |
+| `MONGODB_CONNECT_TIMEOUT_MS` | `10000` | TCP connect timeout |
+| `MONGODB_HEARTBEAT_FREQUENCY_MS` | `10000` | Server monitoring heartbeat interval |
+| `MONGODB_WAIT_QUEUE_TIMEOUT_MS` | `5000` | Max time a request waits for a free connection before erroring |
+| `MONGODB_POOL_WARN_THRESHOLD` | `0.8` | Pool utilization fraction that triggers a `warn` log |
+| `MONGODB_POOL_CRITICAL_THRESHOLD` | `0.95` | Pool utilization fraction that triggers an `error` log |
+| `MONGODB_MONITOR_INTERVAL_MS` | `30000` | How often pool utilization is sampled |
+
+Tune `MONGODB_POOL_SIZE` relative to instance count × pool size vs. your MongoDB deployment's own `maxConns` limit — an over-provisioned pool across many API instances can exhaust the server side before any single instance sees pressure.
+
+**Startup resilience** — `connectDB()` retries the initial connection up to `MAX_RETRIES` (5) times with exponential backoff (1s, 2s, 4s, 8s, 16s) before exiting the process. Connection lifecycle events (`connected`, `disconnected`, `reconnected`, `error`) are logged via the shared logger (see [`OBSERVABILITY.md`](./OBSERVABILITY.md)).
+
+**Runtime monitoring** — once connected, a background interval (`MONGODB_MONITOR_INTERVAL_MS`) samples pool utilization via `getPoolMetrics()` and logs a `warn`/`error` when it crosses the configured thresholds, plus a `warn` whenever requests are queued waiting for a connection (`waitQueueSize > 0`). `getPoolMetrics()` and `getDbStatus()` are also used by the `/health` endpoint and by the Grafana dashboards/alerts described in `monitoring/README.md` (see `monitoring/runbooks/MONGODB_POOL_WAIT_QUEUE.md` for the response runbook when this fires in production).
+
+For query optimization and general performance tuning beyond indexing, see [`PERFORMANCE_OPTIMIZATION.md`](./PERFORMANCE_OPTIMIZATION.md). For backup/restore procedures, see [`BACKUP_VERIFICATION.md`](./BACKUP_VERIFICATION.md) and [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md).
+
+---
+
 ## Migration Guide
 
 ### Commands
@@ -525,3 +556,15 @@ npm run migrate:up --workspace=api
 ```
 
 For multi-step rollbacks (rolling back more than one migration), run `migrate:down` once per migration you need to revert, then re-apply all with `migrate:up`.
+
+## Core Entities and PHI Requirements
+
+Core entities:
+
+- Tenant: organization boundary for clinics and partners.
+- User: authenticated actor tied to a tenant and role.
+- Patient: PHI-bearing clinical record.
+- Encounter: visit or telehealth session.
+- AuditEvent: immutable record of sensitive actions.
+
+All PHI-bearing models require tenant scoping, audit metadata, retention classification, and encryption coverage.

@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '@api/utils/logger';
 import { WebhookDeliveryModel, WebhookEventLogModel, type IWebhook } from './webhook.model';
 import { generateWebhookSignature } from './webhook.service';
+import { buildSignatureHeaders } from './webhook-signature';
 import { validateWebhookUrl } from '@api/utils/url-validator';
 
 interface RetryConfig {
@@ -28,10 +29,7 @@ function calculateBackoff(attempt: number, config: RetryConfig): number {
   }
 }
 
-export async function retryDelivery(
-  deliveryId: string,
-  webhook: IWebhook
-): Promise<boolean> {
+export async function retryDelivery(deliveryId: string, webhook: IWebhook): Promise<boolean> {
   const delivery = await WebhookDeliveryModel.findById(deliveryId);
   if (!delivery) {
     logger.warn({ deliveryId }, 'Retry skipped: delivery not found');
@@ -71,14 +69,23 @@ export async function retryDelivery(
   }
 
   const payloadString = JSON.stringify(delivery.payload);
-  const signature = generateWebhookSignature(webhook.secret, payloadString);
+  const signed = buildSignatureHeaders(webhook.secret, payloadString);
+  const headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'HealthWatchers-Webhooks/1',
+    'X-Webhook-Signature': generateWebhookSignature(webhook.secret, payloadString), // legacy
+    'X-Webhook-Timestamp': signed['x-webhook-timestamp'],
+    'X-Webhook-Signature-256': signed['x-webhook-signature'],
+    'X-Webhook-Id': String(delivery._id),
+    'X-Webhook-Event': delivery.event,
+    'X-Webhook-Attempt': String(delivery.attempts + 1),
+    ...(delivery.eventId ? { 'X-Webhook-Event-Id': delivery.eventId } : {}),
+  };
+  const startedAt = Date.now();
 
   try {
     const response = await axios.post(delivery.url, delivery.payload, {
-      headers: {
-        'X-Webhook-Signature': signature,
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: 10000,
     });
 
@@ -86,6 +93,8 @@ export async function retryDelivery(
     delivery.attempts += 1;
     delivery.lastAttemptAt = new Date();
     delivery.responseStatus = response.status;
+    delivery.durationMs = Date.now() - startedAt;
+    delivery.requestHeaders = headers;
     delivery.error = undefined;
     await delivery.save();
 
@@ -102,7 +111,17 @@ export async function retryDelivery(
   } catch (error) {
     delivery.attempts += 1;
     delivery.lastAttemptAt = new Date();
+    delivery.durationMs = Date.now() - startedAt;
+    delivery.requestHeaders = headers;
     delivery.error = error instanceof Error ? error.message : 'Unknown error';
+    const resp = (error as any)?.response;
+    if (resp) {
+      delivery.responseStatus = resp.status;
+      delivery.responseBody =
+        typeof resp.data === 'string'
+          ? resp.data.slice(0, 2000)
+          : JSON.stringify(resp.data ?? '').slice(0, 2000);
+    }
 
     if (delivery.attempts >= config.maxRetries) {
       delivery.status = 'dead';
@@ -132,52 +151,35 @@ export async function retryDelivery(
   }
 }
 
-let retryTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * Re-attempt pending webhook deliveries whose `nextRetryAt` has passed.
+ * Scheduled through the JobRegistry (`webhook-retry`, every 30s).
+ */
+export async function processDueWebhookRetries(now: Date = new Date()): Promise<number> {
+  const dueDeliveries = await WebhookDeliveryModel.find({
+    status: 'pending',
+    nextRetryAt: { $lte: now },
+  }).limit(50);
 
-export function startRetryWorker(intervalMs = 30000): void {
-  if (retryTimer) {
-    logger.warn('Retry worker already running');
-    return;
-  }
+  if (dueDeliveries.length === 0) return 0;
 
-  retryTimer = setInterval(async () => {
-    try {
-      const dueDeliveries = await WebhookDeliveryModel.find({
-        status: 'pending',
-        nextRetryAt: { $lte: new Date() },
-      }).limit(50);
+  logger.info({ count: dueDeliveries.length }, 'Processing pending webhook retries');
 
-      if (dueDeliveries.length === 0) return;
-
-      logger.info({ count: dueDeliveries.length }, 'Processing pending webhook retries');
-
-      for (const delivery of dueDeliveries) {
-        const webhook = await import('./webhook.model').then((m) =>
-          m.WebhookModel.findById(delivery.webhookId)
-        );
-        if (!webhook) {
-          delivery.status = 'dead';
-          delivery.error = 'Webhook not found';
-          await delivery.save();
-          continue;
-        }
-
-        retryDelivery(String(delivery._id), webhook).catch((err) => {
-          logger.error({ deliveryId: String(delivery._id), error: err }, 'Retry worker error');
-        });
-      }
-    } catch (error) {
-      logger.error({ error }, 'Retry worker tick failed');
+  for (const delivery of dueDeliveries) {
+    const webhook = await import('./webhook.model').then((m) =>
+      m.WebhookModel.findById(delivery.webhookId)
+    );
+    if (!webhook) {
+      delivery.status = 'dead';
+      delivery.error = 'Webhook not found';
+      await delivery.save();
+      continue;
     }
-  }, intervalMs);
 
-  logger.info({ intervalMs }, 'Webhook retry worker started');
-}
-
-export function stopRetryWorker(): void {
-  if (retryTimer) {
-    clearInterval(retryTimer);
-    retryTimer = null;
-    logger.info('Webhook retry worker stopped');
+    retryDelivery(String(delivery._id), webhook).catch((err) => {
+      logger.error({ deliveryId: String(delivery._id), error: err }, 'Retry worker error');
+    });
   }
+
+  return dueDeliveries.length;
 }

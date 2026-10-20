@@ -112,25 +112,37 @@ beforeEach(() => {
   jest.clearAllMocks();
 
   // Default responses for overview
-  patientAggregateSpy.mockReturnValue(makeAggregateQuery([{
-    total: [{ count: 100 }],
-    active: [{ count: 85 }],
-    new: [{ count: 12 }],
-  }]));
-  encounterAggregateSpy.mockReturnValue(makeAggregateQuery([{
-    total: [{ count: 50 }],
-    byStatus: [{ completed: 40, cancelled: 5 }],
-    byDoctor: [],
-    topComplaints: [],
-    completionRate: [{ total: 50, completed: 40 }],
-  }]));
-  paymentAggregateSpy.mockReturnValue(makeAggregateQuery([{
-    summary: [{ total: 20, confirmed: 15, pending: 5 }],
-    totalXLM: [{ sum: 1000.5 }],
-    byMonth: [],
-    successRate: [{ total: 20, confirmed: 15 }],
-    byAsset: [],
-  }]));
+  patientAggregateSpy.mockReturnValue(
+    makeAggregateQuery([
+      {
+        total: [{ count: 100 }],
+        active: [{ count: 85 }],
+        new: [{ count: 12 }],
+      },
+    ])
+  );
+  encounterAggregateSpy.mockReturnValue(
+    makeAggregateQuery([
+      {
+        total: [{ count: 50 }],
+        byStatus: [{ completed: 40, cancelled: 5 }],
+        byDoctor: [],
+        topComplaints: [],
+        completionRate: [{ total: 50, completed: 40 }],
+      },
+    ])
+  );
+  paymentAggregateSpy.mockReturnValue(
+    makeAggregateQuery([
+      {
+        summary: [{ total: 20, confirmed: 15, pending: 5 }],
+        totalXLM: [{ sum: 1000.5 }],
+        byMonth: [],
+        successRate: [{ total: 20, confirmed: 15 }],
+        byAsset: [],
+      },
+    ])
+  );
 });
 
 // ── GET /reports/overview ─────────────────────────────────────────────────────
@@ -163,9 +175,7 @@ describe('#1070 GET /reports/overview — aggregation pipeline optimization', ()
   });
 
   it('applies date range filter when from/to params provided', async () => {
-    await request(app)
-      .get('/reports/overview?from=2026-01-01&to=2026-12-31')
-      .expect(200);
+    await request(app).get('/reports/overview?from=2026-01-01&to=2026-12-31').expect(200);
 
     const pipelineArg: any[] = patientAggregateSpy.mock.calls[0]?.[0] ?? [];
     const matchStage = pipelineArg[0].$match;
@@ -178,11 +188,18 @@ describe('#1070 GET /reports/overview — aggregation pipeline optimization', ()
 // ── GET /reports/patients ─────────────────────────────────────────────────────
 describe('#1070 GET /reports/patients', () => {
   beforeEach(() => {
-    patientAggregateSpy.mockReturnValue(makeAggregateQuery([{
-      newByMonth: [{ _id: '2026-01', count: 5 }],
-      bySex: [{ _id: 'M', count: 40 }, { _id: 'F', count: 45 }],
-      byAge: [{ _id: 0, count: 10 }],
-    }]));
+    patientAggregateSpy.mockReturnValue(
+      makeAggregateQuery([
+        {
+          newByMonth: [{ _id: '2026-01', count: 5 }],
+          bySex: [
+            { _id: 'M', count: 40 },
+            { _id: 'F', count: 45 },
+          ],
+          byAge: [{ _id: 0, count: 10 }],
+        },
+      ])
+    );
   });
 
   it('returns 200 with demographics data', async () => {
@@ -214,11 +231,15 @@ describe('#1070 GET /reports/patients', () => {
 // ── GET /reports/encounters ───────────────────────────────────────────────────
 describe('#1070 GET /reports/encounters', () => {
   beforeEach(() => {
-    encounterAggregateSpy.mockReturnValue(makeAggregateQuery([{
-      byDoctor: [{ _id: 'doc-1', count: 20 }],
-      topComplaints: [{ _id: 'headache', count: 15 }],
-      completionRate: [{ total: 50, completed: 45 }],
-    }]));
+    encounterAggregateSpy.mockReturnValue(
+      makeAggregateQuery([
+        {
+          byDoctor: [{ _id: 'doc-1', count: 20 }],
+          topComplaints: [{ _id: 'headache', count: 15 }],
+          completionRate: [{ total: 50, completed: 45 }],
+        },
+      ])
+    );
   });
 
   it('returns 200 with byDoctor, topComplaints, completionRate', async () => {
@@ -243,11 +264,15 @@ describe('#1070 GET /reports/encounters', () => {
 // ── GET /reports/payments ─────────────────────────────────────────────────────
 describe('#1070 GET /reports/payments', () => {
   beforeEach(() => {
-    paymentAggregateSpy.mockReturnValue(makeAggregateQuery([{
-      byMonth: [{ _id: '2026-01', count: 5, total: 500 }],
-      successRate: [{ total: 10, confirmed: 8 }],
-      byAsset: [{ _id: 'XLM', count: 8, total: 800 }],
-    }]));
+    paymentAggregateSpy.mockReturnValue(
+      makeAggregateQuery([
+        {
+          byMonth: [{ _id: '2026-01', count: 5, total: 500 }],
+          successRate: [{ total: 10, confirmed: 8 }],
+          byAsset: [{ _id: 'XLM', count: 8, total: 800 }],
+        },
+      ])
+    );
   });
 
   it('returns 200 with byMonth, successRate, byAsset', async () => {

@@ -217,7 +217,9 @@ describe('errorHandler middleware', () => {
     const res = mockRes();
     errorHandler(new Error('unexpected'), mockReq(), res, noop);
     expect((res.status as jest.Mock).mock.calls[0][0]).toBe(500);
-    expect((res.json as jest.Mock).mock.calls[0][0]).toMatchObject({ error: 'InternalServerError' });
+    expect((res.json as jest.Mock).mock.calls[0][0]).toMatchObject({
+      error: 'InternalServerError',
+    });
   });
 });
 
@@ -236,11 +238,7 @@ describe('authenticate middleware', () => {
   it('returns 401 when header does not start with Bearer', async () => {
     const res = mockRes();
     const next = jest.fn();
-    await authenticate(
-      mockReq({ headers: { authorization: 'Basic abc123' } }),
-      res,
-      next
-    );
+    await authenticate(mockReq({ headers: { authorization: 'Basic abc123' } }), res, next);
     expect((res.status as jest.Mock).mock.calls[0][0]).toBe(401);
     expect(next).not.toHaveBeenCalled();
   });
@@ -415,11 +413,7 @@ describe('TokenDenylistService', () => {
   it('setUserInvalidatedAt stores timestamp under user key with 7-day TTL', async () => {
     const ts = Math.floor(Date.now() / 1000);
     await setUserInvalidatedAt('user-1', ts);
-    expect(cache.set).toHaveBeenCalledWith(
-      'user-invalidated:user-1',
-      ts,
-      7 * 24 * 60 * 60
-    );
+    expect(cache.set).toHaveBeenCalledWith('user-invalidated:user-1', ts, 7 * 24 * 60 * 60);
   });
 
   it('isInvalidatedForUser returns false when no invalidation record exists', async () => {

@@ -35,18 +35,36 @@ jest.mock('@health-watchers/config', () => ({
 }));
 
 // Stub out routes not under test
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -68,7 +86,12 @@ jest.mock('@api/modules/auth/models/user.model', () => ({
   UserModel: { findOne: jest.fn(), findById: jest.fn(), create: jest.fn() },
 }));
 jest.mock('@api/modules/auth/models/refresh-token.model', () => ({
-  RefreshTokenModel: { findOne: jest.fn(), create: jest.fn(), deleteOne: jest.fn(), deleteMany: jest.fn() },
+  RefreshTokenModel: {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    deleteOne: jest.fn(),
+    deleteMany: jest.fn(),
+  },
 }));
 jest.mock('@api/modules/auth/totp.service', () => ({
   totpService: { setup: jest.fn(), verify: jest.fn() },
@@ -78,7 +101,13 @@ jest.mock('@api/modules/audit/audit.service', () => ({
 }));
 jest.mock('@api/middlewares/rate-limit.middleware', () => {
   const pass = (_req: unknown, _res: unknown, next: () => void) => next();
-  return { authLimiter: pass, forgotPasswordLimiter: pass, aiLimiter: pass, paymentLimiter: pass, generalLimiter: pass };
+  return {
+    authLimiter: pass,
+    forgotPasswordLimiter: pass,
+    aiLimiter: pass,
+    paymentLimiter: pass,
+    generalLimiter: pass,
+  };
 });
 jest.mock('@api/instrument.ts');
 
@@ -154,9 +183,7 @@ describe('GET /api/v1/auth/mfa/backup-codes/count', () => {
       select: jest.fn().mockResolvedValue(user),
     });
 
-    const res = await request(app)
-      .get(url)
-      .set('Authorization', `Bearer ${makeToken()}`);
+    const res = await request(app).get(url).set('Authorization', `Bearer ${makeToken()}`);
 
     expect(res.status).toBe(409);
   });
@@ -167,9 +194,7 @@ describe('GET /api/v1/auth/mfa/backup-codes/count', () => {
       select: jest.fn().mockResolvedValue(user),
     });
 
-    const res = await request(app)
-      .get(url)
-      .set('Authorization', `Bearer ${makeToken()}`);
+    const res = await request(app).get(url).set('Authorization', `Bearer ${makeToken()}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.remaining).toBe(10);
@@ -183,9 +208,7 @@ describe('GET /api/v1/auth/mfa/backup-codes/count', () => {
       select: jest.fn().mockResolvedValue(user),
     });
 
-    const res = await request(app)
-      .get(url)
-      .set('Authorization', `Bearer ${makeToken()}`);
+    const res = await request(app).get(url).set('Authorization', `Bearer ${makeToken()}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.remaining).toBe(2);
@@ -198,9 +221,7 @@ describe('GET /api/v1/auth/mfa/backup-codes/count', () => {
       select: jest.fn().mockResolvedValue(user),
     });
 
-    const res = await request(app)
-      .get(url)
-      .set('Authorization', `Bearer ${makeToken()}`);
+    const res = await request(app).get(url).set('Authorization', `Bearer ${makeToken()}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.remaining).toBe(0);

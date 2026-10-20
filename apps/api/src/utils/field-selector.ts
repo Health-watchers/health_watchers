@@ -70,10 +70,7 @@ export class FieldSelector {
     return Object.keys(projection).length > 0 ? projection : {};
   }
 
-  buildGraphQLSelection(
-    modelName: string,
-    requestedFields?: string | string[]
-  ): string[] {
+  buildGraphQLSelection(modelName: string, requestedFields?: string | string[]): string[] {
     const config = this.fieldConfigs.get(modelName);
 
     if (!config) {
@@ -96,14 +93,15 @@ export class FieldSelector {
     const config = this.fieldConfigs.get(modelName);
 
     if (!config) {
-      return { valid: false, invalidFields: Array.isArray(requestedFields) ? requestedFields : [requestedFields] };
+      return {
+        valid: false,
+        invalidFields: Array.isArray(requestedFields) ? requestedFields : [requestedFields],
+      };
     }
 
     const requested = Array.isArray(requestedFields) ? requestedFields : requestedFields.split(',');
 
-    const invalidFields = requested.filter(
-      (field) => !config.allowedFields.includes(field.trim())
-    );
+    const invalidFields = requested.filter((field) => !config.allowedFields.includes(field.trim()));
 
     return {
       valid: invalidFields.length === 0,
@@ -129,11 +127,7 @@ export class FieldSelector {
     return 0;
   }
 
-  estimatePayloadSize(
-    data: any,
-    modelName: string,
-    requestedFields?: string | string[]
-  ): number {
+  estimatePayloadSize(data: any, modelName: string, requestedFields?: string | string[]): number {
     const config = this.fieldConfigs.get(modelName);
 
     if (!config || !Array.isArray(data)) {

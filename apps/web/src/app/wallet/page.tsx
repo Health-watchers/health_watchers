@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function WalletPage() {
-  return <WalletClient />;
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+      <WalletClient />
+    </div>
+  );
 }

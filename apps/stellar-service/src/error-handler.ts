@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import { getRequestId } from './request-context.js';
 
 export interface HorizonError {
   errorCode: string;
@@ -6,6 +7,117 @@ export interface HorizonError {
   retryable: boolean;
   suggestedAction: string;
   statusCode: number;
+}
+
+/**
+ * Stable error response shape returned to callers.
+ * Every error response includes the requestId for end-to-end tracing.
+ */
+export interface ErrorResponse {
+  error: string;
+  code: string;
+  message: string;
+  requestId: string;
+  retryable?: boolean;
+}
+
+/**
+ * Build a stable error response object, attaching the current request ID.
+ */
+export function buildErrorResponse(
+  code: string,
+  message: string,
+  options: { error?: string; retryable?: boolean } = {}
+): ErrorResponse {
+  const response: ErrorResponse = {
+    error: options.error ?? code,
+    code,
+    message,
+    requestId: getRequestId(),
+  };
+
+  if (options.retryable !== undefined) {
+    response.retryable = options.retryable;
+  }
+
+  return response;
+}
+
+/**
+ * Convert a parsed Horizon error into the stable error response shape.
+ */
+export function toErrorResponse(horizonError: HorizonError): ErrorResponse {
+  return buildErrorResponse(horizonError.errorCode, horizonError.errorMessage, {
+    retryable: horizonError.retryable,
+  });
+}
+
+/**
+ * Error thrown when a batch is cancelled before submission.
+ */
+export class BatchCancelledError extends Error {
+  readonly code = 'batch_cancelled';
+  readonly retryable = false;
+
+  constructor(message: string = 'Batch was cancelled before submission') {
+    super(message);
+    this.name = 'BatchCancelledError';
+  }
+
+  toResponse(): ErrorResponse {
+    return buildErrorResponse(this.code, this.message, { retryable: this.retryable });
+  }
+}
+
+/**
+ * Error thrown when retries for a batch transaction are exhausted.
+ */
+export class BatchRetryExhaustedError extends Error {
+  readonly code = 'batch_retry_exhausted';
+  readonly retryable = false;
+  readonly attempts: number;
+
+  constructor(message: string, attempts: number) {
+    super(message);
+    this.name = 'BatchRetryExhaustedError';
+    this.attempts = attempts;
+  }
+
+  toResponse(): ErrorResponse {
+    return buildErrorResponse(this.code, this.message, { retryable: this.retryable });
+  }
+}
+
+/**
+ * Error thrown when a batch completes with partial success.
+ */
+export class BatchPartialFailureError extends Error {
+  readonly code = 'batch_partial_failure';
+  readonly retryable = false;
+  readonly succeeded: string[];
+  readonly failed: Array<{ id: string; code: string; message: string }>;
+
+  constructor(
+    message: string,
+    succeeded: string[],
+    failed: Array<{ id: string; code: string; message: string }>
+  ) {
+    super(message);
+    this.name = 'BatchPartialFailureError';
+    this.succeeded = succeeded;
+    this.failed = failed;
+  }
+
+  toResponse(): ErrorResponse & {
+    succeeded: string[];
+    failed: Array<{ id: string; code: string; message: string }>;
+  } {
+    return {
+      ...buildErrorResponse(this.code, this.message, { retryable: this.retryable }),
+      succeeded: this.succeeded,
+      failed: this.failed,
+    };
+  }
 }
 
 export interface CircuitBreakerState {
@@ -146,7 +258,13 @@ export async function retryWithBackoff<T>(
 
       const delayMs = baseDelayMs * Math.pow(2, attempt);
       logger.warn(
-        { attempt: attempt + 1, maxRetries, delayMs, errorCode: horizonError.errorCode },
+        {
+          requestId: getRequestId(),
+          attempt: attempt + 1,
+          maxRetries,
+          delayMs,
+          errorCode: horizonError.errorCode,
+        },
         'Retrying after backoff'
       );
 
@@ -178,13 +296,16 @@ export function checkCircuitBreaker(): boolean {
   if (circuitBreakerState.failureCount >= CIRCUIT_BREAKER_THRESHOLD) {
     if (circuitBreakerState.status === 'closed') {
       circuitBreakerState.status = 'open';
-      logger.error('Circuit breaker opened after 5 consecutive failures');
+      logger.error(
+        { requestId: getRequestId() },
+        'Circuit breaker opened after 5 consecutive failures'
+      );
     }
 
     // Try half-open after timeout
     if (circuitBreakerState.status === 'open' && timeSinceLastFailure > CIRCUIT_BREAKER_TIMEOUT) {
       circuitBreakerState.status = 'half-open';
-      logger.info('Circuit breaker half-open, testing recovery');
+      logger.info({ requestId: getRequestId() }, 'Circuit breaker half-open, testing recovery');
     }
   }
 
@@ -199,7 +320,7 @@ export function recordSuccess(): void {
     circuitBreakerState.status = 'closed';
     circuitBreakerState.failureCount = 0;
     circuitBreakerState.successCount = 0;
-    logger.info('Circuit breaker closed, service recovered');
+    logger.info({ requestId: getRequestId() }, 'Circuit breaker closed, service recovered');
   }
 }
 

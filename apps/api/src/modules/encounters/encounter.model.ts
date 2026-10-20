@@ -1,5 +1,6 @@
 import { Schema, model, models } from 'mongoose';
 import { sanitizeText, sanitizeHtml } from '../../utils/sanitize';
+import { ENCOUNTER_STATUSES, type EncounterStatus } from '@health-watchers/types';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -73,7 +74,7 @@ export interface Encounter {
   /** The specific template version used when creating this encounter. */
   templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
+  status: EncounterStatus;
   notes?: string;
   soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
@@ -215,7 +216,7 @@ const encounterSchema = new Schema<Encounter>(
     chiefComplaint: { type: String, required: true },
     status: {
       type: String,
-      enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'],
+      enum: ENCOUNTER_STATUSES,
       default: 'open',
       index: true,
     },

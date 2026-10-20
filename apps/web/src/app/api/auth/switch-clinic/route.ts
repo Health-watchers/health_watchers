@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_URL } from '@/lib/api';
+import { webConfig } from '@/lib/config';
 
 /**
  * Proxies a SUPER_ADMIN clinic switch to the API and rotates the httpOnly
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('accessToken', data.data.accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: webConfig.isProd(),
       sameSite: 'lax',
       maxAge: 15 * 60,
       path: '/',
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('refreshToken', data.data.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: webConfig.isProd(),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',

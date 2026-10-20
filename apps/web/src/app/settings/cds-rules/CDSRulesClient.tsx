@@ -112,7 +112,7 @@ export default function CDSRulesClient() {
               setEditingRule(null);
               setView('create');
             }}
-            className="bg-primary-600 hover:bg-primary-700 rounded-md px-4 py-2 text-sm font-medium text-white"
+            className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
           >
             Create Rule
           </button>

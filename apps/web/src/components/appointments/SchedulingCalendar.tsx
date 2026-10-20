@@ -68,7 +68,7 @@ export function SchedulingCalendar({
     return (
       <div className="grid grid-cols-7 gap-2">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="text-center text-xs font-semibold text-gray-600 py-2">
+          <div key={day} className="py-2 text-center text-xs font-semibold text-gray-600">
             {day}
           </div>
         ))}
@@ -77,12 +77,12 @@ export function SchedulingCalendar({
             key={idx}
             onClick={() => day && onDateChange(day)}
             disabled={!day}
-            className={`p-2 text-sm font-medium rounded-lg transition-colors ${
+            className={`rounded-lg p-2 text-sm font-medium transition-colors ${
               day
                 ? isSameDay(day, selectedDate)
                   ? 'bg-blue-600 text-white'
                   : day < new Date() && day.toDateString() !== new Date().toDateString()
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'cursor-not-allowed bg-gray-100 text-gray-400'
                     : 'border border-gray-200 hover:bg-blue-50'
                 : 'invisible'
             }`}
@@ -100,7 +100,7 @@ export function SchedulingCalendar({
       <div className="flex gap-2">
         <button
           onClick={() => setViewMode('week')}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
             viewMode === 'week'
               ? 'bg-blue-600 text-white'
               : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -110,7 +110,7 @@ export function SchedulingCalendar({
         </button>
         <button
           onClick={() => setViewMode('month')}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
             viewMode === 'month'
               ? 'bg-blue-600 text-white'
               : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -121,14 +121,14 @@ export function SchedulingCalendar({
       </div>
 
       {/* Calendar header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <button
           onClick={() => {
             const prev = new Date(selectedDate);
             prev.setDate(prev.getDate() - (viewMode === 'week' ? 7 : 1));
             onDateChange(prev);
           }}
-          className="px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"
         >
           ← Previous
         </button>
@@ -147,30 +147,34 @@ export function SchedulingCalendar({
             next.setDate(next.getDate() + (viewMode === 'week' ? 7 : 1));
             onDateChange(next);
           }}
-          className="px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"
         >
           Next →
         </button>
       </div>
 
       {/* Calendar display */}
-      <div className="border border-gray-200 rounded-lg p-4 bg-white">
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
         {viewMode === 'week' ? (
           <div className="space-y-2">
             {weekDays.map((day) => (
               <button
                 key={day.toISOString()}
                 onClick={() => onDateChange(day)}
-                className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                className={`w-full rounded-lg border-2 p-3 text-left transition-colors ${
                   isSameDay(day, selectedDate)
                     ? 'border-blue-600 bg-blue-50'
                     : 'border-gray-200 hover:border-blue-300'
                 }`}
               >
                 <div className="font-medium text-gray-900">
-                  {day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  {day.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="mt-1 text-xs text-gray-500">
                   {getAvailableSlots(day, timeSlots).length} slots available
                 </div>
               </button>
@@ -183,26 +187,31 @@ export function SchedulingCalendar({
 
       {/* Time slots */}
       <div>
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">
-          Available times on {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+        <h4 className="mb-3 text-sm font-semibold text-gray-900">
+          Available times on{' '}
+          {selectedDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric',
+          })}
         </h4>
         {isLoading ? (
-          <div className="text-center py-4 text-gray-500">Loading available times...</div>
+          <div className="py-4 text-center text-gray-500">Loading available times...</div>
         ) : timeSlots.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">No available slots on this date</div>
+          <div className="py-4 text-center text-gray-500">No available slots on this date</div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {timeSlots.map((slot) => (
               <button
                 key={slot.time}
                 onClick={() => slot.available && onSlotSelect(slot.time)}
                 disabled={!slot.available}
-                className={`p-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`rounded-lg p-2 text-sm font-medium transition-colors ${
                   slot.available
                     ? slot.booked
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      ? 'cursor-not-allowed bg-gray-100 text-gray-400'
                       : 'border border-blue-300 bg-white text-blue-600 hover:bg-blue-50'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'cursor-not-allowed bg-gray-100 text-gray-400'
                 }`}
               >
                 {slot.time}

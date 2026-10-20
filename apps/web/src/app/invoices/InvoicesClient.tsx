@@ -143,20 +143,20 @@ export default function InvoicesClient() {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handlePreviewPDF(inv._id)}
-                        className="text-primary-600 text-xs hover:underline"
+                        className="text-xs text-primary-600 hover:underline"
                       >
                         Preview
                       </button>
                       <button
                         onClick={() => handleDownloadPDF(inv._id, inv.invoiceNumber)}
-                        className="text-primary-600 text-xs hover:underline"
+                        className="text-xs text-primary-600 hover:underline"
                       >
                         Download
                       </button>
                       {inv.status === 'draft' && (
                         <button
                           onClick={() => handleSend(inv._id)}
-                          className="text-primary-600 text-xs hover:underline"
+                          className="text-xs text-primary-600 hover:underline"
                         >
                           Send
                         </button>

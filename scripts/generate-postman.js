@@ -75,9 +75,89 @@ function convertToPostman(openapiSpec) {
   }
 }
 
-// ── 3. Validate collection covers required folders ────────────────────────────
+// ── 3. Pagination schema helpers ──────────────────────────────────────────────
+// List endpoints that must expose the standardized pagination query params.
+const PAGINATED_FOLDERS = [
+  'Patients',
+  'Encounters',
+  'Payments',
+  'Invoices',
+  'Appointments',
+  'Notifications',
+  'Communications',
+];
+
+// Query params every paginated list endpoint must document.
+const REQUIRED_QUERY_PARAMS = ['page', 'limit', 'sort', 'cursor'];
+
+// Recursively collect all requests (items with a `request`) from a folder tree.
+function collectRequests(items, acc = []) {
+  for (const item of items || []) {
+    if (item.request) {
+      acc.push(item);
+    }
+    if (Array.isArray(item.item)) {
+      collectRequests(item.item, acc);
+    }
+  }
+  return acc;
+}
+
+// Extract query param keys from a Postman request URL (string or object form).
+function getQueryParamKeys(request) {
+  const url = request && request.url;
+  if (!url) return [];
+  if (typeof url === 'string') {
+    const qs = url.split('?')[1] || '';
+    return qs
+      .split('&')
+      .filter(Boolean)
+      .map((pair) => decodeURIComponent(pair.split('=')[0]));
+  }
+  if (Array.isArray(url.query)) {
+    return url.query.map((q) => q.key);
+  }
+  return [];
+}
+
+// Check whether a request's example response body uses the { data, pagination } shape.
+function hasStandardPaginationShape(request) {
+  const responses = (request && request.response) || [];
+  return responses.some((res) => {
+    const body = res && res.body;
+    if (typeof body !== 'string') return false;
+    try {
+      const parsed = JSON.parse(body);
+      return (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray(parsed.data) &&
+        parsed.pagination &&
+        typeof parsed.pagination === 'object' &&
+        'total' in parsed.pagination &&
+        'page' in parsed.pagination &&
+        'limit' in parsed.pagination &&
+        'hasMore' in parsed.pagination
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+// ── 4. Validate collection covers required folders & pagination schema ────────
 function validateCollection(collection) {
-  const required = ['Auth', 'Patients', 'Encounters', 'Payments'];
+  const required = [
+    'Auth',
+    'Patients',
+    'Encounters',
+    'Payments',
+    'Invoices',
+    'Appointments',
+    'Notifications',
+    'Communications',
+    'Attachments',
+  ];
   const folders = (collection.item || []).map((i) => i.name);
   const missing = required.filter(
     (r) => !folders.some((f) => f.toLowerCase().includes(r.toLowerCase()))
@@ -88,14 +168,52 @@ function validateCollection(collection) {
     process.exit(1);
   }
 
+  // Validate pagination query params + response shape on paginated list folders.
+  const errors = [];
+  for (const folderName of PAGINATED_FOLDERS) {
+    const folder = (collection.item || []).find((f) =>
+      f.name.toLowerCase().includes(folderName.toLowerCase())
+    );
+    if (!folder) continue; // already reported as missing above
+
+    const requests = collectRequests(folder.item);
+    if (requests.length === 0) {
+      errors.push(`${folderName}: no requests found`);
+      continue;
+    }
+
+    for (const req of requests) {
+      const label = `${folderName} › ${req.name || '(unnamed request)'}`;
+      const paramKeys = getQueryParamKeys(req.request).map((k) => k.toLowerCase());
+      const missingParams = REQUIRED_QUERY_PARAMS.filter(
+        (p) => !paramKeys.includes(p)
+      );
+      if (missingParams.length > 0) {
+        errors.push(`${label}: missing query params [${missingParams.join(', ')}]`);
+      }
+      if (!hasStandardPaginationShape(req.request)) {
+        errors.push(`${label}: response example missing { data, pagination } shape`);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error('❌ Pagination schema validation failed:');
+    errors.forEach((e) => console.error(`   - ${e}`));
+    process.exit(1);
+  }
+
   console.log(`✅ Collection validated — folders present: ${folders.join(', ')}`);
+  console.log(
+    `✅ Pagination schema validated for: ${PAGINATED_FOLDERS.join(', ')}`
+  );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 if (update) {
   console.log('Generating Postman collection from OpenAPI spec…');
   const spec = exportOpenApiSpec();
-  const collection = convertToPostman(spec);
+  const collection = augmentCollection(convertToPostman(spec));
   validateCollection(collection);
   fs.writeFileSync(COLLECTION_PATH, JSON.stringify(collection, null, 2));
   console.log(`✅ Written to ${COLLECTION_PATH}`);
@@ -106,6 +224,6 @@ if (update) {
     console.error(`❌ Collection not found at ${COLLECTION_PATH}`);
     process.exit(1);
   }
-  const collection = JSON.parse(fs.readFileSync(COLLECTION_PATH, 'utf8'));
+  const collection = augmentCollection(JSON.parse(fs.readFileSync(COLLECTION_PATH, 'utf8')));
   validateCollection(collection);
 }

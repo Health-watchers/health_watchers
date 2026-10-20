@@ -221,10 +221,7 @@ export function getJobProgress(jobId: string): BatchProgress | undefined {
   return progressMap.get(jobId);
 }
 
-export function updateJobProgress(
-  jobId: string,
-  progress: Partial<BatchProgress>
-): void {
+export function updateJobProgress(jobId: string, progress: Partial<BatchProgress>): void {
   const current = progressMap.get(jobId);
   if (!current) return;
 
@@ -232,11 +229,7 @@ export function updateJobProgress(
 
   // #1072 — Auto-compute ETA using sliding-window checkpoints whenever
   //          processed count is available and the job is still running.
-  if (
-    progress.processed !== undefined &&
-    merged.total > 0 &&
-    merged.status === 'processing'
-  ) {
+  if (progress.processed !== undefined && merged.total > 0 && merged.status === 'processing') {
     recordProgressCheckpoint(jobId, merged.processed);
     const eta = computeEta(jobId, merged.processed, merged.total);
     merged.estimatedTimeRemainingMs = eta.estimatedTimeRemainingMs;

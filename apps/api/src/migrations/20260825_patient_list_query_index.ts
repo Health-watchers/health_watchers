@@ -21,5 +21,8 @@ export async function up(db: Db): Promise<void> {
 }
 
 export async function down(db: Db): Promise<void> {
-  await db.collection('patients').dropIndex('clinicId_1_isActive_1').catch(() => {});
+  await db
+    .collection('patients')
+    .dropIndex('clinicId_1_isActive_1')
+    .catch(() => {});
 }

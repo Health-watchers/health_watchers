@@ -1,0 +1,9 @@
+%% Payment Processing data flow
+%% Mirrors docs/ARCHITECTURE.md "Payment Processing Flow"
+flowchart TD
+    A["Patient Checkout"] -->|"POST /payments"| B["API Gateway"]
+    B --> C["Express API<br/>- Validate amount<br/>- Create invoice"]
+    C --> D["Stellar Service<br/>- Build tx<br/>- Multi-sig check<br/>- Submit to network"]
+    D --> E["Stellar Network<br/>Confirm payment"]
+    E --> F["Settlement Queue"]
+    F -->|"Daily reconciliation"| G["Bank Integration"]

@@ -1,0 +1,32 @@
+{
+  "name": "@health-watchers/sdk",
+  "version": "0.1.0",
+  "description": "Official JavaScript/TypeScript client SDK for the Health Watchers API.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "health-watchers",
+    "healthcare",
+    "sdk",
+    "api-client"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -94,7 +94,10 @@ export class MainnetSafetyManager {
     if (result.passed) {
       logger.debug({ network, horizonUrl }, 'Network consistency check passed');
     } else {
-      logger.error({ network, horizonUrl, errors: result.errors }, 'Network consistency check failed');
+      logger.error(
+        { network, horizonUrl, errors: result.errors },
+        'Network consistency check failed'
+      );
     }
 
     return result;
@@ -230,7 +233,9 @@ export class MainnetSafetyManager {
           );
           result.passed = false;
         }
-        result.warnings.push('⚠️  MAINNET MODE: explicit confirmation is required for transactions');
+        result.warnings.push(
+          '⚠️  MAINNET MODE: explicit confirmation is required for transactions'
+        );
       }
 
       result.warnings.push('🚨 MAINNET MODE ACTIVE — real XLM will be transferred 🚨');
@@ -264,7 +269,10 @@ export class MainnetSafetyManager {
     }
 
     if (result.warnings.length) {
-      logger.warn({ amountXlm, warnings: result.warnings }, 'Transaction passed safety check with warnings');
+      logger.warn(
+        { amountXlm, warnings: result.warnings },
+        'Transaction passed safety check with warnings'
+      );
     }
   }
 

@@ -236,6 +236,20 @@ export const rateLimitHitsTotal = new client.Counter({
   registers: [register],
 });
 
+export const rateLimitRequestsTotal = new client.Counter({
+  name: 'rate_limit_requests_total',
+  help: 'Total number of requests evaluated by the rate limiter, by limiter',
+  labelNames: ['limiter'] as const,
+  registers: [register],
+});
+
+export const rateLimitRemaining = new client.Gauge({
+  name: 'rate_limit_remaining',
+  help: 'Remaining requests in the current rate limit window, by limiter',
+  labelNames: ['limiter'] as const,
+  registers: [register],
+});
+
 // ── Normalise path helper ─────────────────────────────────────────────────────
 // Replace dynamic segments (ObjectIds, UUIDs, numbers) with placeholders
 // to avoid high-cardinality label explosion.

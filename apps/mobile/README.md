@@ -80,6 +80,10 @@ Create `.env` file:
 
 ```
 EXPO_PUBLIC_API_URL=http://localhost:3001/api/v1
+# Release builds only — primary,backup SPKI pins (see docs/SECURITY_PINNING.md)
+EXPO_PUBLIC_SSL_PUBLIC_KEY_HASHES=
+# warn (default) | block | off
+EXPO_PUBLIC_COMPROMISED_DEVICE_POLICY=warn
 ```
 
 ## Security
@@ -88,6 +92,12 @@ EXPO_PUBLIC_API_URL=http://localhost:3001/api/v1
 - Biometric authentication support
 - JWT token refresh on 401 responses
 - HTTPS enforced in production
+- SSL public-key pinning of the API host (primary + backup pins), failing closed in release builds
+- Root/jailbreak detection with a configurable warn/block policy
+
+See [docs/SECURITY_PINNING.md](docs/SECURITY_PINNING.md) for pin generation, rotation and how to
+verify pinning with mitmproxy. Both features need an EAS development or release build; they are
+inactive in Expo Go.
 
 ## Stellar Integration
 

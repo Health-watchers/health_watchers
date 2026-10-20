@@ -8,19 +8,20 @@
  * ├─────────────────┼──────────────────────────────────────────────────┤
  * │ auth            │ /auth, /users, /portal (MFA)                     │
  * │ clinical        │ /patients, /encounters, /appointments,           │
- * │                 │ /waitlist, /appointment-analytics,               │
- * │                 │ /appointment-templates, /lab-results,            │
- * │                 │ /immunizations, /care-plans,                     │
+ * │                 │ /lab-results, /immunizations, /care-plans,       │
  * │                 │ /referrals, /medications, /schedules, /cds,      │
+ * │                 │ /interactions,                                        │
  * │                 │ /peer-reviews, /pre-auth, /icd10, /reports,     │
  * │                 │ /consent, /ai, /dashboard, /portal, /surveys     │
  * │ payments        │ /payments, /invoices, /subscriptions,            │
- * │                 │ /billing, /export                                │
+ * │                 │ /billing, /export, /exports/schedules,           │
+ * │                 │ HL7 v2 (patients/:id/hl7v2)                      │
  * │ admin           │ /clinics, /onboarding, /settings, /api-keys,    │
  * │                 │ /webhooks, /compliance, /breach-incidents,       │
- * │                 │ /audit, /audit-logs, /notifications,             │
+ * │                 │ /audit, /notifications,                          │
  * │                 │ /documents, /security/csp-report                 │
- * │ system          │ /metrics, /federation (well-known)               │
+ * │ infrastructure  │ /cdn, /replication                              │
+ * │ system          │ /metrics, /federation (well-known), /health      │
  * └─────────────────┴──────────────────────────────────────────────────┘
  */
 
@@ -33,7 +34,9 @@ import {
   bulkExportLimiter,
   patientSearchLimiter,
   reportGenerationLimiter,
+  generalLimiter,
 } from '../../middlewares/rate-limit.middleware';
+import { idempotency } from '../../middlewares/idempotency.middleware';
 import express from 'express';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -42,22 +45,28 @@ import { userRoutes } from '../../modules/users/users.controller';
 import { userManagementRoutes } from '../../modules/users/user-management.controller';
 
 // ── Clinical ──────────────────────────────────────────────────────────────────
-import { patientRoutes } from '../../modules/patients/patients.controller';
+import { deprecated, V1_SUNSET_DATE } from '../../middlewares/api-versioning.middleware';
+import patientRoutes from '../../modules/patients/patients.routes';
 import { medicalHistoryRoutes } from '../../modules/patients/medical-history.controller';
 import { patientPhotoRoutes } from '../../modules/patients/photo.controller';
 import { encounterRoutes } from '../../modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from '../../modules/encounters/encounter-templates.controller';
+import { encounterOutcomeRoutes } from '../../modules/encounters/encounter-outcomes.controller';
+import { encounterTranscriptionRoutes } from '../../modules/encounters/encounter-transcription.controller';
 import { appointmentRoutes } from '../../modules/appointments/appointments.controller';
 import { waitlistRoutes } from '../../modules/appointments/waitlist.controller';
-import { appointmentAnalyticsRoutes } from '../../modules/appointments/appointment-analytics.controller';
-import { appointmentTemplateRoutes } from '../../modules/appointments/appointment-template.controller';
 import { labResultRoutes } from '../../modules/lab-results/lab-results.controller';
 import { icd10Routes } from '../../modules/icd10/icd10.controller';
 import { carePlanRoutes } from '../../modules/care-plans/care-plans.controller';
 import { referralRoutes } from '../../modules/referrals/referrals.controller';
 import { consentRoutes } from '../../modules/consent/consent.controller';
-import { immunizationRoutes, cvxCodesRouter } from '../../modules/immunizations/immunizations.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from '../../modules/immunizations/immunizations.controller';
+import { immunizationOpsRoutes } from '../../modules/immunizations/immunization-operations.controller';
 import { reportRoutes } from '../../modules/reports/reports.controller';
+import { analyticsRoutes } from '../../modules/reports/analytics/analytics.controller';
 import {
   healthLogRouter,
   patientHealthLogRouter,
@@ -66,17 +75,25 @@ import aiRoutes from '../../modules/ai/ai.routes';
 import dashboardRoutes from '../../modules/dashboard/dashboard.routes';
 import { portalRoutes } from '../../modules/portal/portal.controller';
 import scheduleRoutes from '../../modules/schedules/schedules.routes';
+import providerSchedulingRoutes from '../../modules/provider-scheduling/provider-scheduling.routes';
 import cdsRoutes from '../../modules/cds/cds.controller';
-import { preAuthRoutes } from '../../modules/pre-auth/pre-auth.controller';
+import interactionRoutes from '../../modules/interactions/interaction.controller';
+import { telehealthRoutes } from '../../modules/telehealth/telehealth.controller';
+import { preAuthRoutes, preAuthBulkRoutes } from '../../modules/pre-auth/pre-auth.controller';
 import peerReviewsRouter from '../../modules/peer-reviews/peer-reviews.router';
+import { surveyRoutes } from '../../modules/surveys/surveys.controller';
+import { inboxRoutes } from '../../modules/inbox/inbox.controller';
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 import paymentsRouter from '../../modules/payments/payments.routes';
 import { reimbursementRoutes } from '../../modules/payments/reimbursement.controller';
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
+import { billingRoutes } from '../../modules/billing/billing.routes';
 import exportRouter from '../../modules/export/export.routes';
 import batchExportRouter from '../../modules/export/batch-export.routes';
+import hl7v2ExportRouter from '../../modules/export/hl7-v2-export.routes';
+import exportScheduleRouter from '../../modules/export/export-schedule.routes';
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 import { clinicRoutes } from '../../modules/clinics/clinics.controller';
@@ -84,10 +101,11 @@ import { clinicSettingsRoutes } from '../../modules/clinics/clinic-settings.cont
 import onboardingRoutes from '../../modules/clinics/onboarding.routes';
 import apiKeyRoutes from '../../modules/api-keys/api-keys.routes';
 import { webhookRoutes } from '../../modules/webhooks/webhooks.controller';
-import { auditLogRoutes } from '../../modules/audit/audit-logs.controller';
 import { auditRoutes } from '../../modules/audit/audit.controller';
 import { documentRoutes } from '../../modules/documents/documents.controller';
+import { documentManagementRoutes } from '../../modules/documents/documents-management.controller';
 import { notificationRoutes } from '../../modules/notifications/notifications.controller';
+import { notificationAdminRoutes } from '../../modules/notifications/notification-admin.controller';
 import { complianceRoutes } from '../../modules/compliance/compliance.controller';
 import { breachIncidentRoutes } from '../../modules/breach-incidents/breach-incidents.controller';
 import { cspReportRoutes } from '../../modules/security/csp-report.controller';
@@ -95,6 +113,9 @@ import { cspReportRoutes } from '../../modules/security/csp-report.controller';
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
 import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-health.controller';
+
+// ── Public verification (#1426) ───────────────────────────────────────────────
+import immunizationVerifyRouter from '../../modules/immunizations/immunization-verify.routes';
 
 // ── Sharding (#1077) ──────────────────────────────────────────────────────────
 import shardingRouter from '../../routes/sharding';
@@ -105,6 +126,12 @@ import cdnHealthRouter from '../../routes/cdn/cdn-health';
 
 // ── Replication (#1080) ───────────────────────────────────────────────────────
 import replicationRouter from '../../routes/replication';
+
+// ── Missing routes (#1427) ────────────────────────────────────────────────────
+import researchRouter from '../../modules/research/research.routes';
+import encounterLazyLoadRouter from '../../modules/encounters/encounter-lazy-load.routes';
+import medicationHistoryRouter from '../../modules/medications/medication-history.routes';
+import dexTradeRouter from '../../modules/payments/dex/dex-trade.routes';
 
 // Standard AI body size limit — configurable via AI_REQUEST_BODY_SIZE
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
@@ -119,17 +146,25 @@ v1Router.use('/users', userRoutes);
 
 // ── Clinical group ────────────────────────────────────────────────────────────
 v1Router.use('/patients/search', patientSearchLimiter);
+// #1434 — the patient list has a v2 successor (cursor pagination, sparse fieldsets).
+v1Router.get('/patients', deprecated(V1_SUNSET_DATE, '/api/v2/patients'));
 v1Router.use('/patients', patientRoutes);
 v1Router.use('/patients', medicalHistoryRoutes);
 v1Router.use('/patients', patientPhotoRoutes);
 v1Router.use('/patients', patientHealthLogRouter);
 v1Router.use('/patients/:id/immunizations', immunizationRoutes);
 v1Router.use('/encounters', encounterRoutes);
+// Lazy-load sub-routes (#1427) — on-demand relation loading for encounters
+v1Router.use('/encounters', encounterLazyLoadRouter);
+// #1591 — Encounter outcome tracking: outcome recording, outcomes summary
+// aggregation for the dashboard and the follow-up reminder queue.
+v1Router.use('/encounters', encounterOutcomeRoutes);
+// #1592 — AI voice transcription: audio upload (multipart), async job status
+// and the review/edit step that persists corrected SOAP fields.
+v1Router.use('/encounters', encounterTranscriptionRoutes);
 v1Router.use('/encounter-templates', encounterTemplateRoutes);
 v1Router.use('/appointments', appointmentRoutes);
 v1Router.use('/waitlist', waitlistRoutes);
-v1Router.use('/appointment-analytics', appointmentAnalyticsRoutes);
-v1Router.use('/appointment-templates', appointmentTemplateRoutes);
 v1Router.use('/lab-results', labResultRoutes);
 v1Router.use('/icd10', icd10Routes);
 v1Router.use('/care-plans', carePlanRoutes);
@@ -138,42 +173,79 @@ v1Router.use('/referrals', referralRoutes);
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', consentRoutes);
 v1Router.use('/immunizations/cvx', cvxCodesRouter);
+v1Router.use('/immunizations', immunizationOpsRoutes);
 v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
+// #1251 — Reporting & analytics engine (templates, custom query builder,
+// cohort analysis, scheduling, dashboard widgets)
+v1Router.use('/reports', reportGenerationLimiter, analyticsRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
+// Portal medication history (#1427) — patient self-service prescription & refill access
+v1Router.use('/portal/medications', medicationHistoryRouter);
 v1Router.use('/schedules', scheduleRoutes);
+v1Router.use('/provider-scheduling', providerSchedulingRoutes);
 v1Router.use('/cds', cdsRoutes);
+v1Router.use('/interactions', interactionRoutes);
+// #1249 — Telehealth: video visit lifecycle, secure meeting links,
+// consent-gated recording, transcription, in-meeting chat and archive.
+v1Router.use('/telehealth', telehealthRoutes);
 v1Router.use('/pre-auth', paymentLimiter, preAuthRoutes);
+// #1606 — Bulk pre-authorization submission (submit multiple requests at once)
+v1Router.use('/pre-auth', paymentLimiter, preAuthBulkRoutes);
 v1Router.use('/peer-reviews', peerReviewsRouter);
+v1Router.use('/surveys', surveyRoutes);
+v1Router.use('/inbox', inboxRoutes);
 v1Router.use('/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 v1Router.use('/dashboard', dashboardRoutes);
 
 // ── Payments group ────────────────────────────────────────────────────────────
+// #1600 — Idempotency keys guard against duplicate payment submissions caused
+// by network retries. Applied to the mutating payment-creation endpoints only.
+v1Router.post('/payments', paymentLimiter, idempotency({ scope: 'payments' }));
+v1Router.post('/payments/batch', paymentLimiter, idempotency({ scope: 'payments' }));
+v1Router.post('/payments/recurring', paymentLimiter, idempotency({ scope: 'payments' }));
 v1Router.use('/payments', paymentLimiter, paymentsRouter);
 v1Router.use('/payments', reimbursementRoutes);
+// Stellar DEX trading (#1427) — submit and review DEX trade offers
+v1Router.use('/payments/dex', dexTradeRouter);
 v1Router.use('/invoices', invoiceRoutes);
 v1Router.use('/subscriptions', subscriptionRoutes);
+v1Router.use('/billing', billingRoutes);
 // Export routes define their own paths (e.g. /patients/:id/export, /clinics/:id/export)
 // so they are mounted at the root of v1 to preserve the existing URL structure.
 v1Router.use('/', exportRouter);
+// HL7 v2 export routes (#1243) — /patients/:id/hl7v2 and sub-routes
+v1Router.use('/', hl7v2ExportRouter);
 // Batch export routes (#1072) — async job queue + SSE progress tracking
 v1Router.use('/exports', batchExportRouter);
+// Export scheduling & automation (#1243) — CRUD for recurring export schedules
+v1Router.use('/exports/schedules', exportScheduleRouter);
 
 // ── Admin group ───────────────────────────────────────────────────────────────
 v1Router.use('/clinics', clinicRoutes);
 v1Router.use('/settings', clinicSettingsRoutes);
 v1Router.use('/onboarding', onboardingRoutes);
+// #1603 — Admin onboarding reset (support tooling) is exposed by onboardingRoutes
+// at /onboarding/admin/reset; mounted here under the admin group.
 v1Router.use('/api-keys', apiKeyRoutes);
 v1Router.use('/webhooks', webhookRoutes);
-v1Router.use('/audit-logs', auditLogRoutes);
 v1Router.use('/audit', auditRoutes);
 v1Router.use('/documents', documentRoutes);
+v1Router.use('/documents', documentManagementRoutes);
 v1Router.use('/notifications', notificationRoutes);
+// #1250 — Multi-channel notification delivery: preferences, templates,
+// delivery-status tracking and manual dispatch.
+v1Router.use('/notifications', notificationAdminRoutes);
 v1Router.use('/compliance', complianceRoutes);
 v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
+// Research data export (#1427) — SUPER_ADMIN only, anonymized dataset export
+v1Router.use('/research', generalLimiter, researchRouter);
 
 // ── Security (no auth, no CSRF) ───────────────────────────────────────────────
 v1Router.use('/csp-report', cspReportRoutes);
+
+// ── Public certificate verification (no auth) (#1426) ────────────────────────
+v1Router.use('/verify/immunization', immunizationVerifyRouter);
 
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);

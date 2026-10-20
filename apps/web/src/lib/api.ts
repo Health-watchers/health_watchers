@@ -1,15 +1,14 @@
 import { ApiErrorCode } from '@health-watchers/types';
+import { webConfig } from './config';
 
 if (!process.env.NEXT_PUBLIC_API_URL) {
   console.warn('⚠️ NEXT_PUBLIC_API_URL is not set. API calls may fail.');
 }
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+export const API_URL = webConfig.api.url;
 
 // Normalised /api/v1 base — handles trailing slashes and already-versioned URLs
-export const API_V1 = API_URL.endsWith('/api/v1')
-  ? API_URL
-  : `${API_URL.replace(/\/$/, '')}/api/v1`;
+export const API_V1 = API_URL.endsWith('/api/v1') ? API_URL : webConfig.api.v1BaseUrl;
 
 export class ApiError extends Error {
   constructor(
@@ -22,10 +21,17 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_URL}${endpoint}`;
+export function apiFetch(endpoint: string, options: RequestInit = {}) {
+  return requestJson(`${API_URL}${endpoint}`, options);
+}
 
-  // Read CSRF token from cookie for state-changing requests
+/** Like apiFetch, but relative to the normalised /api/v1 base (e.g. `/audit?limit=50`). */
+export function apiV1Fetch(endpoint: string, options: RequestInit = {}) {
+  return requestJson(`${API_V1}${endpoint}`, options);
+}
+
+/** CSRF header for state-changing requests made outside apiFetch (e.g. multipart uploads). */
+export function csrfHeader(): Record<string, string> {
   const csrfToken =
     typeof document !== 'undefined'
       ? document.cookie
@@ -33,7 +39,10 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
           .find((r) => r.startsWith('csrf-token='))
           ?.split('=')[1]
       : undefined;
+  return csrfToken ? { 'X-CSRF-Token': csrfToken } : {};
+}
 
+async function requestJson(url: string, options: RequestInit) {
   const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
     (options.method ?? 'GET').toUpperCase()
   );
@@ -43,7 +52,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(isMutation && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...(isMutation ? csrfHeader() : {}),
       ...(options.headers ?? {}),
     },
   });

@@ -93,7 +93,11 @@ describe('Database Queries', () => {
   describe('Encounter queries', () => {
     it('finds encounters by patientId', async () => {
       const patientId = new mongoose.Types.ObjectId();
-      const encounters = buildEncounterBatch(3, { patientId, clinicId: CLINIC_ID, attendingDoctorId: DOCTOR_ID });
+      const encounters = buildEncounterBatch(3, {
+        patientId,
+        clinicId: CLINIC_ID,
+        attendingDoctorId: DOCTOR_ID,
+      });
       await EncounterModel.insertMany(encounters);
 
       const results = await EncounterModel.find({ patientId });
@@ -102,8 +106,16 @@ describe('Database Queries', () => {
 
     it('filters encounters by status', async () => {
       await EncounterModel.insertMany([
-        ...buildEncounterBatch(2, { clinicId: CLINIC_ID, attendingDoctorId: DOCTOR_ID, status: 'open' }),
-        ...buildEncounterBatch(1, { clinicId: CLINIC_ID, attendingDoctorId: DOCTOR_ID, status: 'closed' }),
+        ...buildEncounterBatch(2, {
+          clinicId: CLINIC_ID,
+          attendingDoctorId: DOCTOR_ID,
+          status: 'open',
+        }),
+        ...buildEncounterBatch(1, {
+          clinicId: CLINIC_ID,
+          attendingDoctorId: DOCTOR_ID,
+          status: 'closed',
+        }),
       ]);
 
       const open = await EncounterModel.find({ clinicId: CLINIC_ID, status: 'open' });
@@ -123,7 +135,11 @@ describe('Database Queries', () => {
 
     it('counts open encounters per clinic', async () => {
       await EncounterModel.insertMany(
-        buildEncounterBatch(5, { clinicId: CLINIC_ID, attendingDoctorId: DOCTOR_ID, status: 'open' })
+        buildEncounterBatch(5, {
+          clinicId: CLINIC_ID,
+          attendingDoctorId: DOCTOR_ID,
+          status: 'open',
+        })
       );
       const count = await EncounterModel.countDocuments({ clinicId: CLINIC_ID, status: 'open' });
       expect(count).toBe(5);

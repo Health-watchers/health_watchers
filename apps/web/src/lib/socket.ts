@@ -94,6 +94,15 @@ class SocketManager {
 
 export const socketManager = new SocketManager();
 
+/** Shared connection for the given token (reuses the live socket when the token matches). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
+}
+
 // React hook for using Socket.IO
 export function useSocket(token?: string) {
   const [socket, setSocket] = React.useState<Socket | null>(null);
@@ -155,4 +164,13 @@ export function useAppointmentEvents() {
   }, []);
 
   return events;
+}
+
+/** Returns the shared socket connection for this token (used by useRealtimeUpdates). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
 }

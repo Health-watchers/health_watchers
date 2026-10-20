@@ -27,6 +27,9 @@ export const API_VERSIONS: ApiVersion[] = [
   },
 ];
 
+/** Documented v1 sunset date (see API_VERSIONS and docs/api-versioning-strategy.md). */
+export const V1_SUNSET_DATE = API_VERSIONS.find((v) => v.version === 'v1')!.sunsetDate!;
+
 /**
  * Middleware to add API-Version header to all responses.
  */

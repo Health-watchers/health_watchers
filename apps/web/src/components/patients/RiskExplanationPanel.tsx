@@ -91,7 +91,7 @@ export default function RiskExplanationPanel({ patientId, apiV1 }: Props) {
     <div className="space-y-5">
       {/* AI Explanation */}
       <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-900/20">
-        <p className="mb-1 text-xs font-semibold tracking-wide text-blue-600 uppercase dark:text-blue-400">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
           AI Explanation
         </p>
         <p className="text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
@@ -147,7 +147,7 @@ export default function RiskExplanationPanel({ patientId, apiV1 }: Props) {
       {/* Improved factors */}
       {data.improvedFactors.length > 0 && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
-          <p className="mb-1 text-xs font-semibold tracking-wide text-green-700 uppercase dark:text-green-400">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
             Factors Resolved Since Last Assessment
           </p>
           <ul className="space-y-0.5">
@@ -175,7 +175,7 @@ export default function RiskExplanationPanel({ patientId, apiV1 }: Props) {
                 key={i}
                 className="flex items-start gap-2 rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
               >
-                <span className="bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                <span className="dark:text-primary-400 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/40">
                   {i + 1}
                 </span>
                 {rec}
@@ -186,7 +186,7 @@ export default function RiskExplanationPanel({ patientId, apiV1 }: Props) {
       )}
 
       {/* Disclaimer */}
-      <p className="text-xs text-neutral-400 italic dark:text-neutral-500">{data.disclaimer}</p>
+      <p className="text-xs italic text-neutral-400 dark:text-neutral-500">{data.disclaimer}</p>
     </div>
   );
 }
