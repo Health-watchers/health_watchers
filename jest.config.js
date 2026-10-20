@@ -6,6 +6,7 @@ module.exports = {
   moduleNameMapper: {
     '^@api/(.*)$': '<rootDir>/apps/api/src/$1',
     '^@health-watchers/config$': '<rootDir>/packages/config/index.ts',
+    '^@health-watchers/utils$': '<rootDir>/packages/utils/src/index.ts',
   },
   transform: {
     '^.+\\.ts$': [

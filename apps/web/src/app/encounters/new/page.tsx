@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
-import { formatDate } from '@health-watchers/types';
+import { formatDate } from '@health-watchers/utils';
 import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
 import { OfflineSync, useOnlineStatus } from '@/lib/offline-sync';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';

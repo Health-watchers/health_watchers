@@ -6,7 +6,8 @@
     "apps/api",
     "packages/config",
     "packages/types",
-    "packages/anonymize"
+    "packages/anonymize",
+    "packages/utils"
   ],
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

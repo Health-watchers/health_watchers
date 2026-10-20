@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatDate } from '@health-watchers/types';
+import { formatDate } from '@health-watchers/utils';
 import { Badge, Button, EmptyState } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 

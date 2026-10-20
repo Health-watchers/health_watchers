@@ -1,6 +1,6 @@
 /**
- * @deprecated Import from '@/lib/utils' instead.
+ * @deprecated Import from '@health-watchers/utils' or '@/lib/utils' instead.
  * This file is kept for backward-compatibility and re-exports
- * the canonical implementations from the utils library.
+ * the canonical implementations from the shared utils package.
  */
-export { formatDate, formatDateTime, formatTime } from './utils/format';
+export { formatDate, formatDateTime, formatTime } from '@health-watchers/utils';

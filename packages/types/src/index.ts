@@ -105,45 +105,18 @@ export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
-// ─── Date Utilities ───────────────────────────────────────────────────────────
+// ─── Date Utilities (re-exported from @health-watchers/utils) ──────────────
 
-/** Format a date string for display (e.g. "Jan 1, 2024"). */
-export function formatDate(dateStr: string | undefined): string {
-  if (!dateStr) return 'N/A';
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-// ─── Age Calculation Utilities (Issue #396) ──────────────────────────────────
-
-export type AgeGroup = 'infant' | 'toddler' | 'child' | 'adolescent' | 'adult' | 'elderly';
-
-export function calculateAge(dateOfBirth: Date | string): number {
-  const dob = new Date(dateOfBirth);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
-}
-
-export function calculateAgeInMonths(dateOfBirth: Date | string): number {
-  const dob = new Date(dateOfBirth);
-  const today = new Date();
-  return (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
-}
-
-export function getAgeGroup(age: number): AgeGroup {
-  if (age < 1) return 'infant';
-  if (age < 3) return 'toddler';
-  if (age < 12) return 'child';
-  if (age < 18) return 'adolescent';
-  if (age < 65) return 'adult';
-  return 'elderly';
-}
+export {
+  formatDate,
+  formatDateTime,
+  formatScheduleDate,
+  formatTime,
+  calculateAge,
+  calculateAgeInMonths,
+  getAgeGroup,
+  type AgeGroup,
+} from '@health-watchers/utils';
 
 // ─── Payment Dispute Types ────────────────────────────────────────────────────
 // Consolidated from stale packages/types/index.ts (issue #928).

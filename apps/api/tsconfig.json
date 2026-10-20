@@ -20,7 +20,8 @@
       "@api/*": ["./*"],
       "dotenv": ["../node_modules/dotenv"],
       "@health-watchers/types": ["../../../packages/types/src/index.ts"],
-      "@health-watchers/anonymize": ["../../../packages/anonymize/src/index.ts"]
+      "@health-watchers/anonymize": ["../../../packages/anonymize/src/index.ts"],
+      "@health-watchers/utils": ["../../../packages/utils/src/index.ts"]
     }
   },
   "include": ["src/**/*"],
