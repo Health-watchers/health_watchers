@@ -30,10 +30,20 @@ export const listLabResultsQuerySchema = z.object({
   status: z.enum(['ordered', 'collected', 'resulted', 'reviewed']).optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  reviewed: z.enum(['true', 'false']).optional(),
+  isCritical: z.enum(['true', 'false']).optional(),
+  includePatient: z.enum(['true', 'false']).optional(),
+  page: z.string().optional(),
+  limit: z.string().optional(),
+});
+
+export const reviewLabResultSchema = z.object({
+  comment: z.string().max(1000).optional(),
 });
 
 export const idParamSchema = z.object({ id: objectId });
 
 export type OrderLabResultDto = z.infer<typeof orderLabResultSchema>;
 export type EnterLabResultsDto = z.infer<typeof enterLabResultsSchema>;
+export type ReviewLabResultDto = z.infer<typeof reviewLabResultSchema>;
 export type ListLabResultsQuery = z.infer<typeof listLabResultsQuerySchema>;

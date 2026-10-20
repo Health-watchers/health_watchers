@@ -1,12 +1,13 @@
 /**
- * Enhanced compression middleware with configurable levels, monitoring, and benchmarking.
- * Provides compression ratio tracking and performance metrics for Prometheus.
+ * Enhanced gzip/deflate compression middleware with configurable levels,
+ * monitoring, and benchmarking.
+ *
+ * Issue #1073 — uses Node.js built-in `zlib` so no extra dependency is needed.
+ * Provides compression ratio tracking and performance metrics.
  */
 import { Request, Response, NextFunction } from 'express';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const compression = require('compression') as ((...args: any[]) => any) & {
-  filter: (...args: any[]) => boolean;
-};
+import zlib from 'zlib';
+import { PassThrough, Transform } from 'stream';
 
 export interface CompressionConfig {
   /** Compression level (0-9). Default: 6 */
@@ -112,72 +113,184 @@ export class CompressionMetrics {
 }
 
 /**
+ * Determine the preferred encoding from the Accept-Encoding header.
+ * Returns 'gzip', 'deflate', or null (no compression).
+ */
+function getPreferredEncoding(req: Request): 'gzip' | 'deflate' | null {
+  const acceptEncoding = req.headers['accept-encoding'] ?? '';
+  if (/\bgzip\b/.test(acceptEncoding)) return 'gzip';
+  if (/\bdeflate\b/.test(acceptEncoding)) return 'deflate';
+  return null;
+}
+
+/**
+ * Determine if a content type should be skipped for compression.
+ */
+function shouldSkipContentType(contentType: string | undefined, skipTypes: string[]): boolean {
+  if (!contentType) return false;
+  const lower = contentType.toLowerCase();
+  return skipTypes.some((t) => lower.startsWith(t.toLowerCase()));
+}
+
+/**
  * Creates enhanced compression middleware with monitoring.
+ * Implements gzip/deflate compression using Node.js built-in zlib.
  */
 export function createCompressionMiddleware(config: Partial<CompressionConfig> = {}) {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config };
+  const finalConfig: CompressionConfig = { ...DEFAULT_CONFIG, ...config };
   const metrics = CompressionMetrics.getInstance();
 
-  const middleware = compression({
-    level: finalConfig.level,
-    threshold: finalConfig.threshold,
-    filter: (req: Request, res: Response) => {
-      const contentType = res.getHeader('Content-Type') as string | undefined;
+  return (req: Request, res: Response, next: NextFunction) => {
+    const encoding = getPreferredEncoding(req);
 
-      // Skip if content type should be skipped
-      if (contentType) {
-        for (const skipType of finalConfig.skipContentTypes) {
-          if (contentType.toLowerCase().startsWith(skipType.toLowerCase())) {
-            metrics.recordSkip();
-            return false;
-          }
+    // Nothing to compress for this client
+    if (!encoding) {
+      metrics.recordSkip();
+      return next();
+    }
+
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+    const originalSetHeader = res.setHeader.bind(res);
+
+    let compressionStream: Transform | null = null;
+    let headersSent = false;
+    let originalSize = 0;
+    let compressedSize = 0;
+    const startTime = Date.now();
+
+    // Intercept setHeader so we can check Content-Type before sending
+    res.setHeader = function (name: string, value: any) {
+      return originalSetHeader(name, value);
+    };
+
+    function setupCompression() {
+      if (compressionStream) return; // already set up
+
+      const contentType = res.getHeader('content-type') as string | undefined;
+      const contentLength = parseInt((res.getHeader('content-length') as string) ?? '0', 10);
+
+      // Skip compression for disallowed content types
+      if (shouldSkipContentType(contentType, finalConfig.skipContentTypes)) {
+        metrics.recordSkip();
+        return;
+      }
+
+      // Skip if below threshold (use content-length hint if available)
+      if (contentLength > 0 && contentLength < finalConfig.threshold) {
+        metrics.recordSkip();
+        return;
+      }
+
+      compressionStream =
+        encoding === 'gzip'
+          ? zlib.createGzip({ level: finalConfig.level })
+          : zlib.createDeflate({ level: finalConfig.level });
+
+      // Forward compressed data to the underlying socket
+      compressionStream.on('data', (chunk: Buffer) => {
+        compressedSize += chunk.length;
+        originalWrite(chunk);
+      });
+
+      compressionStream.on('end', () => {
+        const duration = Date.now() - startTime;
+        if (finalConfig.enableMonitoring) {
+          metrics.recordCompression(originalSize, compressedSize, duration);
+        }
+      });
+
+      compressionStream.on('error', () => {
+        // Compression error — fall through with uncompressed response
+        metrics.recordSkip();
+      });
+
+      // Set response headers for compressed content
+      res.removeHeader('content-length'); // length unknown after compression
+      originalSetHeader('content-encoding', encoding);
+      originalSetHeader('vary', 'Accept-Encoding');
+      headersSent = true;
+    }
+
+    // Intercept write
+    res.write = function (
+      chunk: any,
+      encodingOrCallback?: BufferEncoding | ((error: Error | null | undefined) => void),
+      callback?: (error: Error | null | undefined) => void
+    ): boolean {
+      // Normalise overloaded signature
+      let enc: BufferEncoding | undefined;
+      let cb: ((error: Error | null | undefined) => void) | undefined;
+      if (typeof encodingOrCallback === 'function') {
+        cb = encodingOrCallback;
+      } else {
+        enc = encodingOrCallback;
+        cb = callback;
+      }
+
+      if (!headersSent) {
+        setupCompression();
+      }
+
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, enc ?? 'utf8');
+      originalSize += buf.length;
+
+      if (compressionStream) {
+        return compressionStream.write(buf, cb);
+      }
+      if (cb) return originalWrite(buf, cb as any);
+      return originalWrite(buf);
+    } as typeof res.write;
+
+    // Intercept end
+    res.end = function (
+      chunk?: any,
+      encodingOrCallback?: BufferEncoding | ((error: Error | null | undefined) => void),
+      callback?: () => void
+    ): Response {
+      let enc: BufferEncoding | undefined;
+      let cb: (() => void) | undefined;
+      if (typeof encodingOrCallback === 'function') {
+        cb = encodingOrCallback as () => void;
+      } else {
+        enc = encodingOrCallback;
+        cb = callback;
+      }
+
+      if (!headersSent) {
+        setupCompression();
+      }
+
+      if (chunk != null) {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, enc ?? 'utf8');
+        originalSize += buf.length;
+
+        if (compressionStream) {
+          compressionStream.end(buf, () => {
+            originalEnd(undefined, cb as any);
+          });
+          return res;
         }
       }
 
-      // Use default compression filter
-      return compression.filter(req, res);
-    },
-  });
+      if (compressionStream) {
+        compressionStream.end(() => {
+          originalEnd(undefined, cb as any);
+        });
+        return res;
+      }
 
-  // Wrap with monitoring if enabled
-  if (finalConfig.enableMonitoring) {
-    return (req: Request, res: Response, next: NextFunction) => {
-      const originalWrite = res.write;
-      const originalEnd = res.end;
-      let originalSize = 0;
-      let compressedSize = 0;
-      const startTime = Date.now();
+      if (chunk != null) {
+        if (cb) return originalEnd(chunk, enc as any, cb) as Response;
+        return originalEnd(chunk, enc as any) as Response;
+      }
 
-      // Track response size
-      res.write = function (chunk: any, ...args: any[]) {
-        if (chunk) {
-          originalSize += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
-        }
-        return originalWrite.apply(res, [chunk, ...args]);
-      } as any;
+      if (cb) return originalEnd(cb) as Response;
+      return originalEnd() as Response;
+    } as typeof res.end;
 
-      res.end = function (chunk: any, ...args: any[]) {
-        if (chunk) {
-          compressedSize += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
-        }
-
-        const duration = Date.now() - startTime;
-        const contentEncoding = res.getHeader('Content-Encoding') as string | undefined;
-
-        if (contentEncoding && ['gzip', 'br', 'deflate'].includes(contentEncoding)) {
-          metrics.recordCompression(originalSize, compressedSize, duration);
-        } else {
-          metrics.recordSkip();
-        }
-
-        return originalEnd.apply(res, [chunk, ...args]);
-      } as any;
-
-      middleware(req, res, next);
-    };
-  }
-
-  return middleware;
+    next();
+  };
 }
 
 /**
@@ -203,15 +316,20 @@ export async function benchmarkCompression(): Promise<
     timeMs: number;
   }>
 > {
-  const gzip = await import('zlib').then((z) => z.promises.gzip);
   const sizes = [1024, 10240, 102400, 1048576]; // 1KB, 10KB, 100KB, 1MB
   const results = [];
 
   for (const size of sizes) {
-    // Generate random data of specified size
     const payload = Buffer.alloc(size, JSON.stringify({ data: 'x'.repeat(size / 2) }));
     const start = Date.now();
-    const compressed = await gzip(payload, { level: 6 });
+
+    const compressed = await new Promise<Buffer>((resolve, reject) => {
+      zlib.gzip(payload, { level: 6 }, (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      });
+    });
+
     const duration = Date.now() - start;
 
     results.push({

@@ -1,0 +1,188 @@
+name: Performance Benchmarks
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Benchmark mode (light for PRs, full for deep runs)'
+        required: false
+        default: 'full'
+        type: choice
+        options: [light, full]
+
+env:
+  NODE_VERSION: 20
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: API Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Start API server
+        run: npm run dev --workspace=api &
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_perf
+          JWT_ACCESS_TOKEN_SECRET: perf-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: perf-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: development
+          PORT: 3001
+
+      - name: Seed performance test data
+        run: npm run seed || echo "Seed script not found, skipping"
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_perf
+
+      - name: Wait for API
+        run: npx wait-on http://localhost:3001/health/live --timeout 90000
+
+      - name: Obtain benchmark credentials
+        id: creds
+        run: |
+          EMAIL="${SMOKE_DOCTOR_EMAIL:-doctor@example.com}"
+          PASSWORD="${SMOKE_DOCTOR_PASSWORD:-Password123!}"
+          TOKEN=$(curl -sf -X POST http://localhost:3001/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\"}" \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).data.accessToken||'')}catch{console.log('')}})")
+          {
+            echo "token=${TOKEN}"
+            echo "email=${EMAIL}"
+            echo "password=${PASSWORD}"
+          } >> "$GITHUB_OUTPUT"
+          test -n "$TOKEN" && echo "token obtained" || { echo "token empty"; exit 1; }
+        env:
+          SMOKE_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          SMOKE_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      - name: Setup k6
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      # Historical metrics survive between runs via the actions cache.
+      - name: Restore performance history
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        with:
+          path: performance/history/metrics-history.json
+          key: perf-history-${{ runner.os }}-${{ github.ref }}
+          restore-keys: |
+            perf-history-${{ runner.os }}-
+            perf-history-
+
+      - name: Determine benchmark mode
+        id: mode
+        run: |
+          MODE="full"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then MODE="light"; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then MODE="${{ github.event.inputs.mode }}"; fi
+          echo "mode=${MODE}" >> "$GITHUB_OUTPUT"
+          echo "Using benchmark mode: ${MODE}"
+
+      # Run the benchmark suite while capturing API resource utilization in parallel.
+      - name: Run k6 benchmarks (+ resource capture)
+        run: |
+          mkdir -p performance/results
+          node performance/scripts/capture-resources.js --duration "$([ "${{ steps.mode.outputs.mode }}" = "full" ] && echo 150 || echo 45)" --interval 3 &
+          CAP_PID=$!
+          k6 run performance/benchmarks/api-benchmarks.js \
+            --env BASE_URL=http://localhost:3001 \
+            --env AUTH_TOKEN=${{ steps.creds.outputs.token }} \
+            --env PERF_EMAIL=${{ steps.creds.outputs.email }} \
+            --env PERF_PASSWORD='${{ steps.creds.outputs.password }}' \
+            --env PERF_MODE=${{ steps.mode.outputs.mode }} \
+            --summary-export=performance/results/summary.json || true
+          wait "${CAP_PID}"
+        continue-on-error: true
+
+      - name: Record run in history
+        run: node performance/scripts/record-history.js --summary performance/results/summary.json
+        env:
+          PERF_ENV: ci
+
+      - name: Generate recommendations
+        run: node performance/scripts/recommendations.js
+        env:
+          PERF_ENV: ci
+
+      - name: Generate report (regression gate)
+        id: report
+        run: node performance/scripts/generate-report.js
+        continue-on-error: true
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: performance-report
+          path: |
+            performance/results/
+            performance/reports/
+          retention-days: 30
+
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            try {
+              body = fs.readFileSync('performance/reports/performance-report.md', 'utf8');
+            } catch { body = 'Performance report unavailable — see the workflow run for diagnostics.'; }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `<!-- perf-benchmark-comment -->\n## ⚡ API Performance Benchmarks\n\n${body}`,
+            });
+
+      - name: Fail on regression gate
+        if: steps.report.outcome == 'failure'
+        run: |
+          echo "❌ Performance regression detected — see the report artifact."
+          exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        continue-on-error: true
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "📉 *Performance benchmark FAILED* — `${{ github.repository }}` @ `${{ github.ref_name }}` (${{ github.sha }}) by ${{ github.actor }}\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }

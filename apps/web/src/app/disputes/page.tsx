@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_V1 } from '@/lib/api';
@@ -8,9 +8,26 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { Modal } from '@/components/ui/Modal';
+import { DisputeFilingForm } from '@/components/disputes/DisputeFilingForm';
 
 type DisputeStatus = 'open' | 'under_review' | 'resolved_refund' | 'resolved_no_action' | 'closed';
 type DisputeReason = 'duplicate_payment' | 'service_not_rendered' | 'incorrect_amount' | 'other';
+type ResolutionAction = 'accept' | 'reject' | 'counter_offer';
+
+interface DisputeEvent {
+  _id?: string;
+  type: string;
+  actor?: string;
+  message?: string;
+  createdAt: string;
+}
+
+interface DisputeDocument {
+  _id?: string;
+  name: string;
+  url: string;
+  uploadedAt?: string;
+}
 
 interface Dispute {
   _id: string;
@@ -25,6 +42,88 @@ interface Dispute {
   resolvedAt?: string;
   resolutionNotes?: string;
   refundIntentId?: string;
+  timeline?: DisputeEvent[];
+  documents?: DisputeDocument[];
+}
+
+const STATUS_OPTIONS: { value: DisputeStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'open', label: 'Open' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'resolved_refund', label: 'Resolved – Refund' },
+  { value: 'resolved_no_action', label: 'Resolved – No action' },
+  { value: 'closed', label: 'Closed' },
+];
+
+const RESOLUTION_ACTIONS: { value: ResolutionAction; label: string }[] = [
+  { value: 'accept', label: 'Accept' },
+  { value: 'reject', label: 'Reject' },
+  { value: 'counter_offer', label: 'Counter-offer' },
+];
+
+function escapeCsv(value: unknown): string {
+  const str = value == null ? '' : String(value);
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+function downloadBlob(content: BlobPart, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportDisputesCsv(disputes: Dispute[]) {
+  const headers = [
+    'Dispute ID',
+    'Payment Intent',
+    'Patient',
+    'Reason',
+    'Status',
+    'Opened By',
+    'Opened At',
+    'Resolved At',
+    'Resolution Notes',
+  ];
+  const rows = disputes.map((d) =>
+    [
+      d._id,
+      d.paymentIntentId,
+      d.patientId,
+      d.reason,
+      d.status,
+      d.openedBy,
+      d.openedAt,
+      d.resolvedAt ?? '',
+      d.resolutionNotes ?? '',
+    ]
+      .map(escapeCsv)
+      .join(',')
+  );
+  downloadBlob([headers.join(','), ...rows].join('\n'), 'disputes.csv', 'text/csv;charset=utf-8');
+}
+
+function exportDisputesPdf(disputes: Dispute[]) {
+  const rows = disputes
+    .map(
+      (d) =>
+        `<tr><td>${d._id}</td><td>${d.paymentIntentId}</td><td>${d.patientId}</td><td>${d.reason}</td><td>${d.status}</td><td>${new Date(d.openedAt).toLocaleDateString()}</td></tr>`
+    )
+    .join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Disputes</title>
+<style>body{font-family:sans-serif;padding:24px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ddd;padding:6px;text-align:left}th{background:#f5f5f5}</style>
+</head><body><h1>Dispute Records</h1><table><thead><tr><th>ID</th><th>Payment</th><th>Patient</th><th>Reason</th><th>Status</th><th>Opened</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
 }
 
 const STATUS_VARIANT: Record<
@@ -56,6 +155,10 @@ export default function DisputesPage() {
   });
   const [refundForm, setRefundForm] = useState({ amount: '', destinationPublicKey: '' });
   const [actionMsg, setActionMsg] = useState('');
+  const [statusFilter, setStatusFilter] = useState<DisputeStatus | 'all'>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [filingOpen, setFilingOpen] = useState(false);
 
   const {
     data: disputes = [],
@@ -64,6 +167,37 @@ export default function DisputesPage() {
   } = useQuery({
     queryKey: ['disputes'],
     queryFn: fetchDisputes,
+  });
+
+  const filteredDisputes = useMemo(() => {
+    return disputes.filter((d) => {
+      if (statusFilter !== 'all' && d.status !== statusFilter) return false;
+      const opened = new Date(d.openedAt).getTime();
+      if (dateFrom && opened < new Date(dateFrom).getTime()) return false;
+      if (dateTo && opened > new Date(`${dateTo}T23:59:59.999`).getTime()) return false;
+      return true;
+    });
+  }, [disputes, statusFilter, dateFrom, dateTo]);
+
+  const resolutionMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: ResolutionAction }) => {
+      const res = await fetchWithAuth(`${DISPUTES_URL}/${id}/resolution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, notes: resolveForm.resolutionNotes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to ${action.replace(/_/g, ' ')} dispute`);
+      return data.data as Dispute;
+    },
+    onSuccess: (updated, { action }) => {
+      queryClient.setQueryData<Dispute[]>(['disputes'], (prev = []) =>
+        prev.map((d) => (d._id === updated._id ? updated : d))
+      );
+      setSelected(updated);
+      setActionMsg(`Dispute ${action.replace(/_/g, ' ')} recorded successfully.`);
+    },
+    onError: (err: Error) => setActionMsg(err.message),
   });
 
   const resolveMutation = useMutation({
@@ -120,14 +254,85 @@ export default function DisputesPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Dispute Management</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Dispute Management</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" size="sm" onClick={() => setFilingOpen(true)}>
+            File Dispute
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportDisputesCsv(filteredDisputes)}
+            disabled={filteredDisputes.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportDisputesPdf(filteredDisputes)}
+            disabled={filteredDisputes.length === 0}
+          >
+            Export PDF
+          </Button>
+        </div>
+      </div>
 
-      {disputes.length === 0 ? (
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">Status</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as DisputeStatus | 'all')}
+            className="rounded border px-2 py-1"
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded border px-2 py-1"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-600">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded border px-2 py-1"
+          />
+        </label>
+        {(statusFilter !== 'all' || dateFrom || dateTo) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setStatusFilter('all');
+              setDateFrom('');
+              setDateTo('');
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {filteredDisputes.length === 0 ? (
         <p className="text-gray-500">No disputes found.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
                 {['Payment ID', 'Patient', 'Reason', 'Status', 'Opened', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium">
@@ -137,11 +342,11 @@ export default function DisputesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {disputes.map((d) => (
+              {filteredDisputes.map((d) => (
                 <tr key={d._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs">{d.paymentIntentId.slice(0, 14)}…</td>
                   <td className="px-4 py-3 text-gray-700">{d.patientId}</td>
-                  <td className="px-4 py-3 text-gray-700 capitalize">
+                  <td className="px-4 py-3 capitalize text-gray-700">
                     {d.reason.replace(/_/g, ' ')}
                   </td>
                   <td className="px-4 py-3">
@@ -202,8 +407,87 @@ export default function DisputesPage() {
               </div>
             )}
 
+            <hr className="my-4" />
+            <h3 className="font-semibold">Timeline</h3>
+            {selected.timeline && selected.timeline.length > 0 ? (
+              <ol className="space-y-2 border-l border-gray-200 pl-4">
+                {selected.timeline.map((event, idx) => (
+                  <li key={event._id ?? idx} className="relative">
+                    <span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-blue-500" />
+                    <div className="text-xs text-gray-500">
+                      {new Date(event.createdAt).toLocaleString()}
+                      {event.actor ? ` · ${event.actor}` : ''}
+                    </div>
+                    <div className="text-gray-800">
+                      <span className="font-medium capitalize">{event.type.replace(/_/g, ' ')}</span>
+                      {event.message ? ` — ${event.message}` : ''}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-gray-500">No timeline events recorded.</p>
+            )}
+
+            <hr className="my-4" />
+            <h3 className="font-semibold">Documents</h3>
+            {selected.documents && selected.documents.length > 0 ? (
+              <ul className="list-disc space-y-1 pl-5">
+                {selected.documents.map((doc, idx) => (
+                  <li key={doc._id ?? idx}>
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      {doc.name}
+                    </a>
+                    {doc.uploadedAt && (
+                      <span className="ml-2 text-xs text-gray-500">
+                        {new Date(doc.uploadedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">No documents attached.</p>
+            )}
+
             {!isResolved(selected) && (
               <>
+                <hr className="my-4" />
+                <h3 className="font-semibold">Resolution Actions</h3>
+                <div className="flex flex-wrap gap-2">
+                  {RESOLUTION_ACTIONS.map((a) => (
+                    <Button
+                      key={a.value}
+                      size="sm"
+                      variant={a.value === 'accept' ? 'primary' : 'outline'}
+                      onClick={() =>
+                        resolutionMutation.mutate({ id: selected._id, action: a.value })
+                      }
+                      disabled={resolutionMutation.isPending}
+                    >
+                      {resolutionMutation.isPending &&
+                      resolutionMutation.variables?.action === a.value ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        a.label
+                      )}
+                    </Button>
+                  ))}
+                </div>
+                <input
+                  placeholder="Notes for resolution action"
+                  value={resolveForm.resolutionNotes}
+                  onChange={(e) =>
+                    setResolveForm((f) => ({ ...f, resolutionNotes: e.target.value }))
+                  }
+                  className="mt-2 w-full rounded border px-2 py-1 text-sm"
+                />
+
                 <hr className="my-4" />
                 <h3 className="font-semibold">Resolve Dispute</h3>
                 <div className="flex flex-wrap gap-2">
@@ -276,6 +560,19 @@ export default function DisputesPage() {
               </p>
             )}
           </div>
+        </Modal>
+      )}
+
+      {filingOpen && (
+        <Modal open onClose={() => setFilingOpen(false)} title="File a Dispute">
+          <DisputeFilingForm
+            onSuccess={() => {
+              setFilingOpen(false);
+              setActionMsg('Dispute filed successfully.');
+              queryClient.invalidateQueries({ queryKey: ['disputes'] });
+            }}
+            onCancel={() => setFilingOpen(false)}
+          />
         </Modal>
       )}
     </div>

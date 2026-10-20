@@ -145,7 +145,11 @@ function filterFields(obj: unknown, role: AppRole): unknown {
 /**
  * Returns the field filter rules for documentation purposes.
  */
-export function getFieldFilterRules(): Array<{ field: string; allowedRoles: AppRole[]; description?: string }> {
+export function getFieldFilterRules(): Array<{
+  field: string;
+  allowedRoles: AppRole[];
+  description?: string;
+}> {
   return [...FIELD_RULES];
 }
 

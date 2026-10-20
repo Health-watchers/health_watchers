@@ -1,0 +1,157 @@
+{
+  "name": "Health Watchers",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bullseye",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": true,
+      "moby": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "node",
+      "uid": "1000",
+      "gid": "1000"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Essential
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        
+        // Testing
+        "ms-playwright.playwright",
+        "orta.vscode-jest",
+        
+        // Docker & DevOps
+        "ms-azuretools.vscode-docker",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        
+        // Database
+        "mongodb.mongodb-vscode",
+        
+        // Git
+        "eamodio.gitlens",
+        "github.vscode-pull-request-github",
+        
+        // Utilities
+        "streetsidesoftware.code-spell-checker",
+        "yzhang.markdown-all-in-one",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        
+        // React/Next.js
+        "dsznajder.es7-react-js-snippets",
+        
+        // TypeScript
+        "usernamehw.errorlens"
+      ],
+      
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "eslint.workingDirectories": [
+          "./apps/api",
+          "./apps/web",
+          "./apps/stellar-service",
+          "./apps/mobile"
+        ],
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "typescript.enablePromptUseWorkspaceTsdk": true,
+        "tailwindCSS.experimental.classRegex": [
+          ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+          ["cn\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
+        ],
+        "files.associations": {
+          "*.css": "tailwindcss"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[json]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+
+  "forwardPorts": [
+    3000,  // Web (Next.js)
+    3001,  // API (Express)
+    3002,  // Stellar Service
+    27017, // MongoDB
+    6379,  // Redis
+    16686, // Jaeger UI
+    8081,  // mongo-express
+    3003,  // Grafana
+    9090,  // Prometheus
+    5601   // Kibana
+  ],
+
+  "portsAttributes": {
+    "3000": {
+      "label": "Web UI",
+      "onAutoForward": "notify"
+    },
+    "3001": {
+      "label": "API",
+      "onAutoForward": "silent"
+    },
+    "3002": {
+      "label": "Stellar Service",
+      "onAutoForward": "silent"
+    },
+    "27017": {
+      "label": "MongoDB",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    },
+    "16686": {
+      "label": "Jaeger UI",
+      "onAutoForward": "ignore"
+    },
+    "8081": {
+      "label": "mongo-express",
+      "onAutoForward": "ignore"
+    },
+    "3003": {
+      "label": "Grafana",
+      "onAutoForward": "ignore"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+
+  "remoteUser": "node",
+
+  "mounts": [
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/node/.ssh,readonly,type=bind,consistency=cached"
+  ],
+
+  "containerEnv": {
+    "NODE_ENV": "development"
+  }
+}

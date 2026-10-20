@@ -3,9 +3,6 @@ import { stellarClient } from './stellar-client';
 import logger from '@api/utils/logger';
 
 const STALE_PENDING_HOURS = 24;
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-
-let reconciliationJobInterval: NodeJS.Timeout | null = null;
 
 /**
  * Check stale pending payments against Horizon and update their status.
@@ -40,20 +37,4 @@ export async function reconcileStalePending(): Promise<number> {
   const total = updated + noHashResult.modifiedCount;
   if (total > 0) logger.info({ event: 'stale_pending_reconciled', count: total });
   return total;
-}
-
-export function startReconciliationJob(): void {
-  if (reconciliationJobInterval) return;
-  reconciliationJobInterval = setInterval(() => {
-    reconcileStalePending().catch((err) => logger.error({ err }, 'Reconciliation job failed'));
-  }, CHECK_INTERVAL_MS);
-  // Run immediately
-  reconcileStalePending().catch((err) => logger.error({ err }, 'Initial reconciliation failed'));
-}
-
-export function stopReconciliationJob(): void {
-  if (reconciliationJobInterval) {
-    clearInterval(reconciliationJobInterval);
-    reconciliationJobInterval = null;
-  }
 }

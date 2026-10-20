@@ -44,39 +44,39 @@ export default function PortalPaymentsPage() {
     }
   };
 
-  if (loading) return <p className="text-gray-500">Loading…</p>;
+  if (loading) return <p className="text-gray-500 dark:text-gray-400">Loading…</p>;
 
   const pending = invoices.filter((i) => i.status === 'pending');
   const history = invoices.filter((i) => i.status !== 'pending');
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
+      <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Payments</h1>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 font-semibold text-gray-700">Outstanding Invoices</h2>
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-3 font-semibold text-gray-700 dark:text-gray-200">Outstanding Invoices</h2>
         {pending.length === 0 ? (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-400 dark:text-gray-500">
             No outstanding invoices. You&apos;re all caught up!
           </p>
         ) : (
           pending.map((i) => (
             <div
               key={i._id}
-              className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0"
+              className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0 dark:border-gray-700"
             >
               <div>
-                <p className="text-sm font-medium text-gray-800">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
                   {i.amount} {i.assetCode}
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-400 dark:text-gray-500">
                   {new Date(i.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <button
                 onClick={() => pay(i._id)}
                 disabled={paying === i._id}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
               >
                 {paying === i._id ? 'Processing…' : 'Pay via Stellar'}
               </button>
@@ -85,26 +85,26 @@ export default function PortalPaymentsPage() {
         )}
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 font-semibold text-gray-700">Payment History</h2>
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-3 font-semibold text-gray-700 dark:text-gray-200">Payment History</h2>
         {history.length === 0 ? (
-          <p className="text-sm text-gray-400">No payment history.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">No payment history.</p>
         ) : (
           history.map((i) => (
             <div
               key={i._id}
-              className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0"
+              className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0 dark:border-gray-700"
             >
               <div>
-                <p className="text-sm font-medium text-gray-800">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
                   {i.amount} {i.assetCode}
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-400 dark:text-gray-500">
                   {new Date(i.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${i.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${i.status === 'confirmed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}
               >
                 {i.status}
               </span>

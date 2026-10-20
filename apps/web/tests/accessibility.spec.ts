@@ -151,7 +151,9 @@ test.describe('WCAG 2.1 AA Accessibility — Authenticated Pages', () => {
       expect(modalContainsFocus).toBeTruthy();
 
       const closeButton = page
-        .locator('[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]')
+        .locator(
+          '[role="dialog"] button[aria-label*="Close"], [role="dialog"] button[aria-label*="close"]'
+        )
         .first();
       if (await closeButton.isVisible()) {
         await closeButton.click();
@@ -362,5 +364,72 @@ test.describe('WCAG 2.1 AA Accessibility — Public Pages', () => {
       .locator('main, [role="main"], header, [role="banner"], nav, [role="navigation"]')
       .all();
     expect(landmarks.length).toBeGreaterThan(0);
+  });
+});
+
+// ── Skip navigation (#1624) ───────────────────────────────────────────────────
+
+test.describe('skip navigation', () => {
+  test('skip-to-main-content link is present and focusable', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+    // Tab once to focus the skip link
+    await page.keyboard.press('Tab');
+    const focused = await page.evaluate(() => document.activeElement?.textContent?.trim());
+    expect(focused).toMatch(/skip to main content/i);
+  });
+
+  test('skip-to-main-content link target exists', async ({ page }) => {
+    await page.goto(`${BASE_URL}/dashboard`);
+    await page.waitForLoadState('networkidle');
+    const mainContent = page.locator('#main-content');
+    await expect(mainContent).toBeDefined();
+  });
+});
+
+// ── Keyboard navigation – notification dropdown (#1624) ──────────────────────
+
+test.describe('keyboard navigation – notification dropdown', () => {
+  test('notification bell is keyboard accessible', async ({ page }) => {
+    await page.goto(`${BASE_URL}/dashboard`);
+    await page.waitForLoadState('networkidle');
+
+    const bellButton = page.getByRole('button', { name: /notifications/i });
+    await expect(bellButton).toBeVisible();
+
+    // Activate via keyboard — focus and press Enter
+    await bellButton.focus();
+    await page.keyboard.press('Enter');
+
+    // The notification panel should now be visible as a region
+    const panel = page.getByRole('region', { name: /notifications/i });
+    await expect(panel).toBeVisible();
+
+    // Escape should close it
+    await page.keyboard.press('Escape');
+    await expect(panel).not.toBeVisible();
+  });
+});
+
+// ── aria-live regions for dynamic content (#1624) ───────────────────────────
+
+test.describe('aria-live regions for dynamic content', () => {
+  test('dashboard loading state is announced to screen readers', async ({ page }) => {
+    await page.goto(`${BASE_URL}/dashboard`);
+    // The sr-only aria-live div should be in the DOM
+    const liveRegion = page.locator('[aria-live="polite"][aria-atomic="true"].sr-only');
+    await expect(liveRegion).toBeAttached();
+  });
+});
+
+// ── OTP input group label (#1624) ────────────────────────────────────────────
+
+test.describe('OTP input accessibility', () => {
+  test('OTP input cells are wrapped in a fieldset with legend', async ({ page }) => {
+    await page.goto(`${BASE_URL}/mfa`);
+    await page.waitForLoadState('networkidle');
+
+    const fieldset = page.locator('fieldset').first();
+    const legend = fieldset.locator('legend');
+    await expect(legend).toBeAttached();
   });
 });

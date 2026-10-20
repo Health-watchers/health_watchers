@@ -42,7 +42,11 @@ function buildApp() {
 
 const SECRET = 'test-access-secret-32-chars-long!!';
 
-function makeToken(userId: string, clinicId = new mongoose.Types.ObjectId().toString(), role = 'DOCTOR') {
+function makeToken(
+  userId: string,
+  clinicId = new mongoose.Types.ObjectId().toString(),
+  role = 'DOCTOR'
+) {
   return jwt.sign({ userId, role, clinicId }, SECRET, {
     expiresIn: '15m',
     issuer: 'health-watchers-api',
@@ -179,7 +183,10 @@ describe('PUT /api/v1/notifications/read-all', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    const remainingUnread = await NotificationModel.countDocuments({ userId: USER_1, isRead: false });
+    const remainingUnread = await NotificationModel.countDocuments({
+      userId: USER_1,
+      isRead: false,
+    });
     expect(remainingUnread).toBe(0);
 
     const other = await NotificationModel.findById(otherUsersNotification._id);

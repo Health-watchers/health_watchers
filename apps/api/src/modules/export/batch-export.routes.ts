@@ -21,10 +21,7 @@ router.get(
 );
 
 // GET /exports/progress/:jobId — poll job progress (#1072)
-router.get(
-  '/progress/:jobId',
-  batchExportController.getProgress.bind(batchExportController)
-);
+router.get('/progress/:jobId', batchExportController.getProgress.bind(batchExportController));
 
 // GET /exports/progress/:jobId/stream — SSE real-time progress (#1072)
 router.get(

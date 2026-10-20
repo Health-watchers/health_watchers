@@ -10,6 +10,7 @@ import {
   ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 
 export type AppRole =
   | 'SUPER_ADMIN'
@@ -30,12 +31,25 @@ interface AuthUser {
   mfaEnabled: boolean;
 }
 
+export type MfaMethod = 'totp' | 'passkey' | 'backup_code';
+
+export interface LoginResult {
+  mfaRequired: boolean;
+  tempToken?: string;
+  methods?: MfaMethod[];
+}
+
+export interface LogoutOptions {
+  /** 'idle_timeout' — automatic logoff; the API revokes the whole session */
+  reason?: 'idle_timeout';
+}
+
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   setUser: (user: AuthUser | null) => void;
-  login: (email: string, password: string) => Promise<{ mfaRequired: boolean; tempToken?: string }>;
-  logout: () => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  logout: (options?: LogoutOptions) => Promise<void>;
   refreshToken: () => Promise<boolean>;
 }
 
@@ -57,7 +71,7 @@ function getInitials(name: string): string {
     .join('');
 }
 
-function mapUserData(data: Record<string, unknown>): AuthUser {
+export function mapUserData(data: Record<string, unknown>): AuthUser {
   const name = (data.fullName as string) ?? '';
   return {
     userId: (data.userId as string) ?? '',
@@ -78,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearRefreshTimer = useCallback(() => {
@@ -103,17 +118,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [clearRefreshTimer]
   );
 
-  const logout = useCallback(async () => {
-    clearRefreshTimer();
-    try {
-      // Best-effort: tell the backend to invalidate the refresh token stored in the cookie
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    } catch {
-      // ignore
-    }
-    setUser(null);
-    router.push('/login');
-  }, [clearRefreshTimer, router]);
+  const logout = useCallback(
+    async (options: LogoutOptions = {}) => {
+      clearRefreshTimer();
+      try {
+        // Best-effort: tell the backend to invalidate the refresh token stored in the cookie
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(options.reason ? { reason: options.reason } : {}),
+        });
+      } catch {
+        // ignore
+      }
+      // Drop every cached query so no protected data stays in memory after sign-out
+      queryClient.cancelQueries();
+      queryClient.clear();
+      sessionStorage.removeItem('mfa_temp_token');
+      sessionStorage.removeItem('mfa_methods');
+      setUser(null);
+      if (options.reason === 'idle_timeout') {
+        router.replace('/login?session=expired');
+      } else {
+        router.push('/login');
+      }
+    },
+    [clearRefreshTimer, router, queryClient]
+  );
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
     const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
@@ -127,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (data?.data) {
           setUser(mapUserData(data.data));
-          scheduleRefresh(logout);
+          scheduleRefresh(() => logout());
         }
       })
       .catch(() => {})
@@ -137,10 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [scheduleRefresh, logout, clearRefreshTimer]);
 
   const login = useCallback(
-    async (
-      email: string,
-      password: string
-    ): Promise<{ mfaRequired: boolean; tempToken?: string }> => {
+    async (email: string, password: string): Promise<LoginResult> => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +186,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // MFA flow: backend returns status 'mfa_required'
       if (json?.status === 'mfa_required' || json?.data?.mfaRequired) {
-        return { mfaRequired: true, tempToken: json?.data?.tempToken };
+        return {
+          mfaRequired: true,
+          tempToken: json?.data?.tempToken,
+          methods: json?.data?.methods,
+        };
       }
 
       // Fetch user profile now that cookies are set
@@ -166,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const meData = await meRes.json();
         if (meData?.data) {
           setUser(mapUserData(meData.data));
-          scheduleRefresh(logout);
+          scheduleRefresh(() => logout());
         }
       }
 

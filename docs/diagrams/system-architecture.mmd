@@ -1,0 +1,39 @@
+%% System Architecture - high-level component diagram
+%% Mirrors docs/ARCHITECTURE.md "High-Level Architecture Diagram"
+flowchart TB
+    subgraph Client["Client Layer"]
+        WEB["Web (Next.js)"]
+        MOBILE["Mobile (React Native)"]
+        API_CONSUMERS["API Consumers"]
+    end
+
+    subgraph Gateway["API Gateway / Load Balancer (NGINX)"]
+        NGINX["SSL/TLS Termination<br/>Request Routing<br/>Rate Limiting"]
+    end
+
+    subgraph Services["Service Layer (Kubernetes)"]
+        API_SVC["API Service (Express)<br/>Auth · Patients · Encounters"]
+        STELLAR_SVC["Stellar Service (Payments)<br/>Transactions · Blockchain · Settlements"]
+        REDIS["Cache Layer (Redis)"]
+    end
+
+    subgraph Data["Data Layer"]
+        MONGO[("MongoDB<br/>(Replica Set)")]
+        STELLAR_NET(("Stellar Network<br/>(Testnet / Live)"))
+        RABBITMQ[("Message Queue<br/>(RabbitMQ)")]
+    end
+
+    WEB --> NGINX
+    MOBILE --> NGINX
+    API_CONSUMERS --> NGINX
+
+    NGINX --> API_SVC
+    NGINX --> STELLAR_SVC
+    NGINX --> REDIS
+
+    API_SVC --> MONGO
+    API_SVC --> RABBITMQ
+    API_SVC --> REDIS
+
+    STELLAR_SVC --> STELLAR_NET
+    STELLAR_SVC --> MONGO

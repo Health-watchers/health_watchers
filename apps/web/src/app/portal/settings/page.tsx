@@ -6,7 +6,12 @@ import { User, Bell, Lock, Key } from 'lucide-react';
 
 const settingsMenu = [
   { id: 'profile', label: 'Profile', icon: User, href: '/portal/settings/profile' },
-  { id: 'notifications', label: 'Notifications', icon: Bell, href: '/portal/settings/notifications' },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    href: '/portal/settings/notifications',
+  },
   { id: 'security', label: 'Security', icon: Lock, href: '/portal/settings/security' },
   { id: 'api-keys', label: 'API Keys', icon: Key, href: '/portal/settings/api-keys' },
 ];
@@ -28,8 +33,10 @@ export default function SettingsPage() {
     <PageWrapper>
       <div className="mx-auto max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="mt-2 text-gray-600">Manage your account, preferences, and security</p>
+          <h1 className="text-3xl font-bold dark:text-gray-100">Settings</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            Manage your account, preferences, and security
+          </p>
         </div>
 
         <Tabs defaultValue={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -44,11 +51,11 @@ export default function SettingsPage() {
 
           {settingsMenu.map((item) => (
             <TabsContent key={item.id} value={item.id} className="mt-6">
-              <div className="rounded-lg bg-white p-6 shadow">
-                <h2 className="text-2xl font-semibold mb-4">{item.label}</h2>
+              <div className="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+                <h2 className="mb-4 text-2xl font-semibold dark:text-gray-100">{item.label}</h2>
                 <button
                   onClick={() => router.push(item.href)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   Go to {item.label} Settings →
                 </button>
@@ -58,9 +65,11 @@ export default function SettingsPage() {
         </Tabs>
 
         {/* Settings Summary Card */}
-        <div className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-6">
-          <h3 className="font-semibold text-blue-900">Tips for Securing Your Account</h3>
-          <ul className="mt-3 space-y-2 text-sm text-blue-800">
+        <div className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-950">
+          <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+            Tips for Securing Your Account
+          </h3>
+          <ul className="mt-3 space-y-2 text-sm text-blue-800 dark:text-blue-200">
             <li>✓ Enable two-factor authentication in Security settings</li>
             <li>✓ Review and manage API keys regularly</li>
             <li>✓ Keep your notification preferences up to date</li>

@@ -39,58 +39,61 @@ export function LogCommunicationForm({ patientId, onClose }: Props) {
       setValidationError('Sent at date is required');
       return;
     }
-    mutate(
-      { ...form, sentAt: new Date(form.sentAt).toISOString() },
-      { onSuccess: onClose }
-    );
+    mutate({ ...form, sentAt: new Date(form.sentAt).toISOString() }, { onSuccess: onClose });
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Channel</label>
         <select
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.channel}
           onChange={(e) => set('channel', e.target.value as LogCommunicationInput['channel'])}
         >
           {CHANNELS.map((c) => (
-            <option key={c} value={c}>{c.replace('_', ' ')}</option>
+            <option key={c} value={c}>
+              {c.replace('_', ' ')}
+            </option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Direction</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Direction</label>
         <select
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.direction}
           onChange={(e) => set('direction', e.target.value as LogCommunicationInput['direction'])}
         >
           {DIRECTIONS.map((d) => (
-            <option key={d} value={d}>{d}</option>
+            <option key={d} value={d}>
+              {d}
+            </option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
         <select
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.status}
           onChange={(e) => set('status', e.target.value as LogCommunicationInput['status'])}
         >
           {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>
+              {s}
+            </option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Sent At *</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Sent At *</label>
         <input
           type="datetime-local"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.sentAt}
           onChange={(e) => set('sentAt', e.target.value)}
           required
@@ -98,9 +101,9 @@ export function LogCommunicationForm({ patientId, onClose }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Content *</label>
         <textarea
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           rows={4}
           value={form.content}
           onChange={(e) => set('content', e.target.value)}
@@ -110,12 +113,12 @@ export function LogCommunicationForm({ patientId, onClose }: Props) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="mb-1 block text-sm font-medium text-gray-700">
           Related Encounter ID <span className="text-gray-400">(optional)</span>
         </label>
         <input
           type="text"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           value={form.relatedEncounterId ?? ''}
           onChange={(e) => set('relatedEncounterId', e.target.value || undefined)}
           placeholder="ObjectId..."
@@ -130,14 +133,14 @@ export function LogCommunicationForm({ patientId, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isPending}
-          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           {isPending ? 'Saving…' : 'Log Communication'}
         </button>

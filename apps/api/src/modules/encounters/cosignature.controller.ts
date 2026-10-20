@@ -7,10 +7,18 @@ export class CoSignatureController {
   static async getPendingQueue(req: Request, res: Response): Promise<void> {
     try {
       const { userId, clinicId } = req.user!;
-      const queue = await CoSignatureService.getPendingCoSignatureQueue(String(userId), clinicId.toString());
+      const queue = await CoSignatureService.getPendingCoSignatureQueue(
+        String(userId),
+        clinicId.toString()
+      );
       res.status(200).json({ success: true, data: queue, count: queue.length });
     } catch (error) {
-      res.status(500).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -27,11 +35,19 @@ export class CoSignatureController {
       }
 
       const encounter = await CoSignatureService.requestCoSignature(
-        id, String(userId), targetDoctorId, clinicId.toString()
+        id,
+        String(userId),
+        targetDoctorId,
+        clinicId.toString()
       );
       res.status(200).json({ success: true, data: encounter });
     } catch (error) {
-      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -49,11 +65,25 @@ export class CoSignatureController {
 
       const encounter = await CoSignatureService.approveCoSignature(id, String(userId), notes);
 
-      auditLog({ action: 'ENCOUNTER_UPDATE', userId: String(userId), clinicId: clinicId.toString(), resourceType: 'Encounter', resourceId: id, metadata: { action: 'cosign_approve', notes } });
+      auditLog({
+        action: 'ENCOUNTER_UPDATE',
+        userId: String(userId),
+        clinicId: clinicId.toString(),
+        resourceType: 'Encounter',
+        resourceId: id,
+        metadata: { action: 'cosign_approve', notes },
+      });
 
-      res.status(200).json({ success: true, message: 'Encounter co-signed successfully', data: encounter });
+      res
+        .status(200)
+        .json({ success: true, message: 'Encounter co-signed successfully', data: encounter });
     } catch (error) {
-      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 
@@ -75,11 +105,25 @@ export class CoSignatureController {
 
       const encounter = await CoSignatureService.rejectCoSignature(id, String(userId), notes);
 
-      auditLog({ action: 'ENCOUNTER_UPDATE', userId: String(userId), clinicId: clinicId.toString(), resourceType: 'Encounter', resourceId: id, metadata: { action: 'cosign_reject', notes } });
+      auditLog({
+        action: 'ENCOUNTER_UPDATE',
+        userId: String(userId),
+        clinicId: clinicId.toString(),
+        resourceType: 'Encounter',
+        resourceId: id,
+        metadata: { action: 'cosign_reject', notes },
+      });
 
-      res.status(200).json({ success: true, message: 'Encounter returned for revision', data: encounter });
+      res
+        .status(200)
+        .json({ success: true, message: 'Encounter returned for revision', data: encounter });
     } catch (error) {
-      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
   }
 }

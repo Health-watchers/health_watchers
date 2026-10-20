@@ -152,12 +152,8 @@ function NotificationRow({ n, selected, onSelect }: NotificationRowProps) {
       role="row"
       aria-selected={selected}
       className={[
-        'group flex items-start gap-3 rounded-lg border p-4 transition-colors',
-        selected
-          ? 'border-primary-300 bg-primary-50/60 dark:border-primary-700 dark:bg-primary-900/20'
-          : n.isRead
-            ? 'border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700/60'
-            : 'border-primary-200 bg-primary-50 hover:bg-primary-100/60 dark:border-primary-800 dark:bg-primary-900/30',
+        'flex items-start gap-4 rounded-lg border p-4 transition-colors',
+        n.isRead ? 'border-neutral-200 bg-white' : 'border-primary-200 bg-primary-50',
       ].join(' ')}
     >
       {/* Checkbox */}
@@ -173,7 +169,7 @@ function NotificationRow({ n, selected, onSelect }: NotificationRowProps) {
       {/* Unread dot */}
       <div className="mt-1.5 w-2 shrink-0">
         {!n.isRead && (
-          <span className="bg-primary-500 block h-2 w-2 rounded-full" aria-label="Unread" />
+          <span className="block h-2 w-2 rounded-full bg-primary-500" aria-label="Unread" />
         )}
       </div>
 
@@ -193,12 +189,7 @@ function NotificationRow({ n, selected, onSelect }: NotificationRowProps) {
         <button
           type="button"
           onClick={handleClick}
-          className={[
-            'hover:text-primary-600 mt-1 text-left text-sm font-semibold focus:underline focus:outline-none',
-            n.isRead
-              ? 'text-neutral-700 dark:text-neutral-300'
-              : 'text-neutral-900 dark:text-neutral-100',
-          ].join(' ')}
+          className="mt-1 text-left text-sm font-semibold text-neutral-900 hover:text-primary-600 focus:underline focus:outline-none"
         >
           {n.title}
           {n.link && (
@@ -219,8 +210,7 @@ function NotificationRow({ n, selected, onSelect }: NotificationRowProps) {
           <button
             type="button"
             onClick={() => markRead.mutate(n._id)}
-            disabled={markRead.isPending}
-            className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none disabled:opacity-50"
+            className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
             aria-label="Mark as read"
           >
             Mark read
@@ -383,7 +373,7 @@ export default function NotificationsPage() {
               type="button"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
-              className="text-primary-600 text-sm hover:underline focus:underline focus:outline-none disabled:opacity-50"
+              className="text-sm text-primary-600 hover:underline focus:underline focus:outline-none disabled:opacity-50"
             >
               {markAllRead.isPending ? 'Marking…' : 'Mark all as read'}
             </button>
@@ -391,76 +381,14 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* ── Category tabs ── */}
-      <div
-        role="tablist"
-        aria-label="Notification categories"
-        className="mb-4 flex gap-1 overflow-x-auto border-b border-neutral-200 pb-0 dark:border-neutral-700"
-      >
-        {ALL_CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            role="tab"
-            aria-selected={activeCategory === cat}
-            type="button"
-            onClick={() => handleCategoryChange(cat)}
-            className={[
-              'flex shrink-0 items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
-              'focus:ring-primary-400 -mb-px rounded-t border-b-2 focus:ring-2 focus:outline-none',
-              activeCategory === cat
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200',
-            ].join(' ')}
-          >
-            <CategoryIcon category={cat} />
-            {CATEGORY_LABELS[cat]}
-            {categoryCounts[cat] > 0 && (
-              <span
-                className={[
-                  'rounded-full px-1.5 py-0.5 text-xs font-semibold',
-                  activeCategory === cat
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                    : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400',
-                ].join(' ')}
-              >
-                {categoryCounts[cat]}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Announce loading and status changes to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isLoading && 'Loading notifications…'}
+        {!isLoading && notifications.length === 0 && 'No notifications. You are all caught up.'}
+        {markAllRead.isPending && 'Marking all notifications as read…'}
+        {markAllRead.isSuccess && 'All notifications marked as read.'}
       </div>
 
-      {/* ── Bulk action toolbar ── */}
-      {filtered.length > 0 && (
-        <div className="mb-3 flex items-center gap-3 rounded-md border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleSelectAll}
-            aria-label={allSelected ? 'Deselect all' : 'Select all'}
-            className="text-primary-600 focus:ring-primary-500 h-4 w-4 cursor-pointer rounded border-neutral-300"
-          />
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            {someSelected ? `${selected.size} selected` : 'Select all'}
-          </span>
-
-          {someSelected && (
-            <>
-              <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-600" />
-              <button
-                type="button"
-                onClick={handleBulkDelete}
-                disabled={bulkDelete.isPending}
-                className="text-xs font-medium text-red-500 hover:text-red-600 focus:underline focus:outline-none disabled:opacity-50"
-              >
-                {bulkDelete.isPending ? 'Deleting…' : `Delete (${selected.size})`}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── Content ── */}
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Spinner />

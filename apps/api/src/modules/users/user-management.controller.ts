@@ -8,7 +8,14 @@ import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { sendMail } from '@api/utils/mailer';
 import logger from '@api/utils/logger';
+import { escapeRegex } from '@api/utils/regex';
 import { AppRole } from '@api/types/express';
+import {
+  InviteStaffSchema,
+  UpdateStaffSchema,
+  STAFF_ROLES,
+  CLINIC_ADMIN_ASSIGNABLE_ROLES,
+} from '@health-watchers/types';
 
 const router = Router();
 
@@ -25,37 +32,44 @@ const ROLE_HIERARCHY: Record<AppRole, number> = {
 };
 
 // Roles that CLINIC_ADMIN can create
-const CLINIC_ADMIN_CREATABLE_ROLES: AppRole[] = ['DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'];
+const CLINIC_ADMIN_CREATABLE_ROLES = CLINIC_ADMIN_ASSIGNABLE_ROLES as readonly AppRole[];
 
 // Generate temporary password
 function generateTemporaryPassword(): string {
   return crypto.randomBytes(12).toString('base64').slice(0, 16);
 }
 
-// Validation schemas
-const createUserSchema = z.object({
-  fullName: z.string().min(1, 'Full name is required').max(100),
-  email: z.string().email('Invalid email address'),
-  role: z.enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY']),
-  clinicId: z.string().optional(),
-});
-
-const updateUserSchema = z.object({
-  fullName: z.string().min(1).max(100).optional(),
-  role: z
-    .enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'])
-    .optional(),
-});
+// Validation schemas (shared with the web Staff Management page)
+const createUserSchema = InviteStaffSchema;
+const updateUserSchema = UpdateStaffSchema;
 
 const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  role: z
-    .enum(['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'])
-    .optional(),
+  role: z.enum(STAFF_ROLES).optional(),
   isActive: z.enum(['true', 'false']).optional(),
   clinicId: z.string().optional(),
+  q: z.string().trim().max(100).optional(),
 });
+
+/**
+ * Returns an error message if the requesting admin may not manage `target`
+ * (other clinic, or a CLINIC_ADMIN acting on an admin account), otherwise null.
+ */
+function manageDeniedReason(
+  requestingUser: NonNullable<Request['user']>,
+  target: { clinicId: { toString(): string }; role: string },
+  action: string
+): string | null {
+  if (requestingUser.role !== 'CLINIC_ADMIN') return null;
+  if (target.clinicId.toString() !== requestingUser.clinicId) {
+    return `You can only ${action} users in your clinic`;
+  }
+  if (['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(target.role)) {
+    return `CLINIC_ADMIN cannot ${action} ${target.role} accounts`;
+  }
+  return null;
+}
 
 // POST /users — Create User
 router.post(
@@ -155,7 +169,7 @@ router.get(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   validateRequest({ query: listUsersQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { page, limit, role, isActive, clinicId } = req.query as any;
+    const { page, limit, role, isActive, clinicId, q } = req.query as any;
     const requestingUser = req.user!;
 
     const filter: Record<string, any> = {};
@@ -170,6 +184,10 @@ router.get(
 
     if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (q) {
+      const pattern = new RegExp(escapeRegex(q), 'i');
+      filter.$or = [{ fullName: pattern }, { email: pattern }];
+    }
 
     const skip = (page - 1) * limit;
     const [users, total] = await Promise.all([
@@ -464,6 +482,68 @@ router.post(
       status: 'success',
       message:
         'Password reset successfully. User will be required to change password on next login.',
+    });
+  })
+);
+
+// POST /users/:id/reactivate — Reactivate a deactivated user
+router.post(
+  '/:id/reactivate',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const requestingUser = req.user!;
+
+    const user = await UserModel.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'NotFound', message: 'User not found' });
+    }
+
+    const denied = manageDeniedReason(requestingUser, user, 'reactivate');
+    if (denied) return res.status(403).json({ error: 'Forbidden', message: denied });
+
+    user.isActive = true;
+    await user.save();
+
+    logger.info({ userId: id, reactivatedBy: requestingUser.userId }, 'User reactivated');
+
+    return res.json({
+      status: 'success',
+      message: 'User reactivated successfully',
+      data: { id: user._id, isActive: user.isActive },
+    });
+  })
+);
+
+// POST /users/:id/revoke-sessions — Sign the user out of every device
+router.post(
+  '/:id/revoke-sessions',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const requestingUser = req.user!;
+
+    const user = await UserModel.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'NotFound', message: 'User not found' });
+    }
+
+    const denied = manageDeniedReason(requestingUser, user, 'revoke sessions for');
+    if (denied) return res.status(403).json({ error: 'Forbidden', message: denied });
+
+    const { deletedCount } = await RefreshTokenModel.deleteMany({ userId: id });
+
+    logger.info(
+      { userId: id, revokedBy: requestingUser.userId, sessions: deletedCount },
+      'User sessions revoked'
+    );
+
+    return res.json({
+      status: 'success',
+      message: 'All sessions revoked',
+      data: { id: user._id, revoked: deletedCount },
     });
   })
 );

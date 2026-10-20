@@ -30,6 +30,10 @@ function schemaForPart(schemas: ValidateOptions, source: RequestPart): ZodSchema
   return schemas.query;
 }
 
+export function validate(schema: ZodSchema, source: RequestPart = 'body'): RequestHandler {
+  return validateRequest({ [source]: schema });
+}
+
 export function validateRequest(schemas: ValidateOptions): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     const validatePart = (

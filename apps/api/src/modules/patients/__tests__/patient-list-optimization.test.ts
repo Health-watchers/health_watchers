@@ -56,7 +56,15 @@ jest.mock('@api/services/cache.service', () => ({ cache: mockCache }));
 // Stub paginate utility
 const mockPaginate = jest.fn().mockResolvedValue({
   data: [],
-  meta: { total: 0, page: 1, limit: 20, totalPages: 0, hasNextPage: false, hasPrevPage: false, nextCursor: null },
+  meta: {
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPrevPage: false,
+    nextCursor: null,
+  },
 });
 jest.mock('@api/utils/paginate', () => ({
   paginate: mockPaginate,
@@ -86,17 +94,39 @@ jest.mock('@api/modules/patients/models/patient-counter.model', () => ({
 
 // Stubs for related models
 jest.mock('@api/modules/auth/models/user.model', () => ({ UserModel: { findOne: jest.fn() } }));
-jest.mock('@api/modules/portal/models/portal-message.model', () => ({ PortalMessageModel: { create: jest.fn() } }));
-jest.mock('@api/modules/payments/models/payment-record.model', () => ({ PaymentRecordModel: { find: jest.fn().mockResolvedValue([]) } }));
-jest.mock('@api/modules/encounters/encounter.model', () => ({ EncounterModel: { find: jest.fn().mockResolvedValue([]) } }));
-jest.mock('@api/modules/lab-results/lab-result.model', () => ({ LabResultModel: { find: jest.fn().mockResolvedValue([]) } }));
-jest.mock('@api/modules/patients/duplicate-detection.service', () => ({ DuplicateDetectionService: { findPotentialDuplicates: jest.fn().mockResolvedValue([]) } }));
-jest.mock('@api/middlewares/common.middleware', () => ({ isValidObjectId: jest.fn((_req: any, _res: any, next: any) => next()) }));
-jest.mock('@api/middlewares/subscription.middleware', () => ({ checkSubscriptionLimit: jest.fn(() => (_req: any, _res: any, next: any) => next()) }));
-jest.mock('@api/modules/patients/patients.transformer', () => ({ toPatientResponse: jest.fn((d: any) => d) }));
-jest.mock('@api/modules/communications/communications.controller', () => ({ communicationsRouter: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.transformer', () => ({ toPaymentResponse: jest.fn((d: any) => d) }));
-jest.mock('@api/modules/encounters/encounters.transformer', () => ({ toEncounterResponse: jest.fn((d: any) => d) }));
+jest.mock('@api/modules/portal/models/portal-message.model', () => ({
+  PortalMessageModel: { create: jest.fn() },
+}));
+jest.mock('@api/modules/payments/models/payment-record.model', () => ({
+  PaymentRecordModel: { find: jest.fn().mockResolvedValue([]) },
+}));
+jest.mock('@api/modules/encounters/encounter.model', () => ({
+  EncounterModel: { find: jest.fn().mockResolvedValue([]) },
+}));
+jest.mock('@api/modules/lab-results/lab-result.model', () => ({
+  LabResultModel: { find: jest.fn().mockResolvedValue([]) },
+}));
+jest.mock('@api/modules/patients/duplicate-detection.service', () => ({
+  DuplicateDetectionService: { findPotentialDuplicates: jest.fn().mockResolvedValue([]) },
+}));
+jest.mock('@api/middlewares/common.middleware', () => ({
+  isValidObjectId: jest.fn((_req: any, _res: any, next: any) => next()),
+}));
+jest.mock('@api/middlewares/subscription.middleware', () => ({
+  checkSubscriptionLimit: jest.fn(() => (_req: any, _res: any, next: any) => next()),
+}));
+jest.mock('@api/modules/patients/patients.transformer', () => ({
+  toPatientResponse: jest.fn((d: any) => d),
+}));
+jest.mock('@api/modules/communications/communications.controller', () => ({
+  communicationsRouter: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.transformer', () => ({
+  toPaymentResponse: jest.fn((d: any) => d),
+}));
+jest.mock('@api/modules/encounters/encounters.transformer', () => ({
+  toEncounterResponse: jest.fn((d: any) => d),
+}));
 jest.mock('@api/middlewares/auth.middleware', () => ({
   authenticate: jest.fn((_req: any, _res: any, next: any) => next()),
   requireRoles: jest.fn(() => (_req: any, _res: any, next: any) => next()),
@@ -180,9 +210,7 @@ describe('#1069 Patient list query optimization', () => {
     it('uses a cache key scoped to clinicId + page + limit', async () => {
       await request(app).get('/patients?page=2&limit=10').expect(200);
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        `patients:list:${CLINIC_ID}:page=2:limit=10`
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(`patients:list:${CLINIC_ID}:page=2:limit=10`);
     });
   });
 
@@ -245,9 +273,7 @@ describe('#1069 Patient list query optimization', () => {
         isActive: false,
       });
 
-      await request(app)
-        .delete('/patients/507f1f77bcf86cd799439011')
-        .expect(200);
+      await request(app).delete('/patients/507f1f77bcf86cd799439011').expect(200);
 
       expect(mockCache.invalidatePatientList).toHaveBeenCalledWith(CLINIC_ID);
     });

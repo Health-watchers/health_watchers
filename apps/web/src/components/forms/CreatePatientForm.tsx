@@ -30,6 +30,7 @@ export function CreatePatientForm({ onSubmit, onCancel }: Props) {
   } = useForm<CreatePatientData>({
     resolver: zodResolver(schema),
     defaultValues: { sex: 'M' },
+    mode: 'onBlur',
   });
 
   const submit = async (data: CreatePatientData) => {
@@ -42,23 +43,39 @@ export function CreatePatientForm({ onSubmit, onCancel }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-4">
+    <form noValidate onSubmit={handleSubmit(submit)} className="space-y-4">
       {errors.root && (
-        <p role="alert" className="text-sm text-red-600">
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="bg-danger-50 text-danger-700 rounded-md px-3 py-2 text-sm"
+        >
           {errors.root.message}
         </p>
       )}
 
-      <Input label="First Name" {...register('firstName')} error={errors.firstName?.message} />
-      <Input label="Last Name" {...register('lastName')} error={errors.lastName?.message} />
+      <Input
+        label="First Name"
+        required
+        {...register('firstName')}
+        error={errors.firstName?.message}
+      />
+      <Input
+        label="Last Name"
+        required
+        {...register('lastName')}
+        error={errors.lastName?.message}
+      />
       <Input
         label="Date of Birth"
         type="date"
+        required
         {...register('dateOfBirth')}
         error={errors.dateOfBirth?.message}
       />
       <Select
         label="Sex"
+        required
         {...register('sex')}
         error={errors.sex?.message}
         options={[
@@ -70,10 +87,11 @@ export function CreatePatientForm({ onSubmit, onCancel }: Props) {
       <Input
         label="Contact Number"
         type="tel"
+        required
         {...register('contactNumber')}
         error={errors.contactNumber?.message}
       />
-      <Input label="Address" {...register('address')} error={errors.address?.message} />
+      <Input label="Address" required {...register('address')} error={errors.address?.message} />
 
       <div className="flex gap-3 pt-4">
         <Button

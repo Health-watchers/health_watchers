@@ -1,0 +1,73 @@
+{{- if and .Values.api.enabled .Values.api.worker.enabled .Values.api.worker.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: api-worker-scaler
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-worker
+  annotations:
+    description: "Scales API workers based on Redis queue depth using BullMQ"
+spec:
+  scaleTargetRef:
+    name: api-worker
+  pollingInterval: {{ .Values.api.worker.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.api.worker.keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.api.worker.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.api.worker.keda.maxReplicas }}
+  
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.api.worker.keda.scaleDown.stabilizationWindowSeconds }}
+          policies:
+            - type: Percent
+              value: {{ .Values.api.worker.keda.scaleDown.percentValue }}
+              periodSeconds: 60
+            - type: Pods
+              value: {{ .Values.api.worker.keda.scaleDown.podsValue }}
+              periodSeconds: 60
+          selectPolicy: Min
+        scaleUp:
+          stabilizationWindowSeconds: {{ .Values.api.worker.keda.scaleUp.stabilizationWindowSeconds }}
+          policies:
+            - type: Percent
+              value: {{ .Values.api.worker.keda.scaleUp.percentValue }}
+              periodSeconds: 30
+            - type: Pods
+              value: {{ .Values.api.worker.keda.scaleUp.podsValue }}
+              periodSeconds: 30
+          selectPolicy: Max
+  
+  triggers:
+    {{- range .Values.api.worker.keda.triggers }}
+    - type: redis
+      metadata:
+        address: {{ $.Values.api.env.REDIS_URL | default "redis:6379" }}
+        listName: {{ .listName | quote }}
+        listLength: {{ .listLength | quote }}
+        activationListLength: {{ .activationListLength | default "1" | quote }}
+        databaseIndex: {{ .databaseIndex | default "0" | quote }}
+      {{- if $.Values.redis.password }}
+      authenticationRef:
+        name: redis-auth
+      {{- end }}
+    {{- end }}
+{{- end }}
+
+---
+{{- if and .Values.api.enabled .Values.api.worker.enabled .Values.api.worker.keda.enabled .Values.redis.password }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: redis-auth
+  namespace: {{ .Values.global.namespace }}
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: health-watchers-secrets
+      key: REDIS_PASSWORD
+{{- end }}

@@ -111,11 +111,31 @@ export default function NotificationSettingsPage() {
   ];
 
   const notificationTypes = [
-    { key: 'referralUpdates', label: 'Referral Updates', description: 'Get notified when referrals are updated' },
-    { key: 'appointmentReminders', label: 'Appointment Reminders', description: 'Reminders before your appointments' },
-    { key: 'testResults', label: 'Test Results', description: 'Alerts when lab results are available' },
-    { key: 'prescriptionAlerts', label: 'Prescription Alerts', description: 'Notifications about prescriptions' },
-    { key: 'systemUpdates', label: 'System Updates', description: 'Important system and security updates' },
+    {
+      key: 'referralUpdates',
+      label: 'Referral Updates',
+      description: 'Get notified when referrals are updated',
+    },
+    {
+      key: 'appointmentReminders',
+      label: 'Appointment Reminders',
+      description: 'Reminders before your appointments',
+    },
+    {
+      key: 'testResults',
+      label: 'Test Results',
+      description: 'Alerts when lab results are available',
+    },
+    {
+      key: 'prescriptionAlerts',
+      label: 'Prescription Alerts',
+      description: 'Notifications about prescriptions',
+    },
+    {
+      key: 'systemUpdates',
+      label: 'System Updates',
+      description: 'Important system and security updates',
+    },
     { key: 'weeklyDigest', label: 'Weekly Digest', description: 'Summary of weekly activity' },
   ];
 
@@ -130,9 +150,7 @@ export default function NotificationSettingsPage() {
           </div>
         )}
 
-        {success && (
-          <Toast type="success" message="Preferences updated successfully!" />
-        )}
+        {success && <Toast type="success" message="Preferences updated successfully!" />}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Notification Channels */}

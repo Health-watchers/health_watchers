@@ -1,0 +1,313 @@
+name: Mobile Build & Deploy
+
+on:
+  push:
+    tags:
+      - 'mobile-v*'  # Trigger on tags like mobile-v1.0.0
+    branches:
+      - main  # For OTA updates
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/mobile-build.yml'
+  workflow_dispatch:  # Allow manual triggers
+    inputs:
+      profile:
+        description: 'EAS Build Profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+      platform:
+        description: 'Platform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ios
+          - android
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════
+  # PRE-BUILD CHECKS
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  lint-and-test:
+    name: Lint & Test Mobile App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+
+      - name: 🔎 Run TypeScript check
+        run: npm run typecheck
+
+      - name: 🧪 Run tests
+        run: npm test
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # OTA UPDATES (for existing builds)
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  ota-update:
+    name: Publish OTA Update
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: |
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main' &&
+      !startsWith(github.ref, 'refs/tags/')
+    defaults:
+      run:
+        working-directory: apps/mobile
+    
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🏗️ Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Publish update to preview channel
+        run: |
+          eas update --branch preview --message "OTA update from commit ${{ github.sha }}"
+
+      - name: 📝 Comment on commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: '✅ OTA update published to preview channel'
+            })
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # PREVIEW BUILDS (on tags)
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  preview-build:
+    name: Build Preview (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    
+    strategy:
+      matrix:
+        platform: [ios, android]
+    
+    defaults:
+      run:
+        working-directory: apps/mobile
+    
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🏗️ Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔧 Configure environment
+        run: |
+          echo "Building for platform: ${{ matrix.platform }}"
+          echo "Tag: ${{ github.ref_name }}"
+
+      - name: 🚀 Build preview for ${{ matrix.platform }}
+        run: |
+          eas build --platform ${{ matrix.platform }} --profile preview --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📝 Generate build report
+        run: |
+          echo "### 📱 Mobile Build Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform**: ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile**: preview" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build started on EAS. Check https://expo.dev for status." >> $GITHUB_STEP_SUMMARY
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # PRODUCTION BUILDS (manual trigger only)
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  production-build:
+    name: Build Production (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.profile == 'production'
+    
+    strategy:
+      matrix:
+        platform: ${{ fromJSON(github.event.inputs.platform == 'all' && '["ios", "android"]' || format('["{0}"]', github.event.inputs.platform)) }}
+    
+    defaults:
+      run:
+        working-directory: apps/mobile
+    
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🏗️ Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Build production for ${{ matrix.platform }}
+        run: |
+          eas build --platform ${{ matrix.platform }} --profile production --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📝 Generate build report
+        run: |
+          echo "### 🚀 Production Build Initiated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform**: ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile**: production" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Remember to submit the build to App Store/Play Store after approval." >> $GITHUB_STEP_SUMMARY
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # AUTO-SUBMIT (optional - requires proper credentials)
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  auto-submit:
+    name: Submit to Stores
+    runs-on: ubuntu-latest
+    needs: production-build
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.profile == 'production' &&
+      vars.ENABLE_AUTO_SUBMIT == 'true'
+    
+    defaults:
+      run:
+        working-directory: apps/mobile
+    
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🏗️ Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 📤 Submit to App Store
+        if: contains(fromJSON('["all", "ios"]'), github.event.inputs.platform)
+        run: |
+          eas submit --platform ios --profile production --latest --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.EXPO_APPLE_APP_SPECIFIC_PASSWORD }}
+
+      - name: 📤 Submit to Google Play
+        if: contains(fromJSON('["all", "android"]'), github.event.inputs.platform)
+        run: |
+          eas submit --platform android --profile production --latest --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # NOTIFICATION
+  # ══════════════════════════════════════════════════════════════════════════
+  
+  notify:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    needs: [preview-build, production-build]
+    if: always()
+    
+    steps:
+      - name: 📢 Create GitHub Release (for tags)
+        if: startsWith(github.ref, 'refs/tags/mobile-v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Mobile Release ${{ github.ref_name }}
+          body: |
+            ## 📱 Mobile App Release
+            
+            Preview builds are being generated for iOS and Android.
+            
+            **What's New:**
+            - Check commit history for changes
+            
+            **Installation:**
+            - iOS: Install via TestFlight (link will be shared)
+            - Android: Download APK from EAS build page
+            
+            **EAS Dashboard:** https://expo.dev/accounts/[your-account]/projects/health-watchers
+          draft: true
+          prerelease: false

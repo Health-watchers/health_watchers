@@ -3,20 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   useUnreadCount,
   useNotifications,
   useMarkRead,
   useMarkAllRead,
   usePendingCosignatures,
-  TYPE_COLORS,
-  TYPE_LABELS,
   type Notification,
 } from '@/hooks/useNotifications';
-import { queryKeys } from '@/lib/queryKeys';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -44,40 +38,21 @@ function NotificationItem({ n, onRead }: { n: Notification; onRead: (id: string)
         type="button"
         onClick={handleClick}
         className={[
-          'w-full px-4 py-3 text-left transition-colors',
-          'border-b border-neutral-100 last:border-0 dark:border-neutral-700',
-          !n.isRead
-            ? 'bg-primary-50 hover:bg-primary-100/60 dark:bg-primary-900/25 dark:hover:bg-primary-900/40'
-            : 'hover:bg-neutral-50 dark:hover:bg-neutral-700/50',
+          'w-full border-b border-neutral-100 px-4 py-3 text-left transition-colors last:border-0 hover:bg-neutral-50',
+          !n.isRead ? 'bg-primary-50' : '',
         ].join(' ')}
       >
         <div className="flex items-start gap-2">
-          {/* Unread dot */}
-          {!n.isRead ? (
+          {!n.isRead && (
             <span
-              className="bg-primary-500 mt-1.5 h-2 w-2 shrink-0 rounded-full"
+              className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary-500"
               aria-hidden="true"
             />
-          ) : (
-            <span className="mt-1.5 h-2 w-2 shrink-0" aria-hidden="true" />
           )}
-
-          <div className="min-w-0 flex-1">
-            {/* Type badge */}
-            <span
-              className={`mb-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium ${TYPE_COLORS[n.type]}`}
-            >
-              {TYPE_LABELS[n.type]}
-            </span>
-            <p className="truncate text-sm leading-snug font-medium text-neutral-900 dark:text-neutral-100">
-              {n.title}
-            </p>
-            <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
-              {n.message}
-            </p>
-            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              <time dateTime={n.createdAt}>{timeAgo(n.createdAt)}</time>
-            </p>
+          <div className={!n.isRead ? '' : 'pl-4'}>
+            <p className="text-sm font-medium leading-snug text-neutral-900">{n.title}</p>
+            <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{n.message}</p>
+            <p className="mt-1 text-xs text-neutral-500">{timeAgo(n.createdAt)}</p>
           </div>
         </div>
       </button>
@@ -155,16 +130,11 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={[
-          'Notifications',
-          count > 0 ? `, ${count} unread` : '',
-          cosignCount > 0
-            ? `, ${cosignCount} pending co-signature${cosignCount !== 1 ? 's' : ''}`
-            : '',
-        ].join('')}
-        aria-haspopup="dialog"
+        aria-label={`Notifications${count > 0 ? `, ${count} unread` : ''}${cosignCount > 0 ? `, ${cosignCount} pending co-signatures` : ''}`}
+        aria-haspopup="menu"
         aria-expanded={open}
-        className="focus:ring-primary-500 relative rounded-md p-2 text-neutral-500 hover:bg-neutral-100 focus:ring-2 focus:outline-none dark:text-neutral-400 dark:hover:bg-neutral-700"
+        aria-controls={open ? 'notification-panel' : undefined}
+        className="relative rounded-md p-2 text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
         {/* Bell icon */}
         <svg
@@ -181,14 +151,17 @@ export default function NotificationBell() {
             d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
           />
         </svg>
-
-        {/* Unread count badge */}
-        <Badge count={totalBadge} />
-
-        {/* Co-signature badge (amber, bottom-right) */}
+        {count > 0 && (
+          <span
+            className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold leading-none text-white"
+            aria-hidden="true"
+          >
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
         {cosignCount > 0 && (
           <span
-            className="absolute -right-0.5 -bottom-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[10px] leading-none font-bold text-white ring-2 ring-white dark:ring-neutral-800"
+            className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[10px] font-bold leading-none text-white"
             title={`${cosignCount} pending co-signature${cosignCount !== 1 ? 's' : ''}`}
             aria-hidden="true"
           >
@@ -200,31 +173,20 @@ export default function NotificationBell() {
       {/* ── Dropdown panel ── */}
       {open && (
         <div
-          role="dialog"
-          aria-label="Notifications panel"
-          aria-modal="false"
-          className={[
-            'absolute right-0 mt-2 w-80 rounded-lg bg-white shadow-lg',
-            'z-50 overflow-hidden border border-neutral-200',
-            'dark:border-neutral-700 dark:bg-neutral-800',
-          ].join(' ')}
+          id="notification-panel"
+          role="region"
+          aria-label="Notifications"
+          aria-live="polite"
+          className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-            <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              Notifications
-              {count > 0 && (
-                <span className="bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300 ml-2 rounded-full px-1.5 py-0.5 text-xs font-bold">
-                  {count} unread
-                </span>
-              )}
-            </h2>
+          <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+            <h2 className="text-sm font-semibold text-neutral-900">Notifications</h2>
             {count > 0 && (
               <button
                 type="button"
                 onClick={() => markAllRead.mutate()}
-                disabled={markAllRead.isPending}
-                className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none disabled:opacity-50"
+                className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
               >
                 {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
               </button>
@@ -233,29 +195,9 @@ export default function NotificationBell() {
 
           {/* List */}
           {notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
-              <svg
-                className="mb-2 h-8 w-8 text-neutral-300 dark:text-neutral-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                />
-              </svg>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">No notifications</p>
-            </div>
+            <p className="px-4 py-6 text-center text-sm text-neutral-500">No notifications</p>
           ) : (
-            <ul
-              className="max-h-80 divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-700"
-              role="list"
-              aria-label="Recent notifications"
-            >
+            <ul className="max-h-80 divide-y divide-neutral-100 overflow-y-auto" role="list">
               {notifications.map((n) => (
                 <NotificationItem key={n._id} n={n} onRead={(id) => markRead.mutate(id)} />
               ))}
@@ -267,7 +209,7 @@ export default function NotificationBell() {
             <Link
               href="/notifications"
               onClick={() => setOpen(false)}
-              className="text-primary-600 dark:text-primary-400 block py-1 text-center text-xs hover:underline focus:underline focus:outline-none"
+              className="block py-1 text-center text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
             >
               View all notifications →
             </Link>

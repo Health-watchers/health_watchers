@@ -100,18 +100,12 @@ class SocketManager {
 
 export const socketManager = new SocketManager();
 
-/**
- * Get (or create) the singleton Socket.IO socket for a given token.
- * Used by useRealtimeUpdates and useLazyRealtimeUpdates.
- */
-export function getSocket(token: string) {
+/** Shared connection for the given token (reuses the live socket when the token matches). */
+export function getSocket(token: string): Socket {
   return socketManager.connect(token);
 }
 
-/**
- * Disconnect the singleton Socket.IO socket.
- */
-export function disconnectSocket() {
+export function disconnectSocket(): void {
   socketManager.disconnect();
 }
 
@@ -176,4 +170,13 @@ export function useAppointmentEvents() {
   }, []);
 
   return events;
+}
+
+/** Returns the shared socket connection for this token (used by useRealtimeUpdates). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
 }
