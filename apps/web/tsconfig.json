@@ -8,7 +8,8 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@health-watchers/utils": ["../../packages/utils/src/index.ts"]
     },
     "allowJs": true,
     "noEmit": true,

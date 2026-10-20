@@ -39,7 +39,7 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
-  transpilePackages: ['@health-watchers/types'],
+  transpilePackages: ['@health-watchers/types', '@health-watchers/utils'],
   experimental: {
     missingSuspenseWithCSRBailout: false,
     optimizePackageImports: [
