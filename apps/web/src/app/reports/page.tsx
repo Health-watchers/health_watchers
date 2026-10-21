@@ -1,9 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { PageWrapper, PageHeader } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { ReportFiltersPanel } from '@/components/reports/ReportFilters';
+import {
+  EncountersPerDayChart,
+  RevenueTrendChart,
+  TopDiagnosesChart,
+} from '@/components/charts/ReportCharts';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
 
@@ -92,6 +99,8 @@ export default function ReportsPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [useCustom, setUseCustom] = useState(false);
+  const [provider, setProvider] = useState<string | undefined>();
+  const [clinicBranch, setClinicBranch] = useState<string | undefined>();
 
   const { from, to } =
     useCustom && customFrom && customTo
@@ -127,54 +136,25 @@ export default function ReportsPage() {
         title="Reports & Analytics"
         subtitle="Clinic performance overview"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {(['this_month', 'last_month', 'last_3_months'] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  setPeriod(p);
-                  setUseCustom(false);
-                }}
-                className={[
-                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                  !useCustom && period === p
-                    ? 'bg-primary-500 text-white'
-                    : 'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50',
-                ].join(' ')}
-                aria-pressed={!useCustom && period === p}
-              >
-                {p === 'this_month'
-                  ? 'This Month'
-                  : p === 'last_month'
-                    ? 'Last Month'
-                    : 'Last 3 Months'}
-              </button>
-            ))}
-            <div className="flex items-center gap-1">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => {
-                  setCustomFrom(e.target.value);
-                  setUseCustom(true);
-                }}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs"
-                aria-label="Custom start date"
-              />
-              <span className="text-neutral-400">–</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => {
-                  setCustomTo(e.target.value);
-                  setUseCustom(true);
-                }}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs"
-                aria-label="Custom end date"
-              />
-            </div>
-          </div>
+          <Link
+            href="/reports/surveys"
+            className="text-primary-600 hover:bg-primary-50 dark:text-primary-400 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-600"
+          >
+            Patient surveys →
+          </Link>
         }
+      />
+
+      {/* Filters */}
+      <ReportFiltersPanel
+        filters={{ dateRange: { from, to }, provider, clinicBranch }}
+        onChange={(newFilters) => {
+          setCustomFrom(newFilters.dateRange.from);
+          setCustomTo(newFilters.dateRange.to);
+          setUseCustom(true);
+          setProvider(newFilters.provider);
+          setClinicBranch(newFilters.clinicBranch);
+        }}
       />
 
       {/* KPI Overview */}
@@ -246,6 +226,29 @@ export default function ReportsPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Encounters Per Day */}
+        {encounterQ.data?.perDay && (
+          <EncountersPerDayChart data={encounterQ.data.perDay} />
+        )}
+
+        {/* Revenue Trend */}
+        {paymentQ.data?.revenueByMonth && (
+          <RevenueTrendChart
+            data={paymentQ.data.revenueByMonth.map((item: any) => ({
+              period: item.month,
+              revenue: parseFloat(item.totalXLM || '0'),
+            }))}
+          />
+        )}
+
+        {/* Top Diagnoses */}
+        {encounterQ.data?.topDiagnoses && (
+          <TopDiagnosesChart
+            data={encounterQ.data.topDiagnoses}
+            onExport={() => handleExport('encounters')}
+          />
+        )}
+
         {/* Patient Growth */}
         <section
           aria-label="Patient growth chart"
@@ -271,60 +274,6 @@ export default function ReportsPage() {
               labelKey="month"
               valueKey="count"
               title="Patient registrations by month"
-            />
-          )}
-        </section>
-
-        {/* Encounter Volume */}
-        <section
-          aria-label="Encounter volume chart"
-          className="rounded-lg border border-neutral-200 bg-white p-5"
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">Top Chief Complaints</h2>
-            <button
-              onClick={() => handleExport('encounters')}
-              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
-              aria-label="Export encounters CSV"
-            >
-              Export CSV
-            </button>
-          </div>
-          {encounterQ.isLoading ? (
-            <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />
-          ) : (
-            <SimpleBarChart
-              data={encounterQ.data?.topComplaints ?? []}
-              labelKey="complaint"
-              valueKey="count"
-              title="Top chief complaints"
-            />
-          )}
-        </section>
-
-        {/* Payment Trends */}
-        <section
-          aria-label="Payment trends chart"
-          className="rounded-lg border border-neutral-200 bg-white p-5"
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">Payment Volume by Month</h2>
-            <button
-              onClick={() => handleExport('payments')}
-              className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
-              aria-label="Export payments CSV"
-            >
-              Export CSV
-            </button>
-          </div>
-          {paymentQ.isLoading ? (
-            <div className="h-32 animate-pulse rounded bg-neutral-100" aria-busy="true" />
-          ) : (
-            <SimpleBarChart
-              data={paymentQ.data?.byMonth ?? []}
-              labelKey="month"
-              valueKey="count"
-              title="Payment volume by month"
             />
           )}
         </section>

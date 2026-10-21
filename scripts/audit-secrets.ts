@@ -160,7 +160,7 @@ function formatReport(report: LeakReport, format: string): string {
       output += `1. Review the leaks above carefully\n`;
       output += `2. Rotate any real secrets immediately\n`;
       output += `3. For false positives, update .gitleaks.toml\n`;
-      output += `4. See SECURITY_SECRETS_REMEDIATION.md for guidance\n\n`;
+      output += `4. See docs/SECURITY_REMEDIATION.md for guidance\n\n`;
 
       return output;
 
@@ -199,7 +199,7 @@ function formatReport(report: LeakReport, format: string): string {
           ],
         },
         null,
-        2,
+        2
       );
 
     default:

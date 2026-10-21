@@ -47,9 +47,7 @@ async function mockStellarRoutes(
   await page.route(`**/api/v1/payments/${MOCK_INTENT_ID}/dispute`, (r) =>
     fulfillJson(r, createDisputeResponse, 201)
   );
-  await page.route(`**/api/v1/payments/disputes/**`, (r) =>
-    fulfillJson(r, resolveDisputeResponse)
-  );
+  await page.route(`**/api/v1/payments/disputes/**`, (r) => fulfillJson(r, resolveDisputeResponse));
   await page.route(`**/api/v1/payments/${MOCK_INTENT_ID}/refund`, (r) =>
     fulfillJson(r, refundResponse)
   );
@@ -109,7 +107,10 @@ test.describe('Stellar Payment Flow (mocked testnet)', () => {
 
     // QR code or pending indicator should appear
     await expect(
-      page.locator('canvas').or(page.getByTestId('qr-code')).or(page.getByText(/pending/i))
+      page
+        .locator('canvas')
+        .or(page.getByTestId('qr-code'))
+        .or(page.getByText(/pending/i))
     ).toBeVisible({ timeout: 8_000 });
   });
 
@@ -190,7 +191,10 @@ test.describe('Stellar Payment Flow (mocked testnet)', () => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ...createIntentResponse, data: { ...createIntentResponse.data, status: 'pending' } }),
+        body: JSON.stringify({
+          ...createIntentResponse,
+          data: { ...createIntentResponse.data, status: 'pending' },
+        }),
       })
     );
     await payment.retryPayment();
@@ -258,11 +262,14 @@ test.describe('Stellar Payment Flow (mocked testnet)', () => {
     await payment.goto();
 
     await payment.fundWithFriendbot();
-    await payment.createClaimableBalance('100', 'GPATIENTPUBLICKEY000000000000000000000000000000000000000001');
+    await payment.createClaimableBalance(
+      '100',
+      'GPATIENTPUBLICKEY000000000000000000000000000000000000000001'
+    );
 
-    await expect(
-      page.getByText(/claimable.*created|balance.*created|cb_/i)
-    ).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText(/claimable.*created|balance.*created|cb_/i)).toBeVisible({
+      timeout: 8_000,
+    });
   });
 
   // ── 12. Claimable balance: claim ──────────────────────────────────────────
@@ -272,10 +279,13 @@ test.describe('Stellar Payment Flow (mocked testnet)', () => {
     await payment.goto();
 
     await payment.fundWithFriendbot();
-    await payment.createClaimableBalance('100', 'GPATIENTPUBLICKEY000000000000000000000000000000000000000001');
-    await expect(
-      page.getByText(/claimable.*created|balance.*created|cb_/i)
-    ).toBeVisible({ timeout: 8_000 });
+    await payment.createClaimableBalance(
+      '100',
+      'GPATIENTPUBLICKEY000000000000000000000000000000000000000001'
+    );
+    await expect(page.getByText(/claimable.*created|balance.*created|cb_/i)).toBeVisible({
+      timeout: 8_000,
+    });
 
     await payment.claimBalance();
 

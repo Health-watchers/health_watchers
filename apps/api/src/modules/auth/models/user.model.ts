@@ -46,6 +46,7 @@ export interface User {
   mfaEnabled: boolean;
   mfaSecret?: string;
   mfaBackupCodes?: string[]; // hashed backup codes
+  passkeyCount: number; // registered WebAuthn passkeys (see passkey.model.ts)
   resetPasswordTokenHash?: string;
   resetPasswordExpiresAt?: Date;
   failedLoginAttempts: number;
@@ -101,6 +102,7 @@ const userSchema = new Schema(
       select: false,
       default: undefined,
     },
+    passkeyCount: { type: Number, default: 0, min: 0 },
     resetPasswordTokenHash: {
       type: String,
       required: false,

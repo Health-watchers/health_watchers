@@ -1,16 +1,21 @@
 # Health Watchers
 
-> **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
-
-[![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
-[![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=alert_status&token=)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=coverage)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)[![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI/CD Pipeline](https://github.com/Health-watchers/health_watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/ci.yml)
+[![Docs](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml)
+[![Lighthouse CI](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![npm Version](https://img.shields.io/badge/npm-10.9.2-blue.svg)](https://www.npmjs.com/)
 
 A HIPAA-compliant healthcare management platform built with Next.js, Express, and Stellar blockchain integration for secure patient data management and payment processing.
+
+## Documentation
+
+- **Documentation site**: [`apps/docs`](apps/docs/README.md) (Docusaurus). It has module guides for every API module and a User Guide for clinic staff, and is published to GitHub Pages by the [Docs workflow](.github/workflows/docs.yml). Run it locally with `cd apps/docs && npm ci && npm start`.
+- **Engineering docs index**: [`docs/README.md`](docs/README.md)
+- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- **Security policy**: [`SECURITY.md`](SECURITY.md)
+- **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Features
 
@@ -20,7 +25,22 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 - 🔐 HIPAA-compliant authentication and authorization
 - 🌐 Internationalization support (English, French)
 - 🎨 Modern, accessible UI with Tailwind CSS
+- 🌙 Dark mode support with persistent theme preference
 - 🔄 Real-time data synchronization with React Query
+
+## Dark Mode
+
+Health Watchers ships with a full dark theme across every page — dashboards, patient cards,
+payment tables, CDS panels, encounter forms, the portal subsection, and charts
+(`VitalSignsChart`, `PaymentAnalyticsCharts`).
+
+Toggle the theme from the header using the sun/moon button (`ThemeToggle`). The choice is
+persisted in `localStorage` and re-applied on load by `ThemeSync`, so your preference survives
+reloads and new sessions. If no preference is stored, the app follows your OS setting.
+
+![Health Watchers dashboard in dark mode](docs/assets/dark-mode-dashboard.png)
+
+*Dashboard in dark mode — charts, tables, and cards all use `dark:` Tailwind variants.*
 
 ## Tech Stack
 
@@ -39,57 +59,91 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 - npm 10.9.2
 - Docker and Docker Compose
 
-### Quick Start — MongoDB only (recommended for local dev)
+### Quick Start with Docker Compose Profiles
 
-No local MongoDB installation required. Spin up just the database:
+We've consolidated all Docker Compose configurations into a single file with profiles. Choose what you need:
+
+#### Core Services Only (Recommended for Development)
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/OWNER/health-watchers.git
-cd health-watchers
+git clone https://github.com/Health-watchers/health_watchers.git
+cd health_watchers
 
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start MongoDB (and optional mongo-express UI on :8081)
-docker-compose -f docker-compose.dev.yml up -d
-
-# 4. Install dependencies and start the API
-npm install
-npm run dev --workspace=api
-```
-
-The default `MONGO_URI=mongodb://localhost:27017/health_watchers` in `.env.example` connects directly to the containerized MongoDB — no credentials needed for local dev.
-
-To stop:
-```bash
-docker-compose -f docker-compose.dev.yml down
-```
-
-### 5-Minute Quickstart — Full Stack with Docker Compose
-
-Runs all services (API, web, stellar-service, MongoDB) in containers:
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/OWNER/health-watchers.git
-cd health-watchers
-
-# 2. Copy environment configuration
-cp .env.example .env
-
-# 3. Start all services
-docker-compose up -d
+# 3. Start core services (API, web, MongoDB, Redis, Jaeger)
+docker compose --profile core up -d
 
 # 4. Access the application
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
+# Jaeger UI: http://localhost:16686
 ```
 
-To stop all services:
+#### With Development Tools
+
 ```bash
-docker-compose down
+# Start core + mongo-express (database UI on :8081)
+docker compose --profile core --profile dev-tools up -d
 ```
+
+#### With Monitoring Stack
+
+```bash
+# Start core + Prometheus, Grafana, AlertManager
+docker compose --profile core --profile monitoring up -d
+
+# Grafana: http://localhost:3003 (admin/admin)
+# Prometheus: http://localhost:9090
+```
+
+#### Full Stack with ELK Logging
+
+```bash
+# Start core + Elasticsearch, Logstash, Kibana
+docker compose --profile core --profile elk up -d
+
+# Kibana: http://localhost:5601
+```
+
+#### MongoDB Replica Set (High Availability)
+
+```bash
+# Use replica profile instead of core (which has standalone MongoDB)
+docker compose --profile replica --profile dev-tools up -d
+
+# Update MONGO_URI in .env:
+# MONGO_URI=mongodb://admin:password123@mongodb-primary:27017,mongodb-secondary-1:27017,mongodb-secondary-2:27017/health_watchers?replicaSet=rs0&authSource=admin
+```
+
+#### Production Deployment
+
+```bash
+# Use production overrides
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile core up -d
+
+# Ensure all production secrets are set in .env
+```
+
+To stop services:
+```bash
+docker compose --profile core down
+# or
+docker compose down  # stops all running services
+```
+
+### Available Profiles
+
+| Profile | Services | Use Case |
+|---------|----------|----------|
+| `core` | API, web, stellar-service, MongoDB, Redis, Jaeger | Development, basic setup |
+| `dev-tools` | mongo-express | Database management UI |
+| `monitoring` | Prometheus, Grafana, AlertManager, node-exporter | Metrics and alerts |
+| `elk` | Elasticsearch, Logstash, Kibana | Centralized logging |
+| `replica` | MongoDB replica set (3 nodes + arbiter) | HA testing |
+| `stellar` | Stellar-specific services | Blockchain development |
 
 ### Manual Setup
 
@@ -120,18 +174,34 @@ This will start:
 - API server on http://localhost:3001
 - Stellar service on http://localhost:3002
 
+### IDE Setup
+
+See [`docs/IDE_SETUP.md`](docs/IDE_SETUP.md) for recommended VS Code extensions, formatter/linter integration, and a debugger launch config for `apps/api`.
+
 ## Project Structure
 
 ```
-health-watchers/
+health_watchers/
 ├── apps/
-│   ├── api/              # Express.js REST API
-│   ├── web/              # Next.js frontend application
-│   └── stellar-service/  # Stellar blockchain integration
-├── packages/             # Shared packages (types, utils)
-├── scripts/              # Database seeding and utilities
+│   ├── api/              # Express.js REST API (modules, migrations, jobs)
+│   ├── web/              # Next.js web application (staff app + patient portal)
+│   ├── mobile/           # React Native (Expo) mobile app
+│   ├── stellar-service/  # Stellar blockchain integration service
+│   └── docs/             # Docusaurus documentation site
+├── packages/
+│   ├── types/            # Shared TypeScript types
+│   ├── config/           # Shared ESLint and tooling configuration
+│   └── anonymize/        # PHI de-identification utilities
+├── contracts/            # Soroban smart contracts (e.g. escrow)
+├── docs/                 # Engineering, operations and compliance docs (see docs/README.md)
+├── k8s/                  # Kubernetes manifests
+├── helm/                 # Helm chart
+├── terraform/            # Infrastructure as code
+├── monitoring/           # Prometheus, Alertmanager and Grafana configuration
+├── k6/                   # k6 load, stress and spike tests
+├── scripts/              # Seeding, security, DR and utility scripts
 ├── .env.example          # Environment configuration template
-└── docker-compose.yml    # Docker orchestration
+└── docker-compose.yml    # Docker Compose with profiles
 ```
 
 ## Development
@@ -167,7 +237,11 @@ Health Watchers is designed with HIPAA compliance in mind:
 - 🛡️ Input validation and sanitization
 - 🔐 Secrets management with AWS Secrets Manager support
 
-For detailed security guidelines, see `SECURITY.md`.
+For detailed security guidelines, see [`SECURITY.md`](SECURITY.md) and [`docs/SECURITY_POLICY.md`](docs/SECURITY_POLICY.md). For day-to-day rules on handling patient data in code, see [`docs/PHI_HANDLING_GUIDE.md`](docs/PHI_HANDLING_GUIDE.md); for onboarding a new vendor that will touch PHI, see [`docs/BAA_TEMPLATE.md`](docs/BAA_TEMPLATE.md).
+
+## Logging & Tracing
+
+The API uses Pino for structured logging and OpenTelemetry for distributed tracing, with correlation IDs tying logs, traces, and audit entries together for a single request. See [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) for the full guide, including log levels, redaction rules, and tracing/sampling configuration.
 
 ## Database Migrations
 
@@ -266,7 +340,7 @@ npm run start
 
 ## Contributing
 
-We welcome contributions! Please follow these steps:
+We welcome contributions! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide. In short:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -283,8 +357,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions, issues, or feature requests:
 
 - 📧 Email: support@healthwatchers.com
-- 🐛 Issues: [GitHub Issues](https://github.com/OWNER/health-watchers/issues)
-- 📖 Documentation: [Wiki](https://github.com/OWNER/health-watchers/wiki)
+- 🐛 Issues: [GitHub Issues](https://github.com/Health-watchers/health_watchers/issues)
+- 📖 Documentation: [Documentation site](apps/docs/README.md) and [docs index](docs/README.md)
 
 ## Acknowledgments
 
@@ -319,3 +393,9 @@ Import the collection and environment from [`docs/postman/`](./docs/postman/) to
 **Public workspace:** [Run in Postman](https://www.postman.com/health-watchers/workspace/health-watchers-api) *(publish via CI by setting `POSTMAN_API_KEY` and `POSTMAN_COLLECTION_UID` secrets)*
 
 The collection is validated on every PR and synced to the public workspace on every merge to `main` (see `.github/workflows/ci.yml` — `postman-sync` job).
+
+## Architecture Documentation
+
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full system design — component
+architecture, data flows, deployment topology, security, and observability — with diagrams
+rendered inline via Mermaid. The diagram sources live in [`docs/diagrams/`](./docs/diagrams/).

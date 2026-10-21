@@ -5,8 +5,20 @@ import multer, { FileFilterCallback } from 'multer';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { DocumentModel } from './models/document.model';
 import { DocumentVersionModel } from './models/document-version.model';
-import { uploadFile, getDownloadUrl } from './storage.service';
+import { uploadFile, getDownloadUrl, downloadFile } from './storage.service';
 import { config } from '@health-watchers/config';
+import {
+  encryptBuffer,
+  decryptBuffer,
+  sha256,
+  isEncryptionConfigured,
+} from './document-encryption.service';
+import type { DocumentEncryption } from './models/document.model';
+import { assignRetention } from './document-retention.service';
+import { indexDocument } from './document-ocr.service';
+import { generatePreview } from './document-preview.service';
+import { recordDocumentAudit } from './document-audit.service';
+import logger from '@api/utils/logger';
 
 const router = Router();
 
@@ -26,7 +38,7 @@ const ALLOWED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.dcm']);
 
 // ── Multer setup (memory storage — we forward to S3 or disk ourselves) ───────
 
-const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_MIME_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
     return cb(Object.assign(new Error('InvalidFileType'), { code: 'INVALID_FILE_TYPE' }));
@@ -44,7 +56,13 @@ const upload = multer({
 
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const { patientId, clinicId, documentType, page = '1', limit = '20' } = req.query as Record<string, string>;
+    const {
+      patientId,
+      clinicId,
+      documentType,
+      page = '1',
+      limit = '20',
+    } = req.query as Record<string, string>;
 
     if (!patientId) {
       return res.status(400).json({ error: 'BadRequest', message: 'patientId is required.' });
@@ -54,7 +72,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     if (clinicId) filter.clinicId = clinicId;
     if (documentType) filter.documentType = documentType;
 
-    const pageNum  = Math.max(1, parseInt(page, 10));
+    const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
 
     const [documents, total] = await Promise.all([
@@ -155,16 +173,27 @@ router.post(
       const ext = path.extname(req.file.originalname).toLowerCase();
       const storageKey = `documents/${clinicId}/${patientId}/${crypto.randomUUID()}${ext}`;
 
+      // Encrypt at rest with a per-file envelope key when a document encryption
+      // key is configured (#1247). Otherwise fall back to storage-layer SSE.
+      const contentSha256 = sha256(req.file.buffer);
+      let encryption: DocumentEncryption | undefined;
+      let bytesToStore = req.file.buffer;
+      if (isEncryptionConfigured()) {
+        const enc = encryptBuffer(req.file.buffer);
+        bytesToStore = enc.ciphertext;
+        encryption = enc.encryption;
+      }
+
       await uploadFile({
         storageKey,
-        buffer: req.file.buffer,
+        buffer: bytesToStore,
         mimeType: req.file.mimetype,
       });
 
       let doc;
       let version = 1;
 
-            if (documentId) {
+      if (documentId) {
         // Validate documentId to prevent NoSQL injection via request body
         if (!/^[a-f\d]{24}$/i.test(documentId)) {
           return res.status(400).json({ error: 'ValidationError', message: 'Invalid document ID' });
@@ -183,7 +212,7 @@ router.post(
           { isCurrentVersion: false, replacedAt: new Date(), replacedBy: undefined }
         );
 
-        // Create version record for old version
+        // Create version record for old version (carrying its encryption meta)
         await DocumentVersionModel.create({
           documentId,
           patientId: existing.patientId,
@@ -196,9 +225,12 @@ router.post(
           documentType: existing.documentType,
           version: existing.currentVersion || 1,
           isCurrentVersion: false,
+          encryption: existing.encryption,
+          contentSha256: existing.contentSha256,
         });
 
-        // Update document with new version
+        // Update document with new version. Reset derived artefacts so the OCR
+        // index and preview are regenerated for the new bytes.
         doc = await DocumentModel.findByIdAndUpdate(
           documentId,
           {
@@ -207,7 +239,12 @@ router.post(
             sizeBytes: req.file.size,
             storageKey,
             currentVersion: version,
+            contentSha256,
+            encryption,
+            ocrStatus: 'pending',
+            previewStatus: 'pending',
             $inc: { versionCount: 1 },
+            $unset: { ocrText: '', previewStorageKey: '' },
           },
           { new: true }
         );
@@ -224,6 +261,10 @@ router.post(
           documentType,
           currentVersion: 1,
           versionCount: 1,
+          contentSha256,
+          encryption,
+          ocrStatus: 'pending',
+          previewStatus: 'pending',
         });
 
         // Create version record
@@ -239,8 +280,44 @@ router.post(
           documentType,
           version: 1,
           isCurrentVersion: true,
+          encryption,
+          contentSha256,
         });
       }
+
+      // ── Lifecycle & indexing (#1247) ────────────────────────────────────
+      const docId = String((doc as { _id: unknown })._id);
+      try {
+        await assignRetention({
+          documentId: docId,
+          clinicId,
+          documentType: documentType as never,
+          actorId: req.user!.userId,
+        });
+      } catch (err) {
+        logger.warn({ err, docId }, 'assignRetention failed (non-fatal)');
+      }
+
+      await recordDocumentAudit({
+        documentId: docId,
+        clinicId,
+        actorId: req.user!.userId,
+        action: documentId ? 'new_version' : 'upload',
+        req,
+        metadata: {
+          mimeType: req.file.mimetype,
+          sizeBytes: req.file.size,
+          encrypted: Boolean(encryption),
+        },
+      });
+
+      // Content extraction + preview run in the background.
+      void indexDocument(docId).catch((err) =>
+        logger.error({ err, docId }, 'OCR indexing failed to start')
+      );
+      void generatePreview(docId).catch((err) =>
+        logger.error({ err, docId }, 'preview generation failed to start')
+      );
 
       return res.status(201).json({ status: 'success', data: doc });
     } catch (err: any) {
@@ -350,8 +427,28 @@ router.get('/:id/versions', authenticate, async (req: Request, res: Response) =>
 // ── Local dev file serving ───────────────────────────────────────────────────
 // Only active when STORAGE_DRIVER=local; serves the raw file for the "pre-signed" URL
 
-router.get('/_local/:storageKey', authenticate, (req: Request, res: Response) => {
+router.get('/_local/:storageKey', authenticate, async (req: Request, res: Response) => {
   const storageKey = decodeURIComponent(req.params.storageKey);
+
+  // If these bytes are envelope-encrypted (#1247), decrypt transparently.
+  const [doc, ver] = await Promise.all([
+    DocumentModel.findOne({ storageKey }).select('encryption mimeType fileName').lean(),
+    DocumentVersionModel.findOne({ storageKey }).select('encryption mimeType fileName').lean(),
+  ]);
+  const enc = doc?.encryption ?? ver?.encryption;
+
+  if (enc) {
+    try {
+      const cipher = await downloadFile(storageKey);
+      const plain = decryptBuffer(cipher, enc);
+      res.setHeader('Content-Type', doc?.mimeType ?? ver?.mimeType ?? 'application/octet-stream');
+      return res.send(plain);
+    } catch (err) {
+      logger.error({ err, storageKey }, 'failed to serve decrypted local document');
+      return res.status(500).json({ error: 'InternalError', message: 'Could not read document.' });
+    }
+  }
+
   const filePath = `${config.storage.localUploadDir}/${storageKey}`;
   return res.sendFile(filePath, { root: process.cwd() }, (err) => {
     if (err) res.status(404).json({ error: 'NotFound', message: 'File not found on disk.' });

@@ -1,6 +1,11 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
 import logger from '../logger.js';
 import { withHorizonCall } from '../stellar.js';
+import {
+  invokeContract,
+  SorobanInvokeResult,
+  SorobanSimulationError,
+} from '../soroban/client.js';
 
 export interface EscrowParams {
   sourceAccount: StellarSdk.Account;
@@ -35,6 +40,257 @@ export interface ClaimableBalanceRecord {
   claimants: any[];
   lastModifiedLedger: number;
   lastModifiedTime: string;
+}
+
+export interface SorobanEscrowParams {
+  /** Soroban RPC server used for simulation and submission */
+  server: StellarSdk.SorobanRpc.Server;
+  /** Horizon server used to load the source account sequence number */
+  horizonServer: StellarSdk.Horizon.Server;
+  /** Public key of the account invoking the contract */
+  sourcePublicKey: string;
+  /** Secret key used to sign the assembled transaction */
+  signerSecret: string;
+  /** Deployed escrow contract id (C...) */
+  contractId: string;
+  /** Amount in stroops (i128) */
+  amount: string;
+  /** Asset contract address (C...) or 'native' for the native asset SAC */
+  asset: string;
+  /** Public key of the beneficiary that can release funds */
+  claimantPublicKey: string;
+  /** Public key of the account that can refund funds */
+  refundPublicKey: string;
+  /** Unix timestamp (seconds) after which the claimant can release */
+  claimableAfter: number;
+  /** Unix timestamp (seconds) after which the refunder can refund */
+  claimableUntil: number;
+  networkPassphrase: string;
+  baseFee: string;
+}
+
+export interface SorobanEscrowActionResult {
+  transactionHash: string;
+  status: string;
+  ledger?: number;
+  returnValue?: unknown;
+}
+
+/**
+ * Build, simulate, assemble, sign and submit a Soroban contract invocation.
+ * Simulation failures are surfaced (thrown) without submitting the transaction.
+ */
+async function submitSorobanInvocation(
+  server: StellarSdk.SorobanRpc.Server,
+  horizonServer: StellarSdk.Horizon.Server,
+  sourcePublicKey: string,
+  signerSecret: string,
+  contractId: string,
+  method: string,
+  args: StellarSdk.xdr.ScVal[],
+  networkPassphrase: string,
+  baseFee: string
+): Promise<SorobanEscrowActionResult> {
+  const sourceAccount = await withHorizonCall(
+    'loadAccount',
+    { sourcePublicKey, operation: `soroban:${method}` },
+    () => horizonServer.loadAccount(sourcePublicKey)
+  );
+
+  let result: SorobanInvokeResult;
+  try {
+    result = await invokeContract({
+      server,
+      sourceAccount,
+      contractId,
+      method,
+      args,
+      networkPassphrase,
+      baseFee,
+      signerSecret,
+    });
+  } catch (error) {
+    if (error instanceof SorobanSimulationError) {
+      logger.error(
+        {
+          operation: `soroban:${method}`,
+          contractId,
+          error: error.message,
+          details: error.details,
+        },
+        'Soroban simulation failed; transaction not submitted'
+      );
+    } else {
+      logger.error(
+        { operation: `soroban:${method}`, contractId, error },
+        'Soroban invocation failed'
+      );
+    }
+    throw error;
+  }
+
+  logger.info(
+    {
+      operation: `soroban:${method}`,
+      contractId,
+      transactionHash: result.transactionHash,
+      status: result.status,
+      ledger: result.ledger,
+    },
+    'Soroban invocation submitted'
+  );
+
+  return {
+    transactionHash: result.transactionHash,
+    status: result.status,
+    ledger: result.ledger,
+    returnValue: result.returnValue,
+  };
+}
+
+/**
+ * Deposit funds into the Soroban escrow contract.
+ * Returns the submitted transaction hash.
+ */
+export async function depositSorobanEscrow(
+  params: SorobanEscrowParams
+): Promise<SorobanEscrowActionResult> {
+  const {
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    amount,
+    asset,
+    claimantPublicKey,
+    refundPublicKey,
+    claimableAfter,
+    claimableUntil,
+    networkPassphrase,
+    baseFee,
+  } = params;
+
+  logger.debug(
+    { operation: 'depositSorobanEscrow', contractId, amount, claimantPublicKey, refundPublicKey },
+    'Invoking Soroban escrow deposit'
+  );
+
+  const args = [
+    StellarSdk.Address.fromString(sourcePublicKey).toScVal(),
+    StellarSdk.Address.fromString(claimantPublicKey).toScVal(),
+    StellarSdk.Address.fromString(refundPublicKey).toScVal(),
+    StellarSdk.nativeToScVal(BigInt(amount), { type: 'i128' }),
+    StellarSdk.Address.fromString(asset).toScVal(),
+    StellarSdk.nativeToScVal(BigInt(claimableAfter), { type: 'u64' }),
+    StellarSdk.nativeToScVal(BigInt(claimableUntil), { type: 'u64' }),
+  ];
+
+  return submitSorobanInvocation(
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    'deposit',
+    args,
+    networkPassphrase,
+    baseFee
+  );
+}
+
+/**
+ * Release escrowed funds to the claimant via the Soroban escrow contract.
+ */
+export async function releaseSorobanEscrow(params: {
+  server: StellarSdk.SorobanRpc.Server;
+  horizonServer: StellarSdk.Horizon.Server;
+  sourcePublicKey: string;
+  signerSecret: string;
+  contractId: string;
+  escrowId: string;
+  networkPassphrase: string;
+  baseFee: string;
+}): Promise<SorobanEscrowActionResult> {
+  const {
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    escrowId,
+    networkPassphrase,
+    baseFee,
+  } = params;
+
+  logger.debug(
+    { operation: 'releaseSorobanEscrow', contractId, escrowId },
+    'Invoking Soroban escrow release'
+  );
+
+  const args = [
+    StellarSdk.Address.fromString(sourcePublicKey).toScVal(),
+    StellarSdk.nativeToScVal(BigInt(escrowId), { type: 'u64' }),
+  ];
+
+  return submitSorobanInvocation(
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    'release',
+    args,
+    networkPassphrase,
+    baseFee
+  );
+}
+
+/**
+ * Refund escrowed funds to the depositor via the Soroban escrow contract.
+ */
+export async function refundSorobanEscrow(params: {
+  server: StellarSdk.SorobanRpc.Server;
+  horizonServer: StellarSdk.Horizon.Server;
+  sourcePublicKey: string;
+  signerSecret: string;
+  contractId: string;
+  escrowId: string;
+  networkPassphrase: string;
+  baseFee: string;
+}): Promise<SorobanEscrowActionResult> {
+  const {
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    escrowId,
+    networkPassphrase,
+    baseFee,
+  } = params;
+
+  logger.debug(
+    { operation: 'refundSorobanEscrow', contractId, escrowId },
+    'Invoking Soroban escrow refund'
+  );
+
+  const args = [
+    StellarSdk.Address.fromString(sourcePublicKey).toScVal(),
+    StellarSdk.nativeToScVal(BigInt(escrowId), { type: 'u64' }),
+  ];
+
+  return submitSorobanInvocation(
+    server,
+    horizonServer,
+    sourcePublicKey,
+    signerSecret,
+    contractId,
+    'refund',
+    args,
+    networkPassphrase,
+    baseFee
+  );
 }
 
 /**

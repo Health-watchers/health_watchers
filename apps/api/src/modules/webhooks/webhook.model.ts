@@ -12,6 +12,10 @@ export interface IWebhook {
     backoffType: 'exponential' | 'linear' | 'fixed';
     initialDelayMs: number;
   };
+  /** #1253 — optional JSON payload template with `{{path}}` placeholders. */
+  payloadTemplate?: Record<string, any>;
+  /** #1253 — cap deliveries/min to this endpoint (0 = no cap). */
+  rateLimitPerMin: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +31,13 @@ export interface IWebhookDelivery {
   nextRetryAt?: Date;
   error?: string;
   responseStatus?: number;
+  /** #1253 — delivery debugging metadata. */
+  requestHeaders?: Record<string, string>;
+  responseBody?: string;
+  durationMs?: number;
+  isTest?: boolean;
+  /** #1432 — outbox event id; deliveries are unique per (eventId, webhookId). */
+  eventId?: string;
   createdAt: Date;
 }
 
@@ -63,8 +74,15 @@ const webhookSchema = new Schema<IWebhook>(
         enum: ['exponential', 'linear', 'fixed'],
         default: defaultRetryConfig.backoffType,
       },
-      initialDelayMs: { type: Number, default: defaultRetryConfig.initialDelayMs, min: 100, max: 60000 },
+      initialDelayMs: {
+        type: Number,
+        default: defaultRetryConfig.initialDelayMs,
+        min: 100,
+        max: 60000,
+      },
     },
+    payloadTemplate: { type: Schema.Types.Mixed },
+    rateLimitPerMin: { type: Number, default: 0, min: 0, max: 100000 },
   },
   { timestamps: true, versionKey: false }
 );
@@ -88,12 +106,23 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     nextRetryAt: { type: Date },
     error: { type: String },
     responseStatus: { type: Number },
+    requestHeaders: { type: Schema.Types.Mixed },
+    responseBody: { type: String },
+    durationMs: { type: Number },
+    isTest: { type: Boolean, default: false },
+    eventId: { type: String },
   },
   { timestamps: true, versionKey: false }
 );
 
 webhookDeliverySchema.index({ status: 1, nextRetryAt: 1 });
+// #1432 — an outbox event is handed to each webhook at most once.
+webhookDeliverySchema.index(
+  { eventId: 1, webhookId: 1 },
+  { unique: true, partialFilterExpression: { eventId: { $type: 'string' } } }
+);
 webhookDeliverySchema.index({ webhookId: 1, status: 1 });
+webhookDeliverySchema.index({ webhookId: 1, createdAt: -1 });
 
 const webhookEventLogSchema = new Schema<IWebhookEventLog>(
   {

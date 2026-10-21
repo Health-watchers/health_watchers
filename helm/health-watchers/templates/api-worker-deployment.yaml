@@ -1,0 +1,79 @@
+{{- if and .Values.api.enabled .Values.api.worker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-worker
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-worker
+spec:
+  replicas: {{ .Values.api.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app: api-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: api-worker
+        {{- include "health-watchers.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api-worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: worker
+          image: {{ include "health-watchers.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.api.image.repository "tag" .Values.api.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Override command to run worker instead of HTTP server
+          command: ["node", "dist/worker.js"]
+          resources:
+            {{- toYaml .Values.api.worker.resources | nindent 12 }}
+          # Simple liveness check for worker processes
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: {{ .Values.api.worker.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.worker.livenessProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: {{ .Values.api.worker.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.worker.readinessProbe.periodSeconds }}
+            timeoutSeconds: 5
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: health-watchers-config
+            - secretRef:
+                name: health-watchers-secrets
+          env:
+            - name: WORKER_MODE
+              value: "true"
+            - name: NODE_ENV
+              value: {{ .Values.api.env.NODE_ENV | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+{{- end }}

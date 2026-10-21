@@ -1,0 +1,14 @@
+{
+  "schedule": "0 30 1 * * ?",
+  "name": "<health-watchers-archive-{now/d}>",
+  "repository": "health-watchers-archive",
+  "config": {
+    "indices": ["health-watchers-*"],
+    "include_global_state": false
+  },
+  "retention": {
+    "expire_after": "2555d",
+    "min_count": 1,
+    "max_count": 200
+  }
+}

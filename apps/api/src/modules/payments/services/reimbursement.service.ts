@@ -52,7 +52,7 @@ export async function matchPaymentToReimbursement(
       return;
     }
 
-   const claimId = claimIdMatch[1];
+    const claimId = claimIdMatch[1];
     if (!CLAIM_ID_REGEX.test(claimId)) {
       logger.warn(`[Reimbursement] Invalid claimId format extracted from memo: ${claimId}`);
       return;

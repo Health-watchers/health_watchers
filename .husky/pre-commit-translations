@@ -1,7 +1,7 @@
 #!/bin/sh
-# Run translation check when en.json or fr.json are staged
-STAGED=$(git diff --cached --name-only | grep -E 'apps/web/messages/(en|fr)\.json' || true)
+# Run translation key-parity check when any locale file is staged
+STAGED=$(git diff --cached --name-only | grep -E 'apps/web/messages/[a-z]{2}\.json' || true)
 if [ -n "$STAGED" ]; then
   echo "🌐 Running translation completeness check..."
-  npx ts-node scripts/check-translations.ts
+  npm run -s i18n:check
 fi

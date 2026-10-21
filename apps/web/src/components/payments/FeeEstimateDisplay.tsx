@@ -32,7 +32,7 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
           type="button"
           onClick={() => refetch()}
           disabled={isFetching}
-          className="text-primary-600 text-xs hover:underline disabled:opacity-50"
+          className="text-xs text-primary-600 hover:underline disabled:opacity-50"
           aria-label="Refresh fee estimate"
         >
           {isFetching ? 'Refreshing…' : '↻ Refresh'}
@@ -54,7 +54,7 @@ export function FeeEstimateDisplay({ selected, onChange, amount }: Props) {
               onClick={() => onChange(value)}
               className={`flex-1 rounded border px-2 py-1.5 text-center transition-colors ${
                 selected === value
-                  ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium'
+                  ? 'border-primary-500 bg-primary-50 font-medium text-primary-700'
                   : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
               }`}
               aria-pressed={selected === value}

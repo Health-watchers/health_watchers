@@ -17,6 +17,20 @@ export interface Document {
 interface DocumentViewerProps {
   document: Document | null;
   onClose: () => void;
+  /**
+   * Direct file URL (e.g. a portal message attachment) — skips the document-download lookup.
+   * Only http(s) URLs are rendered.
+   */
+  src?: string;
+}
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url, window.location.href);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -25,23 +39,38 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ document, onClose, src }: DocumentViewerProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!document) { setUrl(null); return; }
+    if (!document) {
+      setUrl(null);
+      return;
+    }
+
+    if (src !== undefined) {
+      setLoading(false);
+      if (isSafeUrl(src)) {
+        setError(null);
+        setUrl(src);
+      } else {
+        setUrl(null);
+        setError('This attachment link is not a valid web address.');
+      }
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     fetch(`/api/v1/documents/${document._id}/download`, { credentials: 'include' })
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`Error ${r.status}`)))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Error ${r.status}`))))
       .then((data) => setUrl(data.data?.url ?? null))
       .catch((err) => setError(err.message ?? 'Failed to load document'))
       .finally(() => setLoading(false));
-  }, [document]);
+  }, [document, src]);
 
   if (!document) return null;
 
@@ -49,17 +78,18 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
   const isPdf = document.mimeType === 'application/pdf';
 
   return (
-    <Modal
-      isOpen={!!document}
-      onClose={onClose}
-      title={document.fileName}
-      size="lg"
-    >
+    <Modal isOpen={!!document} onClose={onClose} title={document.fileName} size="lg">
       <div className="space-y-3">
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400">
-          <span>Type: <span className="capitalize">{document.documentType.replace(/_/g, ' ')}</span></span>
-          <span>Size: {formatBytes(document.sizeBytes)}</span>
-          <span>Version: {document.currentVersion} of {document.versionCount}</span>
+          <span>
+            Type: <span className="capitalize">{document.documentType.replace(/_/g, ' ')}</span>
+          </span>
+          {document.sizeBytes > 0 && <span>Size: {formatBytes(document.sizeBytes)}</span>}
+          {src === undefined && (
+            <span>
+              Version: {document.currentVersion} of {document.versionCount}
+            </span>
+          )}
           <span>Uploaded: {new Date(document.createdAt).toLocaleDateString()}</span>
         </div>
 
@@ -69,28 +99,20 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
           </div>
         )}
 
-        {error && (
-          <p className="text-sm text-danger-600 dark:text-danger-400">{error}</p>
-        )}
+        {error && <p className="text-danger-600 dark:text-danger-400 text-sm">{error}</p>}
 
         {url && !loading && (
-          <div className="rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700">
-            {isPdf && (
-              <iframe
-                src={url}
-                className="w-full h-[60vh]"
-                title={document.fileName}
-              />
-            )}
+          <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700">
+            {isPdf && <iframe src={url} className="h-[60vh] w-full" title={document.fileName} />}
             {isImage && (
               <img
                 src={url}
                 alt={document.fileName}
-                className="w-full max-h-[60vh] object-contain bg-neutral-50 dark:bg-neutral-900"
+                className="max-h-[60vh] w-full bg-neutral-50 object-contain dark:bg-neutral-900"
               />
             )}
             {!isPdf && !isImage && (
-              <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="flex flex-col items-center justify-center gap-4 py-12">
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
                   Preview not available for this file type.
                 </p>
@@ -107,7 +129,9 @@ export function DocumentViewer({ document, onClose }: DocumentViewerProps) {
             <Button variant="outline" onClick={() => window.open(url, '_blank')}>
               Open in New Tab
             </Button>
-            <Button variant="secondary" onClick={onClose}>Close</Button>
+            <Button variant="secondary" onClick={onClose}>
+              Close
+            </Button>
           </div>
         )}
       </div>

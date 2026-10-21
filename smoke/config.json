@@ -1,0 +1,94 @@
+{
+  "budgetSeconds": 300,
+  "retries": 2,
+  "retryDelayMs": 500,
+  "api": {
+    "baseUrl": "http://localhost:3001",
+    "checks": [
+      {
+        "name": "liveness",
+        "method": "GET",
+        "path": "/health/live",
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true
+      },
+      {
+        "name": "readiness",
+        "method": "GET",
+        "path": "/health/ready",
+        "expectStatus": 200,
+        "maxDurationMs": 2000,
+        "critical": true
+      },
+      {
+        "name": "authentication-login",
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "body": "login",
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true,
+        "saveTokenFrom": "accessToken"
+      },
+      {
+        "name": "patients-list",
+        "method": "GET",
+        "path": "/api/v1/patients",
+        "authenticated": true,
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true
+      },
+      {
+        "name": "patients-search",
+        "method": "GET",
+        "path": "/api/v1/patients/search?q=a",
+        "authenticated": true,
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true
+      },
+      {
+        "name": "appointments-list",
+        "method": "GET",
+        "path": "/api/v1/appointments",
+        "authenticated": true,
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true
+      },
+      {
+        "name": "payments-list",
+        "method": "GET",
+        "path": "/api/v1/payments",
+        "authenticated": true,
+        "expectStatus": 200,
+        "maxDurationMs": 1500,
+        "critical": true
+      },
+      {
+        "name": "metrics-endpoint",
+        "method": "GET",
+        "path": "/metrics",
+        "expectStatus": 200,
+        "maxDurationMs": 2000,
+        "critical": false
+      }
+    ]
+  },
+  "web": {
+    "baseUrl": "http://localhost:3000",
+    "flows": ["login", "patients", "navigation"]
+  },
+  "credentials": {
+    "env": {
+      "email": "SMOKE_DOCTOR_EMAIL",
+      "password": "SMOKE_DOCTOR_PASSWORD"
+    },
+    "defaults": {
+      "email": "doctor@example.com",
+      "password": "Password123!"
+    }
+  }
+}

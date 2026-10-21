@@ -54,12 +54,6 @@ class SocketManager {
       console.error('Socket.IO connection error:', error);
     });
 
-    // Notification events — dispatch as window CustomEvent so components
-    // (e.g. NotificationBell) can subscribe without needing the socket ref.
-    this.socket.on('notification:new', (data) => {
-      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
-    });
-
     // Appointment events
     this.socket.on('appointment:confirmed', (data) => {
       console.log('Appointment confirmed:', data);
@@ -81,6 +75,12 @@ class SocketManager {
       console.log('Patient arrived:', data);
       window.dispatchEvent(new CustomEvent('appointment:patient_arrived', { detail: data }));
     });
+
+    // Notification events — dispatch custom DOM event so NotificationBell can react
+    this.socket.on('notification:new', (data) => {
+      console.log('New notification:', data);
+      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
+    });
   }
 
   // Join appointment room for real-time updates
@@ -99,6 +99,15 @@ class SocketManager {
 }
 
 export const socketManager = new SocketManager();
+
+/** Shared connection for the given token (reuses the live socket when the token matches). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
+}
 
 // React hook for using Socket.IO
 export function useSocket(token?: string) {
@@ -163,17 +172,11 @@ export function useAppointmentEvents() {
   return events;
 }
 
-// ─── Convenience exports used by useRealtimeUpdates / useLazyRealtimeUpdates ──
-
-/**
- * Returns (or creates) the shared socket connected with the given token.
- * Wraps socketManager.connect() so callers don't need to import the class.
- */
-export function getSocket(token: string) {
+/** Returns the shared socket connection for this token (used by useRealtimeUpdates). */
+export function getSocket(token: string): Socket {
   return socketManager.connect(token);
 }
 
-/** Disconnects the shared socket instance. */
-export function disconnectSocket() {
+export function disconnectSocket(): void {
   socketManager.disconnect();
 }

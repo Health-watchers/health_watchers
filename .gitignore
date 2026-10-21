@@ -69,8 +69,13 @@ jest-results.json
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
 
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
+
 # Playwright test artifacts
 playwright-report/
+playwright-visual-report/
 test-results/
 blob-report/
 playwright/.cache/
@@ -83,6 +88,10 @@ stryker-report/
 # which would accidentally ignore apps/api/src/modules/reports/
 apps/api/reports/
 apps/api/stryker-reports/
+
+# Generated performance & quality pipeline reports
+performance/reports/
+scripts/quality/reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -260,3 +269,4 @@ benchmark-*.json
 *.repl.ts
 *.debug.ts
 scratch.*
+scripts/translation-report.json

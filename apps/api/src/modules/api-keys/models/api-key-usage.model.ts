@@ -5,6 +5,10 @@ export interface IApiKeyUsage {
   clinicId: string;
   date: string; // YYYY-MM-DD
   requestCount: number;
+  /** Requests turned away by the per-key rate limiter (#1252). */
+  rejectedCount: number;
+  /** Requests that returned a 5xx (#1252). */
+  errorCount: number;
   lastEndpoint: string;
 }
 
@@ -14,6 +18,8 @@ const apiKeyUsageSchema = new Schema<IApiKeyUsage>(
     clinicId: { type: String, required: true },
     date: { type: String, required: true }, // YYYY-MM-DD
     requestCount: { type: Number, default: 0 },
+    rejectedCount: { type: Number, default: 0 },
+    errorCount: { type: Number, default: 0 },
     lastEndpoint: { type: String, default: '' },
   },
   { timestamps: false, versionKey: false }

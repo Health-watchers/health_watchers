@@ -7,8 +7,10 @@ const ONBOARDING_PATH = '/onboarding';
 const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
 const PORTAL_PUBLIC = ['/portal/login'];
 
-const ADMIN_PATHS = ['/settings', '/reports', '/users'];
+const ADMIN_PATHS = ['/settings', '/reports', '/users', '/billing'];
 const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
+/** Admin paths that answer non-admins with a 403 page instead of redirecting home. */
+const FORBIDDEN_ON_DENY = ['/settings/staff'];
 
 function isStaffPublic(pathname: string): boolean {
   return STAFF_PUBLIC.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -39,12 +41,27 @@ export function middleware(request: NextRequest) {
     const portalToken = request.cookies.get('portalAccessToken')?.value;
 
     if (!portalToken && !isPortalPublic) {
-      return NextResponse.redirect(new URL(PORTAL_LOGIN, request.url));
+      const loginUrl = new URL(PORTAL_LOGIN, request.url);
+      // Store the intended URL so login can redirect back after auth
+      loginUrl.searchParams.set('returnTo', pathname);
+      return NextResponse.redirect(loginUrl);
     }
     if (portalToken && isPortalPublic) {
-      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+      // If a returnTo was stored (e.g. deep link), honour it after login
+      const returnTo = request.nextUrl.searchParams.get('returnTo');
+      const safeReturnTo = returnTo && returnTo.startsWith('/portal/') ? returnTo : '/portal/dashboard';
+      return NextResponse.redirect(new URL(safeReturnTo, request.url));
     }
     return NextResponse.next();
+  }
+
+  // ── Portal deep links must not expose admin routes ────────────────────────
+  // If someone tries to deep-link to an admin path via /portal/, block it
+  if (pathname.startsWith('/portal/')) {
+    const adminPatterns = ['/portal/patients', '/portal/encounters/new', '/portal/settings/staff', '/portal/users', '/portal/billing', '/portal/reports', '/portal/audit-log'];
+    if (adminPatterns.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+    }
   }
 
   // ── Staff routes ──────────────────────────────────────────────────────────
@@ -78,6 +95,9 @@ export function middleware(request: NextRequest) {
     if (isAdminPath(pathname)) {
       const role = payload?.role as string | undefined;
       if (!role || !ADMIN_ROLES.includes(role)) {
+        if (FORBIDDEN_ON_DENY.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+          return NextResponse.rewrite(new URL('/forbidden', request.url), { status: 403 });
+        }
         return NextResponse.redirect(new URL('/', request.url));
       }
     }

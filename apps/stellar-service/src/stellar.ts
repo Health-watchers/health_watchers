@@ -12,6 +12,14 @@ import { assertTransactionLimit } from './guards.js';
 import logger from './logger.js';
 import { batchProcessor } from './batch-processor.js';
 import ResilientHorizonClient from './horizon-client.js';
+import {
+  transactionsSubmittedTotal,
+  transactionsConfirmedTotal,
+  transactionsFailedTotal,
+  transactionConfirmationDuration,
+  accountBalanceXlm,
+  networkFeeStroops,
+} from './metrics.js';
 
 // Initialize resilient Horizon client
 const horizonClient = new ResilientHorizonClient(stellarConfig.horizonUrls);
@@ -67,6 +75,55 @@ export async function withHorizonCall<T>(
     );
     throw error;
   }
+}
+
+/**
+ * Record a successful transaction submission: increments the submitted and
+ * confirmed counters and observes the confirmation duration histogram.
+ */
+export function recordTransactionSuccess(
+  operation: string,
+  durationMs: number,
+  hash?: string
+): void {
+  transactionsSubmittedTotal.inc({ operation });
+  transactionsConfirmedTotal.inc({ operation });
+  transactionConfirmationDuration.observe({ operation }, durationMs / 1000);
+  logger.debug(
+    { operation, hash, durationMs, outcome: 'confirmed' },
+    'Recorded transaction success metrics'
+  );
+}
+
+/**
+ * Record a failed transaction submission: increments the submitted and failed
+ * counters. The confirmation duration histogram is not observed for failures.
+ */
+export function recordTransactionFailure(operation: string, durationMs: number): void {
+  transactionsSubmittedTotal.inc({ operation });
+  transactionsFailedTotal.inc({ operation });
+  logger.debug(
+    { operation, durationMs, outcome: 'failed' },
+    'Recorded transaction failure metrics'
+  );
+}
+
+/**
+ * Update the account balance gauge for the platform account.
+ */
+export function recordAccountBalance(publicKey: string, balanceXlm: string | number): void {
+  const value = typeof balanceXlm === 'number' ? balanceXlm : parseFloat(balanceXlm);
+  if (!Number.isFinite(value)) return;
+  accountBalanceXlm.set({ account: publicKey }, value);
+}
+
+/**
+ * Update the network fee gauge (in stroops).
+ */
+export function recordNetworkFee(feeStroops: string | number): void {
+  const value = typeof feeStroops === 'number' ? feeStroops : parseInt(feeStroops, 10);
+  if (!Number.isFinite(value)) return;
+  networkFeeStroops.set(value);
 }
 
 /**
@@ -166,6 +223,10 @@ export async function getAccountBalance(publicKey: string) {
       (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native'
     );
 
+    if (xlmBalance) {
+      recordAccountBalance(publicKey, xlmBalance.balance);
+    }
+
     const payments = await withHorizonCall('payments', { publicKey }, () =>
       server.payments().forAccount(publicKey).limit(10).order('desc').call()
     );
@@ -242,6 +303,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
     }
 
     const fee = await withHorizonCall('fetchBaseFee', { publicKey }, () => server.fetchBaseFee());
+    recordNetworkFee(fee);
     const transaction = new TransactionBuilder(sourceAccount, {
       fee: String(fee),
       networkPassphrase: getNetworkPassphrase(),
@@ -264,6 +326,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
           () => server.submitTransaction(transaction)
         );
         const durationMs = Date.now() - start;
+        recordTransactionSuccess('createUsdcTrustline', durationMs, result.hash);
         logger.info(
           {
             operation: 'createUsdcTrustline',
@@ -293,6 +356,8 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
     );
     return { envelope: transaction.toEnvelope().toXDR('base64'), dryRun: true };
   } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('createUsdcTrustline', durationMs);
     logger.error(
       {
         operation: 'createUsdcTrustline',
@@ -300,7 +365,7 @@ export async function createUsdcTrustline(publicKey: string, usdcIssuer: string)
         asset: 'USDC',
         usdcIssuer,
         outcome: 'failure',
-        durationMs: Date.now() - start,
+        durationMs,
         error: toErrorContext(error),
       },
       'Failed to create USDC trustline'
@@ -581,6 +646,7 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
       () => server.loadAccount(sourceKeypair.publicKey())
     );
     const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+    recordNetworkFee(fee);
 
     const transaction = new TransactionBuilder(account, {
       fee: String(fee),
@@ -623,6 +689,7 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
       () => server.submitTransaction(transaction)
     );
     const durationMs = Date.now() - start;
+    recordTransactionSuccess('issueRefund', durationMs, result.hash);
     logger.info(
       {
         operation: 'issueRefund',
@@ -637,6 +704,8 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
     );
     return { transactionHash: result.hash, durationMs };
   } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('issueRefund', durationMs);
     logger.error(
       {
         operation: 'issueRefund',
@@ -644,7 +713,7 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
         amount,
         asset: 'XLM',
         outcome: 'failure',
-        durationMs: Date.now() - start,
+        durationMs,
         error: toErrorContext(error),
       },
       'Failed to issue refund'
@@ -665,6 +734,7 @@ export async function getFeeStats() {
     server.feeStats()
   );
   const { fee_charged } = stats;
+  recordNetworkFee(fee_charged.p50);
   logger.info(
     { operation: 'getFeeStats', outcome: 'success', durationMs: Date.now() - start },
     'Fetched fee statistics'
@@ -741,6 +811,7 @@ export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
         { operation: 'buildFeeBumpTransaction', hash, feeStroops },
         () => server.submitTransaction(feeBumpTx)
       );
+      recordTransactionSuccess('buildFeeBumpTransaction', Date.now() - start, hash);
     }
 
     logger.info(
@@ -756,11 +827,13 @@ export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
 
     return { xdr, hash, feeStroops };
   } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('buildFeeBumpTransaction', durationMs);
     logger.error(
       {
         operation: 'buildFeeBumpTransaction',
         outcome: 'failure',
-        durationMs: Date.now() - start,
+        durationMs,
         error: toErrorContext(error),
       },
       'Failed to build fee bump transaction'
@@ -853,33 +926,98 @@ export function streamAccountTransactions(
   return close as () => void;
 }
 
-// ── Multi-Signature Payments (Issue #868) ─────────────────────────────────────
+// ── Multi-Signature Payments (Issue #868, #1594) ───────────────────────────────
+
+/**
+ * A single signer in a multi-sig configuration.
+ * `weight` is the signing weight the signer contributes toward the account
+ * thresholds (0–255). A weight of 0 effectively disables the signer.
+ */
+export interface MultiSigSigner {
+  publicKey: string;
+  weight: number;
+}
+
+/**
+ * Account threshold configuration. A transaction is authorised when the sum of
+ * the weights of all valid signatures meets or exceeds the threshold for the
+ * operation's category (low / medium / high).
+ */
+export interface MultiSigThresholds {
+  low: number;
+  medium: number;
+  high: number;
+}
+
+/**
+ * A multi-sig policy describes who may sign and how many weighted signatures
+ * are required. For an N-of-M scheme, M signers each carry weight 1 and the
+ * threshold equals N.
+ */
+export interface MultiSigPolicy {
+  signers: MultiSigSigner[];
+  thresholds: MultiSigThresholds;
+}
 
 export interface MultiSigPaymentParams {
   fromPublicKey: string;
   toPublicKey: string;
   amount: string;
   signerPublicKeys: string[];
+  /** Optional asset; defaults to native XLM. */
+  assetCode?: string;
+  assetIssuer?: string;
+  /** Optional memo (text, truncated to 28 bytes). */
+  memo?: string;
+  /** Transaction timeout in seconds (defaults to 300). */
+  timeoutSeconds?: number;
 }
 
-/**
- * Build a multi-signature payment transaction XDR.
- * Returns an unsigned envelope that must be signed by all required co-signers
- * before submission. The source account must have its thresholds configured
- * to require the signers listed.
- */
-export async function buildMultiSigTransaction(params: MultiSigPaymentParams): Promise<{
+export interface MultiSigBuildResult {
   xdr: string;
   hash: string;
   signerPublicKeys: string[];
   networkPassphrase: string;
-}> {
-  const { fromPublicKey, toPublicKey, amount, signerPublicKeys } = params;
+  /** Weighted threshold that must be met for the payment operation. */
+  requiredThreshold: number;
+  /** Total weight available across all configured signers. */
+  totalWeight: number;
+}
+
+/**
+ * Build a multi-signature payment transaction XDR.
+ * Returns an unsigned envelope that must be signed by the required co-signers
+ * before submission. The source account must have its thresholds configured
+ * to require the signers listed (see {@link buildSetOptionsTransaction}).
+ */
+export async function buildMultiSigTransaction(
+  params: MultiSigPaymentParams
+): Promise<MultiSigBuildResult> {
+  const {
+    fromPublicKey,
+    toPublicKey,
+    amount,
+    signerPublicKeys,
+    assetCode,
+    assetIssuer,
+    memo,
+    timeoutSeconds = 300,
+  } = params;
   assertTransactionLimit(parseFloat(amount));
+
+  if (!signerPublicKeys.length) {
+    throw new Error('At least one co-signer public key is required');
+  }
 
   const start = Date.now();
   logger.info(
-    { operation: 'buildMultiSigTransaction', from: fromPublicKey, to: toPublicKey, amount, signerCount: signerPublicKeys.length },
+    {
+      operation: 'buildMultiSigTransaction',
+      from: fromPublicKey,
+      to: toPublicKey,
+      amount,
+      signerCount: signerPublicKeys.length,
+    },
     'Building multi-sig payment transaction'
   );
 
@@ -890,32 +1028,62 @@ export async function buildMultiSigTransaction(params: MultiSigPaymentParams): P
     );
     const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
 
-    const transaction = new TransactionBuilder(account, {
+    const asset =
+      assetCode && assetCode !== 'XLM' ? new Asset(assetCode, assetIssuer!) : Asset.native();
+
+    const builder = new TransactionBuilder(account, {
       fee: String(fee),
       networkPassphrase: getNetworkPassphrase(),
-    })
-      .addOperation(
-        Operation.payment({
-          destination: toPublicKey,
-          asset: Asset.native(),
-          amount,
-        })
-      )
-      .setTimeout(300)
-      .build();
+    }).addOperation(
+      Operation.payment({
+        destination: toPublicKey,
+        asset,
+        amount,
+      })
+    );
+
+    if (memo) {
+      builder.addMemo({ type: 'text', value: memo.slice(0, 28) } as any);
+    }
+
+    const transaction = builder.setTimeout(timeoutSeconds).build();
 
     const xdr = transaction.toXDR();
     const hash = transaction.hash().toString('hex');
 
+    // Derive the required threshold from the on-chain account configuration so
+    // callers know how much signing weight still needs to be gathered.
+    const { requiredThreshold, totalWeight } = resolveAccountThresholds(account, signerPublicKeys);
+
     logger.info(
-      { operation: 'buildMultiSigTransaction', hash, signerCount: signerPublicKeys.length, outcome: 'success', durationMs: Date.now() - start },
+      {
+        operation: 'buildMultiSigTransaction',
+        hash,
+        signerCount: signerPublicKeys.length,
+        requiredThreshold,
+        totalWeight,
+        outcome: 'success',
+        durationMs: Date.now() - start,
+      },
       'Multi-sig transaction built'
     );
 
-    return { xdr, hash, signerPublicKeys, networkPassphrase: getNetworkPassphrase() };
+    return {
+      xdr,
+      hash,
+      signerPublicKeys,
+      networkPassphrase: getNetworkPassphrase(),
+      requiredThreshold,
+      totalWeight,
+    };
   } catch (error) {
     logger.error(
-      { operation: 'buildMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'buildMultiSigTransaction',
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
       'Failed to build multi-sig transaction'
     );
     throw error;
@@ -923,10 +1091,39 @@ export async function buildMultiSigTransaction(params: MultiSigPaymentParams): P
 }
 
 /**
- * Add a signature from a co-signer to an existing transaction XDR.
- * Returns the updated XDR with the new signature appended.
+ * Determine the medium threshold (payments are medium-threshold operations) and
+ * the total signing weight available for the given signer set. Falls back to a
+ * simple N-of-N interpretation when the account has no explicit thresholds.
  */
-export function addCoSignerSignature(xdr: string, signerSecret: string): { xdr: string; signerPublicKey: string } {
+function resolveAccountThresholds(
+  account: Horizon.ServerApi.AccountRecord,
+  signerPublicKeys: string[]
+): { requiredThreshold: number; totalWeight: number } {
+  const thresholds = (account as any).thresholds;
+  const medium = thresholds?.med_threshold ?? signerPublicKeys.length;
+
+  const signerWeights = new Map<string, number>();
+  for (const s of (account as any).signers ?? []) {
+    signerWeights.set(s.key, s.weight ?? 0);
+  }
+
+  let totalWeight = 0;
+  for (const pk of signerPublicKeys) {
+    totalWeight += signerWeights.get(pk) ?? 1;
+  }
+
+  return { requiredThreshold: medium, totalWeight };
+}
+
+/**
+ * Add a signature from a co-signer to an existing transaction XDR.
+ * Returns the updated XDR with the new signature appended. Signing the same
+ * XDR twice with the same key is idempotent (the SDK replaces the signature).
+ */
+export function addCoSignerSignature(
+  xdr: string,
+  signerSecret: string
+): { xdr: string; signerPublicKey: string } {
   const keypair = Keypair.fromSecret(signerSecret);
   const transaction = new Transaction(xdr, getNetworkPassphrase());
   transaction.sign(keypair);
@@ -934,9 +1131,54 @@ export function addCoSignerSignature(xdr: string, signerSecret: string): { xdr: 
 }
 
 /**
- * Submit a fully-signed multi-sig transaction XDR to Horizon.
+ * Merge signatures from multiple signed envelopes into a single XDR.
+ * Useful when co-signers sign independently and their signatures must be
+ * combined before submission. Duplicate signatures are de-duplicated by the SDK.
  */
-export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: string }> {
+export function mergeMultiSigSignatures(signedXdrs: string[]): { xdr: string; hash: string } {
+  if (!signedXdrs.length) {
+    throw new Error('At least one signed XDR is required to merge signatures');
+  }
+
+  const networkPassphrase = getNetworkPassphrase();
+  const base = new Transaction(signedXdrs[0], networkPassphrase);
+
+  for (const signedXdr of signedXdrs.slice(1)) {
+    const other = new Transaction(signedXdr, networkPassphrase);
+    for (const signature of other.signatures) {
+      base.addSignature(signature.publicKey(), signature.signature());
+    }
+  }
+
+  return { xdr: base.toXDR(), hash: base.hash().toString('hex') };
+}
+
+/**
+ * Count the number of distinct signatures currently attached to an XDR.
+ */
+export function countSignatures(xdr: string): number {
+  const transaction = new Transaction(xdr, getNetworkPassphrase());
+  return transaction.signatures.length;
+}
+
+/**
+ * Check whether an XDR has gathered enough signatures to meet the required
+ * threshold. This is a best-effort check based on signature count; the
+ * authoritative check is performed by Horizon on submission.
+ */
+export function hasMetThreshold(xdr: string, requiredThreshold: number): boolean {
+  return countSignatures(xdr) >= requiredThreshold;
+}
+
+/**
+ * Submit a fully-signed multi-sig transaction XDR to Horizon.
+ * Throws if the envelope does not carry enough signatures to meet the
+ * required threshold (when provided).
+ */
+export async function submitMultiSigTransaction(
+  xdr: string,
+  requiredThreshold?: number
+): Promise<{ hash: string }> {
   const start = Date.now();
   logger.info({ operation: 'submitMultiSigTransaction' }, 'Submitting multi-sig transaction');
 
@@ -944,9 +1186,24 @@ export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: st
     const server = getHorizonServer();
     const transaction = new Transaction(xdr, getNetworkPassphrase());
 
+    if (requiredThreshold !== undefined && !hasMetThreshold(xdr, requiredThreshold)) {
+      throw new Error(
+        `Insufficient signatures: have ${countSignatures(xdr)}, need ${requiredThreshold}`
+      );
+    }
+
     if (stellarConfig.dryRun) {
       const hash = transaction.hash().toString('hex');
-      logger.info({ operation: 'submitMultiSigTransaction', hash, outcome: 'success', dryRun: true, durationMs: Date.now() - start }, 'Multi-sig transaction submitted (dry run)');
+      logger.info(
+        {
+          operation: 'submitMultiSigTransaction',
+          hash,
+          outcome: 'success',
+          dryRun: true,
+          durationMs: Date.now() - start,
+        },
+        'Multi-sig transaction submitted (dry run)'
+      );
       return { hash };
     }
 
@@ -954,18 +1211,151 @@ export async function submitMultiSigTransaction(xdr: string): Promise<{ hash: st
       server.submitTransaction(transaction)
     );
 
+    const durationMs = Date.now() - start;
+    recordTransactionSuccess('submitMultiSigTransaction', durationMs, result.hash);
     logger.info(
-      { operation: 'submitMultiSigTransaction', hash: result.hash, outcome: 'success', durationMs: Date.now() - start },
+      {
+        operation: 'submitMultiSigTransaction',
+        hash: result.hash,
+        outcome: 'success',
+        durationMs,
+      },
       'Multi-sig transaction submitted'
     );
     return { hash: result.hash };
   } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('submitMultiSigTransaction', durationMs);
     logger.error(
-      { operation: 'submitMultiSigTransaction', outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'submitMultiSigTransaction',
+        outcome: 'failure',
+        durationMs,
+        error: toErrorContext(error),
+      },
       'Failed to submit multi-sig transaction'
     );
     throw error;
   }
+}
+
+/**
+ * Build a `setOptions` transaction that configures an account for multi-sig:
+ * adds each signer with its weight and sets the low/medium/high thresholds.
+ * The transaction is signed by the platform keypair (which must be a signer on
+ * the account) and submitted unless running in dry-run mode.
+ */
+export async function buildSetOptionsTransaction(
+  accountPublicKey: string,
+  policy: MultiSigPolicy
+): Promise<{ xdr: string; hash: string; dryRun: boolean }> {
+  const start = Date.now();
+  logger.info(
+    {
+      operation: 'buildSetOptionsTransaction',
+      accountPublicKey,
+      signerCount: policy.signers.length,
+      thresholds: policy.thresholds,
+    },
+    'Building multi-sig setOptions transaction'
+  );
+
+  try {
+    const server = getHorizonServer();
+    const account = await withHorizonCall('loadAccount', { publicKey: accountPublicKey }, () =>
+      server.loadAccount(accountPublicKey)
+    );
+    const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+
+    const transaction = new TransactionBuilder(account, {
+      fee: String(fee),
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(
+        Operation.setOptions({
+          signer: policy.signers.map((s) => ({
+            ed25519PublicKey: s.publicKey,
+            weight: s.weight,
+          })),
+          lowThreshold: policy.thresholds.low,
+          medThreshold: policy.thresholds.medium,
+          highThreshold: policy.thresholds.high,
+        })
+      )
+      .setTimeout(300)
+      .build();
+
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    transaction.sign(platformKeypair);
+
+    const xdr = transaction.toXDR();
+    const hash = transaction.hash().toString('hex');
+
+    if (stellarConfig.dryRun) {
+      logger.info(
+        {
+          operation: 'buildSetOptionsTransaction',
+          accountPublicKey,
+          hash,
+          outcome: 'success',
+          dryRun: true,
+          durationMs: Date.now() - start,
+        },
+        'Multi-sig setOptions transaction built (dry run)'
+      );
+      return { xdr, hash, dryRun: true };
+    }
+
+    const result = await withHorizonCall(
+      'submitTransaction',
+      { operation: 'buildSetOptionsTransaction', accountPublicKey },
+      () => server.submitTransaction(transaction)
+    );
+
+    logger.info(
+      {
+        operation: 'buildSetOptionsTransaction',
+        accountPublicKey,
+        hash: result.hash,
+        outcome: 'success',
+        durationMs: Date.now() - start,
+      },
+      'Multi-sig setOptions transaction submitted'
+    );
+    return { xdr, hash: result.hash, dryRun: false };
+  } catch (error) {
+    logger.error(
+      {
+        operation: 'buildSetOptionsTransaction',
+        accountPublicKey,
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
+      'Failed to build multi-sig setOptions transaction'
+    );
+    throw error;
+  }
+}
+
+/**
+ * Convenience helper to configure an N-of-M multi-sig policy where each of the
+ * M signers carries weight 1 and the medium/high thresholds require N signatures.
+ */
+export function buildNOfMPolicy(signerPublicKeys: string[], requiredSignatures: number): MultiSigPolicy {
+  if (requiredSignatures < 1 || requiredSignatures > signerPublicKeys.length) {
+    throw new Error(
+      `Invalid threshold ${requiredSignatures} for ${signerPublicKeys.length} signers`
+    );
+  }
+  return {
+    signers: signerPublicKeys.map((publicKey) => ({ publicKey, weight: 1 })),
+    thresholds: {
+      low: 1,
+      medium: requiredSignatures,
+      high: requiredSignatures,
+    },
+  };
 }
 
 // ── Batch Payment Processing (Issue #869) ─────────────────────────────────────
@@ -995,9 +1385,7 @@ export async function processBatchPayments(
     throw new Error('Batch must contain between 1 and 100 payments');
   }
 
-  const totalAmount = payments
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0)
-    .toFixed(7);
+  const totalAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0).toFixed(7);
 
   assertTransactionLimit(parseFloat(totalAmount));
 
@@ -1014,6 +1402,7 @@ export async function processBatchPayments(
       server.loadAccount(fromPublicKey)
     );
     const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+    recordNetworkFee(fee);
 
     // Each operation costs one base fee unit
     const totalFee = String(parseInt(String(fee), 10) * payments.length);
@@ -1040,26 +1429,53 @@ export async function processBatchPayments(
       const hash = transaction.hash().toString('hex');
       const durationMs = Date.now() - start;
       logger.info(
-        { operation: 'processBatchPayments', hash, count: payments.length, totalAmount, outcome: 'success', dryRun: true, durationMs },
+        {
+          operation: 'processBatchPayments',
+          hash,
+          count: payments.length,
+          totalAmount,
+          outcome: 'success',
+          dryRun: true,
+          durationMs,
+        },
         'Batch payment built (dry run)'
       );
       return { hash, count: payments.length, totalAmount, durationMs };
     }
 
-    const result = await withHorizonCall('submitTransaction', { count: payments.length, totalAmount }, () =>
-      server.submitTransaction(transaction)
+    const result = await withHorizonCall(
+      'submitTransaction',
+      { count: payments.length, totalAmount },
+      () => server.submitTransaction(transaction)
     );
 
     const durationMs = Date.now() - start;
+    recordTransactionSuccess('processBatchPayments', durationMs, result.hash);
     logger.info(
-      { operation: 'processBatchPayments', hash: result.hash, count: payments.length, totalAmount, outcome: 'success', durationMs },
+      {
+        operation: 'processBatchPayments',
+        hash: result.hash,
+        count: payments.length,
+        totalAmount,
+        outcome: 'success',
+        durationMs,
+      },
       'Batch payments submitted'
     );
 
     return { hash: result.hash, count: payments.length, totalAmount, durationMs };
   } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('processBatchPayments', durationMs);
     logger.error(
-      { operation: 'processBatchPayments', count: payments.length, totalAmount, outcome: 'failure', durationMs: Date.now() - start, error: toErrorContext(error) },
+      {
+        operation: 'processBatchPayments',
+        count: payments.length,
+        totalAmount,
+        outcome: 'failure',
+        durationMs,
+        error: toErrorContext(error),
+      },
       'Failed to process batch payments'
     );
     throw error;

@@ -13,6 +13,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
+import { webConfig } from './config';
 
 // ── Dynamic import helpers ────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ export interface DynamicImportOptions {
  */
 export const createDynamicComponent = <P extends Record<string, unknown>>(
   importFn: () => Promise<{ default: ComponentType<P> }>,
-  options: DynamicImportOptions = {},
+  options: DynamicImportOptions = {}
 ) => {
   return dynamic(importFn, {
     ssr: options.ssr ?? true,
@@ -178,4 +179,3 @@ export const CRITICAL_CHUNKS = ['react', 'react-dom', 'next-intl'];
  * Large dependencies that are not needed on the first render.
  */
 export const DEFERRED_CHUNKS = ['recharts', 'socket.io-client', '@sentry/nextjs'];
-

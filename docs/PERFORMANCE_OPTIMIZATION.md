@@ -113,3 +113,17 @@ POST /api/v1/cdn/cache-invalidation
 - Alert when p95 exceeds 500ms or error rate exceeds 1%.
 - Review MongoDB slow query log weekly.
 - Monitor Redis hit rate: `< 90%` indicates TTL or key-pattern issues.
+
+## Profiling Suite
+
+Use this suite to profile backend latency, frontend interaction cost, and database pressure before releases.
+
+### Profiles
+
+- API latency: endpoint timing and error-rate capture.
+- Database: slow query capture and index review.
+- Web: bundle size, interaction timing, and route-level metrics.
+
+### Outputs
+
+Store reports in `performance/reports/` and compare them with `performance/baselines/`.

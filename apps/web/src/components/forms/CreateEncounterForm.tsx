@@ -47,6 +47,7 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
   } = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: { patientId: defaultPatientId ?? '' },
+    mode: 'onBlur',
   });
 
   const chiefComplaint = watch('chiefComplaint') ?? '';
@@ -84,19 +85,29 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
   };
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-5">
+    <form noValidate onSubmit={handleSubmit(submit)} className="space-y-5">
       {errors.root && (
-        <p role="alert" className="text-sm text-red-600">
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="bg-danger-50 text-danger-700 rounded-md px-3 py-2 text-sm"
+        >
           {errors.root.message}
         </p>
       )}
 
-      <Input label="Patient ID" {...register('patientId')} error={errors.patientId?.message} />
+      <Input
+        label="Patient ID"
+        required
+        {...register('patientId')}
+        error={errors.patientId?.message}
+      />
 
       {/* Chief Complaint + AI trigger */}
       <div className="space-y-2">
         <Input
           label="Chief Complaint"
+          required
           {...register('chiefComplaint')}
           error={errors.chiefComplaint?.message}
         />
@@ -168,10 +179,10 @@ export function CreateEncounterForm({ onSubmit, onCancel, defaultPatientId }: Pr
           </ul>
         </div>
       )}
-      <div>
-        <label className="text-secondary-700 mb-2 block text-sm font-medium">SOAP Notes</label>
+      <fieldset className="min-w-0">
+        <legend className="text-secondary-700 mb-2 block text-sm font-medium">SOAP Notes</legend>
         <SoapNotesEditor value={soapNotes ?? {}} onChange={setSoapNotes} />
-      </div>
+      </fieldset>
 
       <div className="flex gap-3 pt-2">
         <Button

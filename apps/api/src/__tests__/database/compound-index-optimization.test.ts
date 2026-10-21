@@ -27,7 +27,10 @@ afterAll(async () => {
 afterEach(async () => {
   const cols = await db.listCollections().toArray();
   for (const col of cols) {
-    await db.collection(col.name).drop().catch(() => {});
+    await db
+      .collection(col.name)
+      .drop()
+      .catch(() => {});
   }
 });
 

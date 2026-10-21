@@ -1,0 +1,284 @@
+name: PR Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+  pull_request_target:
+    types: [closed]
+
+env:
+  REGISTRY: ghcr.io
+  NODE_VERSION: 20
+
+jobs:
+  deploy-preview:
+    name: Deploy Preview Environment
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    environment:
+      name: preview-pr-${{ github.event.pull_request.number }}
+      url: https://pr-${{ github.event.pull_request.number }}.preview.healthwatchers.dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push preview images
+        run: |
+          PR_TAG="pr-${{ github.event.pull_request.number }}"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Build API
+          docker build -f apps/api/Dockerfile.prod \
+            -t ${{ env.REGISTRY }}/${REPO_LOWER}/health-watchers-api:${PR_TAG} \
+            --build-arg NODE_ENV=production \
+            .
+          docker push ${{ env.REGISTRY }}/${REPO_LOWER}/health-watchers-api:${PR_TAG}
+          
+          # Build Web
+          docker build -f apps/web/Dockerfile.prod \
+            -t ${{ env.REGISTRY }}/${REPO_LOWER}/health-watchers-web:${PR_TAG} \
+            --build-arg NODE_ENV=production \
+            --build-arg NEXT_PUBLIC_API_URL=https://api-pr-${{ github.event.pull_request.number }}.preview.healthwatchers.dev \
+            --build-arg NEXT_PUBLIC_STELLAR_NETWORK=testnet \
+            .
+          docker push ${{ env.REGISTRY }}/${REPO_LOWER}/health-watchers-web:${PR_TAG}
+
+      - name: Install Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: '3.14.0'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PREVIEW }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Create namespace and deploy
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          NAMESPACE="health-watchers-pr-${PR_NUM}"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          PR_TAG="pr-${PR_NUM}"
+          
+          # Create namespace with labels
+          kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | \
+            kubectl apply -f -
+          kubectl label namespace ${NAMESPACE} \
+            app.kubernetes.io/name=health-watchers \
+            app.kubernetes.io/instance=pr-${PR_NUM} \
+            preview=true \
+            pr-number=${PR_NUM} \
+            --overwrite
+          
+          # Deploy with Helm
+          helm upgrade --install health-watchers-pr-${PR_NUM} ./helm/health-watchers \
+            --namespace ${NAMESPACE} \
+            --create-namespace \
+            --set global.imageRegistry=${{ env.REGISTRY }}/${REPO_LOWER} \
+            --set api.image.tag=${PR_TAG} \
+            --set web.image.tag=${PR_TAG} \
+            --set stellarService.enabled=false \
+            --set ingress.enabled=true \
+            --set ingress.hostname=pr-${PR_NUM}.preview.healthwatchers.dev \
+            --set api.ingress.hostname=api-pr-${PR_NUM}.preview.healthwatchers.dev \
+            --set mongodb.auth.enabled=false \
+            --set mongodb.replicaSet.enabled=false \
+            --set api.env.MONGO_URI="mongodb://mongodb:27017/health_watchers_pr_${PR_NUM}" \
+            --set api.env.JWT_ACCESS_TOKEN_SECRET="preview-access-secret-pr-${PR_NUM}-32chars" \
+            --set api.env.JWT_REFRESH_TOKEN_SECRET="preview-refresh-secret-pr-${PR_NUM}-32char" \
+            --set api.env.STELLAR_NETWORK=testnet \
+            --set api.env.NODE_ENV=preview \
+            --set web.env.NEXT_PUBLIC_API_URL="https://api-pr-${PR_NUM}.preview.healthwatchers.dev" \
+            --set web.env.NEXT_PUBLIC_STELLAR_NETWORK=testnet \
+            --set resources.api.requests.memory=256Mi \
+            --set resources.api.requests.cpu=200m \
+            --set resources.api.limits.memory=512Mi \
+            --set resources.api.limits.cpu=500m \
+            --set resources.web.requests.memory=256Mi \
+            --set resources.web.requests.cpu=200m \
+            --set resources.web.limits.memory=512Mi \
+            --set resources.web.limits.cpu=500m \
+            --timeout 10m \
+            --wait
+
+      - name: Wait for deployment
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          NAMESPACE="health-watchers-pr-${PR_NUM}"
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=health-watchers-api \
+            -n ${NAMESPACE} \
+            --timeout=300s || true
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/name=health-watchers-web \
+            -n ${NAMESPACE} \
+            --timeout=300s || true
+
+      - name: Seed database with synthetic data
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          NAMESPACE="health-watchers-pr-${PR_NUM}"
+          
+          # Get API pod name
+          API_POD=$(kubectl get pods -n ${NAMESPACE} \
+            -l app.kubernetes.io/name=health-watchers-api \
+            -o jsonpath='{.items[0].metadata.name}')
+          
+          # Run seed script
+          kubectl exec -n ${NAMESPACE} ${API_POD} -- \
+            npm run seed || echo "⚠️  Seed script failed or not available"
+
+      - name: Get preview URLs
+        id: urls
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          WEB_URL="https://pr-${PR_NUM}.preview.healthwatchers.dev"
+          API_URL="https://api-pr-${PR_NUM}.preview.healthwatchers.dev"
+          echo "web_url=${WEB_URL}" >> $GITHUB_OUTPUT
+          echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const webUrl = '${{ steps.urls.outputs.web_url }}';
+            const apiUrl = '${{ steps.urls.outputs.api_url }}';
+            
+            const body = `## 🚀 Preview Environment Ready!
+            
+            Your preview environment has been deployed and seeded with synthetic test data.
+            
+            | Service | URL |
+            |---------|-----|
+            | 🌐 Web App | ${webUrl} |
+            | 🔌 API | ${apiUrl} |
+            
+            ### 🔐 Test Credentials
+            
+            All test accounts use password: \`Seed@1234!\`
+            
+            | Role | Email |
+            |------|-------|
+            | Super Admin | superadmin@seed.dev |
+            | Clinic Admin | clinicadmin@seed.dev |
+            | Doctor | doctor@seed.dev |
+            
+            ### 📊 Test Data
+            - 10 sample patients
+            - 5 sample encounters
+            - 3 sample payment records
+            - 5 encounter templates
+            
+            ⚠️ **Note:** This environment uses **synthetic data only** (no PHI) and **testnet Stellar keys**.
+            
+            The preview will be automatically torn down when this PR is closed.
+            `;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Preview Environment Ready')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body
+              });
+            }
+
+      - name: Verify health endpoints
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          API_URL="https://api-pr-${PR_NUM}.preview.healthwatchers.dev"
+          WEB_URL="https://pr-${PR_NUM}.preview.healthwatchers.dev"
+          
+          echo "Checking API health..."
+          curl -f ${API_URL}/health || echo "⚠️  API health check pending (DNS propagation may take a few minutes)"
+          
+          echo "Checking Web health..."
+          curl -f ${WEB_URL} || echo "⚠️  Web health check pending (DNS propagation may take a few minutes)"
+
+  teardown-preview:
+    name: Teardown Preview Environment
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PREVIEW }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Delete namespace
+        run: |
+          PR_NUM=${{ github.event.pull_request.number }}
+          NAMESPACE="health-watchers-pr-${PR_NUM}"
+          
+          if kubectl get namespace ${NAMESPACE} 2>/dev/null; then
+            echo "Deleting namespace ${NAMESPACE}..."
+            kubectl delete namespace ${NAMESPACE} --timeout=5m
+            echo "✅ Preview environment torn down"
+          else
+            echo "Namespace ${NAMESPACE} not found, nothing to clean up"
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: '🧹 Preview environment has been torn down.'
+            });

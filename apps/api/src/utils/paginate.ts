@@ -5,8 +5,8 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
+  hasNext: boolean;
+  hasPrev: boolean;
   nextCursor: string | null;
 }
 
@@ -57,7 +57,7 @@ export async function paginate<T>(
   limit: number,
   sort: Record<string, 1 | -1> = { createdAt: -1 },
   options?: PaginateOptions
-): Promise<{ data: T[]; meta: PaginationMeta }> {
+): Promise<{ data: T[]; pagination: PaginationMeta }> {
   const safeQuery = sanitizeQuery(query);
   const effectiveSort = options?.sort ?? sort;
   const projection = options?.projection;
@@ -76,13 +76,13 @@ export async function paginate<T>(
       .lean() as Promise<T[]>,
   ]);
   const totalPages = Math.ceil(total / limit);
-  const hasNextPage = page < totalPages;
-  const hasPrevPage = page > 1;
+  const hasNext = page < totalPages;
+  const hasPrev = page > 1;
   const lastDoc = data[data.length - 1] as (T & { _id?: Types.ObjectId }) | undefined;
-  const nextCursor = hasNextPage && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
+  const nextCursor = hasNext && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
   return {
     data,
-    meta: { total, page, limit, totalPages, hasNextPage, hasPrevPage, nextCursor },
+    pagination: { total, page, limit, totalPages, hasNext, hasPrev, nextCursor },
   };
 }
 
@@ -98,11 +98,8 @@ export function parsePagination(
 
 export interface CursorPaginationResult<T> {
   data: T[];
-  meta: {
-    limit: number;
-    hasNextPage: boolean;
-    nextCursor: string | null;
-  };
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 /** Cursor-based pagination using _id as the cursor (O(1) regardless of depth). */
@@ -128,11 +125,11 @@ export async function paginateCursor<T>(
     .sort(sort)
     .limit(limit + 1)
     .lean()) as (T & { _id?: Types.ObjectId })[];
-  const hasNextPage = data.length > limit;
-  if (hasNextPage) data.pop();
+  const hasMore = data.length > limit;
+  if (hasMore) data.pop();
   const lastDoc = data[data.length - 1];
-  const nextCursor = hasNextPage && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
-  return { data: data as T[], meta: { limit, hasNextPage, nextCursor } };
+  const nextCursor = hasMore && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
+  return { data: data as T[], nextCursor, hasMore };
 }
 
 export function parseCursorPagination(query: Record<string, unknown>): {

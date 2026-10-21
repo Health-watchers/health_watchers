@@ -1,0 +1,242 @@
+name: API Breaking Change Detection
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'packages/types/**'
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  detect-breaking-changes:
+    name: Detect API Breaking Changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to compare with base branch
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate OpenAPI spec from current branch
+        run: |
+          cd apps/api
+          npm run generate:openapi || node scripts/generate-openapi.js || echo "No OpenAPI generation script found"
+        continue-on-error: true
+      
+      - name: Save current spec
+        run: |
+          if [ -f apps/api/openapi.json ]; then
+            cp apps/api/openapi.json /tmp/openapi-new.json
+            echo "✅ Current branch spec saved"
+          elif [ -f apps/api/docs/openapi.json ]; then
+            cp apps/api/docs/openapi.json /tmp/openapi-new.json
+            echo "✅ Current branch spec saved from docs/"
+          else
+            echo "⚠️ No OpenAPI spec found. Creating placeholder."
+            echo '{"openapi":"3.0.0","info":{"title":"API","version":"1.0.0"},"paths":{}}' > /tmp/openapi-new.json
+          fi
+      
+      - name: Checkout base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git checkout origin/${{ github.base_ref }}
+      
+      - name: Install dependencies for base branch
+        run: npm ci
+      
+      - name: Generate OpenAPI spec from base branch
+        run: |
+          cd apps/api
+          npm run generate:openapi || node scripts/generate-openapi.js || echo "No OpenAPI generation script found"
+        continue-on-error: true
+      
+      - name: Save base spec
+        run: |
+          if [ -f apps/api/openapi.json ]; then
+            cp apps/api/openapi.json /tmp/openapi-base.json
+            echo "✅ Base branch spec saved"
+          elif [ -f apps/api/docs/openapi.json ]; then
+            cp apps/api/docs/openapi.json /tmp/openapi-base.json
+            echo "✅ Base branch spec saved from docs/"
+          else
+            echo "⚠️ No OpenAPI spec found in base. Creating placeholder."
+            echo '{"openapi":"3.0.0","info":{"title":"API","version":"1.0.0"},"paths":{}}' > /tmp/openapi-base.json
+          fi
+      
+      - name: Install oasdiff
+        run: |
+          curl -L https://github.com/Tufin/oasdiff/releases/latest/download/oasdiff_linux_amd64.tar.gz | tar -xz
+          chmod +x oasdiff
+          sudo mv oasdiff /usr/local/bin/
+      
+      - name: Compare OpenAPI specs
+        id: diff
+        run: |
+          oasdiff breaking /tmp/openapi-base.json /tmp/openapi-new.json \
+            --format json \
+            --output /tmp/breaking-changes.json \
+            || echo "Breaking changes detected"
+          
+          oasdiff diff /tmp/openapi-base.json /tmp/openapi-new.json \
+            --format markdown \
+            --output /tmp/api-diff.md
+        continue-on-error: true
+      
+      - name: Check for breaking changes
+        id: check
+        run: |
+          if [ -f /tmp/breaking-changes.json ] && [ -s /tmp/breaking-changes.json ]; then
+            BREAKING_COUNT=$(cat /tmp/breaking-changes.json | jq 'length' || echo "0")
+            if [ "$BREAKING_COUNT" -gt 0 ]; then
+              echo "has_breaking=true" >> $GITHUB_OUTPUT
+              echo "breaking_count=$BREAKING_COUNT" >> $GITHUB_OUTPUT
+            else
+              echo "has_breaking=false" >> $GITHUB_OUTPUT
+              echo "breaking_count=0" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            echo "breaking_count=0" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Upload diff reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diff-reports
+          path: |
+            /tmp/breaking-changes.json
+            /tmp/api-diff.md
+          if-no-files-found: ignore
+      
+      - name: Comment PR with API changes
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let breakingChanges = [];
+            let diffMarkdown = 'No changes detected.';
+            
+            try {
+              if (fs.existsSync('/tmp/breaking-changes.json')) {
+                const content = fs.readFileSync('/tmp/breaking-changes.json', 'utf8');
+                if (content.trim()) {
+                  breakingChanges = JSON.parse(content);
+                }
+              }
+            } catch (e) {
+              console.log('Could not parse breaking changes:', e.message);
+            }
+            
+            try {
+              if (fs.existsSync('/tmp/api-diff.md')) {
+                diffMarkdown = fs.readFileSync('/tmp/api-diff.md', 'utf8');
+              }
+            } catch (e) {
+              console.log('Could not read diff markdown:', e.message);
+            }
+            
+            const hasBreaking = breakingChanges.length > 0;
+            const emoji = hasBreaking ? '🔴' : '✅';
+            const status = hasBreaking ? 'BREAKING CHANGES DETECTED' : 'No Breaking Changes';
+            
+            let body = `## ${emoji} API Change Report\n\n`;
+            body += `**Status:** ${status}\n`;
+            body += `**Base Branch:** \`${{ github.base_ref }}\`\n`;
+            body += `**PR Branch:** \`${{ github.head_ref }}\`\n\n`;
+            
+            if (hasBreaking) {
+              body += `### ⚠️ Breaking Changes Found (${breakingChanges.length})\n\n`;
+              body += '**Action Required:**\n';
+              body += '1. Review the breaking changes below\n';
+              body += '2. Ensure a changeset is included with this PR\n';
+              body += '3. Update API documentation\n';
+              body += '4. Consider backward compatibility\n\n';
+              
+              breakingChanges.slice(0, 10).forEach((change, index) => {
+                body += `${index + 1}. **${change.operation || change.type}**: ${change.message || change.description || 'Breaking change detected'}\n`;
+              });
+              
+              if (breakingChanges.length > 10) {
+                body += `\n... and ${breakingChanges.length - 10} more. See artifacts for full report.\n`;
+              }
+            } else {
+              body += '✅ No breaking changes detected in this PR.\n';
+            }
+            
+            body += '\n<details>\n<summary>📋 Full API Diff</summary>\n\n';
+            body += diffMarkdown;
+            body += '\n</details>';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+      
+      - name: Add breaking-api-change label
+        if: steps.check.outputs.has_breaking == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['breaking-api-change']
+            });
+      
+      - name: Check for changeset
+        if: steps.check.outputs.has_breaking == 'true'
+        id: changeset
+        run: |
+          if [ -n "$(ls -A .changeset/*.md 2>/dev/null | grep -v README)" ]; then
+            echo "has_changeset=true" >> $GITHUB_OUTPUT
+            echo "✅ Changeset found"
+          else
+            echo "has_changeset=false" >> $GITHUB_OUTPUT
+            echo "❌ No changeset found"
+          fi
+      
+      - name: Fail if breaking changes without changeset
+        if: steps.check.outputs.has_breaking == 'true' && steps.changeset.outputs.has_changeset == 'false'
+        run: |
+          echo "❌ Breaking API changes detected but no changeset found!"
+          echo "Please add a changeset documenting the breaking changes:"
+          echo "  npx changeset add"
+          exit 1
+      
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## 🔄 API Breaking Change Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Base:** ${{ github.base_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Head:** ${{ github.head_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check.outputs.has_breaking }}" == "true" ]; then
+            echo "🔴 **Breaking Changes:** ${{ steps.check.outputs.breaking_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "${{ steps.changeset.outputs.has_changeset }}" == "true" ]; then
+              echo "✅ Changeset present" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ Changeset missing" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "✅ **No breaking changes detected**" >> $GITHUB_STEP_SUMMARY
+          fi

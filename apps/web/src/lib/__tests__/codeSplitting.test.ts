@@ -70,7 +70,7 @@ describe('prefetchComponent()', () => {
   it('appends a prefetch link to document.head', () => {
     prefetchComponent('/another-route');
     expect(appendChildSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ rel: 'prefetch', href: '/another-route' }),
+      expect.objectContaining({ rel: 'prefetch', href: '/another-route' })
     );
   });
 });
@@ -103,7 +103,7 @@ describe('usePrefetchOnHover()', () => {
     const { result } = renderHook(() => usePrefetchOnHover('/unique-hover-test'));
     result.current.onMouseEnter();
     expect(appendChildSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ rel: 'prefetch', href: '/unique-hover-test' }),
+      expect.objectContaining({ rel: 'prefetch', href: '/unique-hover-test' })
     );
   });
 
@@ -114,8 +114,8 @@ describe('usePrefetchOnHover()', () => {
     result.current.onMouseEnter();
     result.current.onFocus();
     // Only one link should be injected despite multiple events
-    const calls = appendChildSpy.mock.calls.filter(
-      ([node]: [any]) => (node as HTMLLinkElement).href?.includes('/hover-once'),
+    const calls = appendChildSpy.mock.calls.filter(([node]: [any]) =>
+      (node as HTMLLinkElement).href?.includes('/hover-once')
     );
     expect(calls.length).toBe(1);
   });
@@ -133,12 +133,12 @@ describe('reportBundleMetrics()', () => {
         chunkSize: 102400,
         loadTime: 350,
         timestamp: new Date(),
-      }),
+      })
     ).not.toThrow();
 
     expect(consoleSpy).toHaveBeenCalledWith(
       '[Bundle Metrics]',
-      expect.objectContaining({ route: '/dashboard' }),
+      expect.objectContaining({ route: '/dashboard' })
     );
 
     Object.defineProperty(process.env, 'NODE_ENV', { value: original, writable: true });

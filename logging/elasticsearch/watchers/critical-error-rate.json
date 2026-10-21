@@ -1,0 +1,42 @@
+{
+  "trigger": {
+    "schedule": { "interval": "1m" }
+  },
+  "input": {
+    "search": {
+      "request": {
+        "search_type": "query_then_fetch",
+        "indices": ["health-watchers-errors-critical-*"],
+        "rest_total_hits_as_int": true,
+        "body": {
+          "query": {
+            "bool": {
+              "filter": [
+                { "range": { "@timestamp": { "gte": "now-5m" } } }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "condition": {
+    "compare": {
+      "ctx.payload.hits.total": { "gt": 20 }
+    }
+  },
+  "actions": {
+    "notify_webhook": {
+      "webhook": {
+        "method": "POST",
+        "url": "https://hooks.example.com/CHANGE_ME",
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"text\": \"[Health Watchers] Critical error spike: {{ctx.payload.hits.total}} CRITICAL/FATAL log entries in the last 5 minutes (threshold: 20). Index: health-watchers-errors-critical-*\"}"
+      }
+    }
+  },
+  "_meta": {
+    "issue": "#1275",
+    "notes": "Watches the health-watchers-errors-critical-* index that logstash/pipeline/health-watchers.conf routes CRITICAL/FATAL log_level entries into. REPLACE the webhook URL above with a real Slack incoming-webhook or PagerDuty Events API URL before enabling in production."
+  }
+}

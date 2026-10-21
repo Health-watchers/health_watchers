@@ -3,7 +3,11 @@ import crypto from 'crypto';
 import multer, { FileFilterCallback } from 'multer';
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { ClinicSettingsModel } from './clinic-settings.model';
+import {
+  ClinicSettingsModel,
+  MAX_IDLE_TIMEOUT_MINUTES,
+  MIN_IDLE_TIMEOUT_MINUTES,
+} from './clinic-settings.model';
 import { UserModel } from '../auth/models/user.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { auditLog } from '../audit/audit.service';
@@ -186,6 +190,8 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
       notifications,
       branding,
       feeOptimization,
+      ai,
+      security,
     } = req.body;
 
     if (timezone && !isValidTimezone(timezone)) {
@@ -203,6 +209,27 @@ clinicSettingsRoutes.put('/', async (req: Request, res: Response) => {
     if (notifications !== undefined) update.notifications = notifications;
     if (branding !== undefined) update.branding = branding;
     if (feeOptimization !== undefined) update.feeOptimization = feeOptimization;
+    if (ai !== undefined) {
+      if (typeof ai !== 'object' || ai === null) {
+        return res.status(400).json({ error: 'BadRequest', message: 'ai must be an object' });
+      }
+      if (ai.enabled !== undefined) update['ai.enabled'] = Boolean(ai.enabled);
+      if (ai.voiceDictation !== undefined) update['ai.voiceDictation'] = Boolean(ai.voiceDictation);
+    }
+    if (security?.idleTimeoutMinutes !== undefined) {
+      const minutes = Number(security.idleTimeoutMinutes);
+      if (
+        !Number.isInteger(minutes) ||
+        minutes < MIN_IDLE_TIMEOUT_MINUTES ||
+        minutes > MAX_IDLE_TIMEOUT_MINUTES
+      ) {
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: `security.idleTimeoutMinutes must be a whole number between ${MIN_IDLE_TIMEOUT_MINUTES} and ${MAX_IDLE_TIMEOUT_MINUTES}`,
+        });
+      }
+      update['security.idleTimeoutMinutes'] = minutes;
+    }
 
     const settings = await ClinicSettingsModel.findOneAndUpdate(
       { clinicId },

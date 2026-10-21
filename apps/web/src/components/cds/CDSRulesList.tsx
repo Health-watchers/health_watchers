@@ -80,7 +80,7 @@ export function CDSRulesList({ rules, onEdit, onTest, onDelete, isDeleting }: CD
           <div className="flex gap-2">
             <button
               onClick={() => onEdit(rule)}
-              className="bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-md px-3 py-2 text-sm font-medium"
+              className="rounded-md bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
             >
               Edit
             </button>
