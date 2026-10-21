@@ -54,6 +54,12 @@ class SocketManager {
       console.error('Socket.IO connection error:', error);
     });
 
+    // Notification events — dispatch as window CustomEvent so components
+    // (e.g. NotificationBell) can subscribe without needing the socket ref.
+    this.socket.on('notification:new', (data) => {
+      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
+    });
+
     // Appointment events
     this.socket.on('appointment:confirmed', (data) => {
       console.log('Appointment confirmed:', data);
@@ -155,4 +161,19 @@ export function useAppointmentEvents() {
   }, []);
 
   return events;
+}
+
+// ─── Convenience exports used by useRealtimeUpdates / useLazyRealtimeUpdates ──
+
+/**
+ * Returns (or creates) the shared socket connected with the given token.
+ * Wraps socketManager.connect() so callers don't need to import the class.
+ */
+export function getSocket(token: string) {
+  return socketManager.connect(token);
+}
+
+/** Disconnects the shared socket instance. */
+export function disconnectSocket() {
+  socketManager.disconnect();
 }
