@@ -76,3 +76,23 @@ export function getSuggestions(word: string): Array<{ abbr: string; expansion: s
 export function expandShorthand(word: string): string | null {
   return MEDICAL_SHORTHANDS[word] ?? null;
 }
+
+/**
+ * Expands all known shorthand abbreviations in a block of free text.
+ * Whole-word matching is used so that substrings like "BP" inside "BPD" are not replaced.
+ * Used by the voice dictation pipeline to auto-correct dictated shorthand.
+ */
+export function expandShorthandInText(text: string): string {
+  if (!text) return text;
+  // Sort by length descending so multi-char abbreviations (e.g. "N/V/D") match before single chars
+  const abbreviations = Object.keys(MEDICAL_SHORTHANDS).sort((a, b) => b.length - a.length);
+  let result = text;
+  for (const abbr of abbreviations) {
+    // Escape regex special characters in the abbreviation
+    const escaped = abbr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match whole word, case-sensitive for abbreviations that have specific casing
+    const re = new RegExp(`\\b${escaped}\\b`, 'g');
+    result = result.replace(re, () => MEDICAL_SHORTHANDS[abbr]!);
+  }
+  return result;
+}
