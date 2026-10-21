@@ -1,6 +1,6 @@
-import { CDSRuleModel, CDSAlert, AlertSeverity } from './cds-rule.model.js';
-import { PatientModel } from '../patients/models/patient.model.js';
-import { EncounterModel, VitalSigns, Prescription } from '../encounters/encounter.model.js';
+import { CDSRuleModel, CDSAlert, AlertSeverity } from './cds-rule.model';
+import { PatientModel } from '../patients/models/patient.model';
+import { EncounterModel, VitalSigns, Prescription } from '../encounters/encounter.model';
 import logger from '@api/utils/logger';
 import { Schema } from 'mongoose';
 

@@ -2,6 +2,10 @@
  * Environment variable validation — must be imported before any other module.
  * Uses zod to parse and validate all required env vars.
  * Prints a table of missing/invalid vars and exits with code 1 on failure.
+ *
+ * HIPAA Security Rule § 164.312 — Technical Safeguards:
+ * All encryption keys, JWT secrets, and SMTP credentials are validated here.
+ * Missing critical HIPAA vars cause a hard exit in production.
  */
 import { z } from 'zod';
 import { redactConnectionString } from '../utils/redact';
@@ -27,11 +31,95 @@ const envSchema = z.object({
 
   GEMINI_API_KEY: z.string().optional(),
 
+  // ── AI voice transcription (encounter audio → SOAP notes) ─────────────────
+  // Provider selection. Optional so the API boots in development without it;
+  // the transcription service falls back to a safe default when unset.
+  TRANSCRIPTION_PROVIDER: z.enum(['google', 'whisper']).optional(),
+
+  // Google Speech-to-Text API key (required when TRANSCRIPTION_PROVIDER=google).
+  GOOGLE_SPEECH_API_KEY: z.string().optional(),
+
+  // OpenAI API key for Whisper (required when TRANSCRIPTION_PROVIDER=whisper).
+  OPENAI_API_KEY: z.string().optional(),
+
+  // Maximum accepted audio upload size in bytes. Default: 25 MiB.
+  TRANSCRIPTION_MAX_AUDIO_BYTES: z
+    .string()
+    .regex(/^\d+$/, 'TRANSCRIPTION_MAX_AUDIO_BYTES must be a positive integer')
+    .optional(),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
 
   SENTRY_DSN: z.string().url().optional(),
+
+  // ── HIPAA — PHI field-level encryption (§ 164.312(a)(2)(iv)) ──────────────
+  // 64-char hex = 32-byte AES-256 key.  Generate:
+  //   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  // Rotate annually; keep old key in FIELD_ENCRYPTION_KEY_V<n> during migration.
+  FIELD_ENCRYPTION_KEY: z
+    .string()
+    .length(64, 'FIELD_ENCRYPTION_KEY must be a 64-char hex string (32 bytes / AES-256)')
+    .optional(),
+
+  FIELD_ENCRYPTION_KEY_VERSION: z.string().optional(),
+
+  // ── HIPAA — Audit log encryption at rest (§ 164.312(b)) ───────────────────
+  // 64-char hex = 32-byte AES-256 key.
+  AUDIT_ENCRYPTION_KEY: z
+    .string()
+    .length(64, 'AUDIT_ENCRYPTION_KEY must be a 64-char hex string (32 bytes / AES-256)')
+    .optional(),
+
+  // ── HIPAA — Backup encryption (§ 164.312(c)(1)) ───────────────────────────
+  BACKUP_ENCRYPTION_KEY: z
+    .string()
+    .min(32, 'BACKUP_ENCRYPTION_KEY must be at least 32 characters')
+    .optional(),
+
+  // ── HIPAA — SMTP for breach notification emails (§ 164.410) ───────────────
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_SECURE: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  APP_BASE_URL: z.string().optional(),
+
+  // ── HIPAA — Data retention & destruction ──────────────────────────────────
+  // Clinical record retention in years (HIPAA minimum: 6 years). Default: 7.
+  CLINICAL_RETENTION_YEARS: z.string().optional(),
+  // Audit log retention in years (HIPAA minimum: 6 years). Default: 6.
+  AUDIT_LOG_RETENTION_YEARS: z.string().optional(),
+
+  // ── Security training enforcement (§ 164.308(a)(5)) ──────────────────────
+  // Annual training expiry window in days. Default: 365.
+  SECURITY_TRAINING_EXPIRY_DAYS: z.string().optional(),
+
+  // ── TLS enforcement ───────────────────────────────────────────────────────
+  TRUST_PROXY: z.string().optional(),
+  NODE_ENV: z.string().optional(),
+
+  // ── Webhook signature verification (HMAC-SHA256) ──────────────────────────
+  // Current signing secret used to verify X-Webhook-Signature on incoming webhooks.
+  WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET must be at least 32 characters (too weak)')
+    .optional(),
+  // Previous signing secret, accepted during key rotation.
+  WEBHOOK_SIGNING_SECRET_PREVIOUS: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET_PREVIOUS must be at least 32 characters (too weak)')
+    .optional(),
+
+  // ── Idempotency keys for payment endpoints ────────────────────────────────
+  // TTL (in seconds) for idempotency key → response mappings. Default: 24 hours.
+  IDEMPOTENCY_TTL_SECONDS: z
+    .string()
+    .regex(/^\d+$/, 'IDEMPOTENCY_TTL_SECONDS must be a positive integer')
+    .refine((v) => Number(v) > 0, 'IDEMPOTENCY_TTL_SECONDS must be greater than 0')
+    .default('86400'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -63,13 +151,65 @@ if (!result.success) {
 
 export const env = result.data;
 
+// ── HIPAA production checks ───────────────────────────────────────────────────
+const isProd = process.env.NODE_ENV === 'production';
+
 // Warn when REDIS_URL is absent in production — in-memory rate limiting is
 // per-pod and allows brute-force bypass in multi-replica deployments.
-if (process.env.NODE_ENV === 'production' && !env.REDIS_URL) {
+if (isProd && !env.REDIS_URL) {
   console.warn(
     '⚠️  WARNING: REDIS_URL is not set in production. ' +
       'Rate limiting will be in-memory and NOT shared across instances. ' +
       'This allows attackers to bypass brute-force protection by distributing requests across pods.'
+  );
+}
+
+// HIPAA § 164.312(a)(2)(iv) — PHI encryption key required in production
+if (isProd && !env.FIELD_ENCRYPTION_KEY) {
+  console.error(
+    '🚨 HIPAA VIOLATION: FIELD_ENCRYPTION_KEY is not set in production. ' +
+      'PHI will be stored in plaintext. Set a 64-char hex AES-256 key immediately.'
+  );
+  process.exit(1);
+}
+
+// HIPAA § 164.312(b) — Audit log encryption required in production
+if (isProd && !env.AUDIT_ENCRYPTION_KEY) {
+  console.warn(
+    '⚠️  HIPAA WARNING: AUDIT_ENCRYPTION_KEY is not set in production. ' +
+      'Audit log metadata will not be encrypted at rest. ' +
+      'Set a 64-char hex AES-256 key for full § 164.312(b) compliance.'
+  );
+}
+
+// HIPAA § 164.312(c)(1) — Backup encryption required in production
+if (isProd && !env.BACKUP_ENCRYPTION_KEY) {
+  console.warn(
+    '⚠️  HIPAA WARNING: BACKUP_ENCRYPTION_KEY is not set in production. ' +
+      'Database backups will not be encrypted. Set a strong passphrase.'
+  );
+}
+
+// HIPAA § 164.410 — SMTP required for breach notification in production
+if (isProd && !env.SMTP_HOST) {
+  console.warn(
+    '⚠️  HIPAA WARNING: SMTP_HOST is not set in production. ' +
+      'Automated breach notification emails (§ 164.410) will not be sent.'
+  );
+}
+
+// AI voice transcription — warn when the selected provider has no credentials.
+// Audio contains PHI, so a misconfigured provider must be visible at startup.
+if (env.TRANSCRIPTION_PROVIDER === 'google' && !env.GOOGLE_SPEECH_API_KEY) {
+  console.warn(
+    '⚠️  WARNING: TRANSCRIPTION_PROVIDER=google but GOOGLE_SPEECH_API_KEY is not set. ' +
+      'Voice transcription requests will fail.'
+  );
+}
+if (env.TRANSCRIPTION_PROVIDER === 'whisper' && !env.OPENAI_API_KEY) {
+  console.warn(
+    '⚠️  WARNING: TRANSCRIPTION_PROVIDER=whisper but OPENAI_API_KEY is not set. ' +
+      'Voice transcription requests will fail.'
   );
 }
 
@@ -79,3 +219,9 @@ console.log(`   API_PORT:        ${env.API_PORT}`);
 console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
 console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
 console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);
+console.log(`   HIPAA FIELD_ENCRYPTION_KEY: ${env.FIELD_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA AUDIT_ENCRYPTION_KEY: ${env.AUDIT_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA BACKUP_ENCRYPTION_KEY: ${env.BACKUP_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA SMTP_HOST:             ${env.SMTP_HOST ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_PROVIDER:      ${env.TRANSCRIPTION_PROVIDER ?? '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_MAX_AUDIO_BYTES: ${env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)'}`);

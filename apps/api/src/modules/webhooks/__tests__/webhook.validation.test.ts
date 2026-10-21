@@ -12,7 +12,15 @@ describe('registerWebhookSchema', () => {
   it('rejects an unsupported event type', () => {
     const result = registerWebhookSchema.safeParse({
       url: 'https://example.com/webhooks',
-      events: ['patient.created'],
+      events: ['patient.exploded'],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects the reserved webhook.test event on registration', () => {
+    const result = registerWebhookSchema.safeParse({
+      url: 'https://example.com/webhooks',
+      events: ['webhook.test'],
     });
     expect(result.success).toBe(false);
   });

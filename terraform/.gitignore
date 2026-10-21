@@ -1,0 +1,19 @@
+# Local Terraform state & plugin cache — never commit
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Plans can contain secrets
+*.tfplan
+tfplan
+
+# Real variable values (commit *.tfvars.example instead)
+*.auto.tfvars
+secrets.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

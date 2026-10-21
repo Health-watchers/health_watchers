@@ -72,7 +72,7 @@ function computeShardIndex(key: string, shardCount: number, config: ShardingConf
       // For date-based range sharding (month 0-11)
       const numericKey = typeof key === 'string' ? parseInt(key, 10) : Number(key);
       const range = config.rangeDistribution.ranges.find(
-        (r) => numericKey >= r.start && numericKey < r.end,
+        (r) => numericKey >= r.start && numericKey < r.end
       );
       if (range) {
         // "shard-N" → extract N and return 0-based index
@@ -212,12 +212,12 @@ export class ShardingService {
         this.updateShardStatus(shard.shardName, 'active');
         logger.debug(
           { shardName: shard.shardName, latencyMs: Date.now() - start },
-          'Shard health-check passed',
+          'Shard health-check passed'
         );
       } catch (error) {
         logger.warn(
           { shardName: shard.shardName, error: (error as Error).message },
-          'Shard health-check failed — marking unavailable',
+          'Shard health-check failed — marking unavailable'
         );
         this.updateShardStatus(shard.shardName, 'unavailable');
       }
@@ -245,7 +245,7 @@ export class ShardingService {
     const config = mapping.config;
     const totalDocs = Array.from(mapping.shards.values()).reduce(
       (sum, s) => sum + s.documentCount,
-      0,
+      0
     );
 
     const shards = Array.from(mapping.shards.values()).map((s) => ({
@@ -283,7 +283,7 @@ export class ShardingService {
    */
   private _fallbackShard(collectionName: string, shardKeyValue: unknown): ShardRouteResult {
     const activeShard = Array.from(this.shards.values()).find(
-      (s) => s.status === 'active' || s.status === 'recovering',
+      (s) => s.status === 'active' || s.status === 'recovering'
     );
 
     if (!activeShard) {
@@ -291,7 +291,7 @@ export class ShardingService {
       const defaultShard = SHARD_SERVERS[0];
       logger.error(
         { collectionName, shardKeyValue },
-        'All shards unavailable — using shard-1 as emergency fallback',
+        'All shards unavailable — using shard-1 as emergency fallback'
       );
       return {
         shardId: 'shard-1',
@@ -302,7 +302,7 @@ export class ShardingService {
 
     logger.warn(
       { collectionName, fallbackShard: activeShard.shardName },
-      'Primary shard unavailable — rerouting to fallback',
+      'Primary shard unavailable — rerouting to fallback'
     );
 
     return {

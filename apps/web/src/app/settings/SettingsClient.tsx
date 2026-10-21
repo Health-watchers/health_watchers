@@ -8,10 +8,19 @@ import { SecuritySection } from '@/components/settings/SecuritySection';
 import { PreferencesSection } from '@/components/settings/PreferencesSection';
 import { SubscriptionSection } from '@/components/settings/SubscriptionSection';
 import { SessionManagement } from '@/components/settings/SessionManagement';
+import { DangerZone } from '@/components/settings/DangerZone';
 import ApiKeyManager from '@/components/settings/ApiKeyManager';
 import WebhookManager from '@/components/settings/WebhookManager';
 
-type Section = 'profile' | 'security' | 'preferences' | 'subscription' | 'sessions' | 'api-keys' | 'webhooks';
+type Section =
+  | 'profile'
+  | 'security'
+  | 'preferences'
+  | 'subscription'
+  | 'sessions'
+  | 'api-keys'
+  | 'webhooks'
+  | 'danger-zone';
 
 interface MeResponse {
   status: 'success';
@@ -20,12 +29,23 @@ interface MeResponse {
     email: string;
     role: string;
     clinic: string;
+    avatarUrl: string | null;
+    timezone: string | null;
     mfaEnabled: boolean;
     preferences: {
       language: string;
       theme: 'light' | 'dark' | 'system';
+      defaultView: 'dashboard' | 'patients' | 'appointments' | 'encounters';
       emailNotifications: boolean;
       inAppNotifications: boolean;
+      notificationTypes?: {
+        referral_received: boolean;
+        payment_confirmed: boolean;
+        appointment_reminder: boolean;
+        ai_summary_ready: boolean;
+        lab_result_ready: boolean;
+        system: boolean;
+      };
     };
   };
 }
@@ -77,6 +97,8 @@ export default function SettingsClient() {
                 email: data.email,
                 role: data.role,
                 clinic: data.clinic,
+                avatarUrl: data.avatarUrl,
+                timezone: data.timezone,
               }}
             />
           )}
@@ -86,11 +108,14 @@ export default function SettingsClient() {
               onMfaStatusChange={() => queryClient.invalidateQueries({ queryKey: ['me'] })}
             />
           )}
-          {active === 'preferences' && <PreferencesSection preferences={data.preferences} />}
+          {active === 'preferences' && (
+            <PreferencesSection preferences={data.preferences} />
+          )}
           {active === 'subscription' && <SubscriptionSection />}
           {active === 'sessions' && <SessionManagement />}
           {active === 'api-keys' && <ApiKeyManager />}
           {active === 'webhooks' && <WebhookManager />}
+          {active === 'danger-zone' && <DangerZone />}
         </main>
       </div>
     </div>

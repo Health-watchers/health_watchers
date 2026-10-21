@@ -47,3 +47,24 @@ secrets:
 
 redis:
   enabled: true
+
+# ── Resource Quotas (Production) ──────────────────────────────────────────────
+# Production uses the default values from values.yaml
+# Explicitly documented here for visibility
+resourceQuota:
+  enabled: true
+  hard:
+    requests:
+      cpu: "8"
+      memory: "16Gi"
+    limits:
+      cpu: "16"
+      memory: "32Gi"
+    pods: "50"
+    services: "20"
+    persistentvolumeclaims: "10"
+    requestsStorage: "100Gi"
+
+# Production limit ranges use defaults from values.yaml
+limitRange:
+  enabled: true

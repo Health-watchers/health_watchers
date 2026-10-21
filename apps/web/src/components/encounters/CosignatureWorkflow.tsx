@@ -61,11 +61,16 @@ export function CosignatureWorkflow({
   const handleRequestSign = async () => {
     setIsRequestingSign(true);
     try {
-      await fetchWithAuth(`${API_V1}/encounters/${encodeURIComponent(encounterId)}/request-cosign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cosignersToRequest: cosigners.filter((c) => c.status === 'pending').map((c) => c.id) }),
-      });
+      await fetchWithAuth(
+        `${API_V1}/encounters/${encodeURIComponent(encounterId)}/request-cosign`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cosignersToRequest: cosigners.filter((c) => c.status === 'pending').map((c) => c.id),
+          }),
+        }
+      );
       onCosignRequested?.();
     } finally {
       setIsRequestingSign(false);
@@ -95,15 +100,15 @@ export function CosignatureWorkflow({
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-center">
           <p className="text-2xl font-bold text-yellow-700">{pendingCount}</p>
-          <p className="text-xs text-yellow-600 uppercase font-semibold">Pending</p>
+          <p className="text-xs font-semibold uppercase text-yellow-600">Pending</p>
         </div>
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-center">
           <p className="text-2xl font-bold text-green-700">{approvedCount}</p>
-          <p className="text-xs text-green-600 uppercase font-semibold">Approved</p>
+          <p className="text-xs font-semibold uppercase text-green-600">Approved</p>
         </div>
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
           <p className="text-2xl font-bold text-red-700">{rejectedCount}</p>
-          <p className="text-xs text-red-600 uppercase font-semibold">Rejected</p>
+          <p className="text-xs font-semibold uppercase text-red-600">Rejected</p>
         </div>
       </div>
 
@@ -112,26 +117,30 @@ export function CosignatureWorkflow({
           <div
             key={cosigner.id}
             className={`rounded-md border p-3 transition-colors ${
-              selectedCosigner === cosigner.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+              selectedCosigner === cosigner.id
+                ? 'border-blue-400 bg-blue-50'
+                : 'border-gray-200 bg-white hover:bg-gray-50'
             }`}
           >
-            <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{cosigner.name}</p>
                 <p className="text-xs text-gray-500">{cosigner.title}</p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(cosigner.status)}`}>
+              <span
+                className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(cosigner.status)}`}
+              >
                 {cosigner.status}
               </span>
             </div>
 
             {cosigner.signedAt && (
-              <p className="text-xs text-gray-500 mb-2">Signed: {formatDate(cosigner.signedAt)}</p>
+              <p className="mb-2 text-xs text-gray-500">Signed: {formatDate(cosigner.signedAt)}</p>
             )}
 
             {cosigner.comments && (
-              <div className="bg-white border border-gray-100 rounded p-2 mb-2">
-                <p className="text-xs font-semibold text-gray-600 mb-1">Comments:</p>
+              <div className="mb-2 rounded border border-gray-100 bg-white p-2">
+                <p className="mb-1 text-xs font-semibold text-gray-600">Comments:</p>
                 <p className="text-sm text-gray-700">{cosigner.comments}</p>
               </div>
             )}
@@ -142,19 +151,19 @@ export function CosignatureWorkflow({
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   placeholder="Add comments (optional)"
-                  className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:border-blue-400 focus:outline-none"
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none"
                   rows={2}
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleApproveCosign(cosigner.id)}
-                    className="flex-1 text-xs font-medium px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700"
+                    className="flex-1 rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
                   >
                     Approve
                   </button>
                   <button
                     onClick={() => setSelectedCosigner(null)}
-                    className="flex-1 text-xs font-medium px-3 py-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                    className="flex-1 rounded bg-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-400"
                   >
                     Cancel
                   </button>
@@ -178,7 +187,7 @@ export function CosignatureWorkflow({
         <button
           onClick={handleRequestSign}
           disabled={isRequestingSign}
-          className="w-full text-sm font-medium px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {isRequestingSign ? 'Sending requests...' : 'Send cosign requests to pending reviewers'}
         </button>

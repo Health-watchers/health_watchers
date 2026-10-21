@@ -43,6 +43,15 @@ export function useRealtimeUpdates(accessToken: string | null) {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     });
 
+    socket.on('lab:critical', (data: unknown) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.labResults.all });
+      window.dispatchEvent(new CustomEvent('lab:critical', { detail: data }));
+    });
+
+    socket.on('lab:resulted', () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.labResults.all });
+    });
+
     socket.on('cosignature:requested', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.encounters.pendingCosignatures() });
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
@@ -65,6 +74,8 @@ export function useRealtimeUpdates(accessToken: string | null) {
       socket.off('encounter:updated');
       socket.off('payment:confirmed');
       socket.off('notification:new');
+      socket.off('lab:critical');
+      socket.off('lab:resulted');
       socket.off('cosignature:requested');
       socket.off('cosignature:completed');
       socket.off('cosignature:rejected');

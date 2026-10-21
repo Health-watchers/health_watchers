@@ -1,8 +1,19 @@
 import { Request, Response } from 'express';
 import { PatientModel } from '@api/modules/patients/models/patient.model';
 import { EncounterModel } from '@api/modules/encounters/encounter.model';
-import { anonymizeBatch, createAuditLog, type PatientData } from '@health-watchers/anonymize';
+import {
+  anonymizeBatch,
+  createAuditLog,
+  applyKAnonymity,
+  addDifferentialPrivacyNoise,
+  type PatientData,
+} from '@health-watchers/anonymize';
 import { AuditService } from '@api/modules/audit/audit.service';
+
+/** Minimum group size for k-anonymity on research exports. */
+const RESEARCH_K = 5;
+/** Privacy budget (epsilon) for differential privacy on aggregate statistics. */
+const RESEARCH_DP_EPSILON = 1.0;
 
 export class ResearchController {
   /**
@@ -44,17 +55,33 @@ export class ResearchController {
         purpose: 'research',
       });
 
+      // Enforce k-anonymity on quasi-identifiers: generalize age/sex/location
+      // and suppress any equivalence class smaller than RESEARCH_K.
+      const kAnonymized = applyKAnonymity(patientData, {
+        k: RESEARCH_K,
+        quasiIdentifiers: ['age', 'sex', 'address'],
+      });
+
       // Optionally include encounter statistics
       let encounterStats = {};
       if (includeEncounters === 'true') {
         const encounters = await EncounterModel.find({}).lean();
+        const encountersByType = encounters.reduce((acc: Record<string, number>, e: any) => {
+          const type = e.encounterType || 'unknown';
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+        }, {});
+        // Add Laplace noise to aggregate counts so individual records cannot
+        // be inferred from published statistics (differential privacy).
+        const noisyByType = addDifferentialPrivacyNoise(encountersByType, {
+          epsilon: RESEARCH_DP_EPSILON,
+        });
         encounterStats = {
-          totalEncounters: encounters.length,
-          encountersByType: encounters.reduce((acc: Record<string, number>, e: any) => {
-            const type = e.encounterType || 'unknown';
-            acc[type] = (acc[type] || 0) + 1;
-            return acc;
-          }, {}),
+          totalEncounters: addDifferentialPrivacyNoise(
+            { total: encounters.length },
+            { epsilon: RESEARCH_DP_EPSILON }
+          ).total,
+          encountersByType: noisyByType,
         };
       }
 
@@ -77,6 +104,8 @@ export class ResearchController {
         metadata: {
           recordCount: patients.length,
           anonymizationLevel: 'aggregation',
+          kAnonymity: RESEARCH_K,
+          differentialPrivacyEpsilon: RESEARCH_DP_EPSILON,
           irbApproval: true,
           includeEncounters: includeEncounters === 'true',
         },
@@ -89,8 +118,11 @@ export class ResearchController {
         data: {
           ...anonymizedData,
           ...encounterStats,
+          kAnonymized,
           exportedAt: new Date().toISOString(),
           anonymizationLevel: 'aggregation',
+          kAnonymity: RESEARCH_K,
+          differentialPrivacyEpsilon: RESEARCH_DP_EPSILON,
           auditLog,
         },
       });

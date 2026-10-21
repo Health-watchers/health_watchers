@@ -1,0 +1,203 @@
+name: Weekly Auth Module Mutation Testing
+
+on:
+  schedule:
+    # Run every Monday at 2 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  auth-mutation-full:
+    name: Full Auth Module Mutation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full mutation test suite on auth module
+        run: npm run test:mutation --workspace=api
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          NODE_ENV: test
+          API_PORT: 3001
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: auth-mutation-report-${{ github.run_number }}
+          path: |
+            apps/api/reports/mutation/mutation.html
+            apps/api/reports/mutation/mutation.json
+          retention-days: 90
+
+      - name: Analyze auth module mutation score
+        if: always()
+        run: |
+          node -e "
+            const fs = require('fs');
+            const reportPath = './apps/api/reports/mutation/mutation.json';
+            
+            if (!fs.existsSync(reportPath)) {
+              console.error('No mutation report found');
+              process.exit(1);
+            }
+            
+            const r = require(reportPath);
+            const files = r.files || {};
+            
+            let authFiles = {};
+            let totalKilled = 0, totalMutants = 0;
+            let totalSurvived = 0, totalNoCoverage = 0;
+            
+            for (const [path, fileData] of Object.entries(files)) {
+              if (!path.includes('modules/auth')) continue;
+              
+              const mutants = fileData.mutants || [];
+              let killed = 0, survived = 0, noCoverage = 0, relevant = 0;
+              
+              for (const m of mutants) {
+                if (m.status === 'NoCoverage') {
+                  noCoverage++;
+                } else if (m.status !== 'Ignored' && m.status !== 'CompileError') {
+                  relevant++;
+                  totalMutants++;
+                  if (m.status === 'Killed' || m.status === 'Timeout') {
+                    killed++;
+                    totalKilled++;
+                  } else if (m.status === 'Survived') {
+                    survived++;
+                    totalSurvived++;
+                  }
+                }
+                if (m.status === 'NoCoverage') totalNoCoverage++;
+              }
+              
+              const score = relevant > 0 ? Math.round((killed / relevant) * 100) : 100;
+              const shortPath = path.split('/').slice(-3).join('/');
+              authFiles[shortPath] = { killed, survived, noCoverage, relevant, score };
+            }
+            
+            const globalScore = totalMutants > 0 ? Math.round((totalKilled / totalMutants) * 100) : 100;
+            
+            console.log('\\n═══════════════════════════════════════════════════════');
+            console.log(' AUTH MODULE MUTATION TESTING - WEEKLY FULL REPORT');
+            console.log('═══════════════════════════════════════════════════════\\n');
+            console.log('Global Auth Module Score: ' + globalScore + '%');
+            console.log('  Killed:      ' + totalKilled);
+            console.log('  Survived:    ' + totalSurvived);
+            console.log('  No Coverage: ' + totalNoCoverage);
+            console.log('  Total:       ' + totalMutants);
+            console.log('\\nPer-file breakdown:\\n');
+            
+            const sortedFiles = Object.entries(authFiles).sort((a, b) => a[1].score - b[1].score);
+            for (const [file, stats] of sortedFiles) {
+              const icon = stats.score >= 80 ? '✅' : stats.score >= 60 ? '⚠️ ' : '❌';
+              console.log('  ' + icon + ' ' + stats.score.toString().padStart(3) + '%  ' + file);
+              console.log('       Killed: ' + stats.killed + ', Survived: ' + stats.survived + ', NoCoverage: ' + stats.noCoverage);
+            }
+            
+            console.log('\\n═══════════════════════════════════════════════════════\\n');
+            
+            if (globalScore < 80) {
+              console.error('⚠️  WARNING: Auth module mutation score ' + globalScore + '% is below 80% threshold');
+              console.error('    This is a weekly informational run. Review surviving mutants and improve tests.');
+              // Don't fail weekly run, just report
+            } else {
+              console.log('✅ EXCELLENT: Auth module maintains 80%+ mutation coverage');
+            }
+          "
+
+      - name: Create GitHub issue for low scores
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = './apps/api/reports/mutation/mutation.json';
+            
+            if (!fs.existsSync(reportPath)) return;
+            
+            const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+            const files = report.files || {};
+            
+            let authKilled = 0, authTotal = 0;
+            let weakFiles = [];
+            
+            for (const [path, fileData] of Object.entries(files)) {
+              if (!path.includes('modules/auth')) continue;
+              
+              const mutants = fileData.mutants || [];
+              let killed = 0, relevant = 0;
+              
+              for (const m of mutants) {
+                if (m.status !== 'NoCoverage' && m.status !== 'Ignored' && m.status !== 'CompileError') {
+                  relevant++;
+                  authTotal++;
+                  if (m.status === 'Killed' || m.status === 'Timeout') {
+                    killed++;
+                    authKilled++;
+                  }
+                }
+              }
+              
+              const score = relevant > 0 ? Math.round((killed / relevant) * 100) : 100;
+              if (score < 80) {
+                weakFiles.push({ path: path.split('/').slice(-3).join('/'), score, killed, relevant });
+              }
+            }
+            
+            const globalScore = authTotal > 0 ? Math.round((authKilled / authTotal) * 100) : 100;
+            
+            if (globalScore < 80) {
+              const body = `## ⚠️ Weekly Auth Module Mutation Testing Alert\n\n` +
+                `The auth module mutation score has dropped to **${globalScore}%**, below the 80% threshold.\n\n` +
+                `### Overall Stats\n` +
+                `- Killed: ${authKilled}/${authTotal}\n` +
+                `- Score: ${globalScore}%\n` +
+                `- Threshold: 80%\n\n` +
+                `### Files Below Threshold\n\n` +
+                weakFiles.map(f => `- \`${f.path}\`: ${f.score}% (${f.killed}/${f.relevant} killed)`).join('\n') +
+                `\n\n### Action Required\n\n` +
+                `Review the [mutation report artifact](${context.payload.repository.html_url}/actions/runs/${context.runId}) ` +
+                `and add tests to kill surviving mutants in the auth module.\n\n` +
+                `**Why this matters:** The auth module is security-critical. Surviving mutants represent potential security vulnerabilities.\n\n` +
+                `📊 [View detailed report](${context.payload.repository.html_url}/actions/runs/${context.runId})`;
+              
+              // Check if an open issue already exists
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'mutation-testing,auth-module',
+              });
+              
+              if (issues.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `Auth Module Mutation Score Below Threshold: ${globalScore}%`,
+                  body: body,
+                  labels: ['mutation-testing', 'auth-module', 'security', 'test-quality'],
+                });
+              } else {
+                // Update existing issue
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issues.data[0].number,
+                  body: `### Weekly Update - ${new Date().toISOString().split('T')[0]}\n\n${body}`,
+                });
+              }
+            }

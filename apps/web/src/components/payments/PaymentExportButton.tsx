@@ -101,7 +101,7 @@ export function PaymentExportButton({ onError }: Props) {
                   type="date"
                   value={opts.from}
                   onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))}
-                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-700">
@@ -110,7 +110,7 @@ export function PaymentExportButton({ onError }: Props) {
                   type="date"
                   value={opts.to}
                   onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))}
-                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </label>
             </div>
@@ -120,7 +120,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.format}
                 onChange={(e) => setOpts((o) => ({ ...o, format: e.target.value as Format }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="csv">CSV</option>
                 <option value="xlsx">Excel (.xlsx)</option>
@@ -132,7 +132,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.status}
                 onChange={(e) => setOpts((o) => ({ ...o, status: e.target.value as Status }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All</option>
                 <option value="confirmed">Confirmed</option>
@@ -146,7 +146,7 @@ export function PaymentExportButton({ onError }: Props) {
               <select
                 value={opts.currency}
                 onChange={(e) => setOpts((o) => ({ ...o, currency: e.target.value as Currency }))}
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All</option>
                 <option value="XLM">XLM</option>

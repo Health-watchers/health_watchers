@@ -1,64 +1,99 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+export interface UnsavedChangesGuard {
+  /** Whether the confirmation modal should be shown. */
+  showModal: boolean;
+  /** Call when the user confirms they want to leave. Navigates to the pending URL. */
+  confirmLeave: () => void;
+  /** Call when the user cancels and wants to stay on the page. */
+  cancelLeave: () => void;
+  /** The URL the user was trying to navigate to, or null if triggered by tab close. */
+  pendingUrl: string | null;
+  /**
+   * Wrap your router.push / router.replace calls with this instead.
+   * If the form is dirty it will open the confirmation modal instead of
+   * navigating immediately; if clean it navigates straight through.
+   *
+   * Example:
+   *   const { guardedPush } = useUnsavedChangesGuard(isDirty);
+   *   <button onClick={() => guardedPush('/patients')}>Cancel</button>
+   */
+  guardedPush: (href: string) => void;
+}
+
+const DEFAULT_MESSAGE =
+  'You have unsaved changes. Are you sure you want to leave this page?';
 
 /**
- * useUnsavedChangesGuard — intercepts page navigation (beforeunload) and
- * internal route changes to warn the user when they have unsaved changes.
+ * Protects a form page from accidental navigation when there are unsaved changes.
  *
- * When `isDirty` is true:
- *  - `beforeunload` event is intercepted to show the browser's native confirm dialog.
- *  - `showModal` becomes true whenever a `routechange` custom event fires.
+ * - Registers a `beforeunload` handler so the browser shows a native prompt when
+ *   the user closes the tab or does a hard refresh.
+ * - Exposes modal state (`showModal`, `confirmLeave`, `cancelLeave`, `pendingUrl`)
+ *   so the caller can render a custom <UnsavedChangesModal> for in-app navigation.
+ * - Provides a `guardedPush` helper to intercept `router.push` calls.
  *
- * The parent component renders an `UnsavedChangesModal` and calls
- * `confirmLeave` (to proceed) or `cancelLeave` (to stay).
+ * @param isDirty  Whether the form has unsaved changes.
+ * @param message  Optional custom message passed to the `beforeunload` event.
  */
-export function useUnsavedChangesGuard(isDirty: boolean, message: string) {
+export function useUnsavedChangesGuard(
+  isDirty: boolean,
+  message: string = DEFAULT_MESSAGE
+): UnsavedChangesGuard {
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
-  // ── beforeunload — native browser dialog ───────────────────────────────────
+  // Keep a ref so the confirmLeave callback always sees the latest pendingUrl
+  // without needing it as a dependency (avoids re-creating the callback).
+  const pendingUrlRef = useRef<string | null>(null);
+  pendingUrlRef.current = pendingUrl;
+
+  // ── beforeunload (tab close / hard refresh) ──────────────────────────────
   useEffect(() => {
     if (!isDirty) return;
 
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
+      // Legacy support: setting returnValue triggers the browser dialog.
+      // Modern browsers ignore the string but require a non-empty value.
       e.returnValue = message;
-      return message;
     };
 
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty, message]);
 
-  // ── Internal route change interception ─────────────────────────────────────
-  // Listen for custom 'routechange' events dispatched by Next.js navigation wrappers
-  useEffect(() => {
-    if (!isDirty) return;
+  // ── In-app navigation helpers ────────────────────────────────────────────
 
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      const path = detail?.path as string | undefined;
-      setPendingPath(path ?? null);
+  const guardedPush = useCallback(
+    (href: string) => {
+      if (!isDirty) {
+        router.push(href);
+        return;
+      }
+      setPendingUrl(href);
       setShowModal(true);
-    };
-
-    window.addEventListener('routechange', handler);
-    return () => window.removeEventListener('routechange', handler);
-  }, [isDirty]);
+    },
+    [isDirty, router]
+  );
 
   const confirmLeave = useCallback(() => {
+    const url = pendingUrlRef.current;
     setShowModal(false);
-    setPendingPath(null);
-    // Allow navigation to proceed by dispatching a "confirmed-leave" event
-    window.dispatchEvent(new CustomEvent('confirmed-leave', { detail: { path: pendingPath } }));
-  }, [pendingPath]);
+    setPendingUrl(null);
+    if (url) {
+      router.push(url);
+    }
+  }, [router]);
 
   const cancelLeave = useCallback(() => {
     setShowModal(false);
-    setPendingPath(null);
-    window.dispatchEvent(new CustomEvent('cancelled-leave'));
+    setPendingUrl(null);
   }, []);
 
-  return { showModal, confirmLeave, cancelLeave };
+  return { showModal, confirmLeave, cancelLeave, pendingUrl, guardedPush };
 }

@@ -1,0 +1,148 @@
+{
+  "title": "Compliance Dashboard",
+  "uid": "hw-compliance",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "tags": ["health-watchers", "compliance", "hipaa"],
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Auth Failures Over Time (401 / 403)",
+      "description": "Same query pattern as the Security dashboard's auth-failure panel.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"401\"}[5m])) by (path)",
+          "legendFormat": "401 {{ path }}"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"403\"}[5m])) by (path)",
+          "legendFormat": "403 {{ path }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Auth Failure Rate (401)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"401\"}[5m]))",
+          "legendFormat": "401/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Forbidden Rate (403)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"health-watchers-api\",status=\"403\"}[5m]))",
+          "legendFormat": "403/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "MongoDB Backup Freshness",
+      "description": "Time since the last successful MongoDB backup. Thresholds flag staleness that could indicate a compliance/data-retention risk.",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "time() - mongodb_backup_last_timestamp_seconds",
+          "legendFormat": "Time Since Last Backup"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 86400 },
+              { "color": "red", "value": 172800 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "MongoDB Backup Age Over Time",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "time() - mongodb_backup_last_timestamp_seconds",
+          "legendFormat": "Backup Age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 86400 },
+              { "color": "red", "value": 172800 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "text",
+      "title": "HIPAA Audit Log Reference",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 5 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Detailed HIPAA audit-log analysis (who accessed what PHI) lives in Kibana, not here.**\n\nSee the **\"Health Watchers - HIPAA Audit Logs\"** dashboard, defined in `logging/kibana/dashboards-export.ndjson`, for per-user PHI access audit trails. This Grafana dashboard intentionally does not duplicate that view — it covers auth-failure rate and backup freshness as Prometheus-metric compliance signals only."
+      }
+    }
+  ]
+}

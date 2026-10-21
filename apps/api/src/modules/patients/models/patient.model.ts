@@ -1,6 +1,7 @@
 import { Schema, model, models } from 'mongoose';
 import { encrypt, decrypt } from '@api/lib/encrypt';
 import { sanitizeText } from '@api/utils/sanitize';
+import { baseSchema } from '@api/shared';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
@@ -54,7 +55,7 @@ export interface IInsurance {
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export interface Patient {
+export interface PatientDocument {
   systemId: string;
   firstName: string;
   lastName: string;
@@ -63,8 +64,6 @@ export interface Patient {
   sex: 'M' | 'F' | 'O';
   contactNumber?: string;
   address?: string;
-  clinicId: Schema.Types.ObjectId;
-  isActive: boolean;
   allergies: IAllergy[];
   emergencyContacts?: IEmergencyContact[];
   insurance?: IInsurance[];
@@ -79,9 +78,10 @@ export interface Patient {
   thumbnailUrl?: string;
   isDuplicate?: boolean;
   mergedInto?: Schema.Types.ObjectId;
-  createdAt?: Date;
-  updatedAt?: Date;
 }
+
+/** @deprecated Use PatientDocument for persistence-layer values. */
+export type Patient = PatientDocument;
 
 const allergySchema = new Schema<IAllergy>(
   {
@@ -134,7 +134,7 @@ const insuranceSchema = new Schema<IInsurance>(
   { _id: true }
 );
 
-const patientSchema = new Schema<Patient>(
+const patientSchema = new Schema<PatientDocument>(
   {
     systemId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true, trim: true },
@@ -144,8 +144,6 @@ const patientSchema = new Schema<Patient>(
     sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
     address: { type: String },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    isActive: { type: Boolean, default: true, index: true },
     allergies: { type: [allergySchema], default: [] },
     emergencyContacts: { type: [emergencyContactSchema], default: [] },
     insurance: { type: [insuranceSchema], default: [] },
@@ -162,10 +160,18 @@ const patientSchema = new Schema<Patient>(
   { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
+patientSchema.add(baseSchema);
+
 // Dashboard aggregation: filter by clinic + date range, sorted by createdAt
 patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });
 // #1069 — Patient list query: clinicId + isActive filter used with query hint
 patientSchema.index({ clinicId: 1, isActive: 1 }, { name: 'clinicId_1_isActive_1' });
+// #1434 — v2 keyset pagination: newest first with _id tie-breaker, so any page
+// is a single index seek (no skip).
+patientSchema.index(
+  { clinicId: 1, isActive: 1, createdAt: -1, _id: -1 },
+  { name: 'patients_clinicId_isActive_createdAt_id' }
+);
 patientSchema.index(
   { firstName: 'text', lastName: 'text', searchName: 'text', systemId: 'text' },
   {
@@ -204,7 +210,7 @@ patientSchema.pre('save', function () {
 });
 
 patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any> | null;
+  const update = this.getUpdate() as Record<string, unknown> | null;
   if (!update) return;
   const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
   for (const field of PHI_FIELDS) {
@@ -231,21 +237,14 @@ function decryptDoc(doc: unknown) {
   }
 }
 
-function encryptUpdatePayload(update: Record<string, any>) {
-  const target = update.$set ?? update;
-  for (const field of PHI_FIELDS) {
-    if (target[field]) target[field] = encrypt(target[field]);
-  }
-}
-
-patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, any>;
-  if (update) encryptUpdatePayload(update);
-});
-
 patientSchema.pre('updateMany', function () {
-  const update = this.getUpdate() as Record<string, any>;
-  if (update) encryptUpdatePayload(update);
+  const update = this.getUpdate() as Record<string, unknown> | null;
+  if (!update) return;
+  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+  for (const field of PHI_FIELDS) {
+    const val = target[field];
+    if (typeof val === 'string') target[field] = encrypt(val);
+  }
 });
 
 patientSchema.post('save', function () {
@@ -268,8 +267,8 @@ patientSchema.virtual('age').get(function () {
 });
 
 patientSchema.virtual('ageGroup').get(function () {
-  const age = (this as any).age;
-  if (age === null) return null;
+  const age = this.get('age') as number | null | undefined;
+  if (age == null) return null;
   if (age < 1) return 'infant';
   if (age < 3) return 'toddler';
   if (age < 12) return 'child';
@@ -279,4 +278,4 @@ patientSchema.virtual('ageGroup').get(function () {
 });
 
 export const PatientModel = (models.Patient ||
-  model<Patient>('Patient', patientSchema)) as import('mongoose').Model<Patient>;
+  model<PatientDocument>('Patient', patientSchema)) as import('mongoose').Model<PatientDocument>;

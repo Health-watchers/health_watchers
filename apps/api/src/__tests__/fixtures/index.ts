@@ -232,6 +232,10 @@ export function mfaScenario(clinicId?: mongoose.Types.ObjectId) {
     clinicId: cId,
     userWithMfa: buildMfaUser({ clinicId: cId }),
     userWithoutMfa: buildDoctorUser({ clinicId: cId, mfaEnabled: false }),
-    adminWithMfa: buildAdminUser({ clinicId: cId, mfaEnabled: true, mfaSecret: 'JBSWY3DPEHPK3PXP' } as any),
+    adminWithMfa: buildAdminUser({
+      clinicId: cId,
+      mfaEnabled: true,
+      mfaSecret: 'JBSWY3DPEHPK3PXP',
+    } as any),
   };
 }

@@ -16,7 +16,10 @@ describe('csvUploadMiddleware', () => {
   it('accepts a .csv file', async () => {
     const res = await request(buildApp())
       .post('/upload')
-      .attach('file', Buffer.from('a,b,c\n1,2,3'), { filename: 'data.csv', contentType: 'text/csv' });
+      .attach('file', Buffer.from('a,b,c\n1,2,3'), {
+        filename: 'data.csv',
+        contentType: 'text/csv',
+      });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
@@ -25,7 +28,10 @@ describe('csvUploadMiddleware', () => {
   it('rejects a non-csv file with 400', async () => {
     const res = await request(buildApp())
       .post('/upload')
-      .attach('file', Buffer.from('not a csv'), { filename: 'data.txt', contentType: 'text/plain' });
+      .attach('file', Buffer.from('not a csv'), {
+        filename: 'data.txt',
+        contentType: 'text/plain',
+      });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual(

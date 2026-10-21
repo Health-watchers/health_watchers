@@ -72,13 +72,27 @@ export interface FhirCoverage {
   order?: number;
 }
 
+export interface FhirImmunization {
+  resourceType: 'Immunization';
+  id: string;
+  status: 'completed' | 'entered-in-error' | 'not-done';
+  vaccineCode: { coding: { system: string; code: string; display: string }[]; text: string };
+  patient: { reference: string };
+  encounter?: { reference: string };
+  occurrenceDateTime: string;
+  primarySource?: boolean;
+  lotNumber?: string;
+  performer?: { actor: { display: string } }[];
+}
+
 export type FhirResource =
   | FhirPatient
   | FhirEncounter
   | FhirCondition
   | FhirObservation
   | FhirMedicationRequest
-  | FhirCoverage;
+  | FhirCoverage
+  | FhirImmunization;
 
 export interface FhirBundle {
   resourceType: 'Bundle';
@@ -203,6 +217,33 @@ export function mapObservations(enc: any, patientId: string): FhirObservation[] 
   return obs;
 }
 
+export function mapImmunizations(enc: any, patientId: string): FhirImmunization[] {
+  if (!enc.immunizations?.length) return [];
+  return enc.immunizations.map((imm: any, i: number) => ({
+    resourceType: 'Immunization' as const,
+    id: `${String(enc._id)}-imm-${i}`,
+    status: 'completed' as const,
+    vaccineCode: {
+      coding: [
+        {
+          system: 'http://hl7.org/fhir/sid/cvx',
+          code: imm.cvxCode ?? 'unknown',
+          display: imm.vaccineName ?? 'Unknown vaccine',
+        },
+      ],
+      text: imm.vaccineName ?? 'Unknown vaccine',
+    },
+    patient: { reference: `Patient/${patientId}` },
+    encounter: { reference: `Encounter/${String(enc._id)}` },
+    occurrenceDateTime: new Date(imm.administeredAt ?? enc.createdAt ?? Date.now()).toISOString(),
+    primarySource: true,
+    ...(imm.lotNumber ? { lotNumber: imm.lotNumber } : {}),
+    ...(imm.administeredBy
+      ? { performer: [{ actor: { display: imm.administeredBy } }] }
+      : {}),
+  }));
+}
+
 export function mapMedicationRequests(enc: any, patientId: string): FhirMedicationRequest[] {
   if (!enc.prescriptions?.length) return [];
   return enc.prescriptions.map((rx: any, i: number) => ({
@@ -292,6 +333,7 @@ export function buildFhirBundle(patient: any, encounters: any[]): FhirBundle {
     resources.push(...mapConditions(enc, patientId));
     resources.push(...mapObservations(enc, patientId));
     resources.push(...mapMedicationRequests(enc, patientId));
+    resources.push(...mapImmunizations(enc, patientId));
   }
 
   return {

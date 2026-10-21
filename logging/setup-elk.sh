@@ -21,6 +21,8 @@ AUTH="-u ${ES_USER}:${ES_PASS}"
 ILM_FILE="/etc/elk/ilm-policy.json"
 TEMPLATE_FILE="/etc/elk/index-templates.json"
 DASHBOARDS_FILE="/etc/elk/dashboards-export.ndjson"
+SLM_FILE="/etc/elk/slm-policy.json"
+WATCHERS_DIR="/etc/elk/watchers"
 
 echo "=== ELK Stack Setup ==="
 echo "Elasticsearch: ${ES_URL}"
@@ -79,6 +81,33 @@ curl -sf -X PUT ${AUTH} \
     }
   }' > /dev/null
 echo "✓ Error/audit index template applied"
+
+# ── Apply SLM policy (long-term compliance archival) ──────────
+echo ""
+echo "Applying SLM policy..."
+RESPONSE=$(curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/_slm/policy/health-watchers-archive" \
+  -H "Content-Type: application/json" \
+  -d @"${SLM_FILE}" 2>&1) || true
+echo "  ${RESPONSE}"
+echo "✓ SLM policy applied"
+
+# ── Load Watcher alert definitions ─────────────────────────────
+echo ""
+echo "Loading Watcher alert definitions..."
+if [ -d "${WATCHERS_DIR}" ]; then
+  for WATCHER_FILE in "${WATCHERS_DIR}"/*.json; do
+    WATCHER_ID=$(basename "${WATCHER_FILE}" .json)
+    RESPONSE=$(curl -sf -X PUT ${AUTH} \
+      "${ES_URL}/_watcher/watch/${WATCHER_ID}" \
+      -H "Content-Type: application/json" \
+      -d @"${WATCHER_FILE}" 2>&1) || true
+    echo "  ${WATCHER_ID}: ${RESPONSE}"
+  done
+  echo "✓ Watcher alerts loaded"
+else
+  echo "⚠ No watchers directory found at ${WATCHERS_DIR} — skipping"
+fi
 
 # ── Bootstrap write alias ─────────────────────────────────────
 echo ""

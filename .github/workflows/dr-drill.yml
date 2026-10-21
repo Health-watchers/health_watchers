@@ -1,0 +1,111 @@
+name: Disaster Recovery Drill
+
+on:
+  schedule:
+    # Monthly automated restore + RTO + integrity drill: 1st of the month, 04:00 UTC
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Drill scope'
+        type: choice
+        options: [monthly, quarterly]
+        default: monthly
+
+concurrency:
+  group: dr-drill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drill:
+    name: Run DR drill (${{ github.event.inputs.scope || 'monthly' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq bc
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-database-tools mongodb-mongosh
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_DR_DRILL_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Run DR drill
+        id: drill
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          DR_BACKUP_BUCKET: ${{ secrets.DR_BACKUP_BUCKET }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          DR_REGION: ${{ secrets.DR_REGION || 'eu-west-1' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          WORKDIR: ${{ github.workspace }}/drill-artifacts
+        run: |
+          set +e
+          bash scripts/dr/dr-drill.sh --scope "${{ github.event.inputs.scope || 'monthly' }}"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload drill artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: dr-drill-${{ github.run_id }}
+          path: |
+            drill-artifacts/**
+            docs/DR_DRILL_LOG.md
+          retention-days: 90
+
+      - name: Publish scorecard to job summary
+        if: always()
+        run: |
+          if [ -f drill-artifacts/scorecard.md ]; then
+            cat drill-artifacts/scorecard.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open issue on drill failure
+        if: steps.drill.outputs.exit_code != '0'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const sc = fs.existsSync('drill-artifacts/scorecard.md')
+              ? fs.readFileSync('drill-artifacts/scorecard.md', 'utf8') : '(no scorecard produced)';
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `🧪 DR drill missed an objective — ${new Date().toISOString().split('T')[0]}`,
+              body: [
+                'The scheduled disaster-recovery drill did not meet all objectives.',
+                '', sc, '',
+                `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                '', 'Follow the runbooks in `docs/runbooks/` and record remediation in `docs/DR_DRILL_LOG.md`.',
+              ].join('\n'),
+              labels: ['disaster-recovery', 'incident', 'devops'],
+            });
+
+      - name: Fail job if drill missed an objective
+        if: steps.drill.outputs.exit_code != '0'
+        run: exit 1

@@ -180,9 +180,7 @@ describe('Aggregation pipeline queries', () => {
   });
 
   it('encounter pipeline with $lookup finds patient data', async () => {
-    const patient = (
-      await PatientModel.create(buildPatientBatch(1, { clinicId: CLINIC_ID })[0]!)
-    );
+    const patient = await PatientModel.create(buildPatientBatch(1, { clinicId: CLINIC_ID })[0]!);
     await EncounterModel.create(
       buildEncounterBatch(1, {
         clinicId: CLINIC_ID,

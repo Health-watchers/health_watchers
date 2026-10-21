@@ -1,30 +1,24 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any -- the Web Speech API ships no TS types */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchWithAuth } from '@/lib/auth';
-import { API_V1 } from '@/lib/api';
-import { expandShorthandInText } from '@/lib/medicalShorthand';
+import { useQuery } from '@tanstack/react-query';
+import { authJson } from '@/lib/authJson';
 
-// Minimal type for the Web Speech API — avoids needing @types/dom-speech
-interface SpeechRecognitionResult {
-  0: { transcript: string };
-  isFinal: boolean;
-}
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: { length: number; [index: number]: SpeechRecognitionResult };
-}
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-}
+/**
+ * Voice dictation for clinical notes (#1419).
+ *
+ * Two engines:
+ *  - `speech`: the browser's Web Speech API (live interim results).
+ *  - `upload`: record with MediaRecorder and send the clip to /ai/transcribe-audio.
+ *
+ * Privacy: both engines move audio off the device — Chrome, Edge and Safari run Web Speech
+ * recognition on their vendors' cloud services, and the upload path goes to the clinic's AI
+ * provider. So dictation stays unavailable until the clinic has enabled AI voice dictation;
+ * the API enforces the same rule for the upload path.
+ */
 
+export type DictationEngine = 'speech' | 'upload';
 export type DictationStatus =
   | 'idle'
   | 'starting'
@@ -33,325 +27,303 @@ export type DictationStatus =
   | 'denied'
   | 'error';
 
-export type DictationEngine = 'webspeech' | 'upload';
-
-export interface VoiceDictation {
-  /** Whether voice dictation is available in this browser */
-  availability: { available: boolean; engine: DictationEngine; reason?: string };
-  /** Current state of the dictation session */
-  status: DictationStatus;
-  /** Key identifying which SOAP section is currently being dictated into */
-  activeKey: string | null;
-  /** Interim (non-final) transcript for live display */
-  interim: string;
-  /** Elapsed recording time in seconds */
-  elapsed: number;
-  /** Human-readable error message; null when no error */
-  error: string | null;
-  /** Start recording into the section identified by `key` */
-  start: (key: string, onFinal: (text: string) => void) => void;
-  /** Stop recording and trigger transcription */
-  stop: () => void;
-  /** Clear any error state */
-  dismissError: () => void;
+interface AiSettings {
+  enabled: boolean;
+  voiceDictation: boolean;
+  serviceAvailable: boolean;
 }
 
-/**
- * useVoiceDictation — manages microphone recording and speech-to-text.
- *
- * Two engines:
- * 1. **Web Speech API** (Chrome, Edge) — real-time interim results, no server round-trip.
- * 2. **Upload fallback** (Firefox, Safari) — records audio with MediaRecorder,
- *    sends it to `POST /api/v1/ai/transcribe`, and receives corrected + SOAP-structured text.
- *
- * In both cases, shorthand abbreviations in the final transcript are expanded
- * (e.g. "SOB" → "Shortness of breath") before being inserted into the editor.
- */
-export function useVoiceDictation(): VoiceDictation {
-  // ── Engine detection ───────────────────────────────────────────────────────
-  const hasWebSpeech =
+export interface DictationAvailability {
+  available: boolean;
+  engine: DictationEngine | null;
+  /** Why the mic is disabled — shown as the button's tooltip. */
+  reason: string | null;
+  loading: boolean;
+}
+
+type SpeechRecognitionLike = any;
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as any;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function canRecordAudio(): boolean {
+  return (
     typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+    typeof (window as any).MediaRecorder !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia
+  );
+}
 
-  const hasMediaRecorder = typeof window !== 'undefined' && 'MediaRecorder' in window;
+function pickRecorderMime(): string | undefined {
+  const MR = (window as any).MediaRecorder;
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) =>
+    MR?.isTypeSupported?.(t)
+  );
+}
 
-  const availability: { available: boolean; engine: DictationEngine; reason?: string } = {
-    available: hasWebSpeech || hasMediaRecorder,
-    engine: (hasWebSpeech ? 'webspeech' : 'upload') as DictationEngine,
-  };
-  if (!hasWebSpeech && !hasMediaRecorder) {
-    availability.reason =
-      'Voice dictation requires Chrome/Edge (Web Speech API) or a browser with MediaRecorder support.';
-  }
+const MAX_UPLOAD_SECONDS = 5 * 60;
 
-  // ── State ──────────────────────────────────────────────────────────────────
+export function useVoiceDictation() {
+  const settingsQ = useQuery({
+    queryKey: ['ai-settings'],
+    queryFn: () => authJson<AiSettings>('/ai/settings'),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  // Browser capabilities are only known on the client — resolve after mount to avoid
+  // hydration mismatches.
+  const [caps, setCaps] = useState<{ speech: boolean; record: boolean } | null>(null);
+  useEffect(() => {
+    setCaps({ speech: !!getSpeechRecognitionCtor(), record: canRecordAudio() });
+  }, []);
+
   const [status, setStatus] = useState<DictationStatus>('idle');
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [interim, setInterim] = useState('');
-  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
-  // ── Refs for mutable objects that shouldn't trigger re-renders ─────────────
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionLike>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const onFinalRef = useRef<((text: string) => void) | null>(null);
-  const activeKeyRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef(0);
+  const stoppingRef = useRef(false);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  const availability: DictationAvailability = (() => {
+    const settings = settingsQ.data;
+    if (!caps || settingsQ.isLoading) {
+      return {
+        available: false,
+        engine: null,
+        reason: 'Checking dictation support…',
+        loading: true,
+      };
     }
+    if (!caps.speech && !caps.record) {
+      return {
+        available: false,
+        engine: null,
+        reason: 'Voice dictation isn’t supported in this browser.',
+        loading: false,
+      };
+    }
+    if (!settings?.voiceDictation) {
+      return {
+        available: false,
+        engine: null,
+        reason:
+          'Voice dictation is turned off for your clinic. An admin can enable AI voice dictation in clinic settings.',
+        loading: false,
+      };
+    }
+    if (caps.speech) return { available: true, engine: 'speech', reason: null, loading: false };
+    if (!settings.serviceAvailable) {
+      return {
+        available: false,
+        engine: null,
+        reason: 'The transcription service is not configured.',
+        loading: false,
+      };
+    }
+    return { available: true, engine: 'upload', reason: null, loading: false };
+  })();
+
+  const clearTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  };
+
+  const releaseMic = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  const reset = useCallback(() => {
+    clearTimer();
+    setInterim('');
+    setActiveKey(null);
+    setElapsed(0);
   }, []);
 
-  const stopStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+  const stop = useCallback(() => {
+    stoppingRef.current = true;
+    clearTimer();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    } else if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop(); // onstop uploads the clip
+    } else {
+      setStatus((s) => (s === 'recording' || s === 'starting' ? 'idle' : s));
+      reset();
     }
-  }, []);
+  }, [reset]);
 
-  // ── Web Speech API engine ──────────────────────────────────────────────────
-  const startWebSpeech = useCallback(
-    (key: string, onFinal: (text: string) => void) => {
-      const Ctor =
-        (window as unknown as Record<string, unknown>).SpeechRecognition ??
-        (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+  const start = useCallback(
+    async (key: string, onFinal: (text: string) => void) => {
+      if (!availability.available || !availability.engine) return;
+      if (status === 'recording' || status === 'starting' || status === 'transcribing') return;
 
-      if (!Ctor) {
-        setError('Speech recognition is not available in this browser.');
-        setStatus('error');
+      stoppingRef.current = false;
+      setError(null);
+      setInterim('');
+      setElapsed(0);
+      setActiveKey(key);
+      setStatus('starting');
+
+      const startTimer = () => {
+        const began = Date.now();
+        clearTimer();
+        timerRef.current = setInterval(() => {
+          const secs = Math.floor((Date.now() - began) / 1000);
+          setElapsed(secs);
+          if (availability.engine === 'upload' && secs >= MAX_UPLOAD_SECONDS) stop();
+        }, 500);
+      };
+
+      if (availability.engine === 'speech') {
+        const Ctor = getSpeechRecognitionCtor()!;
+        const rec = new Ctor();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = navigator.language || 'en-US';
+
+        rec.onstart = () => {
+          setStatus('recording');
+          startTimer();
+        };
+        rec.onresult = (event: any) => {
+          let pending = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const text = result[0]?.transcript ?? '';
+            if (result.isFinal) {
+              if (text.trim()) onFinal(text.trim());
+            } else {
+              pending += text;
+            }
+          }
+          setInterim(pending);
+        };
+        rec.onerror = (event: any) => {
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            setStatus('denied');
+            setError('Microphone access was blocked.');
+          } else if (event.error === 'no-speech' || event.error === 'aborted') {
+            // benign — onend resets
+          } else {
+            setStatus('error');
+            setError(
+              event.error === 'network'
+                ? 'Speech recognition needs a network connection.'
+                : 'Dictation stopped unexpectedly.'
+            );
+          }
+        };
+        rec.onend = () => {
+          recognitionRef.current = null;
+          setStatus((s) => (s === 'denied' || s === 'error' ? s : 'idle'));
+          reset();
+        };
+
+        recognitionRef.current = rec;
+        try {
+          rec.start();
+        } catch {
+          recognitionRef.current = null;
+          setStatus('error');
+          setError('Could not start dictation.');
+          reset();
+        }
         return;
       }
 
-      const recognition = new (Ctor as new () => SpeechRecognitionLike)();
-      recognition.lang = 'en-US';
-      recognition.interimResults = true;
-      recognition.continuous = true;
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interimText = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result && result.isFinal) {
-            const finalText = expandShorthandInText(result[0].transcript);
-            onFinal(finalText);
-          } else if (result) {
-            interimText += result[0].transcript;
-          }
-        }
-        setInterim(interimText);
-      };
-
-      recognition.onend = () => {
-        setInterim('');
-        setStatus('idle');
-        setActiveKey(null);
-        activeKeyRef.current = null;
-        clearTimer();
-      };
-
-      recognition.onerror = (event: { error: string }) => {
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          setError(
-            'Microphone access denied. Please allow microphone permissions in your browser.'
-          );
-          setStatus('denied');
-        } else {
-          setError(`Speech recognition error: ${event.error}`);
-          setStatus('error');
-        }
-        clearTimer();
-      };
-
-      recognitionRef.current = recognition;
-      onFinalRef.current = onFinal;
-      activeKeyRef.current = key;
-      setStatus('starting');
-      setActiveKey(key);
-      elapsedRef.current = 0;
-      setElapsed(0);
-
+      // Upload engine
+      let stream: MediaStream;
       try {
-        recognition.start();
-        setStatus('recording');
-        clearTimer();
-        timerRef.current = setInterval(() => {
-          elapsedRef.current += 1;
-          setElapsed(elapsedRef.current);
-        }, 1000);
-      } catch {
-        setError('Failed to start speech recognition.');
-        setStatus('error');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        const name = (err as DOMException)?.name;
+        setStatus(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'error');
+        setError(
+          name === 'NotAllowedError' || name === 'SecurityError'
+            ? 'Microphone access was blocked.'
+            : name === 'NotFoundError'
+              ? 'No microphone was found.'
+              : 'Could not access the microphone.'
+        );
+        reset();
+        return;
       }
-    },
-    [clearTimer]
-  );
+      streamRef.current = stream;
 
-  const stopWebSpeech = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    setInterim('');
-    clearTimer();
-  }, [clearTimer]);
-
-  // ── Upload (MediaRecorder) engine ──────────────────────────────────────────
-  const startUpload = useCallback(
-    async (key: string, onFinal: (text: string) => void) => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
-        audioChunksRef.current = [];
-
-        const recorder = new MediaRecorder(stream);
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-
-        recorder.onstop = async () => {
-          setStatus('transcribing');
-          setInterim('');
-          clearTimer();
-          stopStream();
-
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const formData = new FormData();
-          formData.append('audio', blob, 'dictation.webm');
-
-          try {
-            // First try the dedicated transcription endpoint (audio upload)
-            const res = await fetchWithAuth(`${API_V1}/ai/transcribe`, {
-              method: 'POST',
-              body: formData,
-            });
-
-            if (res.ok) {
-              const json = await res.json();
-              // The API returns { corrected, soap: { S, O, A, P } }
-              const corrected: string = json?.data?.corrected ?? json?.corrected ?? '';
-              if (corrected) {
-                onFinalRef.current?.(expandShorthandInText(corrected));
-              }
-            } else {
-              throw new Error(`Transcription failed (${res.status})`);
-            }
-          } catch {
-            // Fallback: try text-based transcription endpoint
-            try {
-              // Use the raw interim as fallback text
-              const fallbackText = interim || 'Unable to transcribe audio.';
-              const res = await fetchWithAuth(`${API_V1}/ai/transcribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: fallbackText }),
-              });
-
-              if (res.ok) {
-                const json = await res.json();
-                const corrected: string = json?.data?.corrected ?? json?.corrected ?? fallbackText;
-                onFinalRef.current?.(expandShorthandInText(corrected));
-              } else {
-                setError('Transcription service unavailable. Please try again or type manually.');
-                setStatus('error');
-              }
-            } catch {
-              setError('Transcription service unavailable. Please try again or type manually.');
-              setStatus('error');
-            }
-          }
-
+      const mimeType = pickRecorderMime();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        recorderRef.current = null;
+        releaseMic();
+        clearTimer();
+        const type = (recorder.mimeType || mimeType || 'audio/webm').split(';')[0];
+        const blob = new Blob(chunks, { type });
+        if (blob.size === 0) {
           setStatus('idle');
-          setActiveKey(null);
-          activeKeyRef.current = null;
-        };
+          reset();
+          return;
+        }
+        setStatus('transcribing');
+        setInterim('Transcribing…');
+        try {
+          const form = new FormData();
+          form.append('audio', blob, `dictation.${type.split('/')[1] ?? 'webm'}`);
+          const { text } = await authJson<{ text: string }>('/ai/transcribe-audio', {
+            method: 'POST',
+            body: form,
+          });
+          if (text?.trim()) onFinal(text.trim());
+          setStatus('idle');
+        } catch (err) {
+          setStatus('error');
+          setError((err as Error).message || 'Transcription failed.');
+        } finally {
+          reset();
+        }
+      };
 
-        recorder.start();
-        mediaRecorderRef.current = recorder;
-        onFinalRef.current = onFinal;
-        activeKeyRef.current = key;
-        setStatus('recording');
-        setActiveKey(key);
-        elapsedRef.current = 0;
-        setElapsed(0);
-
-        clearTimer();
-        timerRef.current = setInterval(() => {
-          elapsedRef.current += 1;
-          setElapsed(elapsedRef.current);
-        }, 1000);
-      } catch {
-        setError('Microphone access denied. Please allow microphone permissions in your browser.');
-        setStatus('denied');
-      }
+      recorderRef.current = recorder;
+      recorder.start();
+      setStatus('recording');
+      startTimer();
     },
-    [clearTimer, stopStream, interim]
+    [availability.available, availability.engine, status, reset, stop]
   );
 
-  const stopUpload = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    clearTimer();
-  }, [clearTimer]);
-
-  // ── Public API ─────────────────────────────────────────────────────────────
-  const start = useCallback(
-    (key: string, onFinal: (text: string) => void) => {
-      setError(null);
-      if (hasWebSpeech) {
-        startWebSpeech(key, onFinal);
-      } else if (hasMediaRecorder) {
-        startUpload(key, onFinal);
-      } else {
-        setError('Voice dictation is not supported in this browser.');
-        setStatus('error');
+  // Release the microphone if the editor unmounts mid-recording
+  useEffect(
+    () => () => {
+      clearTimer();
+      recognitionRef.current?.abort?.();
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.onstop = null;
+        recorderRef.current.stop();
       }
+      releaseMic();
     },
-    [hasWebSpeech, hasMediaRecorder, startWebSpeech, startUpload]
+    []
   );
-
-  const stop = useCallback(() => {
-    if (hasWebSpeech) {
-      stopWebSpeech();
-    } else {
-      stopUpload();
-    }
-  }, [hasWebSpeech, stopWebSpeech, stopUpload]);
 
   const dismissError = useCallback(() => {
     setError(null);
-    if (status === 'error' || status === 'denied') setStatus('idle');
-  }, [status]);
+    setStatus('idle');
+  }, []);
 
-  // ── Cleanup on unmount ─────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      clearTimer();
-      stopStream();
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, [clearTimer, stopStream]);
-
-  return {
-    availability,
-    status,
-    activeKey,
-    interim,
-    elapsed,
-    error,
-    start,
-    stop,
-    dismissError,
-  };
+  return { availability, status, activeKey, interim, error, elapsed, start, stop, dismissError };
 }
+
+export type VoiceDictation = ReturnType<typeof useVoiceDictation>;

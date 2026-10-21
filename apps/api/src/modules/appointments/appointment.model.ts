@@ -1,4 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { APPOINTMENT_STATUSES, type AppointmentStatus } from '@health-watchers/types';
+import { baseSchema } from '@api/shared';
 
 export interface IAppointment extends Document {
   patientId: mongoose.Types.ObjectId;
@@ -7,7 +9,7 @@ export interface IAppointment extends Document {
   scheduledAt: Date;
   duration: number; // minutes (default 30)
   type: 'consultation' | 'follow-up' | 'procedure' | 'emergency';
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
+  status: AppointmentStatus;
   chiefComplaint?: string;
   notes?: string;
   encounterId?: mongoose.Types.ObjectId;
@@ -25,13 +27,14 @@ export interface IAppointment extends Document {
   videoDuration?: number; // minutes
   reminderSent24h?: boolean;
   reminderSent1h?: boolean;
+  isActive: boolean;
+  createdBy: mongoose.Types.ObjectId;
 }
 
 const AppointmentSchema = new Schema<IAppointment>(
   {
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
     doctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
     scheduledAt: { type: Date, required: true },
     duration: { type: Number, default: 30 },
     type: {
@@ -41,7 +44,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     },
     status: {
       type: String,
-      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show', 'patient_arrived'],
+      enum: APPOINTMENT_STATUSES,
       default: 'scheduled',
     },
     chiefComplaint: { type: String },
@@ -68,6 +71,8 @@ const AppointmentSchema = new Schema<IAppointment>(
   },
   { timestamps: true, versionKey: false }
 );
+
+AppointmentSchema.add(baseSchema);
 
 // Indexes for conflict detection and common queries
 AppointmentSchema.index({ doctorId: 1, scheduledAt: 1 });

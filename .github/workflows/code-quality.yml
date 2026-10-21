@@ -1,0 +1,134 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 20
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality:
+    name: Code Quality Analysis & Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Restore quality trend history
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        with:
+          path: scripts/quality/history/trend.json
+          key: quality-trend-${{ runner.os }}-${{ github.ref }}
+          restore-keys: |
+            quality-trend-${{ runner.os }}-
+            quality-trend-
+
+      - name: Run API tests with coverage
+        run: npm run test:coverage --workspace=api
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
+          API_PORT: 3001
+
+      - name: Run web tests with coverage
+        run: npm run test:coverage --workspace=web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+
+      - name: Run stellar-service tests with coverage
+        run: npm run test:coverage --workspace=stellar-service || echo "no test:coverage script"
+        continue-on-error: true
+
+      - name: Analyze complexity (TS AST)
+        run: node scripts/quality/analyze-complexity.js
+
+      - name: Detect duplication (token-based)
+        run: node scripts/quality/analyze-duplication.js
+
+      - name: Compute maintainability score & gate
+        id: score
+        run: node scripts/quality/maintainability-score.js
+
+      - name: Generate improvement suggestions
+        run: node scripts/quality/suggestions.js
+
+      - name: Record quality trend
+        run: node scripts/quality/record-trend.js
+        continue-on-error: true
+
+      - name: Generate dashboard (enforce gate)
+        id: dashboard
+        run: node scripts/quality/generate-dashboard.js
+        continue-on-error: true
+
+      - name: Upload quality dashboard artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: code-quality-dashboard
+          path: |
+            scripts/quality/reports/
+          retention-days: 30
+
+      - name: Comment quality report on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            try { body = fs.readFileSync('scripts/quality/reports/quality-report.md', 'utf8'); }
+            catch { body = 'Quality report unavailable — see the workflow run.'; }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `<!-- code-quality-comment -->\n${body}`,
+            });
+
+      - name: Fail on quality gate
+        if: steps.dashboard.outcome == 'failure' || steps.score.outcome == 'failure'
+        run: |
+          echo "❌ Code quality gate failed — see the dashboard artifact."
+          exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        continue-on-error: true
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "🧹 *Code quality gate FAILED* — `${{ github.repository }}` @ `${{ github.ref_name }}` (${{ github.sha }}) by ${{ github.actor }}\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }

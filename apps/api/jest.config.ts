@@ -22,6 +22,11 @@ const config: Config = {
       __dirname,
       '../../packages/anonymize/src/index.ts'
     ),
+    // Resolve the types workspace package — not symlinked into node_modules in CI.
+    '^@health-watchers/types$': path.resolve(
+      __dirname,
+      '../../packages/types/src/index.ts'
+    ),
     // Mock the rate-limit middleware so tests don't need redis installed.
     // Match both the @api alias and the resolved absolute path.
     '^@api/middlewares/rate-limit\\.middleware$': `${srcRoot}/__mocks__/rate-limit.middleware.ts`,
@@ -30,6 +35,9 @@ const config: Config = {
     '^pino-http$': `${srcRoot}/__mocks__/pino-http.ts`,
     // Mock Sentry profiling native binary — not available in test environments
     '^@sentry/profiling-node$': `${srcRoot}/__mocks__/sentry-profiling-node.ts`,
+    // Mock @stellar/stellar-sdk — the real package ships ESM that ts-jest
+    // cannot parse; the API only uses it for clinic keypair generation.
+    '^@stellar/stellar-sdk$': `${srcRoot}/__mocks__/stellar-sdk.ts`,
   },
 
   // Tell Jest to look in the API workspace's node_modules first, then the root

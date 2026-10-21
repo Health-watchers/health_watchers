@@ -70,9 +70,21 @@ export function decrypt(encoded: string): string {
   }
 
   const parts = rest.split(':');
-  if (parts.length < 3) return encoded; // not encrypted — return as-is
+  if (parts.length !== 3) return encoded; // not encrypted — return as-is
 
   const [ivHex, ctHex, tagHex] = parts;
+
+  // Only treat a value as encrypted when all parts are valid hex of the
+  // expected lengths (iv = 12 bytes, tag = 16 bytes). Otherwise values like
+  // ISO timestamps ("1990-05-15T00:00:00.000Z") would be misinterpreted as
+  // ciphertext and crash with "Invalid initialization vector".
+  const isHexOfLength = (s: string, len?: number) =>
+    /^[0-9a-f]*$/i.test(s) && (len === undefined || s.length === len);
+  // Empty ciphertext is valid (empty plaintext); iv (12 bytes) and tag (16 bytes) must be exact.
+  if (!isHexOfLength(ivHex, 24) || !isHexOfLength(ctHex) || !isHexOfLength(tagHex, 32)) {
+    return encoded;
+  }
+
   const key = getKeyForVersion(version);
   const decipher = createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));

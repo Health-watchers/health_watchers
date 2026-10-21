@@ -1,6 +1,6 @@
 # API Rate Limiting Documentation
 
-Health Watchers uses [express-rate-limit](https://github.com/express-rate-limit/express-rate-limit) with an optional Redis backend. All limiters return standard IETF rate-limit headers and a consistent `429` error body.
+Health Watchers uses [express-rate-limit](https://github.com/express-rate-limit/express-rate-limit) with a Redis-backed **sliding window** store (falling back to in-memory for local development). All limiters return standard IETF rate-limit headers, a `Retry-After` header on `429` responses, and a consistent `429` error body.
 
 ---
 
@@ -19,16 +19,29 @@ Health Watchers uses [express-rate-limit](https://github.com/express-rate-limit/
 
 ## Rate Limit Summary
 
-| Limiter | Window | Max Requests | Key | Scope |
-|---------|--------|-------------|-----|-------|
-| `authLimiter` | 15 minutes | 5 | IP address | `POST /api/v1/auth/login` |
-| `forgotPasswordLimiter` | 1 hour | 3 | IP address | `POST /api/v1/auth/forgot-password` |
-| `aiLimiter` | 1 minute | 20 | `clinicId` (fallback: IP) | `/api/v1/ai/*` and `/api/v2/ai/*` |
-| `paymentLimiter` | 1 minute | 20 | `clinicId` (fallback: IP) | Payment endpoints |
-| `generalLimiter` | 15 minutes | 300 | IP address | All `/api/v1/*` and `/api/v2/*` routes |
-| `bulkExportLimiter` | 1 hour | 5 | `userId` (fallback: IP) | Bulk data export |
-| `patientSearchLimiter` | 1 minute | 100 | `userId` (fallback: IP) | Patient search |
-| `reportGenerationLimiter` | 1 hour | 10 | `userId` (fallback: IP) | Report generation |
+All limiters use a **sliding window** algorithm: the counter is evaluated over the trailing window (e.g. the last 15 minutes) rather than a fixed bucket that resets abruptly. This prevents burst traffic from "doubling up" at window boundaries.
+
+| Limiter | Sensitivity | Window | Max Requests | Key | Scope |
+|---------|-------------|--------|-------------|-----|-------|
+| `authLimiter` | Critical | 15 minutes | 5 | IP address | `POST /api/v1/auth/login` |
+| `registerLimiter` | Critical | 1 hour | 5 | IP address | `POST /api/v1/auth/register` |
+| `forgotPasswordLimiter` | Critical | 1 hour | 3 | IP address | `POST /api/v1/auth/forgot-password` |
+| `mfaLimiter` | Critical | 15 minutes | 5 | `userId` (fallback: IP) | `/api/v1/portal/mfa/*` |
+| `aiLimiter` | High | 1 minute | 20 | `clinicId` (fallback: IP) | `/api/v1/ai/*` and `/api/v2/ai/*` |
+| `paymentLimiter` | High | 1 minute | 20 | `clinicId` (fallback: IP) | Payment endpoints |
+| `bulkExportLimiter` | High | 1 hour | 5 | `userId` (fallback: IP) | `/api/v1/export/*` (PHI export) |
+| `reportGenerationLimiter` | Medium | 1 hour | 10 | `userId` (fallback: IP) | Report generation |
+| `patientSearchLimiter` | Medium | 1 minute | 100 | `userId` (fallback: IP) | Patient search |
+| `generalLimiter` | Low | 15 minutes | 300 | IP address | All `/api/v1/*` and `/api/v2/*` routes |
+
+### Endpoint Sensitivity Classification
+
+| Sensitivity | Endpoints | Rationale |
+|-------------|-----------|-----------|
+| **Critical** | `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/portal/mfa/*` | Direct attack surface for credential stuffing, account enumeration, and MFA brute-forcing. Strictest limits. |
+| **High** | `/export/*`, `/ai/*`, payment endpoints | PHI exfiltration risk (bulk export), expensive inference (AI), and financial impact (payments). |
+| **Medium** | Patient search, report generation | Enumeration and resource-exhaustion risk, but lower blast radius. |
+| **Low** | All other `/api/v1/*` and `/api/v2/*` routes | Catch-all abuse protection. |
 
 ---
 
@@ -44,6 +57,13 @@ Every response from a rate-limited endpoint includes these standard IETF headers
 | `Retry-After` | Seconds to wait before retrying (only on `429` responses) |
 
 > **Note:** Legacy `X-RateLimit-*` headers are **disabled** (`legacyHeaders: false`).
+
+### `Retry-After` semantics
+
+- `Retry-After` is emitted **only** on `429` responses.
+- The value is an integer number of **seconds** (delta-seconds form, not an HTTP date).
+- With the sliding window store, the value is computed from the oldest request still inside the window, so it reflects the exact time until capacity frees up — it is never longer than the configured window.
+- Clients **must** honour `Retry-After` rather than using a fixed back-off delay.
 
 ---
 
@@ -76,7 +96,9 @@ The `error` field is always `"TooManyRequests"`. The `message` field is human-re
 | Limiter | 429 message |
 |---------|-------------|
 | `authLimiter` | `"Too many login attempts. Try again in 15 minutes."` |
+| `registerLimiter` | `"Too many registration attempts. Try again in 1 hour."` |
 | `forgotPasswordLimiter` | `"Too many password reset requests. Try again in 1 hour."` |
+| `mfaLimiter` | `"Too many MFA attempts. Try again in 15 minutes."` |
 | `aiLimiter` | `"AI rate limit exceeded. Try again in 1 minute."` |
 | `paymentLimiter` | `"Payment rate limit exceeded. Try again in 1 minute."` |
 | `generalLimiter` | `"Too many requests. Try again in 15 minutes."` |
@@ -185,7 +207,27 @@ const response = await fetchWithRetry(
 - **Window / Max**: 15 min / 5 per IP
 - **Key**: `req.ip`
 - **429 message**: `"Too many login attempts. Try again in 15 minutes."`
-- **Rationale**: Protects against brute-force login attacks. The 15-minute window resets fully after the window expires — it is not a sliding window.
+- **Rationale**: Protects against brute-force login attacks. Uses the sliding window store, so capacity is regained gradually as old attempts age out of the trailing 15-minute window.
+
+---
+
+### `registerLimiter`
+
+- **Route**: `POST /api/v1/auth/register`
+- **Window / Max**: 1 hour / 5 per IP
+- **Key**: `req.ip`
+- **429 message**: `"Too many registration attempts. Try again in 1 hour."`
+- **Rationale**: Prevents automated account creation and abuse of the registration flow.
+
+---
+
+### `mfaLimiter`
+
+- **Routes**: `/api/v1/portal/mfa/*` (MFA setup, verification, and challenge endpoints)
+- **Window / Max**: 15 min / 5 per user
+- **Key**: `req.user.userId` (falls back to `req.ip`)
+- **429 message**: `"Too many MFA attempts. Try again in 15 minutes."`
+- **Rationale**: Blocks brute-forcing of one-time codes and repeated MFA challenge attempts.
 
 ---
 
@@ -275,7 +317,7 @@ Set REDIS_URL for production deployments.
 
 ### Redis (recommended — production / multi-instance)
 
-Set the `REDIS_URL` environment variable to enable a shared Redis store across all API replicas:
+Set the `REDIS_URL` environment variable to enable a shared Redis store across all API replicas. The Redis store implements a **sliding window** counter, so limits are enforced consistently across replicas without fixed-window boundary bursts:
 
 ```bash
 # .env
@@ -342,13 +384,29 @@ Every time a limiter fires a `429` response, the `rate_limit_hits_total` Prometh
 
 | Label | Values |
 |-------|--------|
-| `limiter` | `auth`, `forgot-password`, `ai`, `payment`, `general`, `bulk-export`, `patient-search`, `report-generation` |
+| `limiter` | `auth`, `register`, `forgot-password`, `mfa`, `ai`, `payment`, `general`, `bulk-export`, `patient-search`, `report-generation` |
 | `method` | HTTP method (`GET`, `POST`, etc.) |
+
+Additional metrics:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `rate_limit_hits_total` | Counter | `limiter`, `method` | Incremented on every `429` response. |
+| `rate_limit_requests_total` | Counter | `limiter`, `method`, `allowed` | Every request evaluated by a limiter; `allowed` is `true`/`false`. |
+| `rate_limit_store_errors_total` | Counter | `limiter` | Redis errors encountered while evaluating a limiter (requests fail open). |
 
 **Prometheus query — rate limit hits per limiter (last 5 min):**
 
 ```promql
 sum by (limiter) (rate(rate_limit_hits_total[5m]))
+```
+
+**Prometheus query — rejection ratio per limiter:**
+
+```promql
+sum by (limiter) (rate(rate_limit_hits_total[5m]))
+  /
+sum by (limiter) (rate(rate_limit_requests_total[5m]))
 ```
 
 **Alert on sustained login brute-forcing:**
@@ -357,4 +415,22 @@ sum by (limiter) (rate(rate_limit_hits_total[5m]))
 rate(rate_limit_hits_total{limiter="auth"}[1m]) > 10
 ```
 
+**Alert on Redis store errors:**
+
+```promql
+rate(rate_limit_store_errors_total[5m]) > 0
+```
+
 Alerts for sustained rate limiting are configured in the platform runbooks. Reach out to the on-call engineer if you observe unexpected spikes.
+
+## Per-Resource Rate Limit Keys
+
+Rate limits should combine user identity, tenant, route, and resource identifiers.
+
+Examples:
+
+- `tenant:{tenantId}:patient:{patientId}:read`
+- `tenant:{tenantId}:auth:login`
+- `tenant:{tenantId}:export:create`
+
+Return `429` with retry metadata when limits are exceeded.

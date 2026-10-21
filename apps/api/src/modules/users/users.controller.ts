@@ -1,3 +1,5 @@
+import path from 'path';
+import crypto from 'crypto';
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
@@ -9,9 +11,21 @@ import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
 import { addToDenylist } from '@api/services/token-denylist.service';
 import { passwordSchema } from '../auth/auth.validation';
+import { imageUpload } from '@api/middlewares/upload.middleware';
+import { uploadFile, getDownloadUrl, deleteFile } from '../documents/storage.service';
+
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const updateProfileSchema = z.object({
-  fullName: z.string().min(1, 'Full name is required').max(100),
+  fullName: z.string().min(1, 'Full name is required').max(100).optional(),
+  timezone: z.string().optional(),
 });
 
 const router = Router();
@@ -67,10 +81,13 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       role: user.role,
       clinic: String(user.clinicId),
       clinicName: clinic?.name ?? null,
+      avatarUrl: user.avatarUrl ?? null,
+      timezone: user.timezone ?? null,
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? 'en',
         theme: user.preferences?.theme ?? 'system',
+        defaultView: user.preferences?.defaultView ?? 'dashboard',
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
@@ -121,7 +138,18 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    user.fullName = req.body.fullName;
+    const { fullName, timezone } = req.body;
+
+    if (fullName !== undefined) user.fullName = fullName;
+    if (timezone !== undefined) {
+      if (!isValidTimezone(timezone)) {
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: `Invalid timezone '${timezone}'. Use a valid IANA timezone e.g. 'Africa/Lagos'.`,
+        });
+      }
+      user.timezone = timezone;
+    }
     await user.save();
 
     return res.json({
@@ -131,6 +159,8 @@ router.patch(
         email: user.email,
         role: user.role,
         clinic: String(user.clinicId),
+        avatarUrl: user.avatarUrl ?? null,
+        timezone: user.timezone ?? null,
         mfaEnabled: user.mfaEnabled,
         preferences: {
           language: user.preferences?.language ?? 'en',
@@ -346,8 +376,9 @@ const notificationTypesSchema = z
   .optional();
 
 const updatePreferencesSchema = z.object({
-  language: z.enum(['en', 'fr']).optional(),
+  language: z.enum(['en', 'fr', 'pt', 'yo', 'ha']).optional(),
   theme: z.enum(['light', 'dark', 'system']).optional(),
+  defaultView: z.enum(['dashboard', 'patients', 'appointments', 'encounters']).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
   notificationTypes: notificationTypesSchema,
@@ -389,10 +420,11 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    const { language, theme, emailNotifications, inAppNotifications, notificationTypes } = req.body;
+    const { language, theme, defaultView, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
     if (theme !== undefined) user.preferences.theme = theme;
+    if (defaultView !== undefined) user.preferences.defaultView = defaultView;
     if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined) user.preferences.inAppNotifications = inAppNotifications;
     if (notificationTypes !== undefined) {
@@ -407,6 +439,7 @@ router.patch(
         preferences: {
           language: user.preferences.language,
           theme: user.preferences.theme,
+          defaultView: user.preferences.defaultView ?? 'dashboard',
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
           notificationTypes: user.preferences.notificationTypes,
@@ -495,6 +528,102 @@ router.delete('/sessions/:sessionId', authenticate, async (req: Request, res: Re
     status: 'success',
     message: 'Session revoked',
   });
+});
+
+/**
+ * POST /users/me/avatar — upload a profile avatar (PNG/JPEG/WebP, max 5 MB)
+ */
+router.post(
+  '/me/avatar',
+  authenticate,
+  (req: Request, res: Response, next) => {
+    imageUpload.single('avatar')(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'FileTooLarge', message: 'Avatar must be under 5 MB.' });
+      }
+      if ((err as any).code === 'INVALID_FILE_TYPE') {
+        return res.status(400).json({ error: 'InvalidFileType', message: 'Avatar must be a PNG, JPEG, or WebP image.' });
+      }
+      return next(err);
+    });
+  },
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'BadRequest', message: 'No avatar file provided.' });
+    }
+    const user = await UserModel.findById(req.user!.userId).select('+avatarStorageKey');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+    }
+
+    // Delete old avatar if it exists
+    if (user.avatarStorageKey) {
+      await deleteFile(user.avatarStorageKey).catch(() => {});
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+    const storageKey = `user-avatar/${String(user._id)}/${crypto.randomUUID()}${ext}`;
+    await uploadFile({ storageKey, buffer: req.file.buffer, mimeType: req.file.mimetype });
+    const avatarUrl = await getDownloadUrl(storageKey);
+
+    user.avatarUrl = avatarUrl;
+    user.avatarStorageKey = storageKey;
+    await user.save();
+
+    return res.json({ status: 'success', data: { avatarUrl } });
+  }
+);
+
+/**
+ * DELETE /users/me/avatar — remove the current avatar
+ */
+router.delete('/me/avatar', authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).select('+avatarStorageKey');
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+  }
+  if (user.avatarStorageKey) {
+    await deleteFile(user.avatarStorageKey).catch(() => {});
+  }
+  user.avatarUrl = undefined;
+  user.avatarStorageKey = undefined;
+  await user.save();
+  return res.json({ status: 'success', data: { avatarUrl: null } });
+});
+
+/**
+ * POST /users/me/deactivate — soft-deactivate the current user's account
+ * Requires the current password as confirmation.
+ */
+router.post('/me/deactivate', authenticate, async (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'BadRequest', message: 'Password confirmation is required.' });
+  }
+  const user = await UserModel.findById(req.user!.userId).select('+password');
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+  }
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) {
+    return res.status(403).json({ error: 'Forbidden', message: 'Incorrect password.' });
+  }
+  user.isActive = false;
+  await user.save();
+
+  // Denylist the current access token
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const rawToken = authHeader.slice(7);
+    const tokenData = jwt.decode(rawToken) as { jti?: string; exp?: number } | null;
+    if (tokenData?.jti && tokenData?.exp) {
+      const ttl = tokenData.exp - Math.floor(Date.now() / 1000);
+      await addToDenylist(tokenData.jti, ttl);
+    }
+  }
+
+  return res.json({ status: 'success', message: 'Account deactivated.' });
 });
 
 export const userRoutes = router;

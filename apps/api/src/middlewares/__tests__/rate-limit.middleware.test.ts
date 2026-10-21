@@ -56,9 +56,7 @@ describe('Rate Limit Bypass Prevention', () => {
       message: { error: 'TooManyRequests', message: 'Too many requests.' },
     });
     const testApp = express();
-    testApp.post('/auth', limiter, (_req: Request, res: Response) =>
-      res.json({ ok: true })
-    );
+    testApp.post('/auth', limiter, (_req: Request, res: Response) => res.json({ ok: true }));
     return testApp;
   }
 
@@ -70,9 +68,7 @@ describe('Rate Limit Bypass Prevention', () => {
     }
 
     // Attempt bypass by spoofing a different IP via X-Forwarded-For
-    const res = await request(testApp)
-      .post('/auth')
-      .set('X-Forwarded-For', '203.0.113.1');
+    const res = await request(testApp).post('/auth').set('X-Forwarded-For', '203.0.113.1');
 
     // Without trust proxy, XFF is ignored — rate limit key stays as the real socket IP
     expect(res.status).toBe(429);
@@ -99,9 +95,7 @@ describe('Rate Limit Bypass Prevention', () => {
       await request(testApp).post('/auth');
     }
 
-    const res = await request(testApp)
-      .post('/auth')
-      .set('X-Real-IP', '203.0.113.1');
+    const res = await request(testApp).post('/auth').set('X-Real-IP', '203.0.113.1');
 
     expect(res.status).toBe(429);
   });
@@ -162,9 +156,7 @@ describe('User-keyed rate limiter bypass prevention', () => {
       if (uid) req.user = { userId: uid, clinicId: 'clinic-1', role: 'DOCTOR' };
       next();
     });
-    testApp.get('/data', limiter, (_req: Request, res: Response) =>
-      res.json({ ok: true })
-    );
+    testApp.get('/data', limiter, (_req: Request, res: Response) => res.json({ ok: true }));
     return testApp;
   }
 

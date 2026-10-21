@@ -194,6 +194,44 @@ export const cache = {
     logger.debug({ clinicId }, '[cache] reports invalidated');
   },
 
+  /**
+   * Atomically increment a counter and (on first write) set its TTL.
+   * Returns the new value, or `null` when Redis is unavailable so callers
+   * can fall back to a local strategy. Used by the per-API-key rate limiter.
+   */
+  async incr(key: string, ttlSeconds: number): Promise<number | null> {
+    const redis = getClient();
+    if (!redis) return null;
+    try {
+      const value = await redis.incr(key);
+      if (value === 1) await redis.expire(key, ttlSeconds);
+      return value;
+    } catch (err) {
+      logger.warn({ err, key }, '[cache] incr error');
+      return null;
+    }
+  },
+
+  /**
+   * Atomically set a key only if it does not already exist (Redis `SET ... NX EX`).
+   * Returns `true` when the key was claimed by this caller, `false` when it was
+   * already present. Returns `null` when Redis is unavailable so callers can
+   * fall back to a DB-backed strategy (e.g. a unique index).
+   * Used by the idempotency middleware to claim a key and detect concurrent
+   * duplicate requests.
+   */
+  async setIfAbsent(key: string, value: unknown, ttlSeconds: number): Promise<boolean | null> {
+    const redis = getClient();
+    if (!redis) return null;
+    try {
+      const result = await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch (err) {
+      logger.warn({ err, key }, '[cache] setIfAbsent error');
+      return null;
+    }
+  },
+
   async ping(): Promise<{ status: string; latency?: number }> {
     const redis = getClient();
     if (!redis) return { status: 'disabled' };

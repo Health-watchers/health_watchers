@@ -58,7 +58,7 @@ export const SHARDING_STRATEGIES: Record<string, ShardingConfig> = {
   },
 
   // Communication logs sharding by date (range-based for time-series)
-  'CommunicationLog': {
+  CommunicationLog: {
     shardKeyPath: 'createdAt',
     shardKeyType: 'range',
     shardCount: 12, // 12 months
@@ -70,7 +70,7 @@ export const SHARDING_STRATEGIES: Record<string, ShardingConfig> = {
   },
 
   // Audit logs sharding by clinic and date
-  'AuditLog': {
+  AuditLog: {
     shardKeyPath: 'clinicId',
     shardKeyType: 'hashed',
     shardCount: 8,
@@ -79,7 +79,7 @@ export const SHARDING_STRATEGIES: Record<string, ShardingConfig> = {
   },
 
   // Health logs sharding by patient
-  'HealthLog': {
+  HealthLog: {
     shardKeyPath: 'patientId',
     shardKeyType: 'hashed',
     shardCount: 6,

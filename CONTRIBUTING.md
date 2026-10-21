@@ -13,6 +13,8 @@ Thank you for your interest in contributing to Health Watchers! This document pr
 - [Testing](#testing)
 - [Commit Messages](#commit-messages)
 - [Dependency Update Guidelines](#dependency-update-guidelines)
+- [Useful Commands](#useful-commands)
+- [Troubleshooting](#troubleshooting)
 
 ## Code of Conduct
 
@@ -283,6 +285,7 @@ Brief description of the changes
 - [ ] No new warnings generated
 - [ ] Tests pass locally
 - [ ] Dependent changes merged
+- [ ] If this PR changes system architecture, the relevant diagram(s) under `docs/diagrams/` (and their embeds in `docs/ARCHITECTURE.md`) are updated
 
 ## Related Issues
 Closes #(issue number)
@@ -301,6 +304,12 @@ Closes #(issue number)
 - Use **interfaces** for object shapes
 - Use **enums** or **union types** for fixed sets of values
 
+### ES Modules
+
+- **ES module syntax (`import`/`export`) is the standard** for all new and updated code. CommonJS `require()` / `module.exports` should not be used in new code.
+- Existing `.js` configuration files that still use `require()` have been migrated to `.ts` with `import`/`export default` (e.g., `jest.config.ts`, `migrate-mongo-config.ts`).
+- The `.cjs` extension is reserved for files that must remain CommonJS (e.g., `jest.mutation.config.cjs` for Stryker compatibility).
+
 #### TypeScript Configuration
 
 The monorepo uses a shared base config (`tsconfig.base.json`) extended by each app:
@@ -315,6 +324,16 @@ The monorepo uses a shared base config (`tsconfig.base.json`) extended by each a
 | `noImplicitReturns` | `true` | All code paths must return a value |
 
 Run `npm run typecheck` locally before pushing. CI fails on any TypeScript error.
+
+#### Strictness progression plan (Issue #1644)
+
+The compiler-level flags above (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) are already enabled project-wide. The next increment is type-aware ESLint rules, which catch patterns the compiler alone doesn't flag (unsafe `any` flow, floating promises, unnecessary conditionals):
+
+1. **Done** — `@typescript-eslint`'s type-checked rule set (`flat/recommended-type-checked`) is added in `packages/config/eslint-config`, wired to each package's own `tsconfig.json` via `projectService`.
+2. **Next** — run `npm run lint` across the monorepo, triage the findings per package, and either fix them or, where a rule is too noisy to fix immediately, turn that specific rule down to `warn` (the same gradual-adoption pattern already used for `no-explicit-any` and friends) rather than disabling the whole rule set.
+3. **Later** — once a package's type-checked findings reach zero, flip its remaining `warn`-level type-checked rules to `error` so it can't regress.
+
+Work through packages in dependency order (`packages/` first, then `apps/`) so a fix in a shared package doesn't get re-flagged by every app that depends on it.
 
 Example:
 ```typescript
@@ -382,6 +401,76 @@ apps/
           users.model.ts
           users.validation.ts
           users.test.ts
+```
+
+### Component Standards (React/Next.js)
+
+- Use functional components
+- Prefer hooks over class components
+- Memoize components that receive props
+- Add prop type validation
+
+**Example:**
+```typescript
+interface PatientCardProps {
+  patient: Patient;
+  onEdit?: (patient: Patient) => void;
+}
+
+export const PatientCard: React.FC<PatientCardProps> = React.memo(({ patient, onEdit }) => {
+  return (
+    <div className="card">
+      <h2>{patient.firstName} {patient.lastName}</h2>
+      {onEdit && <button onClick={() => onEdit(patient)}>Edit</button>}
+    </div>
+  );
+});
+```
+
+### API Endpoints
+
+- Use RESTful conventions (GET, POST, PUT, DELETE)
+- Return consistent response format
+- Include proper error handling
+- Add rate limiting where needed
+- Document with Swagger/OpenAPI
+
+**Example:**
+```typescript
+/**
+ * @swagger
+ * /patients/{id}:
+ *   get:
+ *     summary: Get patient by ID
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *     responses:
+ *       200: { description: Patient found }
+ *       404: { description: Patient not found }
+ */
+router.get('/patients/:id', requireAuth, async (req, res, next) => {
+  try {
+    const patient = await patientService.getPatient(req.params.id);
+    res.json({ data: patient });
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+### Error Handling
+
+Always include proper error handling:
+
+```typescript
+try {
+  // operation
+} catch (error) {
+  logger.error('Operation failed', { error, context });
+  next(new AppError('Operation failed', 500));
+}
 ```
 
 ## Testing
@@ -513,6 +602,67 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 ```
 
 See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
+
+### Type
+
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation
+- `refactor` - Code refactoring
+- `test` - Test additions/modifications
+- `chore` - Build, deps, config changes
+- `perf` - Performance improvements
+
+### Scope
+
+Module or area affected:
+```
+feat(patients): add duplicate detection
+fix(payments): resolve stellar transaction timeout
+docs(api): update authentication examples
+```
+
+### Subject
+
+- Imperative mood ("add" not "added")
+- No period at end
+- Lowercase
+- Keep under 50 characters
+
+### Body
+
+Explain what and why (not how):
+```
+Add patient duplicate detection using fuzzy matching.
+
+This prevents creating duplicate patient records by:
+- Matching on first/last name + DOB
+- Calculating similarity score >= 0.85
+- Prompting user before creation
+```
+
+### Footer
+
+Reference issues:
+```
+Closes #897
+Related-to: #896
+```
+
+### Example Commit
+
+```
+feat(patients): add duplicate detection
+
+Implement fuzzy matching algorithm to identify
+potential duplicate patient records before creation.
+
+- Use metaphone for phonetic matching
+- Calculate Jaro-Winkler similarity score
+- Show merge suggestions to user
+
+Closes #897
+```
 
 ### Pull Request Titles
 
@@ -670,6 +820,59 @@ Before adding a new npm package:
 ```bash
 # Add to specific workspace
 npm install package-name --workspace=apps/api
+```
+
+## Useful Commands
+
+```bash
+# Development
+npm run dev --workspace=api      # API only (http://localhost:3001)
+npm run dev --workspace=web      # Web app only (http://localhost:3000)
+docker compose --profile core up -d   # Full core stack
+
+# Testing
+npm test                         # Run all tests (Turbo)
+npm run test:watch --workspace=api
+npm run test:coverage --workspace=api
+
+# Code Quality
+npm run lint                     # Run linters
+npm run format                   # Auto-format code
+npm run typecheck                # TypeScript check
+
+# Database
+npm run migrate:up --workspace=api      # Run pending migrations
+npm run migrate:down --workspace=api    # Roll back last migration
+npm run migrate:status --workspace=api  # Show migration status
+
+# Build
+npm run build                    # Build all workspaces
+```
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Find process using port 3001
+lsof -i :3001
+# Kill it
+kill -9 <PID>
+```
+
+### MongoDB Connection Failed
+```bash
+# Check MongoDB is running
+docker compose --profile core ps
+# Restart if needed
+docker compose --profile core restart mongodb
+```
+
+### Tests Failing Locally
+```bash
+# Clear cache
+npm run test -- --clearCache
+# Run with verbose output
+npm run test -- --verbose
 ```
 
 ## Questions?

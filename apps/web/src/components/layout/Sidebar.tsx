@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
 import type { AppRole } from '@/context/AuthContext';
+import { INBOX_ROLES, useInboxUnreadCount } from '@/hooks/useInbox';
 
 interface NavItem {
-  label: string;
+  /** Key under `nav` in the message files */
+  labelKey: string;
   href: string;
   icon: React.ReactNode;
   roles?: AppRole[]; // undefined = visible to all
@@ -15,7 +18,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Dashboard',
+    labelKey: 'dashboard',
     href: '/',
     icon: (
       <svg
@@ -35,7 +38,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Patients',
+    labelKey: 'patients',
     href: '/patients',
     icon: (
       <svg
@@ -55,7 +58,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Encounters',
+    labelKey: 'encounters',
     href: '/encounters',
     icon: (
       <svg
@@ -70,6 +73,58 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+        />
+      </svg>
+    ),
+  },
+  {
+    labelKey: 'payments',
+    label: 'Lab Results',
+    href: '/lab-results',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+        />
+      </svg>
+    ),
+    roles: INBOX_ROLES,
+  },
+  {
+    label: 'Peer Review',
+    href: '/peer-reviews',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    roles: ['CLINIC_ADMIN', 'DOCTOR'],
+          d="M9 3v6.172a2 2 0 01-.586 1.414L4.293 14.707A2 2 0 005.707 18h12.586a2 2 0 001.414-3.293l-4.121-4.121A2 2 0 0115 9.172V3M8 3h8"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE'],
+          d="M9 3v6.5L4.2 18a2 2 0 001.7 3h12.2a2 2 0 001.7-3L15 9.5V3M8 3h8m-5 9h2"
         />
       </svg>
     ),
@@ -96,6 +151,28 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR'],
   },
   {
+    labelKey: 'appointments',
+    label: 'Billing',
+    href: '/billing',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
     label: 'Appointments',
     href: '/appointments',
     icon: (
@@ -111,6 +188,27 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  },
+  {
+    labelKey: 'cds',
+    label: 'Schedules',
+    href: '/schedules',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
     ),
@@ -136,7 +234,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Immunizations',
+    labelKey: 'immunizations',
     href: '/immunizations',
     icon: (
       <svg
@@ -156,7 +254,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Documents',
+    labelKey: 'documents',
     href: '/documents',
     icon: (
       <svg
@@ -171,6 +269,27 @@ const navItems: NavItem[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  },
+  {
+    labelKey: 'settings',
+    label: 'Medications',
+    href: '/medications',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4m0-18h10a2 2 0 012 2v14a2 2 0 01-2 2H9m0-18v18M13 8h4m-4 4h4m-4 4h4"
         />
       </svg>
     ),
@@ -203,8 +322,34 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
-    label: 'Audit Log',
+    labelKey: 'staff',
+    href: '/settings/staff',
+    label: 'Compliance',
+    href: '/compliance',
+    icon: (
+      <svg
+        className="h-5 w-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        />
+      </svg>
+    ),
+    roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
+  },
+  {
+    labelKey: 'auditLog',
     href: '/audit-log',
+    label: 'Audit Log',
+    href: '/compliance/audit-logs',
     icon: (
       <svg
         className="h-5 w-5"
@@ -224,7 +369,7 @@ const navItems: NavItem[] = [
     roles: ['SUPER_ADMIN', 'CLINIC_ADMIN'],
   },
   {
-    label: 'Reports',
+    labelKey: 'reports',
     href: '/reports',
     icon: (
       <svg
@@ -252,9 +397,11 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const { user } = useAuth();
   const sidebarRef = useRef<HTMLElement>(null);
+  const inboxUnread = useInboxUnreadCount();
 
   // Focus trap for mobile drawer
   useEffect(() => {
@@ -298,7 +445,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const sidebarContent = (
     <nav
       ref={sidebarRef}
-      aria-label="Main navigation"
+      aria-label={t('mainNavigation')}
       className="bg-neutral-0 flex h-full w-60 flex-col border-r border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800"
     >
       {/* Logo area */}
@@ -309,8 +456,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Nav items */}
       <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" role="list">
         {visibleItems.map((item) => {
+          // Prefer the most specific match so /settings/staff doesn't also highlight /settings
           const isActive =
-            pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            pathname === item.href ||
+            (item.href !== '/' &&
+              pathname.startsWith(item.href) &&
+              !visibleItems.some(
+                (other) =>
+                  other.href.length > item.href.length &&
+                  other.href.startsWith(item.href) &&
+                  pathname.startsWith(other.href)
+              ));
           return (
             <li key={item.href}>
               <Link
@@ -321,12 +477,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                   'border-l-4',
                   isActive
-                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-500'
+                    ? 'border-primary-500 bg-primary-50 text-primary-500 dark:bg-primary-900/30'
                     : 'border-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
                 ].join(' ')}
               >
                 {item.icon}
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             </li>
           );
@@ -346,7 +502,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           className="fixed inset-0 z-40 md:hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="Navigation menu"
+          aria-label={t('navigationMenu')}
         >
           {/* Backdrop */}
           <div className="fixed inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />

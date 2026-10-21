@@ -54,6 +54,11 @@ jest.mock('../../payments/services/payment-expiration-job', () => ({
     lastSuccessfulRunAt: new Date(),
     consecutiveFailures: 0,
   }),
+  getClusterJobStatus: jest.fn().mockResolvedValue({
+    running: true,
+    lastSuccessfulRunAt: new Date(),
+    consecutiveFailures: 0,
+  }),
   CHECK_INTERVAL_MS: 30000,
 }));
 
@@ -110,8 +115,9 @@ describe('Health Check Service', () => {
       const result = await runComprehensiveHealthCheck();
 
       expect(result.summary.total).toBe(Object.keys(result.services).length);
-      expect(result.summary.healthy + result.summary.degraded + result.summary.unhealthy)
-        .toBeLessThanOrEqual(result.summary.total);
+      expect(
+        result.summary.healthy + result.summary.degraded + result.summary.unhealthy
+      ).toBeLessThanOrEqual(result.summary.total);
     });
 
     it('should include system information', async () => {

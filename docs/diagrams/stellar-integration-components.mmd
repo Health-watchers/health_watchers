@@ -1,0 +1,50 @@
+%% apps/stellar-service internals and how they connect to the main API and Horizon
+%% Edges are grounded in actual imports in apps/stellar-service/src
+flowchart LR
+    API["Express API (apps/api)"]
+
+    subgraph StellarService["Stellar Service (apps/stellar-service)"]
+        INDEX["index.ts<br/>Express HTTP layer"]
+        STELLAR["stellar.ts<br/>core Horizon operations"]
+        HORIZON_CLIENT["horizon-client.ts<br/>ResilientHorizonClient"]
+        PAYMENT_STREAM["payment-stream.ts"]
+        STATE_MACHINE["payment-state-machine.ts"]
+        RECONCILIATION["payment-reconciliation.ts"]
+        BATCH["batch-processor.ts"]
+        FEE_CALC["fee-calculator.ts"]
+        EXCHANGE["exchange-rates.ts"]
+        COLD_WALLET["cold-wallet.ts"]
+        MAINNET_SAFETY["mainnet-safety.ts"]
+        NETWORK_MONITOR["network-monitor.ts"]
+        CLAIMABLE["operations/claimable-balance.ts"]
+        ESCROW["operations/escrow.ts"]
+    end
+
+    HORIZON["Stellar Horizon API"]
+    NETWORK(("Stellar Network"))
+
+    API -->|"HTTP: payments, balances, refunds"| INDEX
+
+    INDEX --> STELLAR
+    INDEX --> CLAIMABLE
+    INDEX --> ESCROW
+    INDEX --> STATE_MACHINE
+    INDEX --> MAINNET_SAFETY
+    INDEX --> EXCHANGE
+    INDEX --> BATCH
+    INDEX --> PAYMENT_STREAM
+    INDEX --> FEE_CALC
+    INDEX --> NETWORK_MONITOR
+    INDEX --> RECONCILIATION
+    INDEX --> COLD_WALLET
+
+    STELLAR --> BATCH
+    STELLAR --> HORIZON_CLIENT
+    CLAIMABLE --> STELLAR
+    ESCROW --> STELLAR
+    NETWORK_MONITOR --> STELLAR
+    RECONCILIATION --> STELLAR
+
+    HORIZON_CLIENT --> HORIZON
+    PAYMENT_STREAM --> HORIZON
+    HORIZON --> NETWORK

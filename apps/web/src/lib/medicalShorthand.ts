@@ -78,21 +78,24 @@ export function expandShorthand(word: string): string | null {
 }
 
 /**
- * Expands all known shorthand abbreviations in a block of free text.
- * Whole-word matching is used so that substrings like "BP" inside "BPD" are not replaced.
- * Used by the voice dictation pipeline to auto-correct dictated shorthand.
+ * Expands every known abbreviation in a run of free text (e.g. dictated speech), leaving
+ * whitespace and surrounding punctuation intact: "pt c/o SOB." → "patient complains of
+ * Shortness of breath."
  */
 export function expandShorthandInText(text: string): string {
-  if (!text) return text;
-  // Sort by length descending so multi-char abbreviations (e.g. "N/V/D") match before single chars
-  const abbreviations = Object.keys(MEDICAL_SHORTHANDS).sort((a, b) => b.length - a.length);
-  let result = text;
-  for (const abbr of abbreviations) {
-    // Escape regex special characters in the abbreviation
-    const escaped = abbr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match whole word, case-sensitive for abbreviations that have specific casing
-    const re = new RegExp(`\\b${escaped}\\b`, 'g');
-    result = result.replace(re, () => MEDICAL_SHORTHANDS[abbr]!);
-  }
-  return result;
+  return text
+    .split(/(\s+)/)
+    .map((token) => {
+      if (!token.trim()) return token;
+      const exact = expandShorthand(token);
+      if (exact) return exact;
+      // Peel trailing sentence punctuation ("SOB," / "HTN.") but keep abbreviations that end in "/"
+      const m = token.match(/^(.*?)([.,;:!?)]+)$/);
+      if (m) {
+        const expanded = expandShorthand(m[1]);
+        if (expanded) return expanded + m[2];
+      }
+      return token;
+    })
+    .join('');
 }

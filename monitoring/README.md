@@ -162,8 +162,15 @@ Alert rules are split across four files, all loaded by Prometheus:
 | `alerts-payments.yml` | `payment-expiration-job`, `stellar-payments` | Payment lifecycle and Stellar service alerts |
 | `alerts-security.yml` | `security` | Auth failures, rate limits, keypair issues |
 | `alerts-business.yml` | `business-kpis`, `api-health`, `mongodb-health` | Business KPIs, API health, MongoDB health |
+| `recording-rules.yml` | `http-red-aggregations`, `slo-availability`, `subsystem-aggregations` | Pre-aggregated RED metrics + SLO ratios consumed by dashboards and burn-rate alerts (#1257) |
+| `alerts-application.yml` | `application-slo`, `application-subsystems` | Error-budget burn rate, latency SLO, event-loop lag, notification + telehealth subsystem health (#1257) |
+| `alerts-backup.yml` | `backup-pipeline` | Backup freshness/verification, monthly DR test, retention, storage-cost spike (#1262) |
+
+> The full, authoritative list of loaded rule files is `rule_files:` in `prometheus.yml`.
 
 Each alert includes a `dashboard` label pointing to the relevant Grafana dashboard UID for quick navigation.
+Subsystem dashboard: `grafana/dashboards/notifications-telehealth.json` (uid `hw-notifications-telehealth`).
+On-call rotation and escalation are defined as code under `oncall/` (`rotation.yaml`, `escalation.yaml`).
 
 ### Severity Levels
 

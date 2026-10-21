@@ -15,6 +15,7 @@ export interface IPeerReview {
     followUp: number;
   };
   isAnonymous: boolean;
+  requiresFollowUp: boolean;
   completedAt?: Date;
 }
 
@@ -39,6 +40,7 @@ const peerReviewSchema = new Schema<IPeerReview>(
       followUp: { type: Number, min: 1, max: 5 },
     },
     isAnonymous: { type: Boolean, default: false },
+    requiresFollowUp: { type: Boolean, default: false },
     completedAt: { type: Date },
   },
   { timestamps: true, versionKey: false }

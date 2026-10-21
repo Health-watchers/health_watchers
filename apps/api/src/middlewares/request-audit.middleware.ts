@@ -30,12 +30,36 @@ const SENSITIVE_KEYS = new Set([
   'stellarSecretKey',
 ]);
 
+// Patient identifiers (PHI) — must never be written to audit files (#1498).
+// Lowercase because keys are compared case-insensitively.
+const PHI_KEYS = new Set([
+  'firstname',
+  'lastname',
+  'middlename',
+  'fullname',
+  'searchname',
+  'dateofbirth',
+  'dob',
+  'contactnumber',
+  'phone',
+  'phonenumber',
+  'address',
+  'nationalid',
+  'policynumber',
+  'memberid',
+]);
+
+function isRedactedKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return SENSITIVE_KEYS.has(lower) || PHI_KEYS.has(lower);
+}
+
 function redact(obj: unknown, depth = 0): unknown {
   if (depth > 5 || obj === null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map((v) => redact(v, depth + 1));
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-    result[k] = SENSITIVE_KEYS.has(k.toLowerCase()) ? REDACTED : redact(v, depth + 1);
+    result[k] = isRedactedKey(k) ? REDACTED : redact(v, depth + 1);
   }
   return result;
 }
