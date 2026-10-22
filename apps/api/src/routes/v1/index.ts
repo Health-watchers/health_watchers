@@ -109,6 +109,10 @@ import { notificationAdminRoutes } from '../../modules/notifications/notificatio
 import { complianceRoutes } from '../../modules/compliance/compliance.controller';
 import { breachIncidentRoutes } from '../../modules/breach-incidents/breach-incidents.controller';
 import { cspReportRoutes } from '../../modules/security/csp-report.controller';
+import {
+  emergencyAccessPatientRoutes,
+  emergencyAccessReviewRoutes,
+} from '../../modules/emergency-access/emergency-access.controller';
 
 // ── System / Infrastructure ───────────────────────────────────────────────────
 import federationRouter from '../../modules/federation/federation.router';
@@ -148,6 +152,9 @@ v1Router.use('/users', userRoutes);
 v1Router.use('/patients/search', patientSearchLimiter);
 // #1434 — the patient list has a v2 successor (cursor pagination, sparse fieldsets).
 v1Router.get('/patients', deprecated(V1_SUNSET_DATE, '/api/v2/patients'));
+// Break-the-glass emergency access (#1493) — before patientRoutes so /:id/emergency-access
+// is handled here.
+v1Router.use('/patients', emergencyAccessPatientRoutes);
 v1Router.use('/patients', patientRoutes);
 v1Router.use('/patients', medicalHistoryRoutes);
 v1Router.use('/patients', patientPhotoRoutes);
@@ -236,6 +243,7 @@ v1Router.use('/notifications', notificationRoutes);
 // #1250 — Multi-channel notification delivery: preferences, templates,
 // delivery-status tracking and manual dispatch.
 v1Router.use('/notifications', notificationAdminRoutes);
+v1Router.use('/compliance/emergency-access', emergencyAccessReviewRoutes);
 v1Router.use('/compliance', complianceRoutes);
 v1Router.use('/admin/breach-incidents', breachIncidentRoutes);
 // Research data export (#1427) — SUPER_ADMIN only, anonymized dataset export

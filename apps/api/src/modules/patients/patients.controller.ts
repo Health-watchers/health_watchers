@@ -36,6 +36,7 @@ import {
   updateEmergencyContactSchema,
 } from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
+import { findActiveGrant } from '../emergency-access/emergency-access.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
@@ -280,6 +281,27 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    // Patients outside the caller's care team (clinic) need a break-the-glass grant (#1493)
+    if (!req.user!.isSuperAdmin && String(doc.clinicId) !== String(req.user!.clinicId)) {
+      const grant = await findActiveGrant(req.user!.userId, String(doc._id));
+      if (!grant) {
+        return res.status(403).json({
+          error: 'EmergencyAccessRequired',
+          message:
+            'This patient is outside your care team. Request emergency access to view the record.',
+        });
+      }
+      req.emergencyAccess = {
+        grantId: String(grant._id),
+        patientId: String(doc._id),
+        expiresAt: grant.expiresAt,
+      };
+      // Never cache a record served under a time-limited grant
+      res.locals.skipCache = true;
+      res.set('X-Emergency-Access-Expires', grant.expiresAt.toISOString());
+    }
+
     // Does not fire on cache hits (served above by cacheResponse), so repeat views by the
     // same user within the 300s TTL are not individually logged — acceptable since the
     // originating access within that window is always recorded.

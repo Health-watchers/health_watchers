@@ -590,6 +590,36 @@ export function sendAccountLockedEmail(
   enqueue(to, subject, text, html);
 }
 
+/**
+ * New-device / new-country sign-in alert (#1497). Only the device description and
+ * the country are included — never the raw IP address.
+ */
+export function sendNewLoginAlertEmail(
+  to: string,
+  fullName: string,
+  details: {
+    deviceLabel: string;
+    location: string | null;
+    occurredAt: Date;
+    newDevice: boolean;
+    newCountry: boolean;
+    revokeUrl: string;
+  }
+): void {
+  const what =
+    details.newDevice && details.newCountry
+      ? 'a new device in a new location'
+      : details.newCountry
+        ? 'a new location'
+        : 'a new device';
+  const when = details.occurredAt.toUTCString();
+  const where = details.location ?? 'Unknown location';
+  const subject = 'New sign-in to your account — Health Watchers';
+  const text = `Hello ${fullName},\n\nYour Health Watchers account was just signed in to from ${what}.\n\nDevice: ${details.deviceLabel}\nLocation (approximate): ${where}\nTime: ${when}\n\nIf this was you, no action is needed.\n\nIf this wasn't you, sign out every session immediately and then reset your password:\n${details.revokeUrl}\n\nThis link expires in 7 days.`;
+  const html = `<h3>New sign-in to your account</h3><p>Hello <strong>${fullName}</strong>,</p><p>Your Health Watchers account was just signed in to from ${what}.</p><table style="border-collapse:collapse"><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Device</td><td>${details.deviceLabel}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Location (approximate)</td><td>${where}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Time</td><td>${when}</td></tr></table><p>If this was you, no action is needed.</p><p><a href="${details.revokeUrl}" style="display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px">This wasn't me</a></p><p style="color:#6b7280">This signs out every session on your account. Reset your password afterwards. The link expires in 7 days.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
 /** Portal MFA enabled notification sent to patient */
 export function sendPortalMfaEnabledEmail(
   to: string,

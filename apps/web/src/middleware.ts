@@ -6,6 +6,8 @@ const ONBOARDING_PATH = '/onboarding';
 
 const STAFF_PUBLIC = ['/login', '/forgot-password', '/reset-password', '/mfa'];
 const PORTAL_PUBLIC = ['/portal/login'];
+/** Reachable whether or not the visitor is signed in (e.g. "This wasn't me" alert links). */
+const ALWAYS_PUBLIC = ['/not-me'];
 
 const ADMIN_PATHS = ['/settings', '/reports', '/users', '/billing'];
 const ADMIN_ROLES = ['CLINIC_ADMIN', 'SUPER_ADMIN'];
@@ -32,6 +34,10 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (ALWAYS_PUBLIC.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
+    return NextResponse.next();
+  }
 
   // ── Portal routes (/portal/*) ─────────────────────────────────────────────
   if (pathname.startsWith('/portal')) {

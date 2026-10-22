@@ -58,6 +58,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.0",
+    "maxmind": "^5.0.7",
     "migrate-mongo": "^14.0.7",
     "mongoose": "^8.23.1",
     "morgan": "^1.10.1",

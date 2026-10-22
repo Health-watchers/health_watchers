@@ -18,6 +18,12 @@ declare global {
         isSuperAdmin?: boolean;
       };
       tokenJti?: string;
+      /** Active break-the-glass grant the request is relying on (#1493) */
+      emergencyAccess?: {
+        grantId: string;
+        patientId: string;
+        expiresAt: Date;
+      };
     }
   }
 }

@@ -10,6 +10,8 @@
 
 ## Threat Model
 
+> The full STRIDE threat model for PHI and payment flows, with per-boundary risk ratings, is in [`security/THREAT_MODEL.md`](security/THREAT_MODEL.md).
+
 ### Assets
 
 1. **Patient Health Information (PHI)**
