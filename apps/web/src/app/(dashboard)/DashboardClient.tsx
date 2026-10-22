@@ -10,6 +10,7 @@ import { MedicationList } from '@/components/dashboard/MedicationList';
 import { VaccinationStatus } from '@/components/dashboard/VaccinationStatus';
 import { AppointmentTimeline } from '@/components/dashboard/AppointmentTimeline';
 import { ActionItems } from '@/components/dashboard/ActionItems';
+import { PendingPeerReviewsWidget } from '@/components/dashboard/PendingPeerReviewsWidget';
 
 const API = 'http://localhost:3001/api/v1';
 
@@ -163,6 +164,8 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
             </div>
 
             <div className="space-y-6">
+              <PendingPeerReviewsWidget />
+
               <div className="rounded-lg border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-800">
                 <h3 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-50">
                   Active Medications

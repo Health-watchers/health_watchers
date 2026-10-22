@@ -140,17 +140,31 @@ function ClaimsQueue({
 
   const submitMutation = useMutation({
     mutationFn: (claimIds: string[]) =>
-      billingFetch<{ data: { submitted: string[]; skipped: string[] } }>('/claims/submit', {
+      billingFetch<{
+        data: {
+          submitted: string[];
+          skipped: string[];
+          invalid?: { claimId: string; errors: { field: string; message: string }[] }[];
+          rejected?: { claimId: string; reason?: string }[];
+        };
+      }>('/claims/submit', {
         method: 'POST',
         body: JSON.stringify({ claimIds }),
       }),
     onSuccess: ({ data: result }) => {
       setSelected(new Set());
+      const invalid = result.invalid ?? [];
+      const rejected = result.rejected ?? [];
+      const parts = [
+        `${result.submitted.length} claim(s) submitted`,
+        result.skipped.length && `${result.skipped.length} skipped (not in draft)`,
+        invalid.length &&
+          `${invalid.length} held back for invalid fields (${invalid[0].errors[0]?.message ?? 'see claim'})`,
+        rejected.length && `${rejected.length} rejected by the clearinghouse`,
+      ].filter(Boolean);
       onToast({
-        message: `${result.submitted.length} claim(s) submitted${
-          result.skipped.length ? `, ${result.skipped.length} skipped (not in draft)` : ''
-        }.`,
-        type: result.submitted.length ? 'success' : 'error',
+        message: `${parts.join(', ')}.`,
+        type: result.submitted.length && !invalid.length && !rejected.length ? 'success' : 'error',
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.billing.all });
     },
@@ -264,7 +278,7 @@ function ClaimsQueue({
                   )}
                 </td>
                 {queue === 'denied' && (
-                  <td className="text-danger-700 px-4 py-3 text-xs">{c.rejectionReason ?? '—'}</td>
+                  <td className="text-danger-700 px-4 py-3 text-xs">{c.denialReason ?? c.rejectionReason ?? '—'}</td>
                 )}
                 {queue === 'written_off' && (
                   <td className="px-4 py-3 text-xs">{c.writeOffReason ?? '—'}</td>
@@ -328,7 +342,14 @@ export default function BillingClient() {
     <PageWrapper className="py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="mb-6">
-        <PageHeader title="Billing workbench" />
+        <PageHeader
+          title="Billing workbench"
+          actions={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/billing/era">Claims & remittances (ERA)</Link>
+            </Button>
+          }
+        />
       </div>
 
       <div className="mb-6">

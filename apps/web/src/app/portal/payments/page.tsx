@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { portalGet, portalFetch } from '@/lib/portalApi';
 
 interface Invoice {
@@ -51,7 +52,23 @@ export default function PortalPaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Payments</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Payments</h1>
+        <nav aria-label="Payment settings" className="flex gap-2">
+          <Link
+            href="/portal/payments/recurring"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Recurring payments
+          </Link>
+          <Link
+            href="/portal/payments/methods"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Payment methods
+          </Link>
+        </nav>
+      </div>
 
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <h2 className="mb-3 font-semibold text-gray-700 dark:text-gray-200">Outstanding Invoices</h2>

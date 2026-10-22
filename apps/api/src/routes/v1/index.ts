@@ -74,6 +74,7 @@ import {
 import aiRoutes from '../../modules/ai/ai.routes';
 import dashboardRoutes from '../../modules/dashboard/dashboard.routes';
 import { portalRoutes } from '../../modules/portal/portal.controller';
+import { portalPaymentsRoutes } from '../../modules/portal/portal-payments.routes';
 import scheduleRoutes from '../../modules/schedules/schedules.routes';
 import providerSchedulingRoutes from '../../modules/provider-scheduling/provider-scheduling.routes';
 import cdsRoutes from '../../modules/cds/cds.controller';
@@ -185,6 +186,8 @@ v1Router.use('/reports', reportGenerationLimiter, reportRoutes);
 // #1251 — Reporting & analytics engine (templates, custom query builder,
 // cohort analysis, scheduling, dashboard widgets)
 v1Router.use('/reports', reportGenerationLimiter, analyticsRoutes);
+// Portal recurring payments & saved cards (#1690)
+v1Router.use('/portal/payments', portalPaymentsRoutes);
 v1Router.use('/portal', portalRoutes);
 v1Router.use('/portal', healthLogRouter);
 // Portal medication history (#1427) — patient self-service prescription & refill access
