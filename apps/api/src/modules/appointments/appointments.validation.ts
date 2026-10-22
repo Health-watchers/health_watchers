@@ -1,13 +1,8 @@
 import { z } from 'zod';
+import { APPOINTMENT_STATUSES } from '@health-watchers/types';
 
 const appointmentTypes = ['consultation', 'follow-up', 'procedure', 'emergency'] as const;
-const appointmentStatuses = [
-  'scheduled',
-  'confirmed',
-  'cancelled',
-  'completed',
-  'no-show',
-] as const;
+const appointmentStatuses = APPOINTMENT_STATUSES;
 
 export const createAppointmentSchema = z.object({
   patientId: z.string().min(1),

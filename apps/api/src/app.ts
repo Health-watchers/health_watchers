@@ -17,6 +17,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import { connectDB, getPoolMetrics } from './config/db';
 import { healthRoutes } from './modules/health/health.controller';
 import { backupHealthRoutes } from './modules/health/backup-health.controller';
+import { readyRoutes } from './modules/health/ready.controller';
 import { initSocket } from './realtime/socket';
 import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
@@ -147,14 +148,26 @@ app.use(
 );
 
 // ── Request ID correlation & propagation ──────────────────────────────────────
-// correlationMiddleware: stamps req.requestId and echoes X-Request-ID header
-app.use(correlationMiddleware);
-// requestIdPropagationMiddleware: stores the ID in AsyncLocalStorage for downstream services
+// requestIdPropagationMiddleware: generates or passes through X-Request-ID, stores it
+// in AsyncLocalStorage for downstream services (stellar-service outbound calls, logs).
 app.use(requestIdPropagationMiddleware);
+// correlationMiddleware: stamps req.requestId, echoes X-Request-ID on the response and
+// correlates it with the active OpenTelemetry trace ID. Runs after propagation so the
+// ID is available to every subsequent middleware, route and error handler.
+app.use(correlationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(cookieParser());
-app.use(express.json({ limit: standardLimit }));
+// Capture the raw request body so webhook signature verification can compute
+// an HMAC over the exact bytes received (JSON re-serialization is not stable).
+app.use(
+  express.json({
+    limit: standardLimit,
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(requestAuditMiddleware);
@@ -183,8 +196,13 @@ app.use((req, res, next) => {
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
+// /health is a lightweight liveness endpoint (no dependency checks).
 app.use('/health', healthRoutes);
 app.use('/health', backupHealthRoutes);
+// /ready (and /health/ready) is the readiness endpoint — verifies DB connectivity
+// so Kubernetes stops routing traffic to a pod that cannot serve requests.
+app.use('/ready', readyRoutes);
+app.use('/health/ready', readyRoutes);
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // Must be registered before API routes so all requests are measured

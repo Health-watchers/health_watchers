@@ -85,6 +85,9 @@ describe('Patients & Payments API provider contract verification', () => {
         'patients exist for the authenticated clinic': async () => {
           // Seeded in beforeAll
         },
+        'the authenticated clinic can create patients': async () => {
+          // No extra setup needed — POST /patients creates a fresh record
+        },
         'a patient with ID patient-id-1 exists': async () => {
           // The provider returns whatever exists; contract verifies shape
         },

@@ -48,6 +48,9 @@ interface ClinicSettings {
     enabled: boolean;
     voiceDictation: boolean;
   };
+  security?: {
+    idleTimeoutMinutes: number;
+  };
 }
 
 async function fetchSettings(): Promise<ClinicSettings> {
@@ -489,6 +492,27 @@ export default function ClinicSettingsClient() {
             />
             Voice dictation in SOAP notes (audio is processed by the browser’s speech service or the
             clinic’s AI transcription provider)
+          </label>
+        </section>
+
+        {/* ── Session security ── */}
+        <section style={sectionStyle}>
+          <h2 style={sectionTitle}>Session security</h2>
+          <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+            Staff are signed out automatically after this much inactivity, with a warning one minute
+            before (HIPAA automatic logoff).
+          </p>
+          <label style={labelStyle}>
+            Idle timeout (minutes)
+            <input
+              style={{ ...inputStyle, width: 100 }}
+              type="number"
+              min={2}
+              max={60}
+              step={1}
+              value={merged.security?.idleTimeoutMinutes ?? 15}
+              onChange={(e) => update({ security: { idleTimeoutMinutes: Number(e.target.value) } })}
+            />
           </label>
         </section>
 

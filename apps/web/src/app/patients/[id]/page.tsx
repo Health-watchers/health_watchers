@@ -32,6 +32,22 @@ export default function PatientDetailPage({ params }: { params: { id: string } }
         contact: t('contact'),
         address: t('address'),
         systemId: t('systemId'),
+        labResults: t('labResults'),
+        medications: t('medications'),
+        carePlans: t('carePlans'),
+        immunizations: t('immunizations'),
+        consent: t('consent'),
+        insurance: t('insurance'),
+        noLabResults: t('noLabResults'),
+        noMedications: t('noMedications'),
+        noCarePlans: t('noCarePlans'),
+        noImmunizations: t('noImmunizations'),
+        noConsent: t('noConsent'),
+        noInsurance: t('noInsurance'),
+        criticalValue: t('criticalValue'),
+        interactionWarning: t('interactionWarning'),
+        goalProgress: t('goalProgress'),
+        taskCompletion: t('taskCompletion'),
       }}
     />
   );

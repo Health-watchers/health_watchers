@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe, toHaveNoViolations } from 'jest-axe';
-import { Toast, Toaster, toast } from '../toast';
+import { Toast, Toaster, toast } from '../Toast';
 
 expect.extend(toHaveNoViolations);
 

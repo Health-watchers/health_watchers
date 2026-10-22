@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
+import { AlertCircle } from 'lucide-react';
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };
@@ -21,36 +22,40 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-neutral-50 font-sans antialiased">
+      <body className="min-h-screen bg-neutral-50 font-sans antialiased dark:bg-neutral-900">
         <div className="flex min-h-screen items-center justify-center px-4">
-          <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-lg sm:p-8">
-            <div className="text-5xl" aria-hidden="true">
-              ⚠️
+          <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-lg sm:p-8 dark:border-neutral-700 dark:bg-neutral-800">
+            <div className="flex justify-center">
+              <div className="rounded-full bg-danger-50 p-4 dark:bg-danger-900/20">
+                <AlertCircle className="h-12 w-12 text-danger-600 dark:text-danger-400" />
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-neutral-900">Something went wrong</h1>
-            <p className="text-neutral-600">
+            <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+              Something went wrong
+            </h1>
+            <p className="text-neutral-600 dark:text-neutral-400">
               {error.message || 'A critical error occurred. Please try again.'}
             </p>
             {error.digest && (
-              <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500">
+              <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 Request ID: {error.digest}
               </div>
             )}
             <div className="flex flex-col gap-3 pt-2">
               <button
                 onClick={reset}
-                className="w-full rounded-md bg-primary-600 px-4 py-2 font-medium text-white transition-colors hover:bg-primary-700"
+                className="w-full rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-primary-500 dark:hover:bg-primary-600"
               >
                 Try Again
               </button>
               <button
                 onClick={() => (window.location.href = '/')}
-                className="w-full rounded-md border border-neutral-300 px-4 py-2 font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+                className="w-full rounded-lg border border-neutral-300 px-4 py-2.5 font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
               >
                 Go Home
               </button>
             </div>
-            <p className="pt-2 text-xs text-neutral-500">
+            <p className="pt-2 text-xs text-neutral-500 dark:text-neutral-400">
               If the problem persists, please contact support.
             </p>
           </div>

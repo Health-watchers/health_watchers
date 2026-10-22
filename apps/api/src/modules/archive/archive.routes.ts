@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, authorize } from '../../middleware/auth';
+import { protect, authorize } from '../../middlewares/auth-barrel';
 import {
   getArchivedRecords,
   restoreArchivedRecord,

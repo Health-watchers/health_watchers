@@ -1,14 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function PortalLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get('returnTo') ?? '/portal/dashboard';
   const [email, setEmail] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  /**
+   * Validates and sanitises a returnTo URL so portal deep links can never
+   * redirect to admin/staff routes. Only /portal/* paths are allowed.
+   */
+  function getSafeReturnTo(raw: string): string {
+    if (raw && raw.startsWith('/portal/') && !raw.startsWith('/portal/login') && !raw.startsWith('/portal/mfa')) {
+      return raw;
+    }
+    return '/portal/dashboard';
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +43,7 @@ export default function PortalLoginPage() {
       // Check if MFA is required
       if (json.data.mfaRequired) {
         localStorage.setItem('portalMfaTempToken', json.data.tempToken);
+        localStorage.setItem('portalReturnTo', getSafeReturnTo(returnTo));
         router.push(`/portal/mfa?method=${json.data.mfaMethod}`);
         return;
       }
@@ -37,7 +51,7 @@ export default function PortalLoginPage() {
       // No MFA, set tokens and redirect
       localStorage.setItem('portalAccessToken', json.data.accessToken);
       localStorage.setItem('portalRefreshToken', json.data.refreshToken);
-      router.push('/portal/dashboard');
+      router.push(getSafeReturnTo(returnTo));
     } catch {
       setError('Something went wrong. Please try again.');
       setLoading(false);

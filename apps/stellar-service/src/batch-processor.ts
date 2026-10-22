@@ -11,6 +11,8 @@
  */
 
 import logger from './logger.js';
+import { retryWithBackoff } from './error-handler.js';
+import { recordBatchMetrics } from './metrics.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +23,21 @@ export interface BatchPaymentItem {
   amount: string;
   /** Optional memo text */
   memo?: string;
+}
+
+export interface PaymentResult {
+  /** Index of the payment within the original batch */
+  index: number;
+  /** Target account public key */
+  toPublicKey: string;
+  /** Amount as a decimal string */
+  amount: string;
+  /** Whether this individual payment succeeded */
+  success: boolean;
+  /** Error code on failure (e.g. "TX_FAILED", "CANCELLED") */
+  errorCode?: string;
+  /** Error message on failure */
+  error?: string;
 }
 
 export interface BatchJob {
@@ -46,9 +63,33 @@ export interface BatchJob {
   startedAt?: Date;
   /** ISO timestamp when processing completed */
   completedAt?: Date;
+  /** Set when the job has been cancelled before submission */
+  cancelled?: boolean;
+  /** Per-payment outcome (partial success reporting) */
+  results?: PaymentResult[];
+  /** Number of payments that succeeded */
+  succeededCount?: number;
+  /** Number of payments that failed */
+  failedCount?: number;
 }
 
-export type BatchJobStatus = 'queued' | 'processing' | 'submitted' | 'confirmed' | 'failed';
+export type BatchJobStatus =
+  | 'queued'
+  | 'processing'
+  | 'submitted'
+  | 'confirmed'
+  | 'failed'
+  | 'cancelled';
+
+export interface BatchPartialSuccessSummary {
+  jobId: string;
+  status: BatchJobStatus;
+  transactionHash?: string;
+  totalPayments: number;
+  succeeded: PaymentResult[];
+  failed: PaymentResult[];
+  error?: string;
+}
 
 export interface BatchProcessorStats {
   /** Number of jobs currently in the queue */
@@ -71,6 +112,16 @@ export interface BatchProcessorStats {
   accepting: boolean;
   /** Timestamp of last processed job */
   lastProcessedAt: Date | null;
+  /** Total individual payments that succeeded */
+  totalPaymentsSucceeded: number;
+  /** Total individual payments that failed */
+  totalPaymentsFailed: number;
+  /** Failure rate (failed payments / total payments) as a 0–1 ratio */
+  failureRate: number;
+  /** Throughput in payments per second since first processed job */
+  throughputPerSecond: number;
+  /** Number of jobs cancelled before submission */
+  totalCancelled: number;
 }
 
 export interface EnqueueResult {
@@ -89,6 +140,9 @@ const DEFAULT_BATCH_SIZE = 50;
 
 /** Auto-flush interval: flush the queue every 10 seconds if not full */
 const AUTO_FLUSH_INTERVAL_MS = 10_000;
+
+/** Default number of retry attempts for a failed bundle submission */
+const DEFAULT_MAX_RETRIES = 3;
 
 // ── BatchProcessor ─────────────────────────────────────────────────────────
 
@@ -123,15 +177,23 @@ export class BatchProcessor {
   private isProcessing = false;
   private accepting = true;
   private autoFlushHandle: ReturnType<typeof setInterval> | null = null;
+  private maxRetries = DEFAULT_MAX_RETRIES;
+
+  /** Jobs cancelled while queued or in-flight (checked before submission) */
+  private readonly cancelledJobIds: Set<string> = new Set();
 
   // Monitoring counters
   private totalProcessed = 0;
   private totalSucceeded = 0;
   private totalFailed = 0;
+  private totalCancelled = 0;
   private totalPaymentsProcessed = 0;
+  private totalPaymentsSucceeded = 0;
+  private totalPaymentsFailed = 0;
   private totalXlmTransferred = 0;
   private totalDurationMs = 0;
   private lastProcessedAt: Date | null = null;
+  private firstProcessedAt: Date | null = null;
 
   // ── Executor registration ──────────────────────────────────────────────
 
@@ -147,6 +209,23 @@ export class BatchProcessor {
   ): void {
     this.executor = fn;
     logger.info('BatchProcessor executor registered');
+  }
+
+  /**
+   * Configure the maximum number of retry attempts for failed bundle
+   * submissions (exponential backoff). Defaults to 3.
+   */
+  setMaxRetries(maxRetries: number): void {
+    if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+      throw new Error('maxRetries must be a non-negative integer');
+    }
+    this.maxRetries = maxRetries;
+    logger.info({ maxRetries }, 'BatchProcessor max retries updated');
+  }
+
+  /** Return the configured maximum retry count. */
+  getMaxRetries(): number {
+    return this.maxRetries;
   }
 
   // ── Queue management ───────────────────────────────────────────────────
@@ -268,6 +347,50 @@ export class BatchProcessor {
     }
   }
 
+  /**
+   * Cancel a batch job before it is submitted.
+   *
+   * - Queued jobs are removed from the queue and marked `cancelled`.
+   * - In-flight jobs are flagged; the processor checks the flag before
+   *   submitting and rejects the job if it has been cancelled.
+   *
+   * @returns true if the job was found and cancelled, false otherwise.
+   */
+  cancel(jobId: string): boolean {
+    const queuedIndex = this.queue.findIndex((j) => j.jobId === jobId);
+    if (queuedIndex !== -1) {
+      const [job] = this.queue.splice(queuedIndex, 1);
+      job.status = 'cancelled';
+      job.cancelled = true;
+      job.completedAt = new Date();
+      this.archiveJob(job);
+      this.cancelledJobIds.add(jobId);
+      this.totalCancelled += 1;
+      logger.info({ jobId }, 'Batch job cancelled while queued');
+      return true;
+    }
+
+    const completed = this.completedJobs.get(jobId);
+    if (completed) {
+      if (completed.status === 'processing') {
+        completed.cancelled = true;
+        this.cancelledJobIds.add(jobId);
+        logger.info({ jobId }, 'Batch job flagged for cancellation (in-flight)');
+        return true;
+      }
+      logger.warn({ jobId, status: completed.status }, 'Cannot cancel a completed job');
+      return false;
+    }
+
+    logger.warn({ jobId }, 'Cannot cancel unknown job');
+    return false;
+  }
+
+  /** Whether a job has been cancelled. */
+  isCancelled(jobId: string): boolean {
+    return this.cancelledJobIds.has(jobId);
+  }
+
   /** Pause acceptance of new jobs. Existing queue is unaffected. */
   pause(): void {
     this.accepting = false;
@@ -302,6 +425,26 @@ export class BatchProcessor {
     return all.slice(Math.max(0, all.length - limit));
   }
 
+  /**
+   * Return a partial-success summary for a job: which payments succeeded
+   * and which failed (with error codes).
+   */
+  getPartialSuccessSummary(jobId: string): BatchPartialSuccessSummary | undefined {
+    const job = this.getJob(jobId);
+    if (!job) return undefined;
+
+    const results = job.results ?? [];
+    return {
+      jobId: job.jobId,
+      status: job.status,
+      transactionHash: job.transactionHash,
+      totalPayments: job.payments.length,
+      succeeded: results.filter((r) => r.success),
+      failed: results.filter((r) => !r.success),
+      error: job.error,
+    };
+  }
+
   // ── Monitoring ─────────────────────────────────────────────────────────
 
   /**
@@ -314,6 +457,18 @@ export class BatchProcessor {
     const averageDurationMs =
       this.totalSucceeded > 0 ? this.totalDurationMs / this.totalSucceeded : 0;
 
+    const failureRate =
+      this.totalPaymentsProcessed > 0
+        ? this.totalPaymentsFailed / this.totalPaymentsProcessed
+        : 0;
+
+    let throughputPerSecond = 0;
+    if (this.firstProcessedAt && this.lastProcessedAt) {
+      const elapsedSeconds =
+        (this.lastProcessedAt.getTime() - this.firstProcessedAt.getTime()) / 1000;
+      throughputPerSecond = elapsedSeconds > 0 ? this.totalPaymentsProcessed / elapsedSeconds : 0;
+    }
+
     return {
       queueDepth: this.queue.length,
       totalProcessed: this.totalProcessed,
@@ -325,6 +480,11 @@ export class BatchProcessor {
       averageDurationMs: parseFloat(averageDurationMs.toFixed(2)),
       accepting: this.accepting,
       lastProcessedAt: this.lastProcessedAt,
+      totalPaymentsSucceeded: this.totalPaymentsSucceeded,
+      totalPaymentsFailed: this.totalPaymentsFailed,
+      failureRate: parseFloat(failureRate.toFixed(4)),
+      throughputPerSecond: parseFloat(throughputPerSecond.toFixed(2)),
+      totalCancelled: this.totalCancelled,
     };
   }
 
@@ -335,10 +495,14 @@ export class BatchProcessor {
     this.totalProcessed = 0;
     this.totalSucceeded = 0;
     this.totalFailed = 0;
+    this.totalCancelled = 0;
     this.totalPaymentsProcessed = 0;
+    this.totalPaymentsSucceeded = 0;
+    this.totalPaymentsFailed = 0;
     this.totalXlmTransferred = 0;
     this.totalDurationMs = 0;
     this.lastProcessedAt = null;
+    this.firstProcessedAt = null;
     logger.info('BatchProcessor stats reset');
   }
 
@@ -382,30 +546,54 @@ export class BatchProcessor {
       const payments = bundle.map((b) => b.payment);
       const bundleJobs = [...new Set(bundle.map((b) => b.job))];
 
+      // Honour cancellation flags before submission
+      const activeJobs = bundleJobs.filter((job) => !this.isCancelled(job.jobId));
+      const cancelledJobs = bundleJobs.filter((job) => this.isCancelled(job.jobId));
+
+      for (const job of cancelledJobs) {
+        this.finalizeCancelledJob(job);
+      }
+
+      if (!activeJobs.length) {
+        continue;
+      }
+
+      // Only submit payments belonging to active jobs
+      const activePayments = bundle
+        .filter((b) => !this.isCancelled(b.job.jobId))
+        .map((b) => b.payment);
+
       try {
-        const result = await this.executor!(fromPublicKey, payments);
+        const result = await retryWithBackoff(
+          () => this.executor!(fromPublicKey, activePayments),
+          { maxRetries: this.maxRetries }
+        );
 
         const now = new Date();
-        for (const job of bundleJobs) {
+        for (const job of activeJobs) {
           job.status = 'submitted';
           job.transactionHash = result.hash;
           job.totalAmount = result.totalAmount;
           job.durationMs = result.durationMs;
           job.completedAt = now;
+          job.results = this.buildSuccessResults(job);
+          job.succeededCount = job.results.length;
+          job.failedCount = 0;
           this.archiveJob(job);
         }
 
         // Update monitoring counters
-        this.totalSucceeded += bundleJobs.length;
-        this.totalPaymentsProcessed += payments.length;
+        this.totalSucceeded += activeJobs.length;
+        this.totalPaymentsProcessed += activePayments.length;
+        this.totalPaymentsSucceeded += activePayments.length;
         this.totalXlmTransferred += parseFloat(result.totalAmount);
         this.totalDurationMs += result.durationMs;
 
         logger.info(
           {
             fromPublicKey,
-            jobCount: bundleJobs.length,
-            paymentCount: payments.length,
+            jobCount: activeJobs.length,
+            paymentCount: activePayments.length,
             hash: result.hash,
             totalAmount: result.totalAmount,
             durationMs: result.durationMs,
@@ -416,28 +604,99 @@ export class BatchProcessor {
         const errMsg = (error as Error).message;
         const now = new Date();
 
-        for (const job of bundleJobs) {
+        for (const job of activeJobs) {
           job.status = 'failed';
           job.error = errMsg;
           job.completedAt = now;
+          job.results = this.buildFailureResults(job, 'TX_FAILED', errMsg);
+          job.succeededCount = 0;
+          job.failedCount = job.results.length;
           this.archiveJob(job);
         }
 
-        this.totalFailed += bundleJobs.length;
+        this.totalFailed += activeJobs.length;
+        this.totalPaymentsProcessed += activePayments.length;
+        this.totalPaymentsFailed += activePayments.length;
 
         logger.error(
           {
             fromPublicKey,
-            jobCount: bundleJobs.length,
-            paymentCount: payments.length,
+            jobCount: activeJobs.length,
+            paymentCount: activePayments.length,
             error: errMsg,
           },
           'Bundle submission failed'
         );
       } finally {
-        this.totalProcessed += bundleJobs.length;
-        this.lastProcessedAt = new Date();
+        const processedCount = activeJobs.length + cancelledJobs.length;
+        this.totalProcessed += processedCount;
+        const now = new Date();
+        if (!this.firstProcessedAt) this.firstProcessedAt = now;
+        this.lastProcessedAt = now;
+
+        this.emitMetrics();
       }
+    }
+  }
+
+  /** Mark an in-flight job as cancelled and archive it. */
+  private finalizeCancelledJob(job: BatchJob): void {
+    job.status = 'cancelled';
+    job.cancelled = true;
+    job.completedAt = new Date();
+    job.results = this.buildFailureResults(job, 'CANCELLED', 'Job cancelled before submission');
+    job.succeededCount = 0;
+    job.failedCount = job.results.length;
+    this.archiveJob(job);
+    this.totalCancelled += 1;
+    this.totalProcessed += 1;
+    this.totalPaymentsProcessed += job.payments.length;
+    this.totalPaymentsFailed += job.payments.length;
+    logger.info({ jobId: job.jobId }, 'Batch job cancelled before submission');
+  }
+
+  /** Build per-payment results for a fully successful job. */
+  private buildSuccessResults(job: BatchJob): PaymentResult[] {
+    return job.payments.map((payment, index) => ({
+      index,
+      toPublicKey: payment.toPublicKey,
+      amount: payment.amount,
+      success: true,
+    }));
+  }
+
+  /** Build per-payment results for a failed/cancelled job. */
+  private buildFailureResults(job: BatchJob, errorCode: string, error: string): PaymentResult[] {
+    return job.payments.map((payment, index) => ({
+      index,
+      toPublicKey: payment.toPublicKey,
+      amount: payment.amount,
+      success: false,
+      errorCode,
+      error,
+    }));
+  }
+
+  /** Emit throughput and failure-rate metrics to the metrics module. */
+  private emitMetrics(): void {
+    const stats = this.getStats();
+    try {
+      recordBatchMetrics({
+        queueDepth: stats.queueDepth,
+        totalProcessed: stats.totalProcessed,
+        totalSucceeded: stats.totalSucceeded,
+        totalFailed: stats.totalFailed,
+        totalCancelled: stats.totalCancelled,
+        totalPayments: stats.totalPayments,
+        totalPaymentsSucceeded: stats.totalPaymentsSucceeded,
+        totalPaymentsFailed: stats.totalPaymentsFailed,
+        failureRate: stats.failureRate,
+        throughputPerSecond: stats.throughputPerSecond,
+        averageBatchSize: stats.averageBatchSize,
+        averageDurationMs: stats.averageDurationMs,
+      });
+    } catch (err) {
+      logger.warn({ error: (err as Error).message }, 'Failed to record batch metrics');
     }
   }
 

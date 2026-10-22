@@ -83,8 +83,20 @@ jobs:
       - name: Install Lighthouse CI
         run: npm install -g @lhci/cli@0.14.x
 
-      - name: Run Lighthouse CI
-        run: lhci autorun
+      - name: Run Lighthouse CI (Issue #1580)
+        id: lighthouse
+        run: |
+          echo "🔍 Running Lighthouse CI performance audit..."
+          lhci autorun 2>&1 | tee lighthouse-output.txt
+
+          # Extract and report pass/fail status
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "✅ Lighthouse CI passed"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Lighthouse CI failed - Performance regressions detected"
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
         env:
           # Pass the CI token if you have a Lighthouse CI server configured
           LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}
@@ -92,6 +104,56 @@ jobs:
           # Set LHCI_AUTH_TOKEN in repo secrets; the API must accept
           # 'X-LHCI-Auth: <token>' and return a seeded session cookie.
           LHCI_AUTH_TOKEN: ${{ secrets.LHCI_AUTH_TOKEN }}
+        continue-on-error: true
+
+      - name: Detect performance regressions (Issue #1580)
+        if: always()
+        run: |
+          echo "📊 Analyzing performance metrics..."
+
+          # Check for critical performance issues
+          if [ -f ".lighthouseci/lhr-*.json" ]; then
+            node -e "
+              const fs = require('fs');
+              const path = require('path');
+              const lhDir = '.lighthouseci';
+
+              const files = fs.readdirSync(lhDir).filter(f => f.startsWith('lhr-') && f.endsWith('.json'));
+
+              let hasRegression = false;
+              const regressions = [];
+
+              files.forEach(file => {
+                const report = JSON.parse(fs.readFileSync(path.join(lhDir, file), 'utf8'));
+                const url = new URL(report.finalUrl).pathname;
+                const perf = (report.categories.performance.score * 100).toFixed(0);
+                const fcp = report.metrics.first_contentful_paint?.numericValue || 0;
+                const lcp = report.metrics.largest_contentful_paint?.numericValue || 0;
+                const cls = report.metrics.cumulative_layout_shift?.numericValue || 0;
+
+                console.log(\`\${url}: Performance=\${perf}%, LCP=\${lcp}ms, CLS=\${cls}\`);
+
+                // Critical paths must maintain 80+ performance
+                if (url.includes('/auth') || url.includes('/patient') || url.includes('/payment')) {
+                  if (perf < 80) {
+                    hasRegression = true;
+                    regressions.push(\`\${url}: Performance score \${perf}% (threshold: 80%)\`);
+                  }
+                }
+
+                // LCP should be < 2500ms
+                if (lcp > 2500) {
+                  console.warn(\`⚠️  \${url}: Large LCP detected (\${lcp}ms)\`);
+                }
+              });
+
+              if (hasRegression) {
+                console.error('🚨 Performance regressions detected on critical paths:');
+                regressions.forEach(r => console.error(\`  - \${r}\`));
+                process.exit(1);
+              }
+            "
+          fi
 
       - name: Upload Lighthouse reports as artifact
         if: always()

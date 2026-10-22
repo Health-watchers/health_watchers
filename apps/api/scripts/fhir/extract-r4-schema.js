@@ -18,6 +18,8 @@ const ROOTS = [
   'Patient',
   'Encounter',
   'Observation',
+  'MedicationRequest',
+  'Immunization',
   'Bundle',
   'CapabilityStatement',
   'OperationOutcome',

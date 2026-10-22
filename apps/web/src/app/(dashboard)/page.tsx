@@ -1,16 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
-import { PageWrapper, PageHeader, CardSkeleton, Badge } from '@/components/ui';
+import { PageWrapper, PageHeader, CardSkeleton, Badge, Skeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTable } from '@/components/dashboard/RecentTable';
 import { AppointmentWidget } from '@/components/dashboard/AppointmentWidget';
 import { QuickActionsWidget } from '@/components/dashboard/QuickActionsWidget';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+import { LazyRealtimeProvider, useRealtime } from '@/components/realtime';
 
 const API = `${API_URL}/api/v1`;
 
@@ -66,9 +67,51 @@ async function fetchHighRiskPatients(): Promise<HighRiskPatient[]> {
   );
 }
 
+// ── Realtime helpers ──────────────────────────────────────────────────────────
+
+type RealtimeEvent = {
+  type?: string;
+  event?: string;
+  room?: string;
+  clinicId?: string;
+  data?: Record<string, any>;
+  payload?: Record<string, any>;
+};
+
+function eventName(evt: RealtimeEvent): string {
+  return String(evt.type ?? evt.event ?? '');
+}
+
+function eventData(evt: RealtimeEvent): Record<string, any> {
+  return (evt.data ?? evt.payload ?? {}) as Record<string, any>;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 const REFRESH_OPTIONS = [0, 30_000, 60_000, 300_000];
+
+function ConnectionStatus({ connected }: { connected: boolean }) {
+  const t = useTranslations('dashboard.realtime');
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      data-testid="realtime-status"
+      data-connected={connected ? 'true' : 'false'}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        connected
+          ? 'border-green-200 bg-green-50 text-green-700'
+          : 'border-neutral-200 bg-neutral-50 text-neutral-500'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 rounded-full ${connected ? 'animate-pulse bg-green-500' : 'bg-neutral-400'}`}
+      />
+      {connected ? t('live') : t('polling')}
+    </span>
+  );
+}
 
 function KpiSkeletons() {
   const t = useTranslations('dashboard');
@@ -91,9 +134,11 @@ function PaymentStatusWidget({ data }: { data: DashboardData['paymentStatus'] })
   return (
     <section
       aria-label={t('aria')}
-      className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm"
+      className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
     >
-      <h2 className="mb-4 text-sm font-semibold text-neutral-700">{t('title')}</h2>
+      <h2 className="mb-4 text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+        {t('title')}
+      </h2>
       <div className="space-y-3">
         {[
           { label: t('pending'), count: data.pending, color: 'bg-yellow-400' },
@@ -101,11 +146,11 @@ function PaymentStatusWidget({ data }: { data: DashboardData['paymentStatus'] })
           { label: t('failed'), count: data.failedToday, color: 'bg-red-500' },
         ].map(({ label, count, color }) => (
           <div key={label}>
-            <div className="mb-1 flex justify-between text-xs text-neutral-600">
+            <div className="mb-1 flex justify-between text-xs text-neutral-600 dark:text-neutral-400">
               <span>{label}</span>
               <span className="font-medium">{count}</span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-700">
               <div
                 className={`h-2 rounded-full ${color} transition-all duration-500`}
                 style={{ width: `${(count / total) * 100}%` }}
@@ -120,7 +165,7 @@ function PaymentStatusWidget({ data }: { data: DashboardData['paymentStatus'] })
       </div>
       <Link
         href="/payments"
-        className="mt-4 block text-center text-xs text-indigo-600 hover:underline"
+        className="mt-4 block text-center text-xs text-indigo-600 hover:underline dark:text-indigo-400"
       >
         {t('viewAll')}
       </Link>
@@ -133,24 +178,26 @@ function PopulationWidget({ data }: { data: DashboardData['patientPopulation'] }
   return (
     <section
       aria-label={t('aria')}
-      className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm"
+      className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
     >
-      <h2 className="mb-4 text-sm font-semibold text-neutral-700">{t('title')}</h2>
+      <h2 className="mb-4 text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+        {t('title')}
+      </h2>
       <div className="grid grid-cols-3 gap-3 text-center">
         {[
-          { label: t('total'), value: data.total, color: 'text-indigo-600' },
-          { label: t('newToday'), value: data.newToday, color: 'text-green-600' },
-          { label: t('highRisk'), value: data.highRisk, color: 'text-red-600' },
+          { label: t('total'), value: data.total, color: 'text-indigo-600 dark:text-indigo-400' },
+          { label: t('newToday'), value: data.newToday, color: 'text-green-600 dark:text-green-400' },
+          { label: t('highRisk'), value: data.highRisk, color: 'text-red-600 dark:text-red-400' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="rounded-lg bg-neutral-50 px-2 py-3">
+          <div key={label} className="rounded-lg bg-neutral-50 px-2 py-3 dark:bg-neutral-700/50">
             <p className={`text-2xl font-bold ${color}`}>{value}</p>
-            <p className="mt-0.5 text-xs text-neutral-500">{label}</p>
+            <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
           </div>
         ))}
       </div>
       <Link
         href="/patients"
-        className="mt-4 block text-center text-xs text-indigo-600 hover:underline"
+        className="mt-4 block text-center text-xs text-indigo-600 hover:underline dark:text-indigo-400"
       >
         {t('viewAll')}
       </Link>
@@ -158,28 +205,174 @@ function PopulationWidget({ data }: { data: DashboardData['patientPopulation'] }
   );
 }
 
+function WidgetSkeletons() {
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2" aria-busy="true">
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
+        >
+          <Skeleton className="mb-4 h-4 w-32" />
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((__, j) => (
+              <div key={j} className="rounded-lg bg-neutral-50 px-2 py-3 dark:bg-neutral-700/50">
+                <Skeleton className="mx-auto h-7 w-12" />
+                <Skeleton className="mx-auto mt-2 h-3 w-16" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RecentTablesSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3" aria-busy="true">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
+        >
+          <Skeleton className="mb-4 h-4 w-28" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((__, j) => (
+              <Skeleton key={j} className="h-4 w-full" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  return (
+    <LazyRealtimeProvider>
+      <DashboardContent />
+    </LazyRealtimeProvider>
+  );
+}
+
+function DashboardContent() {
   const t = useTranslations('dashboard');
   const tStatus = useTranslations('status');
   const format = useFormatter();
+  const queryClient = useQueryClient();
   const [refreshInterval, setRefreshInterval] = useState(30_000);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
+
+  const { connected, subscribe, joinRoom } = useRealtime();
+
+  // When the socket is live we rely on push updates; otherwise fall back to polling.
+  const pollingInterval = connected ? false : refreshInterval || false;
 
   const { data, isLoading, isError, refetch } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: fetchDashboard,
     staleTime: refreshInterval || 30_000,
-    refetchInterval: refreshInterval || false,
+    refetchInterval: pollingInterval,
   });
 
   const { data: highRiskPatients = [] } = useQuery<HighRiskPatient[]>({
     queryKey: ['high-risk-patients'],
     queryFn: fetchHighRiskPatients,
     staleTime: 60_000,
-    refetchInterval: refreshInterval ? refreshInterval * 2 : false,
+    refetchInterval: connected ? false : refreshInterval ? refreshInterval * 2 : false,
   });
+
+  // Join the current clinic's realtime room.
+  const clinicId = useMemo(() => {
+    if (typeof window === 'undefined') return undefined;
+    return (
+      data?.stats && (data as any).clinicId
+        ? String((data as any).clinicId)
+        : (window.localStorage.getItem('clinicId') ?? undefined)
+    );
+  }, [data]);
+
+  useEffect(() => {
+    if (!connected || !clinicId) return;
+    joinRoom?.(`clinic:${clinicId}`);
+  }, [connected, clinicId, joinRoom]);
+
+  // Subscribe to live events and patch the React Query cache in place.
+  useEffect(() => {
+    if (!connected || !subscribe) return;
+
+    const patchDashboard = (updater: (prev: DashboardData) => DashboardData) => {
+      queryClient.setQueryData<DashboardData>(['dashboard'], (prev) =>
+        prev ? updater(prev) : prev
+      );
+    };
+
+    const unsubscribers: Array<() => void> = [];
+
+    // New patient registration
+    unsubscribers.push(
+      subscribe('patient.created', (evt: RealtimeEvent) => {
+        const patient = eventData(evt);
+        patchDashboard((prev) => ({
+          ...prev,
+          stats: {
+            ...prev.stats,
+            totalPatients: prev.stats.totalPatients + 1,
+            newPatientsToday: prev.stats.newPatientsToday + 1,
+          },
+          patientPopulation: {
+            ...prev.patientPopulation,
+            total: prev.patientPopulation.total + 1,
+            newToday: prev.patientPopulation.newToday + 1,
+          },
+          recentPatients: [patient, ...prev.recentPatients].slice(0, 10),
+        }));
+      })
+    );
+
+    // Appointment status change
+    unsubscribers.push(
+      subscribe('appointment.updated', (evt: RealtimeEvent) => {
+        const appt = eventData(evt);
+        if (!appt?._id) return;
+        patchDashboard((prev) => ({
+          ...prev,
+          upcomingAppointments: prev.upcomingAppointments.map((a) =>
+            a._id === appt._id ? { ...a, ...appt } : a
+          ),
+        }));
+      })
+    );
+
+    // Payment confirmation
+    unsubscribers.push(
+      subscribe('payment.confirmed', (evt: RealtimeEvent) => {
+        const payment = eventData(evt);
+        patchDashboard((prev) => ({
+          ...prev,
+          stats: {
+            ...prev.stats,
+            pendingPayments: Math.max(0, prev.stats.pendingPayments - 1),
+          },
+          paymentStatus: {
+            ...prev.paymentStatus,
+            pending: Math.max(0, prev.paymentStatus.pending - 1),
+            confirmedToday: prev.paymentStatus.confirmedToday + 1,
+          },
+          pendingPayments: prev.pendingPayments.filter(
+            (p) => p.intentId !== payment?.intentId
+          ),
+        }));
+      })
+    );
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  }, [connected, subscribe, queryClient]);
 
   // Track last refresh time
   useEffect(() => {
@@ -206,14 +399,18 @@ export default function DashboardPage() {
         })}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* Realtime connection status */}
+            <ConnectionStatus connected={connected} />
             {/* Refresh rate control */}
-            <div className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2 py-1">
-              <span className="text-xs text-neutral-500">{t('refreshLabel')}</span>
+            <div className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-800">
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                {t('refreshLabel')}
+              </span>
               {REFRESH_OPTIONS.map((value) => (
                 <button
                   key={value}
                   onClick={() => setRefreshInterval(value)}
-                  className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${refreshInterval === value ? 'bg-indigo-600 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+                  className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${refreshInterval === value ? 'bg-indigo-600 text-white' : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-700'}`}
                   aria-pressed={refreshInterval === value}
                 >
                   {value === 0
@@ -227,7 +424,7 @@ export default function DashboardPage() {
             {/* Manual refresh */}
             <button
               onClick={handleManualRefresh}
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50"
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
               title={t('lastRefreshed', {
                 time: format.dateTime(lastRefreshed, { timeStyle: 'medium' }),
               })}
@@ -238,27 +435,21 @@ export default function DashboardPage() {
             <nav aria-label={t('quickActions.title')} className="flex flex-wrap gap-2">
               <Link
                 href="/patients/new"
-                className="focus-visible:ring-primary-500 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 inline-flex h-8 items-center gap-1 rounded-md px-3 text-xs font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                aria-label={t('newPatientAria')}
-                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary-500 px-3 text-xs font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 active:bg-primary-700"
+                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary-500 px-3 text-xs font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 active:bg-primary-700 dark:bg-primary-600 dark:hover:bg-primary-500"
                 aria-label="Register a new patient"
               >
                 {t('newPatient')}
               </Link>
               <Link
                 href="/encounters"
-                className="focus-visible:ring-primary-500 inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                aria-label={t('logEncounterAria')}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                 aria-label="Log a new encounter"
               >
                 {t('logEncounter')}
               </Link>
               <Link
                 href="/payments"
-                className="focus-visible:ring-primary-500 inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                aria-label={t('paymentAria')}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                 aria-label="Initiate a payment"
               >
                 {t('payment')}
@@ -272,7 +463,7 @@ export default function DashboardPage() {
       {isError ? (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
         >
           {t('apiError')}
         </div>
@@ -312,11 +503,15 @@ export default function DashboardPage() {
       )}
 
       {/* Population + Payment widgets */}
-      {data && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <PopulationWidget data={data.patientPopulation} />
-          <PaymentStatusWidget data={data.paymentStatus} />
-        </div>
+      {isLoading ? (
+        <WidgetSkeletons />
+      ) : (
+        data && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <PopulationWidget data={data.patientPopulation} />
+            <PaymentStatusWidget data={data.paymentStatus} />
+          </div>
+        )
       )}
 
       {/* Quick Actions */}
@@ -328,8 +523,8 @@ export default function DashboardPage() {
       {/* High-Risk Patients */}
       {highRiskPatients.length > 0 && (
         <section aria-label={t('highRisk.aria')}>
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-700">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/40">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
               <span aria-hidden="true">⚠️</span>{' '}
               {t('highRisk.title', { count: highRiskPatients.length })}
             </h2>
@@ -338,13 +533,13 @@ export default function DashboardPage() {
                 <Link
                   key={p._id}
                   href={`/patients/${p._id}?tab=risk`}
-                  className="flex items-center justify-between rounded bg-white px-3 py-2 text-sm transition-colors hover:bg-red-50"
+                  className="flex items-center justify-between rounded bg-white px-3 py-2 text-sm transition-colors hover:bg-red-50 dark:bg-neutral-800 dark:hover:bg-neutral-700"
                 >
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-gray-900 dark:text-neutral-100">
                     {p.firstName} {p.lastName}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-neutral-400">
                       {p.riskFactors?.slice(0, 2).join(', ')}
                     </span>
                     <Badge variant="danger">
@@ -359,7 +554,12 @@ export default function DashboardPage() {
       )}
 
       {/* Recent Activity */}
-      {data && (
+      {isLoading ? (
+        <section aria-label={t('recentActivity')}>
+          <RecentTablesSkeleton />
+        </section>
+      ) : (
+        data && (
         <section aria-label={t('recentActivity')}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <RecentTable
@@ -432,7 +632,7 @@ export default function DashboardPage() {
                         href={`https://stellar.expert/explorer/testnet/tx/${row.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-indigo-600 hover:underline"
+                        className="text-indigo-600 hover:underline dark:text-indigo-400"
                         aria-label={t('viewTransaction')}
                       >
                         {String(row.txHash).slice(0, 8)}…
@@ -446,6 +646,7 @@ export default function DashboardPage() {
             />
           </div>
         </section>
+        )
       )}
     </PageWrapper>
   );

@@ -1,26 +1,10 @@
 import { Schema, model, models, Types } from 'mongoose';
+import { NOTIFICATION_TYPES, type NotificationType } from '@health-watchers/types';
 
-export const NOTIFICATION_TYPES = [
-  'referral_received',
-  'payment_confirmed',
-  'appointment_reminder',
-  'appointment_status_update',
-  'ai_summary_ready',
-  'lab_result_ready',
-  'high_risk_patient',
-  'system',
-  'balance_low_warning',
-  'balance_critical',
-  'large_transaction',
-  'unrecognized_transaction',
-  'waitlist_available',
-  'claimable_expiring',
-  'subscription_warning',
-  'follow_up_reminder',
-  'report_ready',
-] as const;
-
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+// Re-exported for existing importers of `./notification.model` (issue #1643
+// moved the canonical definition to @health-watchers/types so other
+// packages/apps share it instead of redefining it).
+export { NOTIFICATION_TYPES, type NotificationType };
 
 export interface INotification {
   userId: Types.ObjectId;

@@ -19,12 +19,14 @@ interface CarePlanIntervention {
   type: 'medication' | 'lifestyle' | 'monitoring' | 'referral';
   description: string;
   frequency?: string;
+  completed?: boolean;
 }
 
 interface MonitoringItem {
   parameter: string;
   frequency: string;
   targetRange?: string;
+  completed?: boolean;
 }
 
 interface CarePlan {
@@ -62,6 +64,19 @@ function goalVariant(s: string) {
   return 'default';
 }
 
+function goalProgress(goal: CarePlanGoal): number {
+  if (goal.status === 'achieved') return 100;
+  if (goal.status === 'abandoned') return 0;
+  if (!goal.targetDate) return 0;
+  const created = goal.targetDate ? new Date(goal.targetDate).getTime() : 0;
+  if (!created) return 0;
+  // Active goals with a future target date show partial progress based on time elapsed
+  const now = Date.now();
+  const target = new Date(goal.targetDate).getTime();
+  if (target <= now) return 90;
+  return 25;
+}
+
 const INTERVENTION_ICONS: Record<string, string> = {
   medication: '💊',
   lifestyle: '🏃',
@@ -94,6 +109,7 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [updatingGoal, setUpdatingGoal] = useState<string | null>(null);
+  const [updatingTask, setUpdatingTask] = useState<string | null>(null);
 
   const {
     data: plans = [],
@@ -181,6 +197,32 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
       queryClient.invalidateQueries({ queryKey: ['care-plans', patientId] });
     } finally {
       setUpdatingGoal(null);
+    }
+  };
+
+  // ── Toggle intervention / monitoring completion ─────────────────────────────
+
+  const handleTaskToggle = async (
+    plan: CarePlan,
+    kind: 'interventions' | 'monitoringSchedule',
+    idx: number
+  ) => {
+    const key = `${plan._id}-${kind}-${idx}`;
+    setUpdatingTask(key);
+    try {
+      const items = plan[kind].map((item, i) =>
+        i === idx ? { ...item, completed: !item.completed } : item
+      );
+      const res = await fetch(`${API_V1}/care-plans/${plan._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ [kind]: items }),
+      });
+      if (!res.ok) throw new Error('Failed to update task');
+      queryClient.invalidateQueries({ queryKey: ['care-plans', patientId] });
+    } finally {
+      setUpdatingTask(null);
     }
   };
 
@@ -460,6 +502,10 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
             const activeGoals = plan.goals.filter((g) => g.status === 'active').length;
             const achievedGoals = plan.goals.filter((g) => g.status === 'achieved').length;
             const totalGoals = plan.goals.length;
+            const totalTasks = plan.interventions.length + plan.monitoringSchedule.length;
+            const completedTasks =
+              plan.interventions.filter((i) => i.completed).length +
+              plan.monitoringSchedule.filter((m) => m.completed).length;
 
             return (
               <li
@@ -489,6 +535,12 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                       {totalGoals > 0 && (
                         <span>
                           {achievedGoals}/{totalGoals} goals achieved
+                          {activeGoals > 0 && ` · ${activeGoals} active`}
+                        </span>
+                      )}
+                      {totalTasks > 0 && (
+                        <span>
+                          {completedTasks}/{totalTasks} tasks done
                         </span>
                       )}
                       <span>Review: {new Date(plan.reviewDate).toLocaleDateString()}</span>
@@ -539,6 +591,31 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                                       </span>
                                     )}
                                   </div>
+                                  {/* Per-goal progress indicator */}
+                                  <div className="mt-1.5 flex items-center gap-2">
+                                    <div
+                                      className="h-1.5 w-full max-w-[10rem] rounded-full bg-neutral-200"
+                                      role="progressbar"
+                                      aria-valuenow={goalProgress(goal)}
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                      aria-label={`Progress for ${goal.description}`}
+                                    >
+                                      <div
+                                        className={`h-1.5 rounded-full transition-all ${
+                                          goal.status === 'achieved'
+                                            ? 'bg-success-500'
+                                            : goal.status === 'abandoned'
+                                              ? 'bg-neutral-400'
+                                              : 'bg-primary-500'
+                                        }`}
+                                        style={{ width: `${goalProgress(goal)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-neutral-500">
+                                      {goalProgress(goal)}%
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="flex flex-shrink-0 items-center gap-1.5">
                                   <Badge variant={goalVariant(goal.status)}>{goal.status}</Badge>
@@ -575,22 +652,33 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                           Interventions
                         </h4>
                         <ul className="space-y-1.5">
-                          {plan.interventions.map((iv, ii) => (
-                            <li
-                              key={ii}
-                              className="flex items-start gap-2 text-sm text-neutral-700"
-                            >
-                              <span>{INTERVENTION_ICONS[iv.type] ?? '•'}</span>
-                              <span>
-                                <span className="font-medium capitalize">{iv.type}</span>
-                                {' — '}
-                                {iv.description}
-                                {iv.frequency && (
-                                  <span className="text-neutral-500"> · {iv.frequency}</span>
-                                )}
-                              </span>
-                            </li>
-                          ))}
+                          {plan.interventions.map((iv, ii) => {
+                            const tKey = `${plan._id}-interventions-${ii}`;
+                            return (
+                              <li
+                                key={ii}
+                                className="flex items-start gap-2 text-sm text-neutral-700"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!iv.completed}
+                                  disabled={!canWrite || updatingTask === tKey}
+                                  onChange={() => handleTaskToggle(plan, 'interventions', ii)}
+                                  className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                                  aria-label={`Mark ${iv.description} as ${iv.completed ? 'incomplete' : 'complete'}`}
+                                />
+                                <span>{INTERVENTION_ICONS[iv.type] ?? '•'}</span>
+                                <span className={iv.completed ? 'text-neutral-400 line-through' : ''}>
+                                  <span className="font-medium capitalize">{iv.type}</span>
+                                  {' — '}
+                                  {iv.description}
+                                  {iv.frequency && (
+                                    <span className="text-neutral-500"> · {iv.frequency}</span>
+                                  )}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </section>
                     )}
@@ -602,16 +690,35 @@ export function CarePlanTab({ patientId }: CarePlanTabProps) {
                           Monitoring
                         </h4>
                         <ul className="space-y-1.5">
-                          {plan.monitoringSchedule.map((m, mi) => (
-                            <li key={mi} className="text-sm text-neutral-700">
-                              <span className="font-medium">{m.parameter}</span>
-                              {' — '}
-                              {m.frequency}
-                              {m.targetRange && (
-                                <span className="text-neutral-500"> (target: {m.targetRange})</span>
-                              )}
-                            </li>
-                          ))}
+                          {plan.monitoringSchedule.map((m, mi) => {
+                            const tKey = `${plan._id}-monitoringSchedule-${mi}`;
+                            return (
+                              <li
+                                key={mi}
+                                className="flex items-start gap-2 text-sm text-neutral-700"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!m.completed}
+                                  disabled={!canWrite || updatingTask === tKey}
+                                  onChange={() => handleTaskToggle(plan, 'monitoringSchedule', mi)}
+                                  className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                                  aria-label={`Mark ${m.parameter} monitoring as ${m.completed ? 'incomplete' : 'complete'}`}
+                                />
+                                <span className={m.completed ? 'text-neutral-400 line-through' : ''}>
+                                  <span className="font-medium">{m.parameter}</span>
+                                  {' — '}
+                                  {m.frequency}
+                                  {m.targetRange && (
+                                    <span className="text-neutral-500">
+                                      {' '}
+                                      (target: {m.targetRange})
+                                    </span>
+                                  )}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </section>
                     )}

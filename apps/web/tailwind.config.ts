@@ -5,6 +5,11 @@ const config: Config = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/hooks/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/lib/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/utils/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/contexts/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/providers/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     // Issue #1221: mobile-first container with per-breakpoint padding
@@ -57,6 +62,26 @@ const config: Config = {
         '128': '32rem',
       },
       colors: {
+        // Issue #1611: semantic tokens driven by CSS variables so components
+        // can use `bg-surface`, `text-content`, etc. and automatically adapt
+        // to dark mode without duplicating `dark:` variants everywhere.
+        surface: {
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          muted: 'rgb(var(--color-surface-muted) / <alpha-value>)',
+          raised: 'rgb(var(--color-surface-raised) / <alpha-value>)',
+          inverse: 'rgb(var(--color-surface-inverse) / <alpha-value>)',
+        },
+        content: {
+          DEFAULT: 'rgb(var(--color-content) / <alpha-value>)',
+          muted: 'rgb(var(--color-content-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--color-content-subtle) / <alpha-value>)',
+          inverse: 'rgb(var(--color-content-inverse) / <alpha-value>)',
+        },
+        border: {
+          DEFAULT: 'rgb(var(--color-border) / <alpha-value>)',
+          muted: 'rgb(var(--color-border-muted) / <alpha-value>)',
+          strong: 'rgb(var(--color-border-strong) / <alpha-value>)',
+        },
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -134,6 +159,13 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
+      // Issue #1611: chart palette tokens for dark-mode-aware data viz
+      // (VitalSignsChart, PaymentAnalyticsCharts).
+      chart: {
+        grid: 'rgb(var(--color-chart-grid) / <alpha-value>)',
+        axis: 'rgb(var(--color-chart-axis) / <alpha-value>)',
+        tooltip: 'rgb(var(--color-chart-tooltip) / <alpha-value>)',
+      },
       keyframes: {
         'fade-in': {
           '0%': { opacity: '0' },
@@ -156,6 +188,8 @@ const config: Config = {
       },
     },
   },
+  // Issue #1611: class-based dark mode toggled by ThemeToggle/ThemeSync and
+  // persisted in localStorage.
   darkMode: 'class',
   plugins: [require('@tailwindcss/forms'), require('@tailwindcss/typography')],
 };

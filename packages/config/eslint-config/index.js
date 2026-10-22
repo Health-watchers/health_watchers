@@ -41,9 +41,28 @@ const baseConfig = [
       'no-console': 'warn',
       'no-eval': 'error',
       'no-implied-eval': 'error',
-      'no-unused-vars': 'off', // Handled by @typescript-eslint/no-unused-vars
+      'no-unused-vars': 'warn',
     },
   },
+  // Type-aware rules (issue #1644). `projectService` picks up each package's
+  // own tsconfig.json automatically, so no explicit `project` path is needed
+  // here. This has not been run against the full monorepo — it hasn't been
+  // possible to run ESLint to see the fallout as part of this change — so
+  // expect real findings the first time CI runs it. Tune individual rules
+  // down to `warn` then, the same way the rules above already are, rather
+  // than disabling this wholesale if it's too noisy at first.
+  ...tseslint.configs['flat/recommended-type-checked'].map((config) => ({
+    ...config,
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      ...config.languageOptions,
+      parserOptions: {
+        ...config.languageOptions?.parserOptions,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  })),
   // Must be last — disables ESLint rules that conflict with Prettier
   prettier,
   {

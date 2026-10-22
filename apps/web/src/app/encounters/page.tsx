@@ -12,6 +12,7 @@ import {
 import { queryKeys } from '@/lib/queryKeys';
 import { useEncounters } from '@/lib/queries/useEncounters';
 import { API_URL } from '@/lib/api';
+import { fetchWithAuth } from '@/lib/auth';
 
 const API = `${API_URL}/api/v1`;
 
@@ -25,10 +26,10 @@ function getEncounterErrorMessage(
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  open: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-700',
-  'follow-up': 'bg-blue-100 text-blue-800',
-  cancelled: 'bg-red-100 text-red-700',
+  open: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  closed: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  'follow-up': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
 };
 
 type SortOption = 'createdAt_desc' | 'createdAt_asc' | 'patientName_asc';
@@ -61,6 +62,10 @@ export default function EncountersPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; patientName: string } | null>(
+    null
+  );
+  const [deleting, setDeleting] = useState(false);
 
   const { data, isLoading, error } = useEncounters(page, 20, appliedFilters);
   const encounters = data?.data ?? [];
@@ -81,6 +86,30 @@ export default function EncountersPage() {
     setShowForm(false);
     setToast({ message: t('created'), type: 'success' });
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
+  };
+
+  const handleDeleteEncounter = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetchWithAuth(`${API}/encounters/${deleteTarget.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `Error ${res.status}`);
+      }
+      setToast({ message: 'Encounter removed successfully.', type: 'success' });
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
+    } catch (error) {
+      setToast({
+        message: error instanceof Error ? error.message : 'Unable to remove encounter.',
+        type: 'error',
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const applyFilters = useCallback(() => {
@@ -115,24 +144,28 @@ export default function EncountersPage() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{t('title')}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl dark:text-gray-100">
+          {t('title')}
+        </h1>
         <button
           onClick={() => setShowForm(true)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
         >
           {t('newEncounter')}
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">{t('newEncounterTitle')}</h2>
+        <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {t('newEncounterTitle')}
+          </h2>
           <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
         </div>
       )}
 
       {/* Search & Filter Bar */}
-      <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-sm">
+      <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {/* Full-text search */}
           <div className="xl:col-span-2">
@@ -142,7 +175,7 @@ export default function EncountersPage() {
             </label>
             <div className="relative">
               <svg
-                className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
+                className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -159,7 +192,7 @@ export default function EncountersPage() {
                 onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
                 onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
                 placeholder={t('filters.searchPlaceholder')}
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pr-3 pl-9 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pr-3 pl-9 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:placeholder-gray-500"
               />
             </div>
           </div>
@@ -174,7 +207,7 @@ export default function EncountersPage() {
               id="filter-status"
               value={filters.status}
               onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
             >
               <option value="">{t('allStatus')}</option>
               <option value="open">{tStatus('open')}</option>
@@ -196,7 +229,7 @@ export default function EncountersPage() {
               value={filters.diagnosisCode}
               onChange={(e) => setFilters((f) => ({ ...f, diagnosisCode: e.target.value }))}
               placeholder={t('filters.diagnosisPlaceholder')}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:placeholder-gray-500"
             />
           </div>
 
@@ -204,7 +237,7 @@ export default function EncountersPage() {
           <div>
             <label
               htmlFor="filter-date-from"
-              className="mb-1 block text-xs font-medium text-gray-500"
+              className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
             >
               {t('filters.from')}
               From
@@ -214,7 +247,7 @@ export default function EncountersPage() {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
             />
           </div>
 
@@ -222,7 +255,7 @@ export default function EncountersPage() {
           <div>
             <label
               htmlFor="filter-date-to"
-              className="mb-1 block text-xs font-medium text-gray-500"
+              className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
             >
               {t('filters.to')}
               To
@@ -232,7 +265,7 @@ export default function EncountersPage() {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
             />
           </div>
 
@@ -246,7 +279,7 @@ export default function EncountersPage() {
               id="filter-sort"
               value={filters.sort}
               onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as SortOption }))}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200"
             >
               <option value="createdAt_desc">{t('filters.sortNewest')}</option>
               <option value="createdAt_asc">{t('filters.sortOldest')}</option>
@@ -259,20 +292,20 @@ export default function EncountersPage() {
         <div className="mt-3 flex items-center gap-2">
           <button
             onClick={applyFilters}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             {t('filters.apply')}
           </button>
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               {t('filters.clear')}
             </button>
           )}
           {hasActiveFilters && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
               {t('filters.resultCount', { count: total })}
             </span>
           )}
@@ -280,9 +313,9 @@ export default function EncountersPage() {
       </div>
 
       {encounters.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-          <h2 className="text-lg font-semibold text-gray-900">{t('empty')}</h2>
-          <p className="mt-2 text-sm text-gray-600">
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center dark:border-gray-600 dark:bg-gray-800">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('empty')}</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             {hasActiveFilters ? t('emptyFiltered') : t('emptyHint')}
           </p>
           {!hasActiveFilters && (
@@ -293,9 +326,9 @@ export default function EncountersPage() {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm dark:border-gray-700">
+            <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   {[
                     t('patient'),
@@ -316,66 +349,70 @@ export default function EncountersPage() {
                     <th
                       key={h}
                       scope="col"
-                      className="px-4 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase"
+                      className="px-4 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
                     >
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
                 {encounters.map((e) => (
-                  <tr key={e.id} className="transition-colors hover:bg-gray-50">
+                  <tr
+                    key={e.id}
+                    className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
                     <td className="px-4 py-3">
                       {e.patient ? (
                         <div>
-                          <div className="font-medium text-gray-900">
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
                             {e.patient.firstName} {e.patient.lastName}
                           </div>
                           {e.patient.systemId && (
-                            <div className="text-xs text-gray-500">{e.patient.systemId}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {e.patient.systemId}
+                            </div>
                           )}
                         </div>
                       ) : (
-                        <span className="font-mono text-xs text-gray-600">{e.patientId}</span>
+                        <span className="font-mono text-xs text-gray-600 dark:text-gray-400">
+                          {e.patientId}
+                        </span>
                       )}
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-gray-900">
+                    <td className="max-w-xs truncate px-4 py-3 text-gray-900 dark:text-gray-100">
                       {e.chiefComplaint}
                     </td>
                     <td className="px-4 py-3">
                       {e.diagnosis && e.diagnosis.length > 0 ? (
-                        <span className="font-mono text-xs text-gray-600">
+                        <span className="font-mono text-xs text-gray-600 dark:text-gray-400">
                           {e.diagnosis[0].code}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[e.status] ?? 'bg-gray-100 text-gray-700'}`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[e.status] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}
                       >
                         {tStatus.has(e.status) ? tStatus(e.status) : e.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">
                       {e.attendingDoctorId}
                     </td>
-                    <td className="px-4 py-3 text-xs whitespace-nowrap text-gray-500">
+                    <td className="px-4 py-3 text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {e.createdAt
                         ? format.dateTime(new Date(e.createdAt), { dateStyle: 'medium' })
                         : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
+                      <Link
+                        href={`/encounters/${e.id}`}
+                        className="text-blue-600 hover:underline dark:text-blue-400"
+                      >
                         {t('viewDetails')}
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
-                      {e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={`/encounters/${e.id}`} className="text-blue-600 hover:underline">
-                        View details
                       </Link>
                     </td>
                   </tr>
@@ -385,20 +422,20 @@ export default function EncountersPage() {
           </div>
 
           {/* Pagination */}
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+          <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
             <span>{t('pagination.summary', { page, totalPages, total })}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
+                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
               >
                 {t('pagination.previous')}
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
+                className="rounded border border-gray-300 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
               >
                 {t('pagination.next')}
               </button>
@@ -406,6 +443,27 @@ export default function EncountersPage() {
           </div>
         </>
       )}
+
+      {/* Remove encounter confirmation */}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        onConfirm={handleDeleteEncounter}
+        title="Remove encounter"
+        confirmLabel="Remove encounter"
+        cancelLabel="Cancel"
+        loading={deleting}
+        message={
+          deleteTarget ? (
+            <>
+              You are about to remove the encounter for <strong>{deleteTarget.patientName}</strong>.
+              This will cancel the encounter and mark it as inactive. This action cannot be undone.
+            </>
+          ) : null
+        }
+      />
     </main>
   );
 }

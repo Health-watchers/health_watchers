@@ -20,6 +20,8 @@
 import { AppError } from './app-error';
 import { ApiErrorCode } from '@health-watchers/types';
 
+export { AppError };
+
 // ─── Auth Errors ──────────────────────────────────────────────────────────────
 
 const auth = {
@@ -437,3 +439,38 @@ export const Errors = {
   external,
   generic,
 } as const;
+
+/**
+ * Normalise any thrown value into an `AppError` instance.
+ *
+ * Controllers should forward unknown errors to the central error handler via
+ * `next(err)`; this helper guarantees the handler always receives a
+ * structured `AppError` (with `statusCode`, `code` and `message`) instead of
+ * an ad-hoc object or plain string.
+ *
+ * @example
+ *   } catch (err) {
+ *     throw toAppError(err, 'Failed to load patients');
+ *   }
+ */
+export function toAppError(err: unknown, fallbackMessage?: string): AppError {
+  if (err instanceof AppError) {
+    return err;
+  }
+
+  if (err instanceof Error) {
+    const wrapped = AppError.internal(fallbackMessage ?? err.message, {
+      originalName: err.name,
+      originalMessage: err.message,
+    });
+    return wrapped;
+  }
+
+  if (typeof err === 'string') {
+    return AppError.internal(fallbackMessage ?? err, { originalMessage: err });
+  }
+
+  return AppError.internal(fallbackMessage ?? 'An unexpected error occurred.', {
+    originalError: err,
+  });
+}

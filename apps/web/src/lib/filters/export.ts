@@ -81,6 +81,69 @@ export function toCsv(
   ].join('\n');
 }
 
+export interface DisputeExportRecord {
+  id: string;
+  status?: string | null;
+  reason?: string | null;
+  amount?: number | string | null;
+  currency?: string | null;
+  paymentId?: string | null;
+  patientId?: string | null;
+  filedAt?: string | Date | null;
+  resolvedAt?: string | Date | null;
+  resolution?: string | null;
+  [key: string]: unknown;
+}
+
+const DISPUTE_CSV_HEADERS = [
+  'id',
+  'status',
+  'reason',
+  'amount',
+  'currency',
+  'paymentId',
+  'patientId',
+  'filedAt',
+  'resolvedAt',
+  'resolution',
+] as const;
+
+function formatDisputeCsvValue(value: unknown): string {
+  if (value == null) return '';
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : value.toISOString();
+  }
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+export function disputesToCsv(disputes: DisputeExportRecord[]): string {
+  const rows = disputes.map((dispute) =>
+    DISPUTE_CSV_HEADERS.map((header) => formatDisputeCsvValue(dispute[header]))
+  );
+  return [
+    DISPUTE_CSV_HEADERS.map((header) => `"${header}"`).join(','),
+    ...rows.map((row) => row.join(',')),
+  ].join('\n');
+}
+
+export function downloadDisputesCsv(
+  disputes: DisputeExportRecord[],
+  filename = 'disputes.csv'
+): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const csv = disputesToCsv(disputes);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function activeRuleValues(
   group: FilterGroup,
   fieldId: string

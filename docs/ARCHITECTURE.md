@@ -4,6 +4,8 @@
 
 Health Watchers is a HIPAA-compliant healthcare management platform built with a microservices architecture. This document provides comprehensive system design, component relationships, and deployment topology.
 
+The platform is split into web, API, Stellar service, worker, database, Redis, and observability layers. Requests enter through the web/API edge, pass authentication and authorization, then reach domain services. PHI-sensitive records stay inside the API/database boundary while operational events flow to monitoring, audit logs, and alerting.
+
 ## High-Level Architecture Diagram
 
 ```mermaid

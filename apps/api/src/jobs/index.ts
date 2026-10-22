@@ -18,6 +18,8 @@ import { runMfaGracePeriodReminderTick } from '@api/modules/auth/mfa-grace-perio
 import { runRetentionSweep } from '@api/modules/documents/document-retention.service';
 import { processDueWebhookRetries } from '@api/modules/webhooks/retry-worker';
 import { sendFollowUpReminders } from '@api/modules/encounters/follow-up-reminder-job';
+import { runMultisigExpiryJob } from '@api/modules/payments/services/multisig-expiry-job';
+import { processDueTranscriptions } from '@api/modules/ai/transcription-queue';
 import { processDueReportSchedules } from '@api/modules/reports/analytics/report-schedule-job';
 import { sweepApiKeyLifecycle } from '@api/modules/api-keys/api-key-lifecycle-job';
 import { processDueDeliveries } from '@api/modules/notifications/notification-dispatch-job';
@@ -84,6 +86,18 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     cron: '0 8 * * *',
     description: 'Send follow-up encounter reminders',
     handler: sendFollowUpReminders,
+  },
+  {
+    name: 'multisig-expiry',
+    cron: '*/5 * * * *',
+    description: 'Auto-void multi-sig payments that gathered no signatures within 24h',
+    handler: runMultisigExpiryJob,
+  },
+  {
+    name: 'transcription-processing',
+    cron: '*/1 * * * *',
+    description: 'Process queued encounter audio transcriptions',
+    handler: () => processDueTranscriptions(),
   },
   {
     name: 'webhook-retry',

@@ -536,5 +536,62 @@
     "pt": "Português",
     "ha": "Hausa",
     "yo": "Yorùbá"
+  },
+  "portal": {
+    "brand": "Health Watchers — Ẹ̀ka Àrùn",
+    "signOut": "Jáde",
+    "nav": {
+      "dashboard": "Pánẹ́ẹ̀lì",
+      "timeline": "Àkókò Ìtàn",
+      "records": "Àwọn Àkọsílẹ̀ Mi",
+      "encounters": "Àwọn Ìpàdé Mi",
+      "appointments": "Appointments",
+      "payments": "Àwọn Ìsanwó",
+      "consent": "Àṣẹ",
+      "healthLog": "Àkọsílẹ̀ Ìlera"
+    },
+    "profile": {
+      "title": "Ètò Àkàǹlò",
+      "firstName": "Orúkọ",
+      "lastName": "Orúkọ Ìdílé",
+      "email": "Ìmẹ́ẹ̀lì",
+      "emailNote": "A kò lè yí ìmẹ́ẹ̀lì padà",
+      "phone": "Nọ́mbà Fóònù",
+      "bio": "Ìtàn Ìgbésí-ayé",
+      "bioPlaceholder": "Sọ fún wa nípa ara rẹ",
+      "preferredLanguage": "Èdè Tí A Fẹ́",
+      "save": "Pamọ́ Àwọn Àyípadà",
+      "saving": "Ń pamọ́...",
+      "cancel": "Fagilé",
+      "success": "A ti ṣàtúnṣe àkàǹlò pẹ̀lú àṣeyọrí!",
+      "error": "Àṣìṣe kan wáyé nígbà àtúnṣe àkàǹlò",
+      "loadError": "Kò ṣeéṣe láti ṣe àgbékalẹ̀ àkàǹlò"
+    }
+  },
+  "emptyStates": {
+    "patients": {
+      "title": "Kò sí àrùn tí a ti ṣe àforúkọsílẹ̀",
+      "description": "Bẹ̀rẹ̀ nípa ṣàfikún àrùn àkọ́kọ́ sí ètò. Tẹ bọ́tìnnì ní ìsàlẹ̀ láti bẹ̀rẹ̀."
+    },
+    "encounters": {
+      "title": "Kò sí ìpàdé tí a kọ",
+      "description": "Ṣẹ̀dá ìpàdé àkọ́kọ́ rẹ láti bẹ̀rẹ̀ àkọsílẹ̀ àwọn ìbẹ̀wò ìlera."
+    },
+    "payments": {
+      "title": "Kò sí ìsanwó tí a rí",
+      "description": "Àwọn ìdúnàádúrà ìsanwó yóò farahàn níbí lẹ́yìn tí a bá ṣe wọn lórí blockchain Stellar."
+    },
+    "appointments": {
+      "title": "Kò sí appointment tí a gbèrò",
+      "description": "Gbèrò appointment àkọ́kọ́ rẹ láti ṣàkóso àwọn ìbẹ̀wò àrùn àti ṣíṣe ìlé-ìwòsàn."
+    },
+    "notifications": {
+      "title": "Kò sí ìfitónilétí",
+      "description": "O ti parí gbogbo rẹ! Àwọn ìfitónilétí nípa àwọn ìṣẹ̀lẹ̀ pàtàkì yóò farahàn níbí."
+    },
+    "search": {
+      "title": "Kò sí àbájáde tí a rí",
+      "description": "Gbìyànjú ṣàtúnṣe àwọn ọ̀rọ̀ ìwádìí tàbí àwọn àlẹ̀mọ́ láti rí ohun tí o n wá."
+    }
   }
 }

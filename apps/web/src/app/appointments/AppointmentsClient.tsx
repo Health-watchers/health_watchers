@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { fetchWithAuth } from '@/lib/auth';
-import { API_V1 } from '@/lib/api';
+import { useState, useMemo } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ui';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { WaitlistPanel } from '@/components/appointments/WaitlistPanel';
+import {
+  useAppointments,
+  useCreateAppointment,
+  useRescheduleAppointment,
+  useCancelAppointment,
+} from '@/hooks/useAppointments';
 
 interface Appointment {
   _id: string;
@@ -80,8 +86,6 @@ function formatTime(datetime: string, hour12 = true) {
 }
 
 export default function AppointmentsClient({ labels }: { labels: Labels }) {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [anchor, setAnchor] = useState(new Date());
   const [doctorFilter, setDoctorFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -95,50 +99,44 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
     chiefComplaint: '',
   });
   const [confirmation, setConfirmation] = useState<Appointment | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
-  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const [view, setView] = useState<'calendar' | 'waitlist'>('calendar');
-
-  // Deep link: /appointments?tab=waitlist
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('tab') === 'waitlist') setView('waitlist');
-  }, []);
-
-  const changeView = (next: string) => {
-    const tab = next === 'waitlist' ? 'waitlist' : 'calendar';
-    setView(tab);
-    const url = new URL(window.location.href);
-    if (tab === 'waitlist') url.searchParams.set('tab', 'waitlist');
-    else url.searchParams.delete('tab');
-    window.history.replaceState(null, '', url);
-  };
 
   const weekDays = getWeekDays(anchor);
   const dateFrom = weekDays[0].toISOString();
   const dateTo = weekDays[6].toISOString();
 
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({ dateFrom, dateTo, limit: '200' });
-        if (doctorFilter) params.set('doctorId', doctorFilter);
-        const res = await fetchWithAuth(`${API_V1}/appointments?${params}`);
-        if (!res.ok) throw new Error(`Failed to load appointments (${res.status})`);
-        const data = await res.json();
-        setAppointments(data.data ?? []);
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to load appointments');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // ── React Query hooks ─────────────────────────────────────────────────────
+  const { data: appointments = [], isLoading } = useAppointments(
+    dateFrom,
+    dateTo,
+    doctorFilter || undefined,
+  );
+  const createMutation = useCreateAppointment();
+  const rescheduleMutation = useRescheduleAppointment();
+  const cancelMutation = useCancelAppointment();
 
-    fetchAppointments();
-  }, [dateFrom, dateTo, doctorFilter]);
+  // Deep link: /appointments?tab=waitlist
+  useMemo(() => {
+    if (typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('tab') === 'waitlist'
+    )
+      setView('waitlist');
+  }, []);
+
+  const changeView = (next: string) => {
+    const tab = next === 'waitlist' ? 'waitlist' : 'calendar';
+    setView(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (tab === 'waitlist') url.searchParams.set('tab', 'waitlist');
+      else url.searchParams.delete('tab');
+      window.history.replaceState(null, '', url);
+    }
+  };
 
   const doctors = Array.from(new Set(appointments.map((a) => a.doctorId))).sort();
 
@@ -149,7 +147,6 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
   };
 
   const createAppointment = async () => {
-    setStatusMessage(null);
     setErrorMessage(null);
 
     if (!draft.patientId.trim() || !draft.doctorId.trim() || !draft.scheduledAt) {
@@ -158,22 +155,8 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
     }
 
     try {
-      const res = await fetchWithAuth(`${API_V1}/appointments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Failed to create appointment (${res.status})`);
-      }
-
-      const data = await res.json();
-      const appointment: Appointment = data.data ?? data;
-      setAppointments((prev) => [appointment, ...prev]);
+      const appointment = await createMutation.mutateAsync(draft);
       setConfirmation(appointment);
-      setStatusMessage('Appointment created successfully.');
       setShowForm(false);
       setDraft({
         patientId: '',
@@ -190,44 +173,21 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
   };
 
   const cancelAppointment = async (id: string) => {
-    setCancelingId(id);
     try {
-      const res = await fetchWithAuth(`${API_V1}/appointments/${encodeURIComponent(id)}/cancel`, {
-        method: 'PATCH',
-      });
-      if (!res.ok) throw new Error(`Failed to cancel (${res.status})`);
-      setAppointments((prev) =>
-        prev.map((appt) => (appt._id === id ? { ...appt, status: 'cancelled' } : appt))
-      );
-      setStatusMessage('Appointment cancelled.');
+      await cancelMutation.mutateAsync(id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to cancel appointment');
-    } finally {
-      setCancelingId(null);
     }
   };
 
   const rescheduleAppointment = async (appointment: Appointment, newDate: string) => {
     setErrorMessage(null);
     try {
-      const res = await fetchWithAuth(
-        `${API_V1}/appointments/${encodeURIComponent(appointment._id)}/reschedule`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scheduledAt: newDate }),
-        }
-      );
-      if (!res.ok) throw new Error(`Failed to reschedule (${res.status})`);
-      setAppointments((prev) =>
-        prev.map((appt) =>
-          appt._id === appointment._id
-            ? { ...appt, scheduledAt: newDate, status: 'scheduled' }
-            : appt
-        )
-      );
+      await rescheduleMutation.mutateAsync({
+        appointmentId: appointment._id,
+        scheduledAt: newDate,
+      });
       setRescheduleTarget(null);
-      setStatusMessage('Appointment rescheduled.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to reschedule appointment');
     }
@@ -243,7 +203,11 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
   };
 
   return (
-    <main id="main-content" style={{ padding: '1.5rem', fontFamily: 'sans-serif' }}>
+    <main
+      id="main-content"
+      className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+      style={{ padding: '1.5rem', fontFamily: 'sans-serif' }}
+    >
       <div
         style={{
           marginBottom: '1rem',
@@ -257,10 +221,9 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
         <button
           type="button"
           onClick={() => setShowForm(true)}
+          className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
           style={{
             padding: '0.5rem 1rem',
-            background: '#2563eb',
-            color: '#fff',
             borderRadius: 6,
             border: 'none',
             cursor: 'pointer',
@@ -281,27 +244,25 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
         </TabsContent>
 
         <TabsContent value="calendar">
-          {statusMessage && (
+          {createMutation.isSuccess && confirmation && (
             <div
+              className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
               style={{
                 marginBottom: '1rem',
                 padding: '0.75rem 1rem',
                 borderRadius: 8,
-                background: '#ecfdf5',
-                color: '#065f46',
               }}
             >
-              {statusMessage}
+              {createMutation.isSuccess ? 'Appointment created successfully.' : ''}
             </div>
           )}
           {errorMessage && (
             <div
+              className="bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200"
               style={{
                 marginBottom: '1rem',
                 padding: '0.75rem 1rem',
                 borderRadius: 8,
-                background: '#fef2f2',
-                color: '#b91c1c',
               }}
             >
               {errorMessage}
@@ -310,12 +271,12 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
 
           {showForm && (
             <div
+              className="border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900"
               style={{
                 marginBottom: '1.5rem',
                 padding: '1rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid',
                 borderRadius: 12,
-                background: '#ffffff',
               }}
             >
               <div
@@ -329,16 +290,17 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
               >
                 <div>
                   <h2 style={{ margin: 0, fontSize: '1.1rem' }}>New appointment</h2>
-                  <p style={{ margin: '0.25rem 0 0', color: '#6b7280' }}>
+                  <p className="text-slate-500 dark:text-slate-400" style={{ margin: '0.25rem 0 0' }}>
                     Choose a patient, clinician, and time slot.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
+                  className="border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                   style={{
                     background: 'transparent',
-                    border: '1px solid #d1d5db',
+                    border: '1px solid',
                     borderRadius: 8,
                     padding: '0.4rem 0.8rem',
                     cursor: 'pointer',
@@ -450,7 +412,8 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                   />
                   <label
                     htmlFor="telemedicine"
-                    style={{ margin: 0, fontSize: '0.95rem', color: '#334155' }}
+                    className="text-slate-700 dark:text-slate-300"
+                    style={{ margin: 0, fontSize: '0.95rem' }}
                   >
                     Telemedicine visit
                   </label>
@@ -483,11 +446,11 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
+                  className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   style={{
                     padding: '0.7rem 1.2rem',
                     borderRadius: 8,
-                    border: '1px solid #d1d5db',
-                    background: '#fff',
+                    border: '1px solid',
                     cursor: 'pointer',
                   }}
                 >
@@ -496,12 +459,11 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                 <button
                   type="button"
                   onClick={createAppointment}
+                  className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                   style={{
                     padding: '0.7rem 1.2rem',
                     borderRadius: 8,
                     border: 'none',
-                    background: '#2563eb',
-                    color: '#fff',
                     cursor: 'pointer',
                   }}
                 >
@@ -513,12 +475,12 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
 
           {confirmation && (
             <div
+              className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950"
               style={{
                 marginBottom: '1.5rem',
                 padding: '1rem',
-                border: '1px solid #d1fae5',
+                border: '1px solid',
                 borderRadius: 12,
-                background: '#ecfdf5',
               }}
             >
               <div
@@ -530,13 +492,19 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                 }}
               >
                 <div>
-                  <p style={{ margin: '0 0 0.25rem', fontSize: '0.95rem', color: '#065f46' }}>
+                  <p
+                    className="text-emerald-800 dark:text-emerald-200"
+                    style={{ margin: '0 0 0.25rem', fontSize: '0.95rem' }}
+                  >
                     Confirmed appointment
                   </p>
-                  <strong style={{ display: 'block', fontSize: '1rem', color: '#064e3b' }}>
+                  <strong
+                    className="text-emerald-900 dark:text-emerald-100"
+                    style={{ display: 'block', fontSize: '1rem' }}
+                  >
                     {confirmation.type}
                   </strong>
-                  <p style={{ margin: '0.25rem 0 0', color: '#065f46' }}>
+                  <p className="text-emerald-800 dark:text-emerald-200" style={{ margin: '0.25rem 0 0' }}>
                     {confirmation.patientId} with {confirmation.doctorId} at{' '}
                     {formatTime(confirmation.scheduledAt)} on{' '}
                     {new Date(confirmation.scheduledAt).toLocaleDateString()}.
@@ -548,43 +516,87 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
 
           <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <div
+              className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
               style={{
                 flex: '1 1 220px',
                 padding: '1rem',
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                border: '1px solid',
               }}
             >
-              <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem' }}>Total appointments</p>
               <p
-                style={{ margin: '0.5rem 0 0', fontSize: '1.4rem', fontWeight: 700, color: '#0f172a' }}
+                className="text-slate-500 dark:text-slate-400"
+                style={{ margin: 0, fontSize: '0.85rem' }}
+              >
+                Total appointments
+              </p>
+              <p
+                className="text-slate-900 dark:text-slate-100"
+                style={{ margin: '0.5rem 0 0', fontSize: '1.4rem', fontWeight: 700 }}
               >
                 {appointments.length}
               </p>
             </div>
             <div
+              className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
               style={{
                 flex: '1 1 220px',
                 padding: '1rem',
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                border: '1px solid',
               }}
             >
-              <p style={{ margin: 0, color: '#64748b', fontSize: '0.85rem' }}>Confirmed</p>
               <p
-                style={{ margin: '0.5rem 0 0', fontSize: '1.4rem', fontWeight: 700, color: '#0f172a' }}
+                className="text-slate-500 dark:text-slate-400"
+                style={{ margin: 0, fontSize: '0.85rem' }}
+              >
+                Confirmed
+              </p>
+              <p
+                className="text-slate-900 dark:text-slate-100"
+                style={{ margin: '0.5rem 0 0', fontSize: '1.4rem', fontWeight: 700 }}
               >
                 {appointments.filter((a) => a.status === 'confirmed').length}
               </p>
             </div>
           </div>
 
-          {loading ? (
-            <p role="status" aria-live="polite">
-              {labels.loading}
-            </p>
+          {isLoading ? (
+            <div role="status" aria-live="polite" aria-label={labels.loading}>
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{ minWidth: 720 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                      gap: '0.5rem',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    {weekDays.map((day) => (
+                      <Skeleton key={day.toISOString()} variant="text" height={20} />
+                    ))}
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    {weekDays.map((day) => (
+                      <div
+                        key={day.toISOString()}
+                        style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+                      >
+                        <Skeleton variant="rect" height={72} />
+                        <Skeleton variant="rect" height={72} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table
@@ -600,11 +612,14 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                         <th
                           key={day.toISOString()}
                           scope="col"
+                          className={
+                            isToday
+                              ? 'border border-slate-200 bg-blue-50 font-bold text-slate-900 dark:border-slate-700 dark:bg-blue-950 dark:text-slate-100'
+                              : 'border border-slate-200 bg-slate-50 font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
+                          }
                           style={{
                             padding: '0.75rem',
-                            border: '1px solid #e5e7eb',
-                            background: isToday ? '#eff6ff' : '#f9fafb',
-                            fontWeight: isToday ? 700 : 600,
+                            border: '1px solid',
                             fontSize: '0.85rem',
                             textAlign: 'center',
                           }}
@@ -629,15 +644,19 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                         <td
                           key={day.toISOString()}
                           valign="top"
+                          className="border border-slate-200 dark:border-slate-700"
                           style={{
                             padding: '0.75rem',
-                            border: '1px solid #e5e7eb',
+                            border: '1px solid',
                             verticalAlign: 'top',
                             minHeight: 120,
                           }}
                         >
                           {dayAppts.length === 0 ? (
-                            <div style={{ color: '#475569', fontSize: '0.82rem', lineHeight: 1.6 }}>
+                            <div
+                              className="text-slate-600 dark:text-slate-400"
+                              style={{ fontSize: '0.82rem', lineHeight: 1.6 }}
+                            >
                               <strong>Available slots:</strong>
                               {getAvailableTimes(day).length > 0 ? (
                                 <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1rem' }}>
@@ -646,7 +665,10 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                                   ))}
                                 </ul>
                               ) : (
-                                <p style={{ margin: '0.5rem 0 0', color: '#94a3b8' }}>
+                                <p
+                                  className="text-slate-400 dark:text-slate-500"
+                                  style={{ margin: '0.5rem 0 0' }}
+                                >
                                   All slots booked
                                 </p>
                               )}
@@ -683,8 +705,8 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                                 >
                                   <button
                                     type="button"
-                                    onClick={() => cancelAppointment(appt._id)}
-                                    disabled={cancelingId === appt._id}
+                                    onClick={() => setCancelTarget(appt)}
+                                    disabled={cancelMutation.isPending}
                                     style={{
                                       borderRadius: 8,
                                       border: '1px solid rgba(255,255,255,0.7)',
@@ -695,7 +717,7 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                                       cursor: 'pointer',
                                     }}
                                   >
-                                    {cancelingId === appt._id ? 'Cancelling...' : 'Cancel'}
+                                    {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
                                   </button>
                                   <button
                                     type="button"
@@ -730,12 +752,12 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
 
           {rescheduleTarget && (
             <div
+              className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
               style={{
                 marginTop: '1rem',
                 padding: '1rem',
                 borderRadius: 12,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                border: '1px solid',
               }}
             >
               <p style={{ margin: 0, fontWeight: 700 }}>Reschedule appointment</p>
@@ -758,12 +780,11 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                   onClick={() =>
                     rescheduleTarget && rescheduleAppointment(rescheduleTarget, rescheduleDate)
                   }
+                  className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                   style={{
                     borderRadius: 8,
                     padding: '0.75rem 1rem',
                     border: 'none',
-                    background: '#2563eb',
-                    color: '#fff',
                     cursor: 'pointer',
                   }}
                 >
@@ -773,13 +794,41 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
             </div>
           )}
 
-          {!loading && appointments.length === 0 && (
-            <p role="status" style={{ marginTop: '1rem', color: '#6b7280' }}>
+          {!isLoading && appointments.length === 0 && (
+            <p
+              role="status"
+              className="text-slate-500 dark:text-slate-400"
+              style={{ marginTop: '1rem' }}
+            >
               {labels.empty}
             </p>
           )}
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        onClose={() => {
+          if (!cancelMutation.isPending) setCancelTarget(null);
+        }}
+        onConfirm={async () => {
+          if (!cancelTarget) return;
+          await cancelAppointment(cancelTarget._id);
+          setCancelTarget(null);
+        }}
+        title="Cancel appointment"
+        confirmLabel="Cancel appointment"
+        cancelLabel="Keep appointment"
+        loading={cancelMutation.isPending}
+        message={
+          cancelTarget ? (
+            <>
+              Are you sure you want to cancel this <strong>{cancelTarget.type}</strong> appointment
+              scheduled for <strong>{new Date(cancelTarget.scheduledAt).toLocaleString()}</strong>?
+              The patient will be notified.
+            </>
+          ) : null
+        }
+      />
     </main>
   );
 }

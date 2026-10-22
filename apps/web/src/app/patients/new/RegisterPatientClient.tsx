@@ -9,6 +9,7 @@ import { PatientSchema, type PatientInput } from '@health-watchers/types';
 import { Button, Input, Textarea, Spinner, toast } from '@/components/ui';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+import { OfflineSync, useOnlineStatus } from '@/lib/offline-sync';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
@@ -43,6 +44,7 @@ export interface RegisterPatientLabels {
 export default function RegisterPatientClient({ labels }: { labels: RegisterPatientLabels }) {
   const router = useRouter();
   const [apiError, setApiError] = useState<string | null>(null);
+  const isOnline = useOnlineStatus();
 
   const {
     register,
@@ -75,11 +77,38 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
 
   const onSubmit = async (data: PatientInput) => {
     setApiError(null);
+
+    const url = `${API_URL}/api/v1/patients`;
+    const body = JSON.stringify(data);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // ── Offline path ──────────────────────────────────────────────────────
+    if (!isOnline) {
+      try {
+        await OfflineSync.storePendingForm({
+          url,
+          method: 'POST',
+          headers,
+          body,
+          label: 'Patient Registration',
+        });
+        toast.success(
+          'You are offline. Patient registration has been queued and will sync automatically when you are back online.'
+        );
+        router.push('/patients');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : labels.errorFallback;
+        setApiError(msg);
+      }
+      return;
+    }
+
+    // ── Online path ───────────────────────────────────────────────────────
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/v1/patients`, {
+      const res = await fetchWithAuth(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        headers,
+        body,
       });
 
       if (!res.ok) {
@@ -109,8 +138,23 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
         router.push('/patients');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : labels.errorFallback;
-      setApiError(msg);
+      // Network failure — queue for later
+      try {
+        await OfflineSync.storePendingForm({
+          url,
+          method: 'POST',
+          headers,
+          body,
+          label: 'Patient Registration',
+        });
+        toast.success(
+          'Network error. Patient registration has been queued and will sync when connectivity is restored.'
+        );
+        router.push('/patients');
+      } catch {
+        const msg = err instanceof Error ? err.message : labels.errorFallback;
+        setApiError(msg);
+      }
     }
   };
 
@@ -154,6 +198,21 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
             >
               ×
             </button>
+          </div>
+        )}
+
+        {/* Offline notice */}
+        {!isOnline && (
+          <div
+            role="status"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            data-testid="offline-notice"
+          >
+            <span className="mt-0.5 shrink-0">⚡</span>
+            <p>
+              You are offline. Submitting this form will queue the registration and sync it
+              automatically when your connection is restored.
+            </p>
           </div>
         )}
 
@@ -302,8 +361,10 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
                   <Spinner size="sm" className="text-white" />
                   {labels.submitting}
                 </>
-              ) : (
+              ) : isOnline ? (
                 labels.submit
+              ) : (
+                'Queue for Sync'
               )}
             </Button>
           </div>
@@ -311,11 +372,7 @@ export default function RegisterPatientClient({ labels }: { labels: RegisterPati
       </div>
 
       {/* ── Unsaved Changes Modal ── */}
-      <UnsavedChangesModal
-        isOpen={showModal}
-        onConfirm={confirmLeave}
-        onCancel={cancelLeave}
-      />
+      <UnsavedChangesModal isOpen={showModal} onConfirm={confirmLeave} onCancel={cancelLeave} />
     </main>
   );
 }

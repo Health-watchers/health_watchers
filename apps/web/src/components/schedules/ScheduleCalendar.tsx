@@ -22,6 +22,20 @@ export interface NewShiftRange {
   endTime: string;
 }
 
+/** Request to move an existing shift to a new slot. */
+export interface MoveShiftRequest {
+  occurrence: ShiftOccurrence;
+  newDateKey: string;
+  newStartTime: string;
+  newEndTime: string;
+}
+
+/** Request to toggle availability (block / unblock time off). */
+export interface BlockTimeOffRequest {
+  occurrence: ShiftOccurrence;
+  isAvailable: boolean;
+}
+
 export interface ScheduleCalendarProps {
   view: 'week' | 'month';
   days: Date[];
@@ -33,6 +47,10 @@ export interface ScheduleCalendarProps {
   onCreate: (range: NewShiftRange) => void;
   onResize: (occurrence: ShiftOccurrence, endTime: string) => void;
   onOpen: (occurrence: ShiftOccurrence) => void;
+  /** Drag-and-drop: move a shift to a new slot. */
+  onMove?: (req: MoveShiftRequest) => void;
+  /** Toggle time-off / block on a shift directly from the calendar. */
+  onToggleBlock?: (req: BlockTimeOffRequest) => void;
 }
 
 const SLOT_HEIGHT = 20; // px per 30-minute slot
@@ -45,6 +63,12 @@ const MONTH_KEY_DELTA: Record<string, number> = {
   ArrowDown: 7,
 };
 
+// ── Slot-availability colour coding ──────────────────────────────────────────
+//   free      → green (staff available / open slot)
+//   booked    → blue  (shift with isAvailable=true, role-coloured)
+//   blocked   → gray  (time off / isAvailable=false)
+//   conflict  → red   (double-booking detected)
+
 const ROLE_COLORS: Record<string, string> = {
   DOCTOR: 'bg-blue-100 border-blue-400 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100',
   NURSE: 'bg-green-100 border-green-400 text-green-900 dark:bg-green-900/40 dark:text-green-100',
@@ -52,11 +76,14 @@ const ROLE_COLORS: Record<string, string> = {
     'bg-purple-100 border-purple-400 text-purple-900 dark:bg-purple-900/40 dark:text-purple-100',
 };
 const DEFAULT_COLOR =
-  'bg-neutral-100 border-neutral-400 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100';
+  'bg-blue-50 border-blue-300 text-blue-900 dark:bg-blue-900/30 dark:text-blue-100';
 const UNAVAILABLE_COLOR =
-  'bg-neutral-100 border-dashed border-neutral-400 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300';
+  'bg-neutral-200 border-neutral-400 border-dashed text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300';
+const CONFLICT_COLOR =
+  'bg-red-100 border-red-500 text-red-900 dark:bg-red-900/40 dark:text-red-100';
 
-function shiftColor(occ: ShiftOccurrence, staff?: StaffInfo) {
+function shiftColor(occ: ShiftOccurrence, staff?: StaffInfo, isConflict = false) {
+  if (isConflict) return CONFLICT_COLOR;
   if (!occ.schedule.isAvailable) return UNAVAILABLE_COLOR;
   return (staff?.role && ROLE_COLORS[staff.role]) || DEFAULT_COLOR;
 }
@@ -100,7 +127,8 @@ function layoutLanes(occs: ShiftOccurrence[]) {
 
 type Drag =
   | { type: 'create'; day: number; from: number; to: number; column: HTMLElement }
-  | { type: 'resize'; day: number; occ: ShiftOccurrence; endSlot: number; column: HTMLElement };
+  | { type: 'resize'; day: number; occ: ShiftOccurrence; endSlot: number; column: HTMLElement }
+  | { type: 'move'; day: number; occ: ShiftOccurrence; column: HTMLElement };
 
 function slotFromPointer(column: HTMLElement, clientY: number, round = false) {
   const y = clientY - column.getBoundingClientRect().top;
@@ -108,7 +136,32 @@ function slotFromPointer(column: HTMLElement, clientY: number, round = false) {
   return Math.max(0, Math.min(SLOTS_PER_DAY, round ? Math.round(raw) : Math.floor(raw)));
 }
 
-// ── Week view ───────────────────────────────────────────────────────────────
+// ── Legend ───────────────────────────────────────────────────────────────────
+
+function SlotLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-600 dark:text-neutral-300">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-4 rounded border border-green-400 bg-green-100 dark:bg-green-900/40" />
+        Available
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-4 rounded border border-blue-400 bg-blue-100 dark:bg-blue-900/40" />
+        Booked
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-4 rounded border border-neutral-400 border-dashed bg-neutral-200 dark:bg-neutral-800" />
+        Blocked / Time off
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-4 rounded border border-red-500 bg-red-100 dark:bg-red-900/40" />
+        Conflict
+      </span>
+    </div>
+  );
+}
+
+// ── Week view ────────────────────────────────────────────────────────────────
 
 function WeekView({
   days,
@@ -118,9 +171,17 @@ function WeekView({
   onCreate,
   onResize,
   onOpen,
+  onMove,
+  onToggleBlock,
 }: ScheduleCalendarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ day: number; slot: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    occ: ShiftOccurrence;
+    x: number;
+    y: number;
+  } | null>(null);
   const todayIndex = Math.max(
     0,
     days.findIndex((d) => dateKey(d) === dateKey(new Date()))
@@ -147,6 +208,14 @@ function WeekView({
     if (top < el.scrollTop) el.scrollTop = top;
     else if (bottom > el.scrollTop + el.clientHeight) el.scrollTop = bottom - el.clientHeight;
   }, [cursor]);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [contextMenu]);
 
   const selFrom = Math.min(cursor.slot, cursor.anchorSlot);
   const selTo = Math.max(cursor.slot, cursor.anchorSlot) + 1;
@@ -231,12 +300,23 @@ function WeekView({
     });
   };
 
+  const startMove = (
+    e: React.DragEvent<HTMLDivElement>,
+    day: number,
+    occ: ShiftOccurrence
+  ) => {
+    if (!canEdit || !onMove) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', occ.key);
+    setDrag({ type: 'move', day, occ, column: e.currentTarget.closest('[data-day-col]') as HTMLElement });
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag) return;
     if (drag.type === 'create') {
       const slot = Math.min(SLOTS_PER_DAY - 1, slotFromPointer(drag.column, e.clientY));
       if (slot !== drag.to) setDrag({ ...drag, to: slot });
-    } else {
+    } else if (drag.type === 'resize') {
       const startSlot = Math.floor(toMinutes(drag.occ.startTime) / SLOT_MINUTES);
       const endSlot = Math.max(startSlot + 1, slotFromPointer(drag.column, e.clientY, true));
       if (endSlot !== drag.endSlot) setDrag({ ...drag, endSlot });
@@ -256,17 +336,73 @@ function WeekView({
         startTime: slotToTime(from),
         endTime: slotToTime(end),
       });
-    } else {
+    } else if (drag.type === 'resize') {
       const endTime = slotToTime(drag.endSlot);
       if (endTime !== drag.occ.endTime) onResize(drag.occ, endTime);
     }
     setDrag(null);
   };
 
+  // ── Drag-and-drop drop handlers ──────────────────────────────────────────
+
+  const onDragOverSlot = (e: React.DragEvent<HTMLDivElement>, day: number) => {
+    if (!canEdit || !onMove || drag?.type !== 'move') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const slot = slotFromPointer(e.currentTarget, e.clientY);
+    setDropTarget({ day, slot });
+  };
+
+  const onDropSlot = (e: React.DragEvent<HTMLDivElement>, day: number) => {
+    if (!canEdit || !onMove) return;
+    e.preventDefault();
+    if (drag?.type !== 'move') {
+      setDropTarget(null);
+      return;
+    }
+
+    const occ = drag.occ;
+    const duration = toMinutes(occ.endTime) - toMinutes(occ.startTime);
+    const dropSlot = dropTarget?.slot ?? slotFromPointer(e.currentTarget, e.clientY, true);
+    const newStart = slotToTime(dropSlot);
+    const newEnd = slotToTime(dropSlot + Math.ceil(duration / SLOT_MINUTES));
+
+    onMove({
+      occurrence: occ,
+      newDateKey: dateKey(days[day]),
+      newStartTime: newStart,
+      newEndTime: newEnd,
+    });
+
+    setDrag(null);
+    setDropTarget(null);
+  };
+
+  // ── Right-click context menu (block / unblock time off) ───────────────────
+
+  const onContextMenu = (
+    e: React.MouseEvent<HTMLDivElement>,
+    occ: ShiftOccurrence
+  ) => {
+    if (!canEdit || !onToggleBlock) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ occ, x: e.clientX, y: e.clientY });
+  };
+
   const totalHeight = SLOTS_PER_DAY * SLOT_HEIGHT;
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="flex items-center justify-between px-3 py-2">
+        <SlotLegend />
+        {canEdit && onToggleBlock && (
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">
+            Right-click a shift to block / unblock time off
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))] border-b border-neutral-200 dark:border-neutral-700">
         <div />
         {days.map((d) => {
@@ -291,7 +427,7 @@ function WeekView({
       <div
         ref={scrollRef}
         role="grid"
-        aria-label="Weekly schedule. Use arrow keys to move, Shift+arrow to extend, Enter to create a shift."
+        aria-label="Weekly schedule. Use arrow keys to move, Shift+arrow to extend, Enter to create a shift. Drag a shift to move it."
         aria-readonly={!canEdit}
         tabIndex={0}
         onKeyDown={onKeyDown}
@@ -325,6 +461,7 @@ function WeekView({
             const keyboardSel = focused && !drag && cursor.day === dayIndex;
             const selFromSlot = creating ? Math.min(creating.from, creating.to) : selFrom;
             const selToSlot = creating ? Math.max(creating.from, creating.to) + 1 : selTo;
+            const isDropTarget = dropTarget?.day === dayIndex;
 
             return (
               <div
@@ -336,14 +473,29 @@ function WeekView({
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => setDrag(null)}
+                onDragOver={(e) => onDragOverSlot(e, dayIndex)}
+                onDrop={(e) => onDropSlot(e, dayIndex)}
+                onDragLeave={() => {
+                  if (dropTarget?.day === dayIndex) setDropTarget(null);
+                }}
                 className={[
                   'relative touch-none border-l border-neutral-100 dark:border-neutral-700',
                   canEdit ? 'cursor-crosshair' : '',
+                  isDropTarget ? 'bg-primary-50/60 dark:bg-primary-900/20' : '',
                 ].join(' ')}
                 style={{
                   backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${2 * SLOT_HEIGHT - 1}px, rgb(229 231 235 / 0.8) ${2 * SLOT_HEIGHT - 1}px, rgb(229 231 235 / 0.8) ${2 * SLOT_HEIGHT}px)`,
                 }}
               >
+                {/* Drop indicator line */}
+                {isDropTarget && dropTarget && (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 h-0.5 bg-primary-500"
+                    style={{ top: dropTarget.slot * SLOT_HEIGHT }}
+                  />
+                )}
+
                 {(creating || keyboardSel) && (
                   <div
                     aria-hidden="true"
@@ -363,17 +515,26 @@ function WeekView({
                   const staff = staffById.get(occ.schedule.userId);
                   const resizing =
                     drag?.type === 'resize' && drag.occ.key === occ.key ? drag : null;
+                  const isMoving = drag?.type === 'move' && drag.occ.key === occ.key;
                   const start = toMinutes(occ.startTime);
                   const end = resizing ? resizing.endSlot * SLOT_MINUTES : toMinutes(occ.endTime);
                   const conflict = conflicts.has(occ.key);
                   return (
                     <div
                       key={occ.key}
+                      draggable={canEdit && Boolean(onMove)}
+                      onDragStart={(e) => onMove && startMove(e, dayIndex, occ)}
+                      onDragEnd={() => {
+                        setDrag(null);
+                        setDropTarget(null);
+                      }}
+                      onContextMenu={(e) => onContextMenu(e, occ)}
                       className={[
                         'absolute overflow-hidden rounded border-l-4 text-[11px] shadow-sm',
-                        shiftColor(occ, staff),
-                        conflict ? 'ring-danger-500 ring-2' : '',
-                        resizing ? 'opacity-80' : '',
+                        shiftColor(occ, staff, conflict),
+                        conflict ? 'ring-2 ring-red-500' : '',
+                        resizing || isMoving ? 'opacity-60' : '',
+                        canEdit && onMove ? 'cursor-grab active:cursor-grabbing' : '',
                       ].join(' ')}
                       style={{
                         top: (start / SLOT_MINUTES) * SLOT_HEIGHT,
@@ -401,7 +562,6 @@ function WeekView({
                         <div
                           aria-hidden="true"
                           onPointerDown={(e) => startResize(e, dayIndex, occ)}
-                          // Captured on the handle; stop bubbling so the column doesn't handle it twice
                           onPointerMove={(e) => {
                             e.stopPropagation();
                             onPointerMove(e);
@@ -421,11 +581,41 @@ function WeekView({
           })}
         </div>
       </div>
+
+      {/* Right-click context menu for block / unblock time off */}
+      {contextMenu && onToggleBlock && (
+        <div
+          className="fixed z-[60] min-w-[12rem] rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            onClick={() => {
+              onToggleBlock({ occurrence: contextMenu.occ, isAvailable: !contextMenu.occ.schedule.isAvailable });
+              setContextMenu(null);
+            }}
+          >
+            {contextMenu.occ.schedule.isAvailable ? '🚫 Block time off' : '✅ Unblock / Mark available'}
+          </button>
+          <button
+            type="button"
+            className="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            onClick={() => {
+              onOpen(contextMenu.occ);
+              setContextMenu(null);
+            }}
+          >
+            ✏️ Edit shift details
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Month view ──────────────────────────────────────────────────────────────
+// ── Month view ───────────────────────────────────────────────────────────────
 
 function MonthView({
   days,
@@ -466,6 +656,9 @@ function MonthView({
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="px-3 py-2">
+        <SlotLegend />
+      </div>
       <div className="grid grid-cols-7 border-b border-neutral-200 text-center text-xs font-semibold text-neutral-500 dark:border-neutral-700">
         {days.slice(0, 7).map((d) => (
           <div key={d.getDay()} className="py-2">
@@ -526,6 +719,7 @@ function MonthView({
               <ul className="mt-1 space-y-0.5">
                 {dayOccs.slice(0, 4).map((occ) => {
                   const staff = staffById.get(occ.schedule.userId);
+                  const conflict = conflicts.has(occ.key);
                   return (
                     <li key={occ.key}>
                       <button
@@ -534,8 +728,8 @@ function MonthView({
                         onClick={() => onOpen(occ)}
                         className={[
                           'block w-full truncate rounded border-l-2 px-1 text-left text-[10px]',
-                          shiftColor(occ, staff),
-                          conflicts.has(occ.key) ? 'ring-danger-500 ring-1' : '',
+                          shiftColor(occ, staff, conflict),
+                          conflict ? 'ring-1 ring-red-500' : '',
                         ].join(' ')}
                       >
                         {occ.startTime} {staff?.name ?? 'Staff'}
@@ -555,7 +749,7 @@ function MonthView({
   );
 }
 
-// ── Mobile agenda ───────────────────────────────────────────────────────────
+// ── Mobile agenda ────────────────────────────────────────────────────────────
 
 export function ScheduleAgenda({
   days,
@@ -610,6 +804,7 @@ export function ScheduleAgenda({
               <ul className="space-y-2">
                 {dayOccs.map((occ) => {
                   const staff = staffById.get(occ.schedule.userId);
+                  const conflict = conflicts.has(occ.key);
                   return (
                     <li key={occ.key}>
                       <button
@@ -617,8 +812,8 @@ export function ScheduleAgenda({
                         onClick={() => onOpen(occ)}
                         className={[
                           'flex w-full items-center justify-between rounded-md border-l-4 px-3 py-2 text-left text-sm',
-                          shiftColor(occ, staff),
-                          conflicts.has(occ.key) ? 'ring-danger-500 ring-2' : '',
+                          shiftColor(occ, staff, conflict),
+                          conflict ? 'ring-2 ring-red-500' : '',
                         ].join(' ')}
                       >
                         <span>

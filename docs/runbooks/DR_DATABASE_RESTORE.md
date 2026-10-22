@@ -4,9 +4,8 @@
 **Objective:** RTO 30 min, RPO 5 min.
 **Owner:** DevOps on-call.
 
-> Related: [`DISASTER_RECOVERY_PROCEDURES.md`](../DISASTER_RECOVERY_PROCEDURES.md),
-> [`BACKUP_VERIFICATION.md`](../BACKUP_VERIFICATION.md),
-> [`disaster-recovery.md`](../disaster-recovery.md).
+> Related: [`DISASTER_RECOVERY.md`](../DISASTER_RECOVERY.md),
+> [`BACKUP_VERIFICATION.md`](../BACKUP_VERIFICATION.md).
 
 ## 0. Declare and communicate
 

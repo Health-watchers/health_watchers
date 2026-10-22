@@ -11,6 +11,7 @@ import {
   Badge,
   SectionErrorBoundary,
   Button,
+  Skeleton,
 } from '@/components/ui';
 import PatientThumbnail from '@/components/patients/PatientThumbnail';
 import PatientImport from '@/components/patients/PatientImport';
@@ -535,21 +536,46 @@ export default function PatientsClient() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-700 dark:bg-neutral-800">
           {activeFilterCount > 0 && (
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 dark:text-neutral-300">
               {t('filters.activeCount', { count: activeFilterCount })}
             </span>
           )}
-          <p className="text-sm text-gray-500">{t('showingCount', { count: patients.length })}</p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-neutral-400">
+            {t('showingCount', { count: patients.length })}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-neutral-400">
             Showing {visiblePatients.length} patient{visiblePatients.length !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
 
       {isLoading ? (
-        <TableSkeleton columns={7} rows={5} />
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 md:hidden">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded border border-gray-200 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
+              >
+                <div className="mb-3 flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-40" />
+                </div>
+                <Skeleton className="mb-1 h-3 w-16" />
+                <Skeleton className="mb-2 h-4 w-32" />
+                <Skeleton className="mb-1 h-3 w-16" />
+                <Skeleton className="mb-2 h-4 w-28" />
+                <Skeleton className="mb-1 h-3 w-16" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <TableSkeleton columns={8} rows={5} />
+          </div>
+        </div>
       ) : error ? (
         <ErrorMessage
           message={error instanceof Error ? error.message : t('loadError')}
@@ -573,7 +599,10 @@ export default function PatientsClient() {
         <SectionErrorBoundary name="patient list">
           <div className="flex flex-col gap-4 md:hidden">
             {visiblePatients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
-              <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
+              <div
+                key={p._id}
+                className="rounded border border-gray-200 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800"
+              >
                 <div className="mb-3 flex items-center gap-3">
                   <PatientThumbnail
                     patientId={String(p._id)}
@@ -582,18 +611,26 @@ export default function PatientsClient() {
                     thumbnailUrl={(p as any).thumbnailUrl}
                     size="md"
                   />
-                  <p className="font-medium text-gray-900">
+                  <p className="font-medium text-gray-900 dark:text-neutral-100">
                     {p.firstName} {p.lastName}
                   </p>
                 </div>
-                <p className="text-xs tracking-wide text-gray-500 uppercase">{t('id')}</p>
-                <p className="font-medium text-gray-900">{p.systemId}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('dob')}</p>
-                <p className="text-gray-700">{formatDob(p.dateOfBirth)}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('sex')}</p>
-                <p className="text-gray-700">{formatSex(p.sex)}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{t('contact')}</p>
-                <p className="text-gray-700">{p.contactNumber || t('na')}</p>
+                <p className="text-xs tracking-wide text-gray-500 uppercase dark:text-neutral-400">
+                  {t('id')}
+                </p>
+                <p className="font-medium text-gray-900 dark:text-neutral-100">{p.systemId}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase dark:text-neutral-400">
+                  {t('dob')}
+                </p>
+                <p className="text-gray-700 dark:text-neutral-300">{formatDob(p.dateOfBirth)}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase dark:text-neutral-400">
+                  {t('sex')}
+                </p>
+                <p className="text-gray-700 dark:text-neutral-300">{formatSex(p.sex)}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase dark:text-neutral-400">
+                  {t('contact')}
+                </p>
+                <p className="text-gray-700 dark:text-neutral-300">{p.contactNumber || t('na')}</p>
                 <p className="text-xs uppercase tracking-wide text-gray-500">{labels.id}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
                 <p className="mt-2 text-xs uppercase tracking-wide text-gray-500">{labels.dob}</p>
@@ -613,7 +650,7 @@ export default function PatientsClient() {
                 )}
                 <Link
                   href={`/patients/${p._id}`}
-                  className="mt-3 inline-block rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
+                  className="mt-3 inline-block rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                 >
                   {t('view')}
                 </Link>
@@ -624,98 +661,68 @@ export default function PatientsClient() {
           <div className="hidden overflow-x-auto md:block">
             <table aria-label={t('title')} className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-gray-50">
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                <tr className="bg-gray-50 dark:bg-neutral-800">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('id')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('photo')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('name')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('dob')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('sex')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('contact')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('risk')}
                   </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                  <th
+                    scope="col"
+                    className="border border-gray-200 px-4 py-2 text-left dark:border-neutral-700 dark:text-neutral-200"
+                  >
                     {t('view')}
-                    {labels.id}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    Photo
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.name}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.dob}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.sex}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.contact}
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    Risk
-                  </th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
-                    {labels.view}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
-                  <tr key={p._id} className="even:bg-gray-50">
-                    <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      <PatientThumbnail
-                        patientId={String(p._id)}
-                        firstName={p.firstName}
-                        lastName={p.lastName}
-                        thumbnailUrl={(p as any).thumbnailUrl}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.firstName} {p.lastName}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">{formatDob(p.dateOfBirth)}</td>
-                    <td className="border border-gray-200 px-4 py-2">{formatSex(p.sex)}</td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.contactNumber || t('na')}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      {p.riskLevel ? (
-                        <Badge variant={riskVariant(p.riskLevel)}>
-                          {formatRisk(p.riskLevel)}
-                          {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="border border-gray-200 px-4 py-2">
-                      <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
-                        {t('view')}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
                 {visiblePatients.map(
                   (p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
-                    <tr key={p._id} className="even:bg-gray-50">
-                      <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
-                      <td className="border border-gray-200 px-4 py-2">
+                    <tr
+                      key={p._id}
+                      className="even:bg-gray-50 dark:even:bg-neutral-800/50"
+                    >
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700 dark:text-neutral-200">
+                        {p.systemId}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700">
                         <PatientThumbnail
                           patientId={String(p._id)}
                           firstName={p.firstName}
@@ -724,29 +731,34 @@ export default function PatientsClient() {
                           size="sm"
                         />
                       </td>
-                      <td className="border border-gray-200 px-4 py-2">
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700 dark:text-neutral-200">
                         {p.firstName} {p.lastName}
                       </td>
-                      <td className="border border-gray-200 px-4 py-2">
-                        {formatDate(p.dateOfBirth)}
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700 dark:text-neutral-200">
+                        {formatDob(p.dateOfBirth)}
                       </td>
-                      <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
-                      <td className="border border-gray-200 px-4 py-2">
-                        {p.contactNumber || 'N/A'}
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700 dark:text-neutral-200">
+                        {formatSex(p.sex)}
                       </td>
-                      <td className="border border-gray-200 px-4 py-2">
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700 dark:text-neutral-200">
+                        {p.contactNumber || t('na')}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700">
                         {p.riskLevel ? (
                           <Badge variant={riskVariant(p.riskLevel)}>
-                            {p.riskLevel}
+                            {formatRisk(p.riskLevel)}
                             {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          <span className="text-xs text-gray-400 dark:text-neutral-500">—</span>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-4 py-2">
-                        <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
-                          {labels.view}
+                      <td className="border border-gray-200 px-4 py-2 dark:border-neutral-700">
+                        <Link
+                          href={`/patients/${p._id}`}
+                          className="text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          {t('view')}
                         </Link>
                       </td>
                     </tr>

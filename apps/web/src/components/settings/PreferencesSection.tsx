@@ -16,6 +16,7 @@ export interface NotificationTypes {
 export interface UserPreferences {
   language: string;
   theme: 'light' | 'dark' | 'system';
+  defaultView: 'dashboard' | 'patients' | 'appointments' | 'encounters';
   emailNotifications: boolean;
   inAppNotifications: boolean;
   notificationTypes?: NotificationTypes;
@@ -65,6 +66,9 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
   const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>(
     preferences.theme ?? 'system'
   );
+  const [defaultView, setDefaultView] = useState<'dashboard' | 'patients' | 'appointments' | 'encounters'>(
+    preferences.defaultView ?? 'dashboard'
+  );
   const [emailNotifications, setEmailNotifications] = useState(preferences.emailNotifications);
   const [inAppNotifications, setInAppNotifications] = useState(preferences.inAppNotifications);
   const [notifTypes, setNotifTypes] = useState<NotificationTypes>(
@@ -80,11 +84,25 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
     setSuccessMessage(null);
     try {
       await patchPreferences({ language: newLang });
-      document.cookie = `NEXT_LOCALE=${newLang}; path=/`;
+      document.cookie = `locale=${newLang}; path=/; max-age=31536000; samesite=lax`;
       router.refresh();
     } catch (err) {
       setLanguage(prev);
       setError(err instanceof Error ? err.message : 'Failed to update language');
+    }
+  };
+
+  const handleDefaultViewChange = async (newView: 'dashboard' | 'patients' | 'appointments' | 'encounters') => {
+    const prev = defaultView;
+    setDefaultView(newView);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      await patchPreferences({ defaultView: newView });
+      setSuccessMessage('Preferences saved');
+    } catch (err) {
+      setDefaultView(prev);
+      setError(err instanceof Error ? err.message : 'Failed to update default view');
     }
   };
 
@@ -211,12 +229,38 @@ export function PreferencesSection({ preferences }: PreferencesSectionProps) {
           </p>
         </div>
 
+        {/* Default view */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="default-view-select"
+            className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+          >
+            Default view after login
+          </label>
+          <select
+            id="default-view-select"
+            value={defaultView}
+            data-testid="prefs-default-view"
+            onChange={(e) =>
+              handleDefaultViewChange(
+                e.target.value as 'dashboard' | 'patients' | 'appointments' | 'encounters'
+              )
+            }
+            className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
+          >
+            <option value="dashboard">Dashboard</option>
+            <option value="patients">Patients</option>
+            <option value="appointments">Appointments</option>
+            <option value="encounters">Encounters</option>
+          </select>
+          <p className="text-xs text-neutral-400">The first page you see after signing in.</p>
+        </div>
+
         {/* Global notification toggles */}
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
             Notifications
           </h3>
-
           <div className="flex items-center justify-between">
             <label
               htmlFor="email-notifications"

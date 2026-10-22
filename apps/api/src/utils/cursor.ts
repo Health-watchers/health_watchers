@@ -65,4 +65,19 @@ export function afterCursorFilter(position: CursorPosition): Record<string, unkn
   };
 }
 
+/**
+ * Mongo filter selecting documents strictly before `position` in
+ * `{ createdAt: -1, _id: -1 }` order (newest first) — the mirror of
+ * `afterCursorFilter`, used for the `before` cursor parameter.
+ */
+export function beforeCursorFilter(position: CursorPosition): Record<string, unknown> {
+  const id = new Types.ObjectId(position.id);
+  return {
+    $or: [
+      { createdAt: { $gt: position.createdAt } },
+      { createdAt: position.createdAt, _id: { $gt: id } },
+    ],
+  };
+}
+
 export const NEWEST_FIRST = { createdAt: -1, _id: -1 } as const;

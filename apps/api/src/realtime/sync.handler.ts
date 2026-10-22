@@ -21,6 +21,7 @@ import { Socket } from 'socket.io';
 import { emitToClinic } from './socket';
 import { applyChange, reconcile, currentSeq } from './sync.service';
 import type { SyncChange, SequencedChange, ApplyResult } from './sync.types';
+import type { SyncPushAck as PushAck } from '@health-watchers/types';
 import {
   syncChangesTotal,
   syncConflictsTotal,
@@ -191,14 +192,6 @@ export class SyncHandler {
       syncActiveClients.dec();
     });
   }
-}
-
-interface PushAck {
-  changeId: string;
-  resolution: ApplyResult['resolution'];
-  seq?: number;
-  version?: number;
-  reason?: string;
 }
 
 /**

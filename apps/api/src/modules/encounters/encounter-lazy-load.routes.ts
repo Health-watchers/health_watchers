@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate as protect } from '../../middlewares/auth.middleware';
-import { parseLazyLoadQuery } from '../../middleware/lazy-load.middleware';
+import { parseLazyLoadQuery } from '../../middlewares/lazy-load.middleware';
 import {
   getEncounterRelation,
   getMultipleEncounterRelations,

@@ -211,6 +211,8 @@
    ```
 4. If persistent, check recent migrations: `npm run migrate:status`
 
+See [Background Jobs — mfa-grace-period](../BACKGROUND_JOBS.md#mfa-grace-period) for the job's schedule, toggles and known issues.
+
 ---
 
 ## Alert: Payment Expiration / Reconciliation Job Failing
@@ -226,6 +228,8 @@
    ```bash
    kubectl rollout restart deployment/stellar-service -n health-watchers
    ```
+
+See [Background Jobs — payment-expiration](../BACKGROUND_JOBS.md#payment-expiration) and [reconciliation](../BACKGROUND_JOBS.md#reconciliation) for per-job troubleshooting.
 
 ---
 
@@ -260,3 +264,4 @@ Remember to remove the silence after maintenance completes.
 - [Incident Response](./03-incident-response.md)
 - [Scaling Procedures](./04-scaling.md)
 - [Database Maintenance](./10-database-maintenance.md)
+- [Background Jobs Catalogue](../BACKGROUND_JOBS.md)

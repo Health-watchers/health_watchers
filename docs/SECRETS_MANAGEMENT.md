@@ -137,7 +137,7 @@ AWS / vice-versa).
    deployments.
 5. **Decommission** — delete the old plain Secret / `.env` entry and confirm it
    is gone from `kubectl get secret` and from git history (BFG if it ever landed
-   in a commit — see [`SECURITY_SECRETS_REMEDIATION.md`](../SECURITY_SECRETS_REMEDIATION.md)).
+   in a commit — see [`SECURITY_REMEDIATION.md`](./SECURITY_REMEDIATION.md#secrets-leak-remediation)).
 6. **Record** — note the migration in the change log.
 
 Rollback: the previous store version is retained (AWS `AWSPREVIOUS`, Vault prior
@@ -159,7 +159,7 @@ version). `rotate-secret.sh --rollback <secret>` restores it and forces a resync
   lock.
 - Recovery is covered by [`docs/runbooks/DR_SECRETS_RECOVERY`](../docs/runbooks/)
   and drilled quarterly as part of the DR programme (see
-  [`DISASTER_RECOVERY_PROCEDURES.md`](./DISASTER_RECOVERY_PROCEDURES.md)).
+  [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md)).
 - **RTO 30 min / RPO 1 h** for the secrets subsystem.
 
 ## 8. Monitoring and alerting

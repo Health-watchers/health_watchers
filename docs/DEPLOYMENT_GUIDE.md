@@ -654,7 +654,7 @@ See [`logging/README.md`](../logging/README.md) for full ELK configuration.
    - Tier 1 → Tier 2 (senior engineer)
    - Data breach → Immediately escalate to Security + Legal + Executive
 4. **Incident channel** → Open `#incidents` Slack channel, post status every 30 minutes
-5. **Post-mortem** → Filed within 48 hours using the template in `docs/DISASTER_RECOVERY_PLAN.md`
+5. **Post-mortem** → Filed within 48 hours using the template in `docs/DISASTER_RECOVERY.md`
 
 **Contact escalation order:**
 
@@ -729,3 +729,19 @@ NODE_OPTIONS="--trace-gc"
 - **Documentation:** Check `docs/` folder
 - **Issues:** GitHub Issues
 - **Email:** devops@healthwatchers.com
+
+## Deployment Checklist
+
+### Preflight
+
+- Confirm migrations are backward compatible.
+- Confirm secrets are present in the target environment.
+- Review monitoring and rollback owner.
+
+### Deploy
+
+1. Build and publish immutable images.
+2. Apply infrastructure changes.
+3. Deploy API, workers, web, and Stellar service.
+4. Run smoke checks.
+5. Watch latency, error rate, and audit-event flow for 30 minutes.

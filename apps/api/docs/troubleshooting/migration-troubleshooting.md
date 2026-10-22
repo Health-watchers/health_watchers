@@ -23,14 +23,14 @@ Covers `migrate-mongo` usage, stuck migrations, rollbacks, index failures, schem
 
 ## Migration Setup
 
-The project uses [`migrate-mongo`](https://github.com/seppevs/migrate-mongo) configured in `migrate-mongo-config.js`.
+The project uses [`migrate-mongo`](https://github.com/seppevs/migrate-mongo) configured in `migrate-mongo-config.ts`.
 
 ```bash
 # Install dependencies (from monorepo root)
 npm install
 
 # Configuration file
-cat apps/api/migrate-mongo-config.js
+cat apps/api/migrate-mongo-config.ts
 
 # Required env var
 echo $MONGO_URI

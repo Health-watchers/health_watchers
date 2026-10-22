@@ -53,7 +53,7 @@ if [ -f "$TEMP_REPORT" ]; then
     echo "  1. For real secrets: remove them and rotate the secret"
     echo "  2. For false positives: add to .gitleaks.toml allowlist"
     echo ""
-    echo "Learn more: https://github.com/Health-watchers/health_watchers/blob/main/SECURITY_SECRETS_REMEDIATION.md"
+    echo "Learn more: https://github.com/Health-watchers/health_watchers/blob/main/docs/SECURITY_REMEDIATION.md#secrets-leak-remediation"
     echo ""
     rm -f "$TEMP_REPORT"
     exit 1

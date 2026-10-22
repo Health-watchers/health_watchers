@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
@@ -20,6 +20,79 @@ import { confirmPayment } from '../payments/services/payment-confirmation.servic
 import { retryDelivery } from './retry-worker';
 
 const router = Router();
+
+/**
+ * Raw request body captured by the `verify` hook on `express.json()` (see app setup).
+ * HMAC signatures must be computed over the exact bytes received, not a re-serialized
+ * JSON object, otherwise key ordering / whitespace differences break verification.
+ */
+function getRawBody(req: Request): string {
+  const raw = (req as Request & { rawBody?: Buffer | string }).rawBody;
+  if (Buffer.isBuffer(raw)) return raw.toString('utf8');
+  if (typeof raw === 'string') return raw;
+  // Fallback: no raw body captured (e.g. middleware not mounted) — best effort.
+  return JSON.stringify(req.body ?? {});
+}
+
+/**
+ * HMAC-SHA256 signature verification for incoming webhooks.
+ *
+ * Requires the `X-Webhook-Signature` header to contain the hex HMAC-SHA256 digest of the
+ * raw request body, signed with the webhook's secret. Returns 401 when the header is
+ * missing or the digest does not match.
+ *
+ * The webhook record is resolved from the (unauthenticated) `destination` field using an
+ * exact match — never a regex — to avoid ReDoS (see PENTEST_FINDINGS FIND-005).
+ */
+async function verifyInboundWebhookSignature(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const signature = req.headers['x-webhook-signature'];
+  if (!signature || typeof signature !== 'string') {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'X-Webhook-Signature header is required',
+    });
+    return;
+  }
+
+  const destination = (req.body as { destination?: string } | undefined)?.destination;
+  if (!destination) {
+    res.status(400).json({
+      error: 'BadRequest',
+      message: 'destination is required',
+    });
+    return;
+  }
+
+  const webhook = await WebhookModel.findOne({ url: destination });
+  if (!webhook) {
+    res.status(404).json({
+      error: 'NotFound',
+      message: 'Webhook not found',
+    });
+    return;
+  }
+
+  const payloadString = getRawBody(req);
+  if (!verifyWebhookSignature(webhook.secret, payloadString, signature)) {
+    logger.warn(
+      { webhookId: String(webhook._id) },
+      'Inbound webhook rejected: invalid signature'
+    );
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid webhook signature',
+    });
+    return;
+  }
+
+  // Expose the resolved webhook to downstream handlers without a second lookup.
+  (req as Request & { webhook?: unknown }).webhook = webhook;
+  next();
+}
 
 /**
  * @swagger
@@ -150,37 +223,9 @@ router.post(
 router.post(
   '/stellar-payment',
   validateRequest({ body: inboundWebhookSchema }),
+  asyncHandler(verifyInboundWebhookSignature),
   asyncHandler(async (req: Request, res: Response) => {
-    const signature = req.headers['x-webhook-signature'] as string;
-    if (!signature) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'X-Webhook-Signature header is required',
-      });
-    }
-
-    const { transactionHash, amount, destination, memo, status } = req.body;
-    const payloadString = JSON.stringify(req.body);
-
-    // Find matching webhook by destination (clinic's public key).
-    // Exact match — this runs before signature verification, so treating `destination`
-    // (unauthenticated request body input) as a regex would allow ReDoS (see PENTEST_FINDINGS FIND-005).
-    const webhook = await WebhookModel.findOne({ url: destination });
-
-    if (!webhook) {
-      return res.status(404).json({
-        error: 'NotFound',
-        message: 'Webhook not found',
-      });
-    }
-
-    // Verify signature
-    if (!verifyWebhookSignature(webhook.secret, payloadString, signature)) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid webhook signature',
-      });
-    }
+    const { transactionHash, amount, memo, status } = req.body;
 
     // Find matching payment record
     const payment = await PaymentRecordModel.findOne({ memo, status: 'pending' });

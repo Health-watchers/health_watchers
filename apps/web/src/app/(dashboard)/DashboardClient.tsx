@@ -77,8 +77,17 @@ export default function DashboardClient({ labels }: { labels: DashboardLabels })
         }
       />
 
+      {/* Announce loading/error state to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isLoading && labels.loading}
+        {isError && labels.apiError}
+      </div>
+
       {isError ? (
-        <div className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 rounded-lg border p-4 text-sm">
+        <div
+          role="alert"
+          className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-400 rounded-lg border p-4 text-sm"
+        >
           {labels.apiError}
         </div>
       ) : (

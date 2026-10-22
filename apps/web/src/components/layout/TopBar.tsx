@@ -90,7 +90,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         </div>
         <button
           type="button"
-          onClick={logout}
+          onClick={() => logout()}
           className="whitespace-nowrap text-sm text-neutral-500 hover:text-neutral-800 focus:underline focus:outline-none dark:text-neutral-400 dark:hover:text-neutral-100"
         >
           Logout

@@ -11,6 +11,7 @@ import { ThemeSync } from '@/components/ThemeSync';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PWAInit } from '@/components/PWAInit';
 import { SessionTimeoutWarning } from '@/components/SessionTimeoutWarning';
+import { SyncQueueStatus } from '@/components/SyncQueueStatus';
 import { CommandPaletteProvider, CommandPalette } from '@/components/CommandPalette';
 import { GlobalHotkeys } from '@/components/GlobalHotkeys';
 import './globals.css';
@@ -91,9 +92,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
+  return (
     <html lang={locale} className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen bg-neutral-50 font-sans antialiased dark:bg-neutral-900">
-        <ThemeProvider>
+        {/* Skip navigation link for keyboard/screen-reader users */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-neutral-900 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          Skip to main content
+        </a>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <QueryProvider>
               <AuthProvider>
@@ -105,6 +118,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <GlobalHotkeys />
                   <CommandPalette />
                   {children}
+                  <div className="fixed right-4 bottom-4 z-40 w-80 max-w-[calc(100vw-2rem)]">
+                    <SyncQueueStatus />
+                  </div>
                   <Toaster />
                 </CommandPaletteProvider>
               </AuthProvider>

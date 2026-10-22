@@ -14,7 +14,7 @@ groups:
           description: >
             backup-scheduler.sh has not recorded a successful full backup since
             {{ $value | humanizeDuration }} ago. Check the mongodb-full-backup CronJob.
-          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/BACKUP_AND_DR_RUNBOOK.md'
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
 
       - alert: IncrementalBackupStalled
         expr: time() - backup_incremental_last_success_timestamp > 5400

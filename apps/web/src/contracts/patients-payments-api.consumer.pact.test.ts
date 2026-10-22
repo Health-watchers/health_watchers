@@ -47,6 +47,31 @@ async function postJson(
   return { status: res.status, body: await res.json() };
 }
 
+async function putJson(
+  baseUrl: string,
+  endpoint: string,
+  body: unknown,
+  token = 'stub-bearer-token'
+) {
+  const res = await fetch(`${baseUrl}${endpoint}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+async function deleteJson(baseUrl: string, endpoint: string, token = 'stub-bearer-token') {
+  const res = await fetch(`${baseUrl}${endpoint}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { status: res.status, body: await res.json() };
+}
+
 // ── Patient Contract Tests ────────────────────────────────────────────────────
 
 describe('Patients API contract (web → api)', () => {
@@ -144,6 +169,176 @@ describe('Patients API contract (web → api)', () => {
           const result = await getJson(mockServer.url, '/api/v1/patients/nonexistent-id');
           expect(result.status).toBe(404);
           expect(result.body).toHaveProperty('error');
+        });
+    });
+  });
+
+  describe('POST /api/v1/patients', () => {
+    it('creates a new patient and returns 201 with the patient record', async () => {
+      await provider
+        .addInteraction({
+          states: [{ description: 'the authenticated clinic can create patients' }],
+          uponReceiving: 'a request to create a new patient',
+          withRequest: {
+            method: 'POST',
+            path: '/api/v1/patients',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: like('Bearer stub-bearer-token'),
+            },
+            body: {
+              firstName: string('Jane'),
+              lastName: string('Doe'),
+              dateOfBirth: string('1990-01-01'),
+              sex: string('F'),
+              contactNumber: string('+1 555 123 4567'),
+              address: string('123 Main St'),
+            },
+          },
+          willRespondWith: {
+            status: 201,
+            headers: { 'Content-Type': like('application/json') },
+            body: {
+              status: string('success'),
+              data: like({
+                _id: string('patient-id-new'),
+                systemId: string('PAT-002'),
+                firstName: string('Jane'),
+                lastName: string('Doe'),
+                isActive: true,
+              }),
+            },
+          },
+        })
+        .executeTest(async (mockServer) => {
+          const result = await postJson(mockServer.url, '/api/v1/patients', {
+            firstName: 'Jane',
+            lastName: 'Doe',
+            dateOfBirth: '1990-01-01',
+            sex: 'F',
+            contactNumber: '+1 555 123 4567',
+            address: '123 Main St',
+          });
+          expect(result.status).toBe(201);
+          expect(result.body.data).toHaveProperty('systemId');
+        });
+    });
+  });
+
+  describe('PUT /api/v1/patients/:id', () => {
+    it('updates an existing patient and returns the updated record', async () => {
+      await provider
+        .addInteraction({
+          states: [{ description: 'a patient with ID patient-id-1 exists' }],
+          uponReceiving: 'a request to update a patient',
+          withRequest: {
+            method: 'PUT',
+            path: '/api/v1/patients/patient-id-1',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: like('Bearer stub-bearer-token'),
+            },
+            body: {
+              firstName: string('Jane'),
+              lastName: string('Smith'),
+              dateOfBirth: string('1990-01-01'),
+              sex: string('F'),
+              contactNumber: string('+1 555 123 4567'),
+              address: string('456 Oak Ave'),
+            },
+          },
+          willRespondWith: {
+            status: 200,
+            headers: { 'Content-Type': like('application/json') },
+            body: {
+              status: string('success'),
+              data: like({
+                _id: string('patient-id-1'),
+                firstName: string('Jane'),
+                lastName: string('Smith'),
+              }),
+            },
+          },
+        })
+        .executeTest(async (mockServer) => {
+          const result = await putJson(mockServer.url, '/api/v1/patients/patient-id-1', {
+            firstName: 'Jane',
+            lastName: 'Smith',
+            dateOfBirth: '1990-01-01',
+            sex: 'F',
+            contactNumber: '+1 555 123 4567',
+            address: '456 Oak Ave',
+          });
+          expect(result.status).toBe(200);
+          expect(result.body.data.lastName).toBe('Smith');
+        });
+    });
+
+    it('returns 404 when updating a patient that does not exist', async () => {
+      await provider
+        .addInteraction({
+          states: [{ description: 'no patient with ID nonexistent-id exists' }],
+          uponReceiving: 'a request to update a patient that does not exist',
+          withRequest: {
+            method: 'PUT',
+            path: '/api/v1/patients/nonexistent-id',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: like('Bearer stub-bearer-token'),
+            },
+            body: {
+              firstName: string('Jane'),
+              lastName: string('Smith'),
+              dateOfBirth: string('1990-01-01'),
+              sex: string('F'),
+              contactNumber: string('+1 555 123 4567'),
+              address: string('456 Oak Ave'),
+            },
+          },
+          willRespondWith: {
+            status: 404,
+            headers: { 'Content-Type': like('application/json') },
+            body: { error: string('NotFound'), message: string('Patient not found') },
+          },
+        })
+        .executeTest(async (mockServer) => {
+          const result = await putJson(mockServer.url, '/api/v1/patients/nonexistent-id', {
+            firstName: 'Jane',
+            lastName: 'Smith',
+            dateOfBirth: '1990-01-01',
+            sex: 'F',
+            contactNumber: '+1 555 123 4567',
+            address: '456 Oak Ave',
+          });
+          expect(result.status).toBe(404);
+        });
+    });
+  });
+
+  describe('DELETE /api/v1/patients/:id', () => {
+    it('soft-deletes a patient and returns the deactivated id', async () => {
+      await provider
+        .addInteraction({
+          states: [{ description: 'a patient with ID patient-id-1 exists' }],
+          uponReceiving: 'a request to delete a patient',
+          withRequest: {
+            method: 'DELETE',
+            path: '/api/v1/patients/patient-id-1',
+            headers: { Authorization: like('Bearer stub-bearer-token') },
+          },
+          willRespondWith: {
+            status: 200,
+            headers: { 'Content-Type': like('application/json') },
+            body: {
+              status: string('success'),
+              data: like({ id: string('patient-id-1'), isActive: false }),
+            },
+          },
+        })
+        .executeTest(async (mockServer) => {
+          const result = await deleteJson(mockServer.url, '/api/v1/patients/patient-id-1');
+          expect(result.status).toBe(200);
+          expect(result.body.data.isActive).toBe(false);
         });
     });
   });

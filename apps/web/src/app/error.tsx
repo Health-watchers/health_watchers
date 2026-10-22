@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui';
+import { AlertCircle } from 'lucide-react';
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -19,25 +20,27 @@ export default function Error({ error, reset }: ErrorProps) {
   const requestId = error.digest || 'UNKNOWN';
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 sm:px-6 lg:px-8">
-      <div className="bg-neutral-0 w-full max-w-md space-y-4 rounded-lg border border-neutral-200 p-6 text-center shadow-lg sm:p-8">
+    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 sm:px-6 lg:px-8 dark:bg-neutral-900">
+      <div className="w-full max-w-md space-y-4 rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-lg sm:p-8 dark:border-neutral-700 dark:bg-neutral-800">
         {/* Error Icon */}
         <div className="flex justify-center">
-          <div className="text-5xl" aria-hidden="true">
-            ⚠️
+          <div className="rounded-full bg-danger-50 p-4 dark:bg-danger-900/20">
+            <AlertCircle className="h-12 w-12 text-danger-600 dark:text-danger-400" strokeWidth={2} />
           </div>
         </div>
 
         {/* Error Title */}
-        <h1 className="text-2xl font-bold text-neutral-900">Something went wrong</h1>
+        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+          Something went wrong
+        </h1>
 
         {/* Error Description */}
-        <p className="text-neutral-600">
+        <p className="text-neutral-600 dark:text-neutral-400">
           {error.message || 'An unexpected error occurred. Please try again.'}
         </p>
 
         {/* Request ID */}
-        <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500">
+        <div className="break-all rounded-md bg-neutral-50 p-3 font-mono text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
           Request ID: {requestId}
         </div>
 
@@ -57,7 +60,7 @@ export default function Error({ error, reset }: ErrorProps) {
         </div>
 
         {/* Additional Help */}
-        <p className="pt-2 text-xs text-neutral-500">
+        <p className="pt-2 text-xs text-neutral-500 dark:text-neutral-400">
           If the problem persists, please contact support with the Request ID above.
         </p>
       </div>

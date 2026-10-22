@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { StellarAddressDisplay } from '@/components/ui/StellarAddressDisplay';
 import { PaymentReceipt } from '@/components/payments/PaymentReceipt';
@@ -59,6 +60,8 @@ interface Props {
   network?: string;
   /** Called when the user confirms a payment; should throw on failure. */
   onConfirm: (paymentId: string, txHash: string) => Promise<void>;
+  /** Called when the user voids/cancels a pending payment; should throw on failure. */
+  onVoid?: (paymentId: string) => Promise<void>;
 }
 
 export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props) {
@@ -71,6 +74,8 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
   const [receiptTarget, setReceiptTarget] = useState<string | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<Payment | null>(null);
   const [disputeTarget, setDisputeTarget] = useState<Payment | null>(null);
+  const [voidTarget, setVoidTarget] = useState<Payment | null>(null);
+  const [voiding, setVoiding] = useState(false);
 
   const filtered = payments.filter((p) => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -192,6 +197,12 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
                         </Button>
                       )}
 
+                      {p.status === 'pending' && onVoid && (
+                        <Button size="sm" variant="danger" onClick={() => setVoidTarget(p)}>
+                          Void
+                        </Button>
+                      )}
+
                       {p.txHash && (
                         <a
                           href={`https://stellar.expert/explorer/${network}/tx/${p.txHash}`}
@@ -275,6 +286,42 @@ export function PaymentTable({ payments, network = 'testnet', onConfirm }: Props
           }}
         />
       )}
+
+      {/* Void payment confirmation */}
+      <ConfirmDialog
+        open={Boolean(voidTarget)}
+        onClose={() => {
+          if (!voiding) setVoidTarget(null);
+        }}
+        onConfirm={async () => {
+          if (!voidTarget || !onVoid) return;
+          setVoiding(true);
+          try {
+            await onVoid(voidTarget.id);
+            setVoidTarget(null);
+          } catch {
+            // Error handling is delegated to the parent via onVoid
+          } finally {
+            setVoiding(false);
+          }
+        }}
+        title="Void payment"
+        confirmLabel="Void payment"
+        cancelLabel="Cancel"
+        loading={voiding}
+        message={
+          voidTarget ? (
+            <>
+              You are about to void a pending payment of{' '}
+              <strong>
+                {voidTarget.amount} {voidTarget.asset ?? 'XLM'}
+              </strong>{' '}
+              (ID: <span className="font-mono text-xs">{truncateId(voidTarget.id)}</span>). The
+              payment intent will be cancelled and cannot be recovered.
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }

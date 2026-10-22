@@ -11,6 +11,7 @@ export { Spinner } from './Spinner';
 export { Pagination, type PaginationProps } from './Pagination';
 export { Skeleton, TableSkeleton, CardSkeleton, DetailSkeleton } from './Skeleton';
 export { EmptyState, ModuleEmptyState, type EmptyStateProps } from './EmptyState';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { ErrorBoundary } from './error-boundary';
 export { SectionErrorBoundary } from './SectionErrorBoundary';
 export { ErrorMessage } from './ErrorMessage';

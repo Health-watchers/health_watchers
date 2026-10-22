@@ -469,7 +469,7 @@ Tune `MONGODB_POOL_SIZE` relative to instance count × pool size vs. your MongoD
 
 **Runtime monitoring** — once connected, a background interval (`MONGODB_MONITOR_INTERVAL_MS`) samples pool utilization via `getPoolMetrics()` and logs a `warn`/`error` when it crosses the configured thresholds, plus a `warn` whenever requests are queued waiting for a connection (`waitQueueSize > 0`). `getPoolMetrics()` and `getDbStatus()` are also used by the `/health` endpoint and by the Grafana dashboards/alerts described in `monitoring/README.md` (see `monitoring/runbooks/MONGODB_POOL_WAIT_QUEUE.md` for the response runbook when this fires in production).
 
-For query optimization and general performance tuning beyond indexing, see [`PERFORMANCE_OPTIMIZATION.md`](./PERFORMANCE_OPTIMIZATION.md). For backup/restore procedures, see [`BACKUP_VERIFICATION.md`](./BACKUP_VERIFICATION.md) and [`DISASTER_RECOVERY_PLAN.md`](./DISASTER_RECOVERY_PLAN.md).
+For query optimization and general performance tuning beyond indexing, see [`PERFORMANCE_OPTIMIZATION.md`](./PERFORMANCE_OPTIMIZATION.md). For backup/restore procedures, see [`BACKUP_VERIFICATION.md`](./BACKUP_VERIFICATION.md) and [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md).
 
 ---
 
@@ -556,3 +556,15 @@ npm run migrate:up --workspace=api
 ```
 
 For multi-step rollbacks (rolling back more than one migration), run `migrate:down` once per migration you need to revert, then re-apply all with `migrate:up`.
+
+## Core Entities and PHI Requirements
+
+Core entities:
+
+- Tenant: organization boundary for clinics and partners.
+- User: authenticated actor tied to a tenant and role.
+- Patient: PHI-bearing clinical record.
+- Encounter: visit or telehealth session.
+- AuditEvent: immutable record of sensitive actions.
+
+All PHI-bearing models require tenant scoping, audit metadata, retention classification, and encryption coverage.

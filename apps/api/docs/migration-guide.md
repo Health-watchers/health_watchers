@@ -57,20 +57,22 @@ If your application uses polling for appointment status changes, migrate to Sock
 
 ### Pagination Metadata
 
-v2 list endpoints include `totalPages` in the `meta` object:
+v2 list endpoints return a standardized pagination envelope. The legacy `meta` object has been replaced by a `pagination` object, and the response body now wraps the results in `data`:
 
 ```json
 {
-  "meta": {
+  "data": [ /* array of resources */ ],
+  "pagination": {
     "total": 142,
     "page": 1,
     "limit": 20,
-    "totalPages": 8
+    "hasMore": true,
+    "nextCursor": "eyJpZCI6IjY1ZjEuLi4ifQ=="
   }
 }
 ```
 
-v1 returns only `total`, `page`, and `limit`. Update any pagination logic to use `totalPages` in v2.
+v1 returned a bare array (or a `meta` object on some endpoints) with only `total`, `page`, and `limit`. See [Pagination Standardization](#pagination-standardization) below for the full contract and migration steps.
 
 ---
 
@@ -108,12 +110,17 @@ if (err.code === 'INVALID_TOKEN' || err.code === 'UNAUTHORIZED') { ... }
 
 ### Step 4 — Update pagination logic
 
-```typescript
-// Before (v1 — manual calculation)
-const totalPages = Math.ceil(meta.total / meta.limit);
+See [Pagination Standardization](#pagination-standardization) for the complete old → new mapping, query parameters, and a consumer checklist.
 
-// After (v2 — provided directly)
-const { totalPages } = meta;
+```typescript
+// Before (v1 — bare array or `meta` object)
+const res = await hw.patients.list({ page: 1, limit: 20 });
+const items = Array.isArray(res) ? res : res.data;
+const totalPages = Math.ceil(res.meta.total / res.meta.limit);
+
+// After (v2 — standardized envelope)
+const { data, pagination } = await hw.patients.list({ page: 1, limit: 20 });
+const { total, page, limit, hasMore, nextCursor } = pagination;
 ```
 
 ### Step 5 — Adopt real-time events (optional but recommended)
@@ -239,9 +246,9 @@ curl https://api.healthwatchers.io/api/versions | jq .
 
 Your client is still calling `/api/v1`. Update `HW_BASE_URL` to `/api/v2`.
 
-### Issue: `totalPages` undefined
+### Issue: `meta` is undefined / `pagination` is undefined
 
-Your pagination code is running against v1. Switch to v2, which includes `totalPages` in every list response.
+Your pagination code is running against v1 or an endpoint that has not yet been migrated. Switch to v2 and read the `pagination` object from the standardized envelope (see [Pagination Standardization](#pagination-standardization)).
 
 ### Issue: Socket.IO events not firing
 
@@ -253,4 +260,161 @@ This means a v1 endpoint is returning the old error shape. Migrate to v2 and upd
 
 ### Issue: `410 Gone` on v1 after sunset
 
-v1 has been sunset. You must migrate to v2 immediately. All request/response shapes are compatible — only the base URL prefix changes.
+v1 has been sunset. You must migrate to v2 immediately. Note that list response shapes are **not** identical between v1 and v2 — see [Pagination Standardization](#pagination-standardization) for the required client changes.
+
+---
+
+## Pagination Standardization
+
+All v2 list endpoints now share a single pagination contract. This section documents the change for consumers migrating from the previous inconsistent shapes.
+
+### Affected endpoints
+
+The standardized envelope applies to every list endpoint:
+
+- `GET /patients`
+- `GET /encounters`
+- `GET /appointments`
+- `GET /payments`
+- `GET /invoices`
+- `GET /lab-results`
+- `GET /medications`
+- `GET /referrals`
+- `GET /notifications`
+
+### Old vs. new response shape
+
+**Before (inconsistent):** some endpoints returned a bare array, others returned a `meta` object with different field names.
+
+```json
+// Bare array (no metadata)
+[
+  { "id": "p_1", "name": "Jane Doe" },
+  { "id": "p_2", "name": "John Smith" }
+]
+```
+
+```json
+// Legacy `meta` shape (field names varied by module)
+{
+  "data": [ { "id": "p_1", "name": "Jane Doe" } ],
+  "meta": {
+    "total": 142,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 8
+  }
+}
+```
+
+**After (standardized):** every list endpoint returns `{ data, pagination }`.
+
+```json
+{
+  "data": [
+    { "id": "p_1", "name": "Jane Doe" },
+    { "id": "p_2", "name": "John Smith" }
+  ],
+  "pagination": {
+    "total": 142,
+    "page": 1,
+    "limit": 20,
+    "hasMore": true,
+    "nextCursor": "eyJpZCI6IjY1ZjEuLi4ifQ=="
+  }
+}
+```
+
+### Pagination object fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | `number` | Total number of matching records across all pages. |
+| `page` | `number` | Current page number (1-based). For cursor-based requests this reflects the resolved page. |
+| `limit` | `number` | Maximum number of records per page. |
+| `hasMore` | `boolean` | `true` when additional records exist beyond the current page. |
+| `nextCursor` | `string \| undefined` | Opaque cursor for the next page. Present only when `hasMore` is `true` and cursor pagination is supported by the endpoint. Treat it as an opaque token — do not parse or construct it. |
+
+> **Removed:** `meta` and `meta.totalPages`. Compute `totalPages` client-side if needed: `Math.ceil(total / limit)`.
+
+### Query parameters
+
+All list endpoints accept the following query parameters:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | `integer` ≥ 1 | `1` | Page number for offset-based pagination. |
+| `limit` | `integer` 1–100 | `20` | Records per page. Values above 100 are rejected. |
+| `sort` | `string` | endpoint-specific | Sort field, optionally prefixed with `-` for descending (e.g. `-createdAt`). |
+| `cursor` | `string` | — | Opaque cursor returned as `nextCursor` from a previous response. When supplied, `page` is ignored. |
+
+### Validation errors
+
+Invalid pagination inputs return `400 ValidationError` with the standard v2 error envelope:
+
+```json
+{
+  "error": "ValidationError",
+  "code": "VALIDATION_ERROR",
+  "message": "Request validation failed.",
+  "details": [
+    { "path": "limit", "message": "limit must be an integer between 1 and 100" }
+  ],
+  "requestId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Common triggers:
+- `limit` non-numeric, `0`, negative, or greater than `100`
+- `page` non-numeric or less than `1`
+- `sort` referencing an unknown field
+- `cursor` malformed or expired
+
+### Cursor-based pagination for high-volume endpoints
+
+High-volume endpoints (`/encounters`, `/lab-results`, `/notifications`) support cursor-based pagination for stable, efficient traversal. Use `nextCursor` from the previous response as the `cursor` query parameter:
+
+```http
+GET /api/v2/encounters?limit=50
+```
+
+```json
+{
+  "data": [ /* 50 encounters */ ],
+  "pagination": {
+    "total": 12000,
+    "page": 1,
+    "limit": 50,
+    "hasMore": true,
+    "nextCursor": "eyJpZCI6IjY1ZjEuLi4ifQ=="
+  }
+}
+```
+
+```http
+GET /api/v2/encounters?limit=50&cursor=eyJpZCI6IjY1ZjEuLi4ifQ==
+```
+
+```typescript
+// Cursor-based traversal
+let cursor: string | undefined;
+do {
+  const res = await hw.encounters.list({ limit: 50, cursor });
+  process(res.data);
+  cursor = res.pagination.hasMore ? res.pagination.nextCursor : undefined;
+} while (cursor);
+```
+
+Cursor pagination is preferred for large result sets because it avoids the drift and performance cost of deep `OFFSET` queries. Offset-based pagination (`page`/`limit`) remains available on all endpoints for UI use cases that need random page access.
+
+### Consumer migration checklist
+
+- [ ] Update API client base URL to `/api/v2`.
+- [ ] Replace reads of `meta` with `pagination`.
+- [ ] Replace `meta.totalPages` with `Math.ceil(pagination.total / pagination.limit)` (or use `hasMore`).
+- [ ] Handle endpoints that previously returned a bare array — read results from `data`.
+- [ ] Replace `hasNext`/`hasPrev` checks with `pagination.hasMore` (there is no `hasPrev`; derive it as `page > 1`).
+- [ ] Use `pagination.nextCursor` (opaque) for cursor-based traversal on high-volume endpoints.
+- [ ] Validate `limit` stays within `1–100` and handle `400 VALIDATION_ERROR` responses.
+- [ ] Update integration tests to assert the `{ data, pagination }` envelope, including empty, single-page, and last-page cases.
+- [ ] Update Postman collections and generated OpenAPI clients to the new schema.

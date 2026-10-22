@@ -96,8 +96,9 @@ export default function NotificationBell() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={`Notifications${count > 0 ? `, ${count} unread` : ''}${cosignCount > 0 ? `, ${cosignCount} pending co-signatures` : ''}`}
-        aria-haspopup="true"
+        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? 'notification-panel' : undefined}
         className="relative rounded-md p-2 text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
       >
         {/* Bell icon */}
@@ -136,8 +137,10 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          role="dialog"
+          id="notification-panel"
+          role="region"
           aria-label="Notifications"
+          aria-live="polite"
           className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg"
         >
           {/* Header */}

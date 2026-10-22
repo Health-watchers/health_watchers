@@ -68,6 +68,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   } = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: { asset: 'XLM', payWithAsset: 'XLM', slippage: '1' },
+    mode: 'onBlur',
   });
 
   const amount = watch('amount');
@@ -77,7 +78,8 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   const slippage = watch('slippage') || '1';
 
   const isPathPayment = payWithAsset !== destinationAsset;
-  const selectedPath = selectedPathIndex !== null ? (paths[selectedPathIndex] ?? null) : null;
+  const selectedPath =
+    paths.find((_, index) => selectedPathIndex !== null && index === selectedPathIndex) ?? null;
   const exchangeRate =
     selectedPath && amount ? parseFloat(selectedPath.sourceAmount) / parseFloat(amount) : null;
 
@@ -157,15 +159,20 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
 
   return (
     <>
-      <form onSubmit={handleSubmit(submit)} className="space-y-5">
+      <form noValidate onSubmit={handleSubmit(submit)} className="space-y-5">
         {errors.root && (
-          <p role="alert" className="bg-danger-50 text-danger-500 rounded-md px-3 py-2 text-sm">
+          <p
+            role="alert"
+            aria-live="assertive"
+            className="bg-danger-50 text-danger-700 rounded-md px-3 py-2 text-sm"
+          >
             {errors.root.message}
           </p>
         )}
 
         <Input
           label="Patient ID"
+          required
           placeholder="Search or enter patient ID"
           {...register('patientId')}
           error={errors.patientId?.message}
@@ -174,6 +181,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <Input
             label="Amount to Receive"
+            required
             type="text"
             inputMode="decimal"
             placeholder="0.00"
@@ -183,6 +191,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
           <AssetSelector
             id="receive-asset"
             label="Receive Asset"
+            required
             {...register('asset')}
             error={errors.asset?.message}
           />
@@ -192,6 +201,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
           <AssetSelector
             id="pay-with-asset"
             label="Pay with Asset"
+            required
             {...register('payWithAsset')}
             error={errors.payWithAsset?.message}
           />
@@ -206,18 +216,18 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         </div>
 
         {isPathPayment && amount && (
-          <div className="rounded-md bg-primary-50 p-3 text-sm">
+          <div className="bg-primary-50 rounded-md p-3 text-sm">
             {loadingPath ? (
-              <p className="animate-pulse text-primary-700">Calculating best paths...</p>
+              <p className="text-primary-700 animate-pulse">Calculating best paths...</p>
             ) : paths.length > 0 ? (
               <fieldset className="space-y-2">
-                <legend className="font-medium text-primary-600">Available Paths</legend>
+                <legend className="text-primary-600 font-medium">Available Paths</legend>
                 <div className="space-y-2">
                   {paths.map((p, idx) => {
                     const rate = parseFloat(p.sourceAmount) / parseFloat(amount);
                     const hops = p.path.length;
                     return (
-                      <label
+                      <div
                         key={idx}
                         className={`flex cursor-pointer items-center justify-between rounded-md border p-2 ${
                           selectedPathIndex === idx
@@ -229,7 +239,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                           <div className="text-sm font-semibold">
                             {p.sourceAmount} {payWithAsset}
                           </div>
-                          <div className="text-xs text-primary-500">
+                          <div className="text-primary-500 text-xs">
                             1 {destinationAsset} ≈ {rate.toFixed(4)} {payWithAsset}
                           </div>
                           <div className="text-primary-400 text-xs">
@@ -238,15 +248,21 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                               : `via ${p.path.join(' → ')} (${hops} hop${hops > 1 ? 's' : ''})`}
                           </div>
                         </div>
-                        <input
-                          type="radio"
-                          name="selectedPath"
-                          value={idx}
-                          checked={selectedPathIndex === idx}
-                          onChange={() => setSelectedPathIndex(idx)}
-                          className="ml-3"
-                        />
-                      </label>
+                        <label htmlFor={`payment-path-${idx}`} className="ml-3">
+                          <span className="sr-only">
+                            Select path: pay {p.sourceAmount} {payWithAsset} to receive {amount}{' '}
+                            {destinationAsset}
+                          </span>
+                          <input
+                            id={`payment-path-${idx}`}
+                            type="radio"
+                            name="selectedPath"
+                            value={idx}
+                            checked={selectedPathIndex === idx}
+                            onChange={() => setSelectedPathIndex(idx)}
+                          />
+                        </label>
+                      </div>
                     );
                   })}
                 </div>

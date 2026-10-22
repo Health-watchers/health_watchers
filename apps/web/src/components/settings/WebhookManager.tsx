@@ -84,6 +84,7 @@ export default function WebhookManager() {
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
   const [activeTab, setActiveTab] = useState<'deliveries' | 'events'>('deliveries');
   const [detailLoading, setDetailLoading] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
 
   const getToken = () =>
     typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
@@ -160,6 +161,21 @@ export default function WebhookManager() {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     await fetchDeliveries(webhookId);
+  };
+
+  // Queue a synthetic `webhook.test` delivery (#1505) and show it in the delivery history.
+  const handleSendTest = async (webhookId: string) => {
+    setSendingTest(true);
+    try {
+      await fetch(`${API_BASE}/api/v1/webhooks/${webhookId}/test`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      setActiveTab('deliveries');
+      await fetchDeliveries(webhookId);
+    } finally {
+      setSendingTest(false);
+    }
   };
 
   const handleToggle = async (webhook: Webhook) => {
@@ -349,6 +365,20 @@ export default function WebhookManager() {
                 </p>
               </div>
             )}
+
+            <div className="flex items-center justify-between rounded-md border border-neutral-200 p-3 text-sm">
+              <p className="text-neutral-500">
+                Send a signed <span className="font-mono">webhook.test</span> event to this URL.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={sendingTest}
+                onClick={() => handleSendTest(selectedWebhook.id)}
+              >
+                Send test event
+              </Button>
+            </div>
 
             <div className="flex gap-2 border-b border-neutral-200">
               <button

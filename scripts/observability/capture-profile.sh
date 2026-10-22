@@ -66,7 +66,7 @@ profile_pod() {
   log "Sending SIGUSR2-style profile trigger to $POD (expects the API's /internal/profile hook) ..."
   kubectl -n "$KUBE_NAMESPACE" exec "$POD" -- \
     sh -c "kill -USR2 1 && sleep $((SECONDS_TO_PROFILE + 2))" || true
-  # The API writes /tmp/profile-*.cpuprofile on SIGUSR2 (see docs/OBSERVABILITY_BEST_PRACTICES.md).
+  # The API writes /tmp/profile-*.cpuprofile on SIGUSR2 (see docs/OBSERVABILITY.md).
   kubectl -n "$KUBE_NAMESPACE" exec "$POD" -- sh -c 'ls -1 /tmp/profile-*.cpuprofile 2>/dev/null' \
     | while read -r f; do
         base=$(basename "$f")

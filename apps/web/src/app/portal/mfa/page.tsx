@@ -52,7 +52,10 @@ export default function PortalMFAVerification() {
       localStorage.setItem('portalRefreshToken', data.data.refreshToken);
       localStorage.removeItem('portalMfaTempToken');
 
-      router.push('/portal/dashboard');
+      // Redirect to the originally requested URL (deep link) or default to dashboard
+      const returnTo = localStorage.getItem('portalReturnTo') ?? '/portal/dashboard';
+      localStorage.removeItem('portalReturnTo');
+      router.push(returnTo);
     } catch (err) {
       setError('An error occurred. Please try again.');
       console.error(err);

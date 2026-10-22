@@ -196,14 +196,151 @@
       },
       "Error": {
         "type": "object",
+        "description": "Standard error response returned by all controllers.",
+        "required": ["success", "error"],
         "properties": {
-          "error": {
-            "type": "string"
+          "success": {
+            "type": "boolean",
+            "enum": [false]
           },
-          "message": {
-            "type": "string"
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Machine-readable error code, e.g. `VALIDATION_ERROR`.",
+                "example": "INTERNAL_ERROR"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message.",
+                "example": "An unexpected error occurred"
+              },
+              "details": {
+                "type": "object",
+                "nullable": true,
+                "description": "Optional additional error context.",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Correlation id for the request, when available."
           }
-        }
+        },
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "description": "Returned when request input fails validation (HTTP 400).",
+        "required": ["success", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": ["VALIDATION_ERROR"]
+              },
+              "message": {
+                "type": "string",
+                "example": "Invalid request payload"
+              },
+              "details": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RateLimitError": {
+        "type": "object",
+        "description": "Returned when a client exceeds its rate limit (HTTP 429).",
+        "required": ["success", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": ["RATE_LIMIT_EXCEEDED"]
+              },
+              "message": {
+                "type": "string",
+                "example": "Too many requests"
+              },
+              "details": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotFoundError": {
+        "type": "object",
+        "description": "Returned when the requested resource does not exist (HTTP 404).",
+        "required": ["success", "error"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": ["NOT_FOUND"]
+              },
+              "message": {
+                "type": "string",
+                "example": "Resource not found"
+              },
+              "details": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "PaymentRecord": {
         "type": "object",
@@ -293,9 +430,203 @@
             "type": "string"
           }
         }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "description": "Standard pagination metadata returned by every list endpoint.",
+        "required": ["total", "page", "limit", "totalPages", "hasNext", "hasPrev"],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total number of records matching the query.",
+            "example": 137
+          },
+          "page": {
+            "type": "integer",
+            "description": "Current page number (1-based).",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of records per page.",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "integer",
+            "description": "Total number of pages available.",
+            "example": 7
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "Whether a next page exists.",
+            "example": true
+          },
+          "hasPrev": {
+            "type": "boolean",
+            "description": "Whether a previous page exists.",
+            "example": false
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Opaque cursor for the next page (cursor-based pagination only)."
+          }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "description": "Standard envelope for all paginated list endpoints.",
+        "required": ["data", "pagination"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {}
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          }
+        }
+      },
+      "PaginatedPatientResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PaginatedResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/V2Patient"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PaginatedPaymentResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PaginatedResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PaymentRecord"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "EncounterAttachment": {
+        "type": "object",
+        "required": ["id", "encounterId", "fileName", "mimeType", "sizeBytes", "createdAt"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "encounterId": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "application/pdf"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["image", "pdf", "lab-report", "other"],
+            "nullable": true
+          },
+          "scanStatus": {
+            "type": "string",
+            "enum": ["pending", "clean", "infected", "failed"],
+            "description": "Result of the virus scan performed before storage."
+          },
+          "uploadedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SignedUrlResponse": {
+        "type": "object",
+        "required": ["url", "expiresIn"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Time-limited signed URL for downloading the attachment."
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Seconds until the signed URL expires.",
+            "example": 3600
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "PageParam": {
+        "name": "page",
+        "in": "query",
+        "description": "Page number (1-based).",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "LimitParam": {
+        "name": "limit",
+        "in": "query",
+        "description": "Maximum number of records per page.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "SortParam": {
+        "name": "sort",
+        "in": "query",
+        "description": "Field to sort by, optionally prefixed with `-` for descending order (e.g. `-createdAt`).",
+        "schema": {
+          "type": "string",
+          "example": "-createdAt"
+        }
+      },
+      "CursorParam": {
+        "name": "cursor",
+        "in": "query",
+        "description": "Opaque cursor from `pagination.nextCursor`.",
+        "schema": {
+          "type": "string"
+        }
       }
     }
   },
+=======
   "security": [
     {
       "bearerAuth": []
@@ -846,13 +1177,30 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/V2Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token"
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitError"
+                }
+              }
+            }
           }
         }
       }
@@ -1081,20 +1429,16 @@
         ],
         "parameters": [
           {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "type": "integer",
-              "default": 1
-            }
+            "$ref": "#/components/parameters/PageParam"
           },
           {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer",
-              "default": 20
-            }
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
           },
           {
             "in": "query",
@@ -1118,32 +1462,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PaymentRecord"
-                      }
-                    },
-                    "meta": {
-                      "type": "object",
-                      "properties": {
-                        "total": {
-                          "type": "integer"
-                        },
-                        "page": {
-                          "type": "integer"
-                        },
-                        "limit": {
-                          "type": "integer"
-                        }
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/PaginatedPaymentResponse"
                 }
               }
             }
@@ -1226,7 +1545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1297,7 +1616,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1318,11 +1637,16 @@
     "/payments/intent": {
       "post": {
         "summary": "Create a payment intent",
-        "description": "Creates a pending payment record and returns the intent ID and memo for the Stellar transaction.",
+        "description": "Creates a pending payment record and returns the intent ID and memo for the Stellar transaction. Supports the `Idempotency-Key` header: retries with the same key return the original response for 24 hours instead of creating a duplicate intent.",
         "tags": ["Payments"],
         "security": [
           {
             "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -1393,13 +1717,201 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
           },
           "402": {
             "description": "Fee budget exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key was already used with a different request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/batch": {
+      "post": {
+        "summary": "Create multiple payment intents in one request",
+        "description": "Creates up to 50 payment intents atomically. Supports the `Idempotency-Key` header: retries with the same key return the original response for 24 hours instead of creating duplicate intents.",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["payments"],
+                "properties": {
+                  "payments": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": {
+                      "$ref": "#/components/schemas/CreatePaymentIntentRequest"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment intents created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key was already used with a different request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/recurring": {
+      "post": {
+        "summary": "Create a recurring payment schedule",
+        "description": "Creates a recurring payment schedule. Supports the `Idempotency-Key` header: retries with the same key return the original response for 24 hours instead of creating a duplicate schedule.",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount", "destination", "interval"],
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  },
+                  "destination": {
+                    "type": "string"
+                  },
+                  "assetCode": {
+                    "type": "string",
+                    "default": "XLM"
+                  },
+                  "patientId": {
+                    "type": "string"
+                  },
+                  "interval": {
+                    "type": "string",
+                    "enum": ["daily", "weekly", "monthly"]
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recurring payment schedule created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency-Key was already used with a different request body",
             "content": {
               "application/json": {
                 "schema": {
@@ -1466,7 +1978,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1476,7 +1988,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -1782,7 +2294,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/ValidationError"
                 }
               }
             }
@@ -1870,7 +2382,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -1939,7 +2451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -2003,7 +2515,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -2067,10 +2579,955 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/batch": {
+      "post": {
+        "summary": "Create multiple payment intents in a single request",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["payments"],
+                "properties": {
+                  "payments": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": {
+                      "$ref": "#/components/schemas/CreatePaymentIntentRequest"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Batch of payment intents created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (empty batch, too many items, invalid entry)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/batch/{batchId}": {
+      "get": {
+        "summary": "Get the status of a batch payment submission",
+        "tags": ["Payments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batchId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Batch status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "batchId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": ["pending", "processing", "completed", "failed"]
+                        },
+                        "payments": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PaymentRecord"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Batch not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/patients": {
+      "get": {
+        "summary": "List patients (paginated)",
+        "tags": ["Patients"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of patients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedPatientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or malformed cursor",
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          }
+        }
+      }
+    },
+    "/patients/{id}/communications": {
+      "get": {
+        "summary": "List a patient's communication log (paginated)",
+        "description": "Returns SMS, email and in-app messages sent to the patient. Restricted to clinic staff with appropriate roles.",
+        "tags": ["Patients"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["sms", "email", "in-app"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of communication log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient role to view communication logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Patient not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/encounters": {
+      "get": {
+        "summary": "List encounters (paginated)",
+        "tags": ["Encounters"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          },
+          {
+            "name": "patientId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of encounters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/encounters/{id}/attachments": {
+      "get": {
+        "summary": "List attachments for an encounter (paginated)",
+        "tags": ["Encounters"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of encounter attachments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PaginatedResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/EncounterAttachment"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Encounter not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Upload an attachment to an encounter",
+        "description": "Accepts images, PDFs and lab reports. Files are virus-scanned before being stored via the documents storage service.",
+        "tags": ["Encounters"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "File to upload (max 10 MB; image/*, application/pdf)."
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": ["image", "pdf", "lab-report", "other"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachment stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EncounterAttachment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing file, unsupported type or file too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Encounter not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "File rejected by virus scan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/encounters/{id}/attachments/{attachmentId}/download": {
+      "get": {
+        "summary": "Get a signed download URL for an encounter attachment",
+        "tags": ["Encounters"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed URL for the attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUrlResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Encounter or attachment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments": {
+      "get": {
+        "summary": "List appointments (paginated)",
+        "tags": ["Appointments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of appointments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invoices": {
+      "get": {
+        "summary": "List invoices (paginated)",
+        "tags": ["Invoices"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of invoices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lab-results": {
+      "get": {
+        "summary": "List lab results (paginated)",
+        "tags": ["Lab Results"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of lab results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/medications": {
+      "get": {
+        "summary": "List medications (paginated)",
+        "tags": ["Medications"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of medications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals": {
+      "get": {
+        "summary": "List referrals (paginated)",
+        "tags": ["Referrals"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of referrals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "List notifications (paginated)",
+        "tags": ["Notifications"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of notifications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/inbound": {
+      "post": {
+        "summary": "Receive an inbound webhook from an external system",
+        "description": "Accepts events from external providers (e.g. Stellar payment events). Every request must carry a valid `X-Webhook-Signature` header computed with the receiver's webhook signing secret. Signing secrets can be rotated: during a rotation window both the previous and the current secret are accepted, after which the previous secret is revoked.",
+        "tags": ["Webhooks"],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WebhookSignature"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["event", "data"],
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "example": "payment.confirmed"
+                  },
+                  "data": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature missing, malformed, expired, or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-logs": {
+      "get": {
+        "summary": "List audit log entries (cursor pagination)",
+        "description": "Cursor-based pagination over the audit log, ordered by `createdAt` descending then `_id` descending. Pass `after` to page forward or `before` to page backward; both cursors are opaque and are returned as `nextCursor` / `prevCursor` in the response.",
+        "tags": ["Audit"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Opaque forward cursor — return entries older than this cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Opaque backward cursor — return entries newer than this cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by audit action.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceType",
+            "in": "query",
+            "description": "Filter by resource type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Only entries created at or after this timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Only entries created at or before this timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of audit log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "data", "meta"],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditLogEntry"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Pass as `after` to fetch the next (older) page."
+                        },
+                        "prevCursor": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Pass as `before` to fetch the previous (newer) page."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters or malformed cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token"
           }
         }
       }
@@ -2098,5 +3555,18 @@
       }
     }
   },
-  "tags": []
+  "tags": [
+    {
+      "name": "Payments",
+      "description": "Stellar payment intents. Creation endpoints accept an `Idempotency-Key` header; retries with the same key return the cached response for 24 hours."
+    },
+    {
+      "name": "Webhooks",
+      "description": "Inbound webhooks from external systems. Requests must be signed with HMAC-SHA256 and carry the signature in `X-Webhook-Signature`."
+    },
+    {
+      "name": "Audit",
+      "description": "Audit log access with cursor-based pagination."
+    }
+  ]
 }

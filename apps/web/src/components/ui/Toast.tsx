@@ -34,10 +34,13 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
     info: 'bg-neutral-800 dark:bg-neutral-700',
   };
 
+  // Use role="alert" for errors (assertive) and role="status" for success/info (polite)
+  const isError = type === 'error';
+
   return (
     <div
-      role="alert"
-      aria-live="assertive"
+      role={isError ? 'alert' : 'status'}
+      aria-atomic="true"
       className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 text-sm text-white shadow-lg ${colors[type]}`}
     >
       <span>{message}</span>
@@ -45,9 +48,9 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
         <button
           onClick={onClose}
           aria-label="Dismiss notification"
-          className="ml-2 opacity-70 hover:opacity-100 focus:outline-none"
+          className="ml-2 opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-white focus:rounded"
         >
-          ✕
+          <span aria-hidden="true">✕</span>
         </button>
       )}
     </div>
@@ -81,10 +84,10 @@ const variantStyles: Record<ToastVariant, string> = {
   info: 'bg-blue-50 border-blue-500 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300',
 };
 
-const icons: Record<ToastVariant, string> = {
-  success: '✓',
-  error: '✕',
-  info: 'ℹ',
+const icons: Record<ToastVariant, { glyph: string; label: string }> = {
+  success: { glyph: '✓', label: 'Success' },
+  error:   { glyph: '✕', label: 'Error' },
+  info:    { glyph: 'ℹ', label: 'Info' },
 };
 
 function ToastItemView({
@@ -99,23 +102,29 @@ function ToastItemView({
     return () => clearTimeout(t);
   }, [item.id, onDismiss]);
 
+  // Use role="status" for success/info (polite) and role="alert" for errors (assertive)
+  const isError = item.variant === 'error';
+
   return (
     <div
-      role="status"
-      aria-live="polite"
+      role={isError ? 'alert' : 'status'}
+      aria-atomic="true"
       className={[
         'flex items-start gap-3 rounded-lg border px-4 py-3 shadow-lg text-sm',
         variantStyles[item.variant],
       ].join(' ')}
     >
-      <span className="mt-0.5 font-bold shrink-0">{icons[item.variant]}</span>
+      <span className="mt-0.5 font-bold shrink-0" aria-hidden="true">
+        {icons[item.variant].glyph}
+      </span>
+      <span className="sr-only">{icons[item.variant].label}:</span>
       <p className="flex-1">{item.message}</p>
       <button
         aria-label="Dismiss notification"
         onClick={() => onDismiss(item.id)}
-        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity text-base leading-none"
+        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity text-base leading-none focus:outline-none focus:ring-2 focus:ring-current focus:rounded"
       >
-        ×
+        <span aria-hidden="true">×</span>
       </button>
     </div>
   );
@@ -141,8 +150,11 @@ export function Toaster() {
   if (items.length === 0) return null;
 
   return (
+    // The outer region is intentionally NOT aria-live — each ToastItemView carries its own
+    // role="alert" or role="status" so screen readers announce exactly once.
     <div
-      aria-live="polite"
+      aria-label="Notifications"
+      role="region"
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-full max-w-sm pointer-events-none"
     >
       {items.map((item) => (
@@ -153,3 +165,4 @@ export function Toaster() {
     </div>
   );
 }
+

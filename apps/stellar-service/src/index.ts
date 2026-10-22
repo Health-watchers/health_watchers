@@ -54,7 +54,15 @@ import {
   recordFailure,
   getCircuitBreakerState,
 } from './error-handler.js';
-import { metricsMiddleware, metricsHandler } from './metrics.js';
+import {
+  metricsMiddleware,
+  metricsHandler,
+  recordTransactionSubmitted,
+  recordTransactionConfirmed,
+  recordTransactionFailed,
+  recordAccountBalance,
+  recordNetworkFee,
+} from './metrics.js';
 import {
   startPaymentStream,
   registerPaymentConfirmationListener,
@@ -105,6 +113,15 @@ import {
   getColdWalletStatistics,
   type SigningRequest,
 } from './cold-wallet.js';
+// #1588: Soroban smart contract integration
+import {
+  invokeContract,
+  SorobanSimulationError,
+  getSorobanConfig,
+  escrowDeposit,
+  escrowRelease,
+  escrowRefund,
+} from './soroban/index.js';
 
 dotenv.config();
 
@@ -176,7 +193,19 @@ app.use(
 app.use(metricsMiddleware);
 
 // ✅ PUBLIC: GET /metrics — Prometheus metrics
+// Registered before auth/circuit-breaker middleware so Prometheus can always scrape
+// transaction success/failure counters, confirmation histograms and account gauges.
 app.get('/metrics', metricsHandler);
+
+// ✅ PUBLIC: GET /metrics/transactions — Snapshot of transaction-level metrics
+app.get('/metrics/transactions', (_req, res) => {
+  return res.json({
+    success: true,
+    network: stellarConfig.network,
+    timestamp: new Date().toISOString(),
+    scrapePath: '/metrics',
+  });
+});
 
 // ✅ PUBLIC: GET /network - Network status endpoint
 app.get('/network', (_req, res) => {
@@ -649,6 +678,10 @@ app.post('/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, re
 app.get('/fee-stats', checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const stats = await retryWithBackoff(() => getFeeStats(), 3, 1000);
+    const feeStroops = Number((stats as any)?.lastLedgerBaseFee ?? (stats as any)?.baseFee);
+    if (Number.isFinite(feeStroops)) {
+      recordNetworkFee(feeStroops);
+    }
     recordSuccess();
     res.json({ success: true, ...stats });
   } catch (error: any) {
@@ -780,6 +813,10 @@ app.get('/balance/:publicKey', requireSecret, checkCircuitBreakerMiddleware, asy
   try {
     const { publicKey } = req.params;
     const result = await retryWithBackoff(() => getAccountBalance(publicKey), 3, 1000);
+    const xlmBalance = Number((result as any)?.balances?.find?.((b: any) => b.asset_type === 'native')?.balance ?? (result as any)?.balance);
+    if (Number.isFinite(xlmBalance)) {
+      recordAccountBalance(publicKey, xlmBalance);
+    }
     recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -888,11 +925,19 @@ app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, asy
       return res.json({ success: true, balanceId, dryRun: true });
     }
 
-    const result = await server.submitTransaction(tx);
-    // Extract balance ID from the transaction result
-    const balanceId = (result as any).id ?? `balance-${result.hash}`;
-    recordSuccess();
-    return res.json({ success: true, balanceId, txHash: result.hash });
+    recordTransactionSubmitted();
+    const confirmationStart = Date.now();
+    try {
+      const result = await server.submitTransaction(tx);
+      recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+      // Extract balance ID from the transaction result
+      const balanceId = (result as any).id ?? `balance-${result.hash}`;
+      recordSuccess();
+      return res.json({ success: true, balanceId, txHash: result.hash });
+    } catch (submitError: any) {
+      recordTransactionFailed();
+      throw submitError;
+    }
   } catch (error: any) {
     recordFailure();
     const horizonError = parseHorizonError(error);
@@ -926,9 +971,17 @@ app.post(
         return res.json({ success: true, txHash: `dry-run-claim-${Date.now()}`, dryRun: true });
       }
 
-      const result = await server.submitTransaction(tx);
-      recordSuccess();
-      return res.json({ success: true, txHash: result.hash });
+      recordTransactionSubmitted();
+      const confirmationStart = Date.now();
+      try {
+        const result = await server.submitTransaction(tx);
+        recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+        recordSuccess();
+        return res.json({ success: true, txHash: result.hash });
+      } catch (submitError: any) {
+        recordTransactionFailed();
+        throw submitError;
+      }
     } catch (error: any) {
       recordFailure();
       const horizonError = parseHorizonError(error);
@@ -965,9 +1018,17 @@ app.post(
         return res.json({ success: true, txHash: `dry-run-reclaim-${Date.now()}`, dryRun: true });
       }
 
-      const result = await server.submitTransaction(tx);
-      recordSuccess();
-      return res.json({ success: true, txHash: result.hash });
+      recordTransactionSubmitted();
+      const confirmationStart = Date.now();
+      try {
+        const result = await server.submitTransaction(tx);
+        recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+        recordSuccess();
+        return res.json({ success: true, txHash: result.hash });
+      } catch (submitError: any) {
+        recordTransactionFailed();
+        throw submitError;
+      }
     } catch (error: any) {
       recordFailure();
       const horizonError = parseHorizonError(error);
@@ -1040,9 +1101,17 @@ app.post('/multi-sig/submit', requireSecret, checkCircuitBreakerMiddleware, asyn
     if (!xdr) {
       return res.status(400).json({ error: 'xdr is required' });
     }
-    const result = await retryWithBackoff(() => submitMultiSigTransaction(xdr), 3, 1000);
-    recordSuccess();
-    return res.json({ success: true, ...result });
+    recordTransactionSubmitted();
+    const confirmationStart = Date.now();
+    try {
+      const result = await retryWithBackoff(() => submitMultiSigTransaction(xdr), 3, 1000);
+      recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+      recordSuccess();
+      return res.json({ success: true, ...result });
+    } catch (submitError: any) {
+      recordTransactionFailed();
+      throw submitError;
+    }
   } catch (error: any) {
     recordFailure();
     const horizonError = parseHorizonError(error);
@@ -1050,27 +1119,64 @@ app.post('/multi-sig/submit', requireSecret, checkCircuitBreakerMiddleware, asyn
   }
 });
 
-// ✅ PROTECTED: POST /batch — submit a batch of payments in a single transaction
+// ✅ PROTECTED: POST /batch — enqueue a batch of payments for async processing
+// Returns a jobId plus the accepted payments so callers can poll GET /batch/:jobId.
 app.post('/batch', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  const requestId = (req.headers['x-request-id'] as string) ?? undefined;
   try {
     const { fromPublicKey, payments } = req.body;
     if (!fromPublicKey || !Array.isArray(payments) || !payments.length) {
-      return res.status(400).json({ error: 'fromPublicKey and payments[] are required' });
+      return res
+        .status(400)
+        .json({ error: 'fromPublicKey and payments[] are required', requestId });
     }
     if (payments.length > 100) {
-      return res.status(400).json({ error: 'Batch size cannot exceed 100 payments' });
+      return res
+        .status(400)
+        .json({ error: 'Batch size cannot exceed 100 payments', requestId });
     }
-    const result = await retryWithBackoff(
-      () => processBatchPayments(fromPublicKey, payments),
-      3,
-      1000
-    );
+    const result = await batchProcessor.enqueue(fromPublicKey, payments);
     recordSuccess();
-    return res.json({ success: true, ...result });
+    return res.json({ success: true, requestId, ...result });
   } catch (error: any) {
     recordFailure();
-    const horizonError = parseHorizonError(error);
-    return res.status(horizonError.statusCode).json(horizonError);
+    logger.error({ error: error.message, requestId }, 'Failed to enqueue batch');
+    return res.status(400).json({ error: error.message, requestId });
+  }
+});
+
+// ✅ PROTECTED: GET /batch/:jobId — batch job status with partial-success breakdown
+app.get('/batch/:jobId', requireSecret, (req, res) => {
+  const requestId = (req.headers['x-request-id'] as string) ?? undefined;
+  try {
+    const { jobId } = req.params;
+    const job = batchProcessor.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: `Batch job not found: ${jobId}`, requestId });
+    }
+    return res.json({ success: true, requestId, job });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message, requestId });
+  }
+});
+
+// ✅ PROTECTED: POST /batch/:jobId/cancel — cancel a batch before submission
+app.post('/batch/:jobId/cancel', requireSecret, (req, res) => {
+  const requestId = (req.headers['x-request-id'] as string) ?? undefined;
+  try {
+    const { jobId } = req.params;
+    const cancelled = batchProcessor.cancel(jobId);
+    if (!cancelled) {
+      return res.status(409).json({
+        error: `Batch job cannot be cancelled (not found or already submitted): ${jobId}`,
+        requestId,
+      });
+    }
+    recordSuccess();
+    return res.json({ success: true, requestId, jobId, message: 'Batch job cancelled' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message, requestId });
   }
 });
 
@@ -1254,10 +1360,18 @@ app.post('/escrow/create', requireSecret, checkCircuitBreakerMiddleware, async (
       return res.json({ success: true, balanceId, dryRun: true });
     }
 
-    const result = await server.submitTransaction(tx);
-    const balanceId = (result as any).id ?? `escrow-${result.hash}`;
-    recordSuccess();
-    return res.json({ success: true, balanceId, txHash: result.hash });
+    recordTransactionSubmitted();
+    const confirmationStart = Date.now();
+    try {
+      const result = await server.submitTransaction(tx);
+      recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+      const balanceId = (result as any).id ?? `escrow-${result.hash}`;
+      recordSuccess();
+      return res.json({ success: true, balanceId, txHash: result.hash });
+    } catch (submitError: any) {
+      recordTransactionFailed();
+      throw submitError;
+    }
   } catch (error: any) {
     recordFailure();
     const horizonError = parseHorizonError(error);
@@ -1304,9 +1418,17 @@ app.post(
         });
       }
 
-      const result = await server.submitTransaction(tx);
-      recordSuccess();
-      return res.json({ success: true, txHash: result.hash });
+      recordTransactionSubmitted();
+      const confirmationStart = Date.now();
+      try {
+        const result = await server.submitTransaction(tx);
+        recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+        recordSuccess();
+        return res.json({ success: true, txHash: result.hash });
+      } catch (submitError: any) {
+        recordTransactionFailed();
+        throw submitError;
+      }
     } catch (error: any) {
       recordFailure();
       const horizonError = parseHorizonError(error);
@@ -1353,9 +1475,17 @@ app.post(
         });
       }
 
-      const result = await server.submitTransaction(tx);
-      recordSuccess();
-      return res.json({ success: true, txHash: result.hash });
+      recordTransactionSubmitted();
+      const confirmationStart = Date.now();
+      try {
+        const result = await server.submitTransaction(tx);
+        recordTransactionConfirmed((Date.now() - confirmationStart) / 1000);
+        recordSuccess();
+        return res.json({ success: true, txHash: result.hash });
+      } catch (submitError: any) {
+        recordTransactionFailed();
+        throw submitError;
+      }
     } catch (error: any) {
       recordFailure();
       const horizonError = parseHorizonError(error);
@@ -1363,6 +1493,184 @@ app.post(
     }
   }
 );
+
+// ============================================================
+// Issue #1588 — Soroban Smart Contract Integration
+// ============================================================
+
+// ✅ PUBLIC: GET /soroban/config — Report Soroban network / contract configuration
+app.get('/soroban/config', (_req, res) => {
+  try {
+    const config = getSorobanConfig();
+    return res.json({ success: true, ...config });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /soroban/invoke — Invoke an arbitrary Soroban contract function
+app.post('/soroban/invoke', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { contractId, functionName, arguments: args, signerSecretKey, signerKeyId } = req.body;
+
+    if (!contractId || !functionName) {
+      return res.status(400).json({ error: 'contractId and functionName are required' });
+    }
+
+    if (!signerSecretKey && !signerKeyId) {
+      return res.status(400).json({ error: 'signerSecretKey or signerKeyId is required' });
+    }
+
+    logger.info({ contractId, functionName }, 'Soroban contract invocation requested');
+
+    const result = await invokeContract({
+      contractId,
+      functionName,
+      arguments: Array.isArray(args) ? args : [],
+      signerSecretKey,
+      signerKeyId,
+    });
+
+    recordSuccess();
+    logger.info(
+      { contractId, functionName, txHash: result.txHash },
+      'Soroban contract invocation succeeded'
+    );
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    if (error instanceof SorobanSimulationError) {
+      logger.warn(
+        { contractId: req.body?.contractId, functionName: req.body?.functionName, error: error.message },
+        'Soroban simulation failed'
+      );
+      return res.status(400).json({
+        success: false,
+        error: 'Simulation failed',
+        message: error.message,
+        simulation: error.details,
+      });
+    }
+    logger.error({ error: error.message }, 'Soroban contract invocation failed');
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /escrow/soroban/deposit — Deposit funds into the escrow contract
+app.post('/escrow/soroban/deposit', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { depositor, beneficiary, amount, token, deadline, signerSecretKey, signerKeyId } =
+      req.body;
+
+    if (!depositor || !beneficiary || !amount || !token) {
+      return res
+        .status(400)
+        .json({ error: 'depositor, beneficiary, amount, and token are required' });
+    }
+
+    if (!signerSecretKey && !signerKeyId) {
+      return res.status(400).json({ error: 'signerSecretKey or signerKeyId is required' });
+    }
+
+    logger.info({ depositor, beneficiary, amount }, 'Soroban escrow deposit requested');
+
+    const result = await escrowDeposit({
+      depositor,
+      beneficiary,
+      amount,
+      token,
+      deadline,
+      signerSecretKey,
+      signerKeyId,
+    });
+
+    recordSuccess();
+    logger.info({ txHash: result.txHash }, 'Soroban escrow deposit succeeded');
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    if (error instanceof SorobanSimulationError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Simulation failed',
+        message: error.message,
+        simulation: error.details,
+      });
+    }
+    logger.error({ error: error.message }, 'Soroban escrow deposit failed');
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /escrow/soroban/release — Release escrowed funds to the beneficiary
+app.post('/escrow/soroban/release', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { escrowId, releaser, signerSecretKey, signerKeyId } = req.body;
+
+    if (!escrowId || !releaser) {
+      return res.status(400).json({ error: 'escrowId and releaser are required' });
+    }
+
+    if (!signerSecretKey && !signerKeyId) {
+      return res.status(400).json({ error: 'signerSecretKey or signerKeyId is required' });
+    }
+
+    logger.info({ escrowId, releaser }, 'Soroban escrow release requested');
+
+    const result = await escrowRelease({ escrowId, releaser, signerSecretKey, signerKeyId });
+
+    recordSuccess();
+    logger.info({ escrowId, txHash: result.txHash }, 'Soroban escrow release succeeded');
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    if (error instanceof SorobanSimulationError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Simulation failed',
+        message: error.message,
+        simulation: error.details,
+      });
+    }
+    logger.error({ error: error.message }, 'Soroban escrow release failed');
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /escrow/soroban/refund — Refund escrowed funds to the depositor
+app.post('/escrow/soroban/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { escrowId, refunder, signerSecretKey, signerKeyId } = req.body;
+
+    if (!escrowId || !refunder) {
+      return res.status(400).json({ error: 'escrowId and refunder are required' });
+    }
+
+    if (!signerSecretKey && !signerKeyId) {
+      return res.status(400).json({ error: 'signerSecretKey or signerKeyId is required' });
+    }
+
+    logger.info({ escrowId, refunder }, 'Soroban escrow refund requested');
+
+    const result = await escrowRefund({ escrowId, refunder, signerSecretKey, signerKeyId });
+
+    recordSuccess();
+    logger.info({ escrowId, txHash: result.txHash }, 'Soroban escrow refund succeeded');
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    if (error instanceof SorobanSimulationError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Simulation failed',
+        message: error.message,
+        simulation: error.details,
+      });
+    }
+    logger.error({ error: error.message }, 'Soroban escrow refund failed');
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // ✅ PUBLIC: GET /escrow/:balanceId — Get escrow balance details
 app.get('/escrow/:balanceId', async (req, res) => {
@@ -1864,6 +2172,7 @@ const server: Server = app.listen(PORT, () => {
       network: stellarConfig.network,
       mainnetMode: stellarConfig.network === 'mainnet',
       secret: SHARED_SECRET ? 'SET' : 'MISSING',
+      metricsPath: '/metrics',
     },
     'Stellar Service running'
   );

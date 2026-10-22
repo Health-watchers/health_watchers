@@ -4,6 +4,8 @@ import { webConfig } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   const refreshToken = request.cookies.get('refreshToken')?.value;
+  // 'idle_timeout' makes the API revoke the whole refresh-token family (automatic logoff)
+  const { reason } = await request.json().catch(() => ({}));
 
   // Best-effort: tell the backend to invalidate the refresh token
   if (refreshToken) {
@@ -11,7 +13,10 @@ export async function POST(request: NextRequest) {
       await fetch(`${API_URL}/api/v1/auth/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({
+          refreshToken,
+          ...(reason === 'idle_timeout' ? { reason } : {}),
+        }),
       });
     } catch {
       // ignore — we still clear cookies regardless

@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type ClaimStatus =
   | 'draft'
@@ -52,13 +53,14 @@ export interface IInsuranceClaim extends Document {
   writtenOffAt?: Date;
   statusHistory: ClaimStatusEvent[];
   attachments: ClaimAttachment[];
+  isActive: boolean;
+  createdBy: mongoose.Types.ObjectId;
 }
 
 const InsuranceClaimSchema = new Schema<IInsuranceClaim>(
   {
     encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter', required: true, index: true },
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
     cptCodes: [{ type: String, required: true }],
     diagnosisCodes: [{ type: String }],
     totalAmount: { type: Number, required: true, min: 0 },
@@ -96,6 +98,8 @@ const InsuranceClaimSchema = new Schema<IInsuranceClaim>(
   },
   { timestamps: true }
 );
+
+InsuranceClaimSchema.add(baseSchema);
 
 InsuranceClaimSchema.index({ clinicId: 1, status: 1, createdAt: -1 });
 

@@ -6,11 +6,18 @@ on:
     paths:
       - 'apps/docs/**'
       - 'docs/**'
+      # Rebuild docs when design-system source tokens or components change
+      - 'apps/web/src/components/ui/**'
+      - 'apps/web/src/lib/design-system.ts'
+      - 'apps/web/tailwind.config.ts'
   pull_request:
     branches: [main, develop]
     paths:
       - 'apps/docs/**'
       - 'docs/**'
+      - 'apps/web/src/components/ui/**'
+      - 'apps/web/src/lib/design-system.ts'
+      - 'apps/web/tailwind.config.ts'
   # Allow manual triggers from the Actions tab
   workflow_dispatch:
 

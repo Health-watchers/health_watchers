@@ -8,6 +8,7 @@ import { formatDate } from '@health-watchers/types';
 import {
   Badge,
   Button,
+  ConfirmDialog,
   DetailSkeleton,
   EmptyState,
   ErrorMessage,
@@ -26,6 +27,7 @@ import {
   type CreatePaymentData,
 } from '@/components/forms/CreatePaymentIntentForm';
 import { API_V1 } from '@/lib/api';
+import { fetchWithAuth } from '@/lib/auth';
 import { useAuth } from '@/context/AuthContext';
 import PhotoUpload from '@/components/patients/PhotoUpload';
 import {
@@ -95,6 +97,7 @@ function calcAge(dob: string): number {
 
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const EDIT_ROLES = new Set(['DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN']);
+const DELETE_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN']);
 
 // ── Labels type ──────────────────────────────────────────────────────────────
 
@@ -166,6 +169,36 @@ export default function PatientDetailClient({
   const aiState = useAiSummary(encounters);
 
   const canEdit = user && EDIT_ROLES.has(user.role);
+  const canDelete = user && DELETE_ROLES.has(user.role);
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeletePatient = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetchWithAuth(`${API_V1}/patients/${patientId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `Error ${res.status}`);
+      }
+      allergyState.setToast({
+        message: 'Patient deleted successfully.',
+        type: 'success',
+      });
+      setShowDeleteDialog(false);
+      router.push('/patients');
+    } catch (error) {
+      allergyState.setToast({
+        message: error instanceof Error ? error.message : 'Unable to delete patient.',
+        type: 'error',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Merge toast state from allergy and AI hooks
   const activeToast = allergyState.toast ?? aiState.toast;
@@ -257,8 +290,10 @@ export default function PatientDetailClient({
         patient={patient}
         patientId={patientId}
         canEdit={!!canEdit}
+        canDelete={!!canDelete}
         labels={labels}
         onEdit={() => router.push(`/patients/${patientId}/edit`)}
+        onDelete={() => setShowDeleteDialog(true)}
       />
 
       {/* Tabs */}
@@ -394,6 +429,28 @@ export default function PatientDetailClient({
           defaultPatientId={patientId}
         />
       </SlideOver>
+
+      {/* Delete patient confirmation — typed-name required */}
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDeletePatient}
+        title="Delete patient"
+        confirmLabel="Delete patient"
+        cancelLabel="Cancel"
+        loading={deleting}
+        requireTextMatch={`${patient.firstName} ${patient.lastName}`}
+        message={
+          <>
+            You are about to permanently delete{' '}
+            <strong>
+              {patient.firstName} {patient.lastName}
+            </strong>
+            . This will remove all encounters, payments, and clinical records associated with this
+            patient. This action cannot be undone.
+          </>
+        }
+      />
     </PageWrapper>
   );
 }
@@ -404,14 +461,18 @@ function DemographicsCard({
   patient,
   patientId,
   canEdit,
+  canDelete,
   labels,
   onEdit,
+  onDelete,
 }: {
   patient: any;
   patientId: string;
   canEdit: boolean;
+  canDelete: boolean;
   labels: Labels;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <section
@@ -441,11 +502,18 @@ function DemographicsCard({
             </div>
           </div>
         </div>
-        {canEdit && (
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            {labels.editPatient}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              {labels.editPatient}
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" size="sm" onClick={onDelete}>
+              Delete patient
+            </Button>
+          )}
+        </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">

@@ -100,6 +100,10 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+export const logoutSchema = refreshSchema.extend({
+  reason: z.enum(['user', 'idle_timeout']).optional(),
+});
+
 export const mfaVerifySchema = z.object({
   totp: z.string().length(6),
 });
@@ -141,6 +145,7 @@ export const mfaBackupCodesRegenerateSchema = z
 export type LoginDto = z.infer<typeof loginSchema>;
 export type RegisterDto = z.infer<typeof registerSchema>;
 export type RefreshDto = z.infer<typeof refreshSchema>;
+export type LogoutDto = z.infer<typeof logoutSchema>;
 export type MfaVerifyDto = z.infer<typeof mfaVerifySchema>;
 export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;
 export type ForgotPasswordDto = z.infer<typeof forgotPasswordSchema>;

@@ -31,6 +31,23 @@ const envSchema = z.object({
 
   GEMINI_API_KEY: z.string().optional(),
 
+  // ── AI voice transcription (encounter audio → SOAP notes) ─────────────────
+  // Provider selection. Optional so the API boots in development without it;
+  // the transcription service falls back to a safe default when unset.
+  TRANSCRIPTION_PROVIDER: z.enum(['google', 'whisper']).optional(),
+
+  // Google Speech-to-Text API key (required when TRANSCRIPTION_PROVIDER=google).
+  GOOGLE_SPEECH_API_KEY: z.string().optional(),
+
+  // OpenAI API key for Whisper (required when TRANSCRIPTION_PROVIDER=whisper).
+  OPENAI_API_KEY: z.string().optional(),
+
+  // Maximum accepted audio upload size in bytes. Default: 25 MiB.
+  TRANSCRIPTION_MAX_AUDIO_BYTES: z
+    .string()
+    .regex(/^\d+$/, 'TRANSCRIPTION_MAX_AUDIO_BYTES must be a positive integer')
+    .optional(),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
@@ -83,6 +100,26 @@ const envSchema = z.object({
   // ── TLS enforcement ───────────────────────────────────────────────────────
   TRUST_PROXY: z.string().optional(),
   NODE_ENV: z.string().optional(),
+
+  // ── Webhook signature verification (HMAC-SHA256) ──────────────────────────
+  // Current signing secret used to verify X-Webhook-Signature on incoming webhooks.
+  WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET must be at least 32 characters (too weak)')
+    .optional(),
+  // Previous signing secret, accepted during key rotation.
+  WEBHOOK_SIGNING_SECRET_PREVIOUS: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET_PREVIOUS must be at least 32 characters (too weak)')
+    .optional(),
+
+  // ── Idempotency keys for payment endpoints ────────────────────────────────
+  // TTL (in seconds) for idempotency key → response mappings. Default: 24 hours.
+  IDEMPOTENCY_TTL_SECONDS: z
+    .string()
+    .regex(/^\d+$/, 'IDEMPOTENCY_TTL_SECONDS must be a positive integer')
+    .refine((v) => Number(v) > 0, 'IDEMPOTENCY_TTL_SECONDS must be greater than 0')
+    .default('86400'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -161,6 +198,21 @@ if (isProd && !env.SMTP_HOST) {
   );
 }
 
+// AI voice transcription — warn when the selected provider has no credentials.
+// Audio contains PHI, so a misconfigured provider must be visible at startup.
+if (env.TRANSCRIPTION_PROVIDER === 'google' && !env.GOOGLE_SPEECH_API_KEY) {
+  console.warn(
+    '⚠️  WARNING: TRANSCRIPTION_PROVIDER=google but GOOGLE_SPEECH_API_KEY is not set. ' +
+      'Voice transcription requests will fail.'
+  );
+}
+if (env.TRANSCRIPTION_PROVIDER === 'whisper' && !env.OPENAI_API_KEY) {
+  console.warn(
+    '⚠️  WARNING: TRANSCRIPTION_PROVIDER=whisper but OPENAI_API_KEY is not set. ' +
+      'Voice transcription requests will fail.'
+  );
+}
+
 // Log non-secret config values at startup
 console.log('✅ Config validated:');
 console.log(`   API_PORT:        ${env.API_PORT}`);
@@ -171,3 +223,5 @@ console.log(`   HIPAA FIELD_ENCRYPTION_KEY: ${env.FIELD_ENCRYPTION_KEY ? '✅ se
 console.log(`   HIPAA AUDIT_ENCRYPTION_KEY: ${env.AUDIT_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
 console.log(`   HIPAA BACKUP_ENCRYPTION_KEY: ${env.BACKUP_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
 console.log(`   HIPAA SMTP_HOST:             ${env.SMTP_HOST ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_PROVIDER:      ${env.TRANSCRIPTION_PROVIDER ?? '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_MAX_AUDIO_BYTES: ${env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)'}`);

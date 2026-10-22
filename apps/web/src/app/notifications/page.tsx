@@ -147,6 +147,14 @@ export default function NotificationsPage() {
         }
       />
 
+      {/* Announce loading and status changes to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isLoading && 'Loading notifications…'}
+        {!isLoading && notifications.length === 0 && 'No notifications. You are all caught up.'}
+        {markAllRead.isPending && 'Marking all notifications as read…'}
+        {markAllRead.isSuccess && 'All notifications marked as read.'}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Spinner />

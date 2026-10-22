@@ -44,7 +44,103 @@ await dispatchNotification({
 ```
 
 Critical types (`balance_critical`, `high_risk_patient`, `unrecognized_transaction`,
-`large_transaction`, `lab_result_ready`) bypass preferences and quiet hours.
+`large_transaction`, `lab_result_ready`, `drug_interaction_critical`) bypass preferences and quiet hours.
+
+## Pre-authorization status changes (#1606)
+
+The pre-auth workflow dispatches `pre_auth_status_change` whenever a pre-auth
+transitions state (`pending → submitted → approved / denied / more-info-needed`).
+
+| Field | Value |
+| --- | --- |
+| `type` | `pre_auth_status_change` |
+| `templateKey` | `pre_auth_status_change` |
+| `channels` | `in_app`, `email` (SMS/push if the recipient has them enabled) |
+| `recipients` | Clinic staff (admins + billing staff) of the pre-auth's clinic |
+
+Template variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `patientName` | Patient the pre-auth is for |
+| `procedureName` / `serviceCode` | Requested procedure / CPT code |
+| `previousStatus` | Status before the change |
+| `newStatus` | `submitted`, `approved`, `denied` or `more_info_needed` |
+| `reason` | Payer reason / denial reason (when provided) |
+| `expiresAt` | Pre-auth expiry date (approved pre-auths, typically 90 days) |
+
+## Drug interaction CDS alerts (#1605)
+
+When a medication is added to an encounter, the AI module checks drug
+interactions. Interactions classified as `severe` or `contraindicated` emit a
+critical CDS alert through the same dispatch path:
+
+| Field | Value |
+| --- | --- |
+| `type` | `drug_interaction_critical` |
+| `templateKey` | `drug_interaction_critical` |
+| `channels` | `in_app`, `email` (critical — bypasses preferences and quiet hours) |
+| `recipients` | Prescribing clinician + clinic admins |
+
+Template variables: `patientName`, `newDrug`, `interactingDrug`, `severity`
+(`severe` / `contraindicated`), `description`, `recommendation`.
+`mild` and `moderate` interactions are surfaced in-app only and do not page staff.
+
+## Follow-up reminders (encounter outcomes — #1591)
+
+When an encounter is marked with an outcome that requires follow-up (e.g.
+`follow_up_needed`), the follow-up reminder job
+(`modules/encounters/follow-up-reminder-job.ts`) schedules a reminder through
+`dispatchNotification()`. The notification type is `follow_up_reminder`; it is
+**not** critical, so it respects user preferences and quiet hours.
+
+```ts
+await dispatchNotification({
+  userId: patient.userId,
+  clinicId: encounter.clinicId,
+  type: 'follow_up_reminder',
+  templateKey: 'follow_up_reminder',
+  variables: {
+    patientName: patient.firstName,
+    clinicianName: encounter.clinicianName,
+    dueDate: encounter.followUpDueAt.toISOString(),
+    reason: encounter.outcomeNotes ?? '',
+  },
+  channels: ['in_app', 'email', 'sms'],
+  scheduledFor: encounter.followUpDueAt,
+});
+```
+
+The job is idempotent: each encounter stores the id of the notification it
+scheduled (`followUpReminderNotificationId`) so re-runs do not duplicate
+reminders, and reminders are cancelled when the outcome is later resolved.
+
+## Multi-signature payment approvals (#1594)
+
+When a Stellar payment exceeds the clinic's multi-sig threshold, the payment is
+created in `pending_signatures` state and every required signer is notified
+with the critical type `payment_signature_required` (bypasses preferences and
+quiet hours). Signers approve via `POST /payments/:id/approve`; once the
+threshold is met the transaction is submitted, and if signatures are not
+gathered within 24 hours the payment is auto-voided and signers receive
+`payment_signature_expired`.
+
+```ts
+await dispatchNotification({
+  userId: signer.userId,
+  clinicId: payment.clinicId,
+  type: 'payment_signature_required',
+  templateKey: 'payment_signature_required',
+  variables: {
+    amount: payment.amount,
+    asset: payment.asset,
+    destination: payment.destination,
+    expiresAt: payment.signatureDeadline.toISOString(),
+    approvalUrl: `/payments/${payment.id}/approve`,
+  },
+  channels: ['in_app', 'email', 'push'],
+});
+```
 
 ## Configuration
 

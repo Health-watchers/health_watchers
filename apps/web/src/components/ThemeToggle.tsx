@@ -3,22 +3,39 @@
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
+const THEME_STORAGE_KEY = 'theme';
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   // Avoid hydration mismatch — only render after mount
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="h-8 w-8" aria-hidden="true" />;
 
   const isDark = resolvedTheme === 'dark';
+
+  const handleToggle = () => {
+    const nextTheme = isDark ? 'light' : 'dark';
+    setTheme(nextTheme);
+    // Explicitly persist the preference so it survives across sessions,
+    // even if next-themes' storage is unavailable or overridden.
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch {
+      // Ignore storage errors (e.g. private mode / disabled storage)
+    }
+  };
+
+  if (!mounted) return <div className="h-8 w-8" aria-hidden="true" />;
 
   return (
     <button
       type="button"
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-neutral-400 dark:hover:bg-neutral-800"
+      onClick={handleToggle}
+      className="rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-neutral-400 dark:hover:bg-neutral-800"
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-pressed={isDark}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
       {isDark ? (
         // Sun icon

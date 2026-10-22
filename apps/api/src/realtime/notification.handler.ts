@@ -220,6 +220,59 @@ export class NotificationHandler {
   }
 
   /**
+   * Notify clinic staff of a pre-authorization status change
+   */
+  static notifyPreAuthStatusChange(
+    clinicId: string,
+    data: {
+      preAuthId: string;
+      oldStatus: string;
+      newStatus: string;
+      patientName?: string;
+      changedBy?: string;
+      notifyUsers?: string[];
+    }
+  ): void {
+    const notification: NotificationEvent = {
+      id: `preauth_${Date.now()}_${Math.random()}`,
+      type: 'data_change',
+      resourceType: 'pre_auth',
+      resourceId: data.preAuthId,
+      title: 'Pre-Authorization Status Changed',
+      message: data.patientName
+        ? `Pre-authorization for ${data.patientName} changed from ${data.oldStatus} to ${data.newStatus}`
+        : `Pre-authorization changed from ${data.oldStatus} to ${data.newStatus}`,
+      userId: data.changedBy || 'system',
+      clinicId,
+      severity:
+        data.newStatus === 'denied'
+          ? 'warning'
+          : data.newStatus === 'more-info-needed'
+            ? 'warning'
+            : 'info',
+      timestamp: new Date(),
+      read: false,
+      actionUrl: `/pre-auth/${data.preAuthId}`,
+      metadata: {
+        preAuthId: data.preAuthId,
+        oldStatus: data.oldStatus,
+        newStatus: data.newStatus,
+        patientName: data.patientName,
+        changedBy: data.changedBy,
+      },
+    };
+
+    // Notify specific users or entire clinic
+    if (data.notifyUsers && data.notifyUsers.length > 0) {
+      for (const userId of data.notifyUsers) {
+        emitToUser(userId, 'notification:pre-auth-status', notification);
+      }
+    } else {
+      emitToClinic(clinicId, 'notification:pre-auth-status', notification);
+    }
+  }
+
+  /**
    * Mark notification as read
    */
   static markAsRead(userId: string, notificationId: string): void {

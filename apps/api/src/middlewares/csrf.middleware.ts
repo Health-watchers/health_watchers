@@ -40,6 +40,8 @@ const CSRF_EXEMPT_PREFIXES = [
   '/api/v1/auth/register',
   '/api/v1/auth/forgot-password',
   '/api/v1/auth/reset-password',
+  // Passkey sign-in happens before a session exists, like /auth/login
+  '/api/v1/auth/passkeys/login',
   '/api/v1/csp-report',
   '/api/v1/webhooks/stellar-payment',
   '/api/v2/webhooks/',

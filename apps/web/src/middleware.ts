@@ -41,12 +41,27 @@ export function middleware(request: NextRequest) {
     const portalToken = request.cookies.get('portalAccessToken')?.value;
 
     if (!portalToken && !isPortalPublic) {
-      return NextResponse.redirect(new URL(PORTAL_LOGIN, request.url));
+      const loginUrl = new URL(PORTAL_LOGIN, request.url);
+      // Store the intended URL so login can redirect back after auth
+      loginUrl.searchParams.set('returnTo', pathname);
+      return NextResponse.redirect(loginUrl);
     }
     if (portalToken && isPortalPublic) {
-      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+      // If a returnTo was stored (e.g. deep link), honour it after login
+      const returnTo = request.nextUrl.searchParams.get('returnTo');
+      const safeReturnTo = returnTo && returnTo.startsWith('/portal/') ? returnTo : '/portal/dashboard';
+      return NextResponse.redirect(new URL(safeReturnTo, request.url));
     }
     return NextResponse.next();
+  }
+
+  // ── Portal deep links must not expose admin routes ────────────────────────
+  // If someone tries to deep-link to an admin path via /portal/, block it
+  if (pathname.startsWith('/portal/')) {
+    const adminPatterns = ['/portal/patients', '/portal/encounters/new', '/portal/settings/staff', '/portal/users', '/portal/billing', '/portal/reports', '/portal/audit-log'];
+    if (adminPatterns.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.redirect(new URL('/portal/dashboard', request.url));
+    }
   }
 
   // ── Staff routes ──────────────────────────────────────────────────────────

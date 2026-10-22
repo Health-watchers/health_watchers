@@ -18,6 +18,7 @@ This directory contains operational runbooks for the Health Watchers platform. E
 | 08 | [Data Export](./08-data-export.md) | HIPAA right-of-access exports, audit log exports, bulk DB exports | 15–60 min |
 | 09 | [User Management](./09-user-management.md) | Create, deactivate, reactivate users; role changes; onboarding/offboarding | 5–30 min |
 | 10 | [Database Maintenance](./10-database-maintenance.md) | Migrations, index management, pool tuning, replica set health, retention | 5–120 min |
+| — | [Background Jobs Catalogue](../BACKGROUND_JOBS.md) | Every scheduled job: schedule, side effects, env toggles, idempotency, troubleshooting | Reference |
 
 ---
 
@@ -52,6 +53,9 @@ This directory contains operational runbooks for the Health Watchers platform. E
 
 ### Database migration
 → [10-database-maintenance.md — Database Migrations](./10-database-maintenance.md#database-migrations)
+
+### A background job is failing, stuck, or needs to be disabled
+→ [BACKGROUND_JOBS.md — General Troubleshooting](../BACKGROUND_JOBS.md#general-troubleshooting)
 
 ---
 

@@ -17,12 +17,16 @@ interface DisputeFilingFormProps {
   paymentId: string;
   onSubmit: (data: DisputeData) => Promise<void>;
   isLoading?: boolean;
+  onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
 export function DisputeFilingForm({
   paymentId,
   onSubmit,
   isLoading = false,
+  onSuccess,
+  onCancel,
 }: DisputeFilingFormProps) {
   const [formData, setFormData] = useState({
     reason: '',
@@ -51,17 +55,43 @@ export function DisputeFilingForm({
     setError(null);
   };
 
+  const MAX_TOTAL_SIZE = 10 * 1024 * 1024;
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const ACCEPTED_TYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      const totalSize =
-        attachments.reduce((sum, f) => sum + f.size, 0) + files.reduce((sum, f) => sum + f.size, 0);
-
-      if (totalSize > 10 * 1024 * 1024) {
-        setError('Total file size cannot exceed 10MB');
+      const oversized = files.find((f) => f.size > MAX_FILE_SIZE);
+      if (oversized) {
+        setError(`File "${oversized.name}" exceeds the 5MB per-file limit`);
+        e.target.value = '';
         return;
       }
 
+      const invalidType = files.find((f) => f.type && !ACCEPTED_TYPES.includes(f.type));
+      if (invalidType) {
+        setError(`File "${invalidType.name}" has an unsupported format`);
+        e.target.value = '';
+        return;
+      }
+
+      const totalSize =
+        attachments.reduce((sum, f) => sum + f.size, 0) + files.reduce((sum, f) => sum + f.size, 0);
+
+      if (totalSize > MAX_TOTAL_SIZE) {
+        setError('Total file size cannot exceed 10MB');
+        e.target.value = '';
+        return;
+      }
+
+      setError(null);
       setAttachments((prev) => [...prev, ...files]);
     }
   };
@@ -89,6 +119,11 @@ export function DisputeFilingForm({
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
+      setError('Please provide a valid email address');
+      return;
+    }
+
     try {
       await onSubmit({
         paymentId,
@@ -101,6 +136,7 @@ export function DisputeFilingForm({
       setSuccess(true);
       setFormData({ reason: '', description: '', contactEmail: '', contactPhone: '' });
       setAttachments([]);
+      onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit dispute. Please try again.');
     }
@@ -247,10 +283,23 @@ export function DisputeFilingForm({
         )}
       </div>
 
-      <Button type="submit" disabled={isLoading} className="w-full">
-        <Send className="mr-2 h-4 w-4" />
-        {isLoading ? 'Submitting...' : 'Submit Dispute'}
-      </Button>
+      <div className="flex gap-3">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={isLoading}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+        )}
+        <Button type="submit" disabled={isLoading} className="flex-1">
+          <Send className="mr-2 h-4 w-4" />
+          {isLoading ? 'Submitting...' : 'Submit Dispute'}
+        </Button>
+      </div>
     </form>
   );
 }

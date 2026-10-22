@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTheme } from 'next-themes';
 import { formatDate } from '@/lib/dateUtils';
 
 export interface VitalSign {
@@ -32,6 +33,8 @@ export function VitalSignsChart({
   showGrid = true,
 }: VitalSignsChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     if (!canvasRef.current || data.length === 0) return;
@@ -39,6 +42,23 @@ export function VitalSignsChart({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Theme-aware colors
+    const colors = isDark
+      ? {
+          background: '#1f2937',
+          grid: '#374151',
+          axis: '#9ca3af',
+          label: '#9ca3af',
+          legendText: '#f3f4f6',
+        }
+      : {
+          background: '#ffffff',
+          grid: '#e5e7eb',
+          axis: '#374151',
+          label: '#6b7280',
+          legendText: '#1f2937',
+        };
 
     // Set canvas size
     const rect = canvas.parentElement?.getBoundingClientRect();
@@ -67,12 +87,12 @@ export function VitalSignsChart({
     maxValue += yRange * 0.1;
 
     // Draw background
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, width, height);
 
     // Draw grid
     if (showGrid) {
-      ctx.strokeStyle = '#e5e7eb';
+      ctx.strokeStyle = colors.grid;
       ctx.lineWidth = 1;
 
       // Horizontal grid lines
@@ -96,7 +116,7 @@ export function VitalSignsChart({
     }
 
     // Draw axes
-    ctx.strokeStyle = '#374151';
+    ctx.strokeStyle = colors.axis;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(padding.left, padding.top);
@@ -105,7 +125,7 @@ export function VitalSignsChart({
     ctx.stroke();
 
     // Draw y-axis labels
-    ctx.fillStyle = '#6b7280';
+    ctx.fillStyle = colors.label;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'right';
     for (let i = 0; i <= 5; i++) {
@@ -185,7 +205,7 @@ export function VitalSignsChart({
         ctx.fillStyle = series.color;
         ctx.fillRect(legendX, legendY, 12, 12);
 
-        ctx.fillStyle = '#1f2937';
+        ctx.fillStyle = colors.legendText;
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(series.name, legendX + 18, legendY + 10);
@@ -193,7 +213,7 @@ export function VitalSignsChart({
         legendY += 20;
       });
     }
-  }, [data, height, showLegend, showGrid]);
+  }, [data, height, showLegend, showGrid, isDark]);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">

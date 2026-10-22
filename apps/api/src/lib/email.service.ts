@@ -85,6 +85,23 @@ function buildWelcomeEmail(name: string, language?: string): EmailContent {
   };
 }
 
+function buildClinicOnboardingCompleteEmail(clinicName: string, language?: string): EmailContent {
+  const dashboardUrl = `${APP_BASE_URL()}/dashboard`;
+  if (resolveLanguage(language) === 'fr') {
+    return {
+      subject: 'Configuration de votre clinique terminée — Health Watchers',
+      text: `Bonjour ${clinicName},\n\nFélicitations ! La configuration de votre clinique sur Health Watchers est terminée. Vous pouvez maintenant accéder à votre tableau de bord : ${dashboardUrl}`,
+      html: `<h3>Configuration de votre clinique terminée</h3><p>Bonjour <strong>${clinicName}</strong>,</p><p>Félicitations ! La configuration de votre clinique sur Health Watchers est terminée. Vous pouvez maintenant commencer à gérer vos patients et vos paiements.</p><p><a href="${dashboardUrl}">Accéder au tableau de bord</a></p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Clinic Onboarding Is Complete — Health Watchers',
+    text: `Hi ${clinicName},\n\nCongratulations! Your clinic's onboarding on Health Watchers is complete. You can now access your dashboard: ${dashboardUrl}`,
+    html: `<h3>Your Clinic Onboarding Is Complete</h3><p>Hi <strong>${clinicName}</strong>,</p><p>Congratulations! Your clinic's onboarding on Health Watchers is complete. You can now start managing your patients and payments.</p><p><a href="${dashboardUrl}">Go to Dashboard</a></p>`,
+  };
+}
+
 function buildPasswordResetEmail(token: string, language?: string): EmailContent {
   const resetUrl = `${APP_BASE_URL()}/reset-password?token=${token}`;
   if (resolveLanguage(language) === 'fr') {
@@ -208,6 +225,21 @@ export function sendVerificationEmail(to: string, token: string, language?: stri
 
 export function sendWelcomeEmail(to: string, name: string, language?: string): void {
   const rendered = renderTemplate('welcome', language, buildWelcomeEmail, name, language);
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+export function sendClinicOnboardingCompleteEmail(
+  to: string,
+  clinicName: string,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'clinicOnboardingComplete',
+    language,
+    buildClinicOnboardingCompleteEmail,
+    clinicName,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -752,6 +784,61 @@ export function sendKeypairRotationEmail(
   const html = isFrench
     ? `<h3>Rotation des clés Stellar effectuée — ${clinicName}</h3><p>La rotation des clés Stellar de votre clinique a été effectuée avec succès.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Nouvelle clé publique</td><td style="padding:8px;font-family:monospace;font-size:12px">${newPublicKey}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Version</td><td style="padding:8px">${keyVersion}</td></tr></table><p style="color:#dc2626"><strong>Si vous n'avez pas initié cette action, contactez le support immédiatement.</strong></p>`
     : `<h3>Stellar Keypair Rotated — ${clinicName}</h3><p>Your clinic's Stellar keypair has been successfully rotated.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">New Public Key</td><td style="padding:8px;font-family:monospace;font-size:12px">${newPublicKey}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Key Version</td><td style="padding:8px">${keyVersion}</td></tr></table><p style="color:#dc2626"><strong>If you did not initiate this action, please contact support immediately.</strong></p>`;
+  enqueue(to, subject, text, html);
+}
+
+/** Multi-signature approval request sent to each pending signer when a payment enters awaiting_signatures */
+export function sendMultisigApprovalRequestEmail(
+  to: string,
+  signerName: string,
+  payment: {
+    paymentId: string;
+    amount: string;
+    assetCode: string;
+    destination: string;
+    requiredSignatures: number;
+    collectedSignatures: number;
+    expiresAt: Date;
+  },
+  language?: string
+): void {
+  const approvalUrl = `${APP_BASE_URL()}/payments/${payment.paymentId}/approve`;
+  const isFrench = resolveLanguage(language) === 'fr';
+  const expiryStr =
+    payment.expiresAt.toLocaleString(isFrench ? 'fr-FR' : 'en-US', {
+      timeZone: 'UTC',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }) + ' UTC';
+  const subject = isFrench
+    ? `Approbation requise — paiement ${payment.amount} ${payment.assetCode}`
+    : `Approval Required — ${payment.amount} ${payment.assetCode} Payment`;
+  const text = isFrench
+    ? `Bonjour ${signerName},\n\nUn paiement de ${payment.amount} ${payment.assetCode} vers ${payment.destination} nécessite votre signature.\n\nSignatures : ${payment.collectedSignatures}/${payment.requiredSignatures}\nExpire le : ${expiryStr}\n\nApprouver : ${approvalUrl}`
+    : `Hello ${signerName},\n\nA payment of ${payment.amount} ${payment.assetCode} to ${payment.destination} requires your signature.\n\nSignatures: ${payment.collectedSignatures}/${payment.requiredSignatures}\nExpires at: ${expiryStr}\n\nApprove: ${approvalUrl}`;
+  const html = isFrench
+    ? `<h3>Approbation requise — paiement multi-signature</h3><p>Bonjour <strong>${signerName}</strong>,</p><p>Un paiement nécessite votre signature pour être soumis au réseau Stellar.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Montant</td><td style="padding:8px">${payment.amount} ${payment.assetCode}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Destination</td><td style="padding:8px;font-family:monospace;font-size:12px">${payment.destination}</td></tr><tr><td style="padding:8px;font-weight:bold">Signatures</td><td style="padding:8px">${payment.collectedSignatures}/${payment.requiredSignatures}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Expire le</td><td style="padding:8px;color:#dc2626">${expiryStr}</td></tr></table><p>Si le seuil de signatures n'est pas atteint avant l'expiration, le paiement sera automatiquement annulé.</p><p><a href="${approvalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Approuver le paiement</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Approval Required — Multi-Signature Payment</h3><p>Hello <strong>${signerName}</strong>,</p><p>A payment requires your signature before it can be submitted to the Stellar network.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Amount</td><td style="padding:8px">${payment.amount} ${payment.assetCode}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Destination</td><td style="padding:8px;font-family:monospace;font-size:12px">${payment.destination}</td></tr><tr><td style="padding:8px;font-weight:bold">Signatures</td><td style="padding:8px">${payment.collectedSignatures}/${payment.requiredSignatures}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Expires At</td><td style="padding:8px;color:#dc2626">${expiryStr}</td></tr></table><p>If the signature threshold is not reached before expiry, the payment will be automatically voided.</p><p><a href="${approvalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Approve Payment</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
+/** Multi-signature payment voided notification sent to all signers when the 24h window elapses */
+export function sendMultisigVoidedEmail(
+  to: string,
+  signerName: string,
+  payment: { paymentId: string; amount: string; assetCode: string; collectedSignatures: number; requiredSignatures: number },
+  language?: string
+): void {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const subject = isFrench
+    ? `Paiement multi-signature annulé — ${payment.amount} ${payment.assetCode}`
+    : `Multi-Signature Payment Voided — ${payment.amount} ${payment.assetCode}`;
+  const text = isFrench
+    ? `Bonjour ${signerName},\n\nLe paiement ${payment.paymentId} de ${payment.amount} ${payment.assetCode} a été automatiquement annulé car le seuil de signatures (${payment.collectedSignatures}/${payment.requiredSignatures}) n'a pas été atteint dans les 24 heures.`
+    : `Hello ${signerName},\n\nThe payment ${payment.paymentId} of ${payment.amount} ${payment.assetCode} was automatically voided because the signature threshold (${payment.collectedSignatures}/${payment.requiredSignatures}) was not reached within 24 hours.`;
+  const html = isFrench
+    ? `<h3>Paiement multi-signature annulé</h3><p>Bonjour <strong>${signerName}</strong>,</p><p>Le paiement <strong>${payment.paymentId}</strong> de <strong>${payment.amount} ${payment.assetCode}</strong> a été automatiquement annulé car le seuil de signatures (${payment.collectedSignatures}/${payment.requiredSignatures}) n'a pas été atteint dans les 24 heures.</p><p>Vous pouvez initier un nouveau paiement si nécessaire.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Multi-Signature Payment Voided</h3><p>Hello <strong>${signerName}</strong>,</p><p>The payment <strong>${payment.paymentId}</strong> of <strong>${payment.amount} ${payment.assetCode}</strong> was automatically voided because the signature threshold (${payment.collectedSignatures}/${payment.requiredSignatures}) was not reached within 24 hours.</p><p>You may initiate a new payment if needed.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
   enqueue(to, subject, text, html);
 }
 

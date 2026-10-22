@@ -4,11 +4,10 @@ import pino from 'pino';
 // skip it in tests so any module importing the logger works under Jest.
 const usePrettyTransport = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
 
-const logger = pino({
+// Exported so tests can build a logger with the exact production redaction rules
+// (see integration/phi-log-leak.flow.test.ts).
+export const loggerOptions: pino.LoggerOptions = {
   level: process.env.LOG_LEVEL ?? 'info',
-  ...(usePrettyTransport
-    ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
-    : {}),
   redact: {
     paths: [
       'req.headers.authorization',
@@ -26,6 +25,13 @@ const logger = pino({
     ],
     censor: '[REDACTED]',
   },
+};
+
+const logger = pino({
+  ...loggerOptions,
+  ...(usePrettyTransport
+    ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
+    : {}),
 });
 
 export default logger;

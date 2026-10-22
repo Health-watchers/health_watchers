@@ -64,7 +64,7 @@ export default function EncounterPrintPage() {
 
           /* Reset page */
           @page {
-            size: letter;
+            size: A4;
             margin: 0.75in 0.75in 0.75in 0.75in;
           }
 

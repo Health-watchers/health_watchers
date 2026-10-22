@@ -90,7 +90,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       err.category,
       err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
       err.message,
-      { requestId: req.requestId, ...(isDev && err.stack ? { stack: err.stack } : {}) }
+      {
+        requestId: req.requestId,
+        ...(err.context ? { details: err.context } : {}),
+        ...(isDev && err.stack ? { stack: err.stack } : {}),
+      }
     );
     return;
   }
@@ -107,13 +111,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
     const details = err.errors.map((e) => ({ path: e.path.join('.'), message: e.message }));
     const fieldList = details.map((d) => `"${d.path}"`).join(', ');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: `Request validation failed. Please check the following field(s): ${fieldList}.`,
-      details,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.VALIDATION_ERROR,
+      `Request validation failed. Please check the following field(s): ${fieldList}.`,
+      { requestId: req.requestId, details }
+    );
     return;
   }
 
@@ -129,13 +134,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
     const fieldList = details.map((d) => `"${d.path}"`).join(', ');
     logger.info({ ...ctx, details }, 'Mongoose validation error');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: `One or more fields are invalid. Please check: ${fieldList}.`,
-      details,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.VALIDATION_ERROR,
+      `One or more fields are invalid. Please check: ${fieldList}.`,
+      { requestId: req.requestId, details }
+    );
     return;
   }
 
@@ -149,12 +155,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       req.user?.userId
     );
     logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
-    res.status(400).json({
-      error: 'BadRequest',
-      code: ApiErrorCode.BAD_REQUEST,
-      message: `"${err.path}" is not a valid ID. IDs must be 24-character hexadecimal strings.`,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.BAD_REQUEST,
+      `"${err.path}" is not a valid ID. IDs must be 24-character hexadecimal strings.`,
+      { requestId: req.requestId }
+    );
     return;
   }
 
@@ -167,13 +175,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     const value = mongoErr.keyValue?.[field];
     const valueHint = value ? ` ("${value}")` : '';
     logger.warn({ ...ctx, field }, 'Duplicate key conflict');
-    res.status(409).json({
-      error: 'Conflict',
-      code: ApiErrorCode.CONFLICT,
-      message: `A record with this ${field}${valueHint} already exists. Please use a unique value.`,
-      field,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      409,
+      'conflict',
+      ApiErrorCode.CONFLICT,
+      `A record with this ${field}${valueHint} already exists. Please use a unique value.`,
+      { requestId: req.requestId, details: { field } }
+    );
     return;
   }
 
@@ -187,12 +196,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       req.user?.userId
     );
     logger.info({ ...ctx }, 'JWT token expired');
-    res.status(401).json({
-      error: 'TokenExpired',
-      code: ApiErrorCode.TOKEN_EXPIRED,
-      message: 'Your session has expired. Please log in again to continue.',
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      401,
+      'authentication',
+      ApiErrorCode.TOKEN_EXPIRED,
+      'Your session has expired. Please log in again to continue.',
+      { requestId: req.requestId }
+    );
     return;
   }
 
@@ -206,12 +217,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       req.user?.userId
     );
     logger.info({ ...ctx }, 'Invalid JWT token');
-    res.status(401).json({
-      error: 'InvalidToken',
-      code: ApiErrorCode.INVALID_TOKEN,
-      message: 'The authentication token is invalid. Please log in again.',
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      401,
+      'authentication',
+      ApiErrorCode.INVALID_TOKEN,
+      'The authentication token is invalid. Please log in again.',
+      { requestId: req.requestId }
+    );
     return;
   }
 
@@ -222,22 +235,20 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     'high',
     req.user?.userId
   );
-  if (isDev) {
-    logger.error({ err }, 'Unhandled error');
-  }
+  logger.error({ ...ctx, err }, 'Unhandled error');
 
   // Report unexpected errors to Sentry (skips 4xx — those are expected)
   Sentry.captureException(err);
 
   const stack = isDev && err instanceof Error ? err.stack : undefined;
-  res.status(500).json({
-    error: 'InternalServerError',
-    code: ApiErrorCode.INTERNAL_SERVER_ERROR,
-    message:
-      'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.',
-    requestId: req.requestId,
-    ...(stack ? { stack } : {}),
-  });
+  sendApiError(
+    res,
+    500,
+    'internal',
+    ApiErrorCode.INTERNAL_SERVER_ERROR,
+    'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.',
+    { requestId: req.requestId, ...(stack ? { stack } : {}) }
+  );
 }
 
 // Alias for backward compatibility

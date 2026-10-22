@@ -222,8 +222,8 @@ function BatchProgress({
         aria-label="Batch progress"
       >
         <div className="flex h-full" style={{ width: `${pct}%` }}>
-          <div className="bg-success-500 h-full" style={{ flex: counts.success }} />
-          <div className="bg-danger-500 h-full" style={{ flex: counts.failed }} />
+          <div className="bg-success-500 h-full" style={{ flexGrow: counts.success }} />
+          <div className="bg-danger-500 h-full" style={{ flexGrow: counts.failed }} />
         </div>
       </div>
 

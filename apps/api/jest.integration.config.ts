@@ -22,6 +22,8 @@ const config: Config = {
   moduleNameMapper: {
     '^@api/(.*)$': `${srcRoot}/$1`,
     '^@/(.*)$': `${srcRoot}/$1`,
+    // Resolve the types workspace package — not symlinked into node_modules in CI.
+    '^@health-watchers/types$': path.resolve(__dirname, '../../packages/types/src/index.ts'),
     // Mock pino-http so tests don't need a real pino logger with .child()
     '^pino-http$': `${srcRoot}/__mocks__/pino-http.ts`,
     // Mock Sentry profiling native binary — not available in test environments
@@ -71,13 +73,17 @@ const config: Config = {
   // Global setup: set env vars before any test file runs
   setupFiles: ['<rootDir>/src/test-setup.ts'],
 
-  // Each worker runs its own mongod — bound concurrency to keep memory sane
-  maxWorkers: 2,
+  // Run serially (--runInBand) to ensure complete database isolation
+  // This prevents state bleeding between test files
+  maxWorkers: 1,
 
   reporters: ['default', 'summary'],
 
   // Increase timeout for integration tests (mongod startup, DB round-trips)
   testTimeout: 30000,
+  
+  // Force exit to prevent hanging from unclosed connections
+  forceExit: true,
 };
 
 export default config;

@@ -75,7 +75,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run integration tests
-        run: npm run test:integration
+        # Includes the PHI log-leak canary suite (apps/api/src/integration/phi-log-leak.flow.test.ts)
+        run: npm run test:integration --workspace=apps/api
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 

@@ -1,49 +1,126 @@
 # Health Watchers Mobile App
 
-React Native patient portal mobile application built with Expo for iOS and Android.
+React Native mobile app for patient portal access, built with Expo.
 
 ## Features
 
-- **Authentication**: Email/password login with biometric support (Face ID, Touch ID)
-- **Dashboard**: View upcoming appointments and recent encounters
-- **Appointments**: Manage and view appointment details
-- **Health Records**: Access encounters and lab results
-- **Payments**: View invoices and pay via Stellar wallet deep links
-- **Push Notifications**: Appointment reminders, payment confirmations, lab results
-- **Offline Support**: Cache recent data for offline access
+- Secure authentication with biometric support
+- Offline-first architecture with data caching
+- Appointment scheduling and management
+- Stellar-based payments
+- Health records access (immunizations, documents, care plans)
+- Push notifications
+- SSL certificate pinning for security
 
-## Getting Started
+## Development
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
-- Expo CLI: `npm install -g expo-cli`
-- iOS: Xcode (for iOS development)
-- Android: Android Studio (for Android development)
+- Node.js 18+
+- Expo CLI
+- iOS Simulator (Mac) or Android Emulator
 
-### Installation
+### Setup
 
 ```bash
 npm install
-```
 
-### Development
-
-```bash
-# Start Expo development server
+# Start development server
 npm run dev
 
-# Run on iOS simulator
-npm run ios
-
-# Run on Android emulator
-npm run android
-
-# Run on web
-npm run web
+# Run on specific platform
+npm run ios      # iOS Simulator
+npm run android  # Android Emulator
+npm run web      # Web browser
 ```
 
-### Building
+### Environment Variables
+
+Create a `.env` file in the `apps/mobile` directory:
+
+```
+EXPO_PUBLIC_API_URL=http://localhost:3001/api/v1
+```
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+```
+
+### Test Structure
+
+Tests are located alongside source files in `__tests__` directories:
+
+```
+src/
+├── services/
+│   ├── auth.service.ts
+│   └── __tests__/
+│       └── auth.service.test.ts
+├── screens/
+│   ├── DashboardScreen.tsx
+│   └── __tests__/
+│       └── DashboardScreen.test.tsx
+```
+
+### Writing Tests
+
+#### Service Tests
+
+Test services using Jest mocks:
+
+```typescript
+import { authService } from '../auth.service';
+import * as SecureStore from 'expo-secure-store';
+
+jest.mock('expo-secure-store');
+
+describe('AuthService', () => {
+  it('stores tokens securely', async () => {
+    await authService.login('user@example.com', 'password');
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('accessToken', expect.any(String));
+  });
+});
+```
+
+#### Screen Render Tests
+
+Test UI components with React Native Testing Library:
+
+```typescript
+import { render, screen } from '@testing-library/react-native';
+import { DashboardScreen } from '../DashboardScreen';
+
+describe('DashboardScreen', () => {
+  it('renders upcoming appointments', async () => {
+    render(<DashboardScreen />);
+    expect(await screen.findByText(/Upcoming Appointments/i)).toBeTruthy();
+  });
+});
+```
+
+### Test Coverage
+
+Minimum coverage thresholds:
+
+- Statements: 70%
+- Branches: 70%
+- Functions: 70%
+- Lines: 70%
+
+## Building
+
+### Development Builds
 
 ```bash
 # Build for iOS
@@ -51,60 +128,114 @@ npm run build:ios
 
 # Build for Android
 npm run build:android
-
-# Build both platforms
-npm run build
 ```
+
+### Production Builds
+
+Production builds are managed through EAS (Expo Application Services):
+
+```bash
+# Submit to app stores
+npm run submit
+```
+
+See `eas.json` for build configuration.
 
 ## Architecture
 
-### Services
-
-- **AuthService**: Handles authentication, token refresh, and API client setup
-- **NotificationService**: Manages push notifications and deep linking
-- **OfflineCacheService**: Caches appointments, encounters, and lab results
-
-### Screens
-
-- **DashboardScreen**: Shows upcoming appointments and recent encounters
-- **PaymentScreen**: Displays invoices and Stellar wallet payment options
-
 ### State Management
 
-- React Query for server state management
-- Zustand for local state (if needed)
+- React Query for server state and caching
+- Zustand for local UI state
 
-## Environment Variables
+### Security
 
-Create `.env` file:
+- SSL certificate pinning via `react-native-ssl-public-key-pinning`
+- Jailbreak/root detection via `jail-monkey`
+- Biometric authentication via `expo-local-authentication`
+- Secure token storage via `expo-secure-store`
 
+### Offline Support
+
+The app uses a multi-layered offline strategy:
+
+1. **React Query Cache**: In-memory cache with 5-minute stale time
+2. **AsyncStorage**: Persistent cache for appointments, encounters, and lab results
+3. **Fallback Logic**: API errors automatically return cached data
+
+See `src/services/offline-cache.service.ts` for implementation.
+
+### Navigation
+
+Uses React Navigation with:
+
+- Bottom tab navigator for main sections
+- Stack navigator for screen hierarchies
+- Deep linking support for notifications
+
+## API Integration
+
+All API calls go through the authenticated Axios client in `authService`:
+
+```typescript
+import { authService } from './services/auth.service';
+
+const api = authService.getApiClient();
+const response = await api.get('/appointments');
 ```
-EXPO_PUBLIC_API_URL=http://localhost:3001/api/v1
-```
 
-## Security
+The client automatically:
 
-- Credentials stored in Expo Secure Store
-- Biometric authentication support
-- JWT token refresh on 401 responses
-- HTTPS enforced in production
+- Attaches access tokens to requests
+- Refreshes tokens on 401 errors
+- Retries failed requests after token refresh
 
-## Stellar Integration
+## Troubleshooting
 
-The app supports deep linking to Stellar wallets:
+### Common Issues
 
-- **Lobstr**: `stellar:pay?destination=...&amount=...`
-- **Solar**: `solar:pay?destination=...&amount=...`
-
-## Testing
+**Metro bundler cache issues:**
 
 ```bash
-npm run test
+npx expo start -c
 ```
 
-## Linting
+**iOS Simulator not showing app:**
 
 ```bash
-npm run lint
-npm run typecheck
+npx expo run:ios
 ```
+
+**Android build fails:**
+
+```bash
+cd android && ./gradlew clean
+cd .. && npm run android
+```
+
+**Tests fail with Expo module errors:**
+
+Check `jest.setup.js` has all necessary mocks configured.
+
+## Contributing
+
+1. Follow the test patterns in existing test files
+2. Maintain test coverage above 70%
+3. Test on both iOS and Android before submitting PR
+4. Run linter: `npm run lint`
+5. Run type check: `npm run typecheck`
+
+## Release Process
+
+See `RELEASE.md` for detailed release instructions.
+
+## Documentation
+
+- [React Native Documentation](https://reactnative.dev/)
+- [Expo Documentation](https://docs.expo.dev/)
+- [React Navigation](https://reactnavigation.org/)
+- [React Query](https://tanstack.com/query/latest)
+
+## License
+
+MIT

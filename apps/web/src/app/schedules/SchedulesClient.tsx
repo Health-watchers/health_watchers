@@ -19,6 +19,8 @@ import {
   ScheduleCalendar,
   type NewShiftRange,
   type StaffInfo,
+  type MoveShiftRequest,
+  type BlockTimeOffRequest,
 } from '@/components/schedules/ScheduleCalendar';
 import { useAuth, type AppRole } from '@/context/AuthContext';
 import { ApiError, apiV1Fetch } from '@/lib/api';
@@ -238,6 +240,50 @@ export default function SchedulesClient() {
     onError: (err: Error) => setFormError(err.message),
   });
 
+  // ── Drag-and-drop: move a shift to a new day/time ──────────────────────────
+  const moveShift = useMutation({
+    mutationFn: (req: MoveShiftRequest) =>
+      apiV1Fetch(`/schedules/staff/${req.occurrence.schedule._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          startTime: req.newStartTime,
+          endTime: req.newEndTime,
+          ...(req.occurrence.schedule.recurrence === 'none'
+            ? { date: req.newDateKey }
+            : {}),
+        }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      setToast({ message: 'Shift moved', type: 'success' });
+    },
+    onError: (err: Error) =>
+      setToast({
+        message:
+          err instanceof ApiError && err.status === 409
+            ? 'Cannot move — conflicts with existing shift'
+            : err.message,
+        type: 'error',
+      }),
+  });
+
+  // ── Block / unblock time off directly from the calendar ────────────────────
+  const toggleBlock = useMutation({
+    mutationFn: (req: BlockTimeOffRequest) =>
+      apiV1Fetch(`/schedules/staff/${req.occurrence.schedule._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isAvailable: req.isAvailable }),
+      }),
+    onSuccess: (_res, req) => {
+      invalidate();
+      setToast({
+        message: req.isAvailable ? 'Marked as available' : 'Time off blocked',
+        type: 'success',
+      });
+    },
+    onError: (err: Error) => setToast({ message: err.message, type: 'error' }),
+  });
+
   // ── Calendar callbacks ────────────────────────────────────────────────────
 
   const openCreate = (range: NewShiftRange) => {
@@ -326,6 +372,8 @@ export default function SchedulesClient() {
     onCreate: openCreate,
     onResize: requestResize,
     onOpen: openEdit,
+    onMove: canEdit ? (req: MoveShiftRequest) => moveShift.mutate(req) : undefined,
+    onToggleBlock: canEdit ? (req: BlockTimeOffRequest) => toggleBlock.mutate(req) : undefined,
   };
 
   return (

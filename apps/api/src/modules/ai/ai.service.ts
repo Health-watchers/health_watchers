@@ -493,17 +493,19 @@ Rules:
 
 // ── Drug Interactions ─────────────────────────────────────────────────────────
 
+export type DrugInteractionSeverity = 'mild' | 'moderate' | 'severe' | 'contraindicated';
+
 export interface DrugInteraction {
   drug1: string;
   drug2: string;
-  severity: 'none' | 'minor' | 'moderate' | 'major' | 'contraindicated';
+  severity: DrugInteractionSeverity;
   description: string;
   recommendation: string;
 }
 
 export interface DrugInteractionResult {
   interactions: DrugInteraction[];
-  severity: 'none' | 'minor' | 'moderate' | 'major' | 'contraindicated';
+  severity: DrugInteractionSeverity | 'none';
   summary: string;
   disclaimer: string;
 }
@@ -516,6 +518,214 @@ export const DRUG_INTERACTION_FALLBACK: DrugInteractionResult = {
   disclaimer:
     'AI drug interaction check is unavailable. This result should NOT be used for clinical decisions. Consult a pharmacist or clinical decision support tool.',
 };
+
+// Severity ranking used to pick the highest severity across interactions.
+const SEVERITY_RANK: Record<DrugInteractionSeverity | 'none', number> = {
+  none: 0,
+  mild: 1,
+  moderate: 2,
+  severe: 3,
+  contraindicated: 4,
+};
+
+// Map legacy / external severity labels onto the canonical four-level scale.
+const LEGACY_SEVERITY_MAP: Record<string, DrugInteractionSeverity> = {
+  none: 'mild',
+  minor: 'mild',
+  mild: 'mild',
+  low: 'mild',
+  moderate: 'moderate',
+  medium: 'moderate',
+  major: 'severe',
+  severe: 'severe',
+  high: 'severe',
+  contraindicated: 'contraindicated',
+  contraindication: 'contraindicated',
+  critical: 'contraindicated',
+};
+
+export function normalizeSeverity(value: string | undefined | null): DrugInteractionSeverity {
+  if (!value) return 'mild';
+  return LEGACY_SEVERITY_MAP[value.trim().toLowerCase()] ?? 'mild';
+}
+
+/**
+ * Classify a free-text interaction description into a canonical severity level.
+ * Exported for unit testing of severity classification.
+ */
+export function classifySeverity(description: string): DrugInteractionSeverity {
+  const text = (description || '').toLowerCase();
+
+  if (
+    /\b(contraindicat|fatal|life[- ]threaten|do not (use|co-?administer)|never (use|combine)|absolute)\b/.test(
+      text
+    )
+  ) {
+    return 'contraindicated';
+  }
+
+  if (
+    /\b(severe|major|serious|significant|dangerous|hemorrhage|bleeding|arrhythmia|qt prolong|serotonin syndrome|toxicity|respiratory depression|cardiotox)\b/.test(
+      text
+    )
+  ) {
+    return 'severe';
+  }
+
+  if (
+    /\b(moderate|caution|monitor|increase[sd]? (the )?(risk|effect)|reduce[sd]? (the )?(effect|absorption)|adjust|interfere)\b/.test(
+      text
+    )
+  ) {
+    return 'moderate';
+  }
+
+  return 'mild';
+}
+
+export function highestSeverity(
+  interactions: Array<{ severity: DrugInteractionSeverity }>
+): DrugInteractionSeverity | 'none' {
+  let highest: DrugInteractionSeverity | 'none' = 'none';
+  for (const interaction of interactions) {
+    if (SEVERITY_RANK[interaction.severity] > SEVERITY_RANK[highest]) {
+      highest = interaction.severity;
+    }
+  }
+  return highest;
+}
+
+// ── Interaction cache ─────────────────────────────────────────────────────────
+const INTERACTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const interactionCache = new Map<string, { value: DrugInteractionResult; expiresAt: number }>();
+
+function normalizeDrugName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export function buildInteractionCacheKey(drugs: string[]): string {
+  const sorted = drugs.map(normalizeDrugName).filter(Boolean).sort();
+  return `drug-interactions:${sorted.join('+')}`;
+}
+
+function getCachedInteraction(key: string): DrugInteractionResult | null {
+  const entry = interactionCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    interactionCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedInteraction(key: string, value: DrugInteractionResult): void {
+  interactionCache.set(key, { value, expiresAt: Date.now() + INTERACTION_CACHE_TTL_MS });
+}
+
+export function clearDrugInteractionCache(): void {
+  interactionCache.clear();
+}
+
+// ── OpenFDA / RxNorm lookup ───────────────────────────────────────────────────
+interface OpenFDAResult {
+  drug_interactions?: string[];
+}
+
+async function fetchOpenFDAInteractions(drug: string): Promise<string[]> {
+  const { fetchWithCorrelation } = await import('../../utils/fetch-with-correlation');
+  const url = `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(
+    drug
+  )}"&limit=1`;
+  try {
+    const response = await fetchWithCorrelation(url, { method: 'GET' });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { results?: OpenFDAResult[] };
+    const results = body.results ?? [];
+    return results.flatMap((r) => r.drug_interactions ?? []);
+  } catch {
+    return [];
+  }
+}
+
+async function lookupExternalInteractions(
+  medications: string[]
+): Promise<DrugInteraction[]> {
+  const interactions: DrugInteraction[] = [];
+  for (const drug of medications) {
+    const snippets = await fetchOpenFDAInteractions(drug);
+    for (const snippet of snippets) {
+      for (const other of medications) {
+        if (normalizeDrugName(other) === normalizeDrugName(drug)) continue;
+        if (snippet.toLowerCase().includes(normalizeDrugName(other))) {
+          interactions.push({
+            drug1: drug,
+            drug2: other,
+            severity: classifySeverity(snippet),
+            description: snippet.slice(0, 500),
+            recommendation: 'Review the interaction and consider alternative therapy.',
+          });
+        }
+      }
+    }
+  }
+  return interactions;
+}
+
+// ── CDS alerting ─────────────────────────────────────────────────────────────
+async function emitCDSAlert(
+  result: DrugInteractionResult,
+  medications: string[],
+  context?: DrugInteractionContext
+): Promise<void> {
+  if (result.severity !== 'severe' && result.severity !== 'contraindicated') return;
+
+  const { default: logger } = await import('../../utils/logger');
+  try {
+    const { NotificationHandler } = await import('../notifications/notification.handler');
+    const handler = new NotificationHandler();
+    await handler.send({
+      type: 'cds_alert',
+      severity: 'critical',
+      title: `Drug interaction alert (${result.severity})`,
+      message: result.summary,
+      metadata: {
+        medications,
+        interactions: result.interactions,
+        encounterId: context?.encounterId,
+        patientId: context?.patientId,
+      },
+    });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      '[ai] failed to emit CDS notification'
+    );
+  }
+
+  try {
+    const cds = await import('../cds/cds.service');
+    if (typeof (cds as { createCDSAlert?: unknown }).createCDSAlert === 'function') {
+      await (cds as { createCDSAlert: (input: unknown) => Promise<unknown> }).createCDSAlert({
+        severity: 'critical',
+        category: 'drug_interaction',
+        message: result.summary,
+        medications,
+        encounterId: context?.encounterId,
+        patientId: context?.patientId,
+      });
+    }
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      '[ai] failed to emit CDS alert'
+    );
+  }
+}
+
+export interface DrugInteractionContext {
+  encounterId?: string;
+  patientId?: string;
+}
 
 export function extractJSON(text: string): string {
   // Strip markdown code fences: ```json ... ``` or ``` ... ```
@@ -535,14 +745,14 @@ export function extractJSON(text: string): string {
 const drugInteractionSchema = z.object({
   drug1: z.string().trim().min(1),
   drug2: z.string().trim().min(1),
-  severity: z.enum(['none', 'minor', 'moderate', 'major', 'contraindicated']),
+  severity: z.string().trim().min(1),
   description: z.string().trim().min(1),
   recommendation: z.string().trim().min(1),
 });
 
 const drugInteractionResultSchema = z.object({
   interactions: z.array(drugInteractionSchema),
-  severity: z.enum(['none', 'minor', 'moderate', 'major', 'contraindicated']),
+  severity: z.string().trim().min(1),
   summary: z.string().trim().min(1),
 });
 
@@ -574,7 +784,8 @@ Rules:
 4. Base recommendations on established clinical guidelines.${strictNote}`;
 }
 
-export async function checkDrugInteractions(medications: string[]): Promise<DrugInteractionResult> {
+async function checkViaGemini(medications: string[]): Promise<DrugInteractionResult | null> {
+  if (!isAIServiceAvailable()) return null;
   const client = getGeminiClient();
 
   const model = client.getGenerativeModel({
@@ -597,8 +808,18 @@ export async function checkDrugInteractions(medications: string[]): Promise<Drug
       const parsed = JSON.parse(jsonStr);
       const validated = drugInteractionResultSchema.parse(parsed);
 
+      const interactions: DrugInteraction[] = validated.interactions.map((interaction) => ({
+        drug1: interaction.drug1,
+        drug2: interaction.drug2,
+        severity: normalizeSeverity(interaction.severity),
+        description: interaction.description,
+        recommendation: interaction.recommendation,
+      }));
+
       return {
-        ...validated,
+        interactions,
+        severity: highestSeverity(interactions),
+        summary: validated.summary,
         disclaimer: AI_DISCLAIMER,
       };
     } catch (err) {
@@ -611,7 +832,59 @@ export async function checkDrugInteractions(medications: string[]): Promise<Drug
     }
   }
 
-  return DRUG_INTERACTION_FALLBACK;
+  return null;
+}
+
+export async function checkDrugInteractions(
+  medications: string[],
+  context?: DrugInteractionContext
+): Promise<DrugInteractionResult> {
+  const drugs = medications.map((m) => m.trim()).filter(Boolean);
+  if (drugs.length < 2) {
+    return {
+      interactions: [],
+      severity: 'none',
+      summary: 'At least two medications are required to check for interactions.',
+      disclaimer: AI_DISCLAIMER,
+    };
+  }
+
+  const cacheKey = buildInteractionCacheKey(drugs);
+  const cached = getCachedInteraction(cacheKey);
+  if (cached) {
+    await emitCDSAlert(cached, drugs, context);
+    return cached;
+  }
+
+  let result: DrugInteractionResult | null = null;
+
+  // Prefer the open drug database (OpenFDA) when available.
+  try {
+    const externalInteractions = await lookupExternalInteractions(drugs);
+    if (externalInteractions.length > 0) {
+      const severity = highestSeverity(externalInteractions);
+      result = {
+        interactions: externalInteractions,
+        severity,
+        summary: `${externalInteractions.length} potential interaction(s) found via OpenFDA.`,
+        disclaimer: AI_DISCLAIMER,
+      };
+    }
+  } catch {
+    // fall through to Gemini
+  }
+
+  if (!result) {
+    result = await checkViaGemini(drugs);
+  }
+
+  if (!result) {
+    return DRUG_INTERACTION_FALLBACK;
+  }
+
+  setCachedInteraction(cacheKey, result);
+  await emitCDSAlert(result, drugs, context);
+  return result;
 }
 
 // ── Clinical Coding (ICD-10 & CPT) ────────────────────────────────────────────

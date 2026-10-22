@@ -82,6 +82,12 @@ blob-report/
 playwright/.cache/
 .playwright/
 
+# NOTE: Playwright visual-regression baseline screenshots live in
+# `<specfile>-snapshots/` directories (e.g. apps/web/e2e/visual-regression.spec.ts-snapshots/).
+# These golden baselines are intentionally NOT ignored — they are committed to
+# version control as the reference for visual regression tests. Only the
+# `**/__snapshots__/` (Jest) pattern above is ignored.
+
 # Dev-only pseudo-locale generated from en.json (apps/web/scripts/generate-pseudo-locale.mjs)
 apps/web/messages/en-XA.json
 

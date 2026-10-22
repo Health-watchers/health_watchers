@@ -536,5 +536,62 @@
     "pt": "Português",
     "ha": "Hausa",
     "yo": "Yorùbá"
+  },
+  "portal": {
+    "brand": "Health Watchers — Patient Portal",
+    "signOut": "Sign out",
+    "nav": {
+      "dashboard": "Dashboard",
+      "timeline": "Timeline",
+      "records": "My Records",
+      "encounters": "My Encounters",
+      "appointments": "Appointments",
+      "payments": "Payments",
+      "consent": "Consent",
+      "healthLog": "Health Log"
+    },
+    "profile": {
+      "title": "Profile Settings",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "emailNote": "Email cannot be changed",
+      "phone": "Phone Number",
+      "bio": "Bio",
+      "bioPlaceholder": "Tell us about yourself",
+      "preferredLanguage": "Preferred Language",
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "success": "Profile updated successfully!",
+      "error": "An error occurred while updating profile",
+      "loadError": "Failed to load profile"
+    }
+  },
+  "emptyStates": {
+    "patients": {
+      "title": "No patients yet",
+      "description": "Start by adding your first patient to the system. Click the button below to get started."
+    },
+    "encounters": {
+      "title": "No encounters recorded",
+      "description": "Create your first patient encounter to begin documenting medical visits and consultations."
+    },
+    "payments": {
+      "title": "No payments found",
+      "description": "Payment transactions will appear here once they are processed on the Stellar blockchain."
+    },
+    "appointments": {
+      "title": "No appointments scheduled",
+      "description": "Schedule your first appointment to manage patient visits and clinic workflow."
+    },
+    "notifications": {
+      "title": "No notifications",
+      "description": "You're all caught up! Notifications about important events will appear here."
+    },
+    "search": {
+      "title": "No results found",
+      "description": "Try adjusting your search terms or filters to find what you're looking for."
+    }
   }
 }

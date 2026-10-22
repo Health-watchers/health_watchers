@@ -12,8 +12,8 @@ Get Health Watchers running in 5 minutes.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/health-watchers/health-watchers.git
-cd health-watchers
+git clone https://github.com/Health-watchers/health_watchers.git
+cd health_watchers
 
 # 2. Copy environment configuration
 cp .env.example .env
@@ -32,8 +32,8 @@ The API will be available at `http://localhost:3001`.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/health-watchers/health-watchers.git
-cd health-watchers
+git clone https://github.com/Health-watchers/health_watchers.git
+cd health_watchers
 
 # 2. Copy environment configuration
 cp .env.example .env
@@ -75,6 +75,6 @@ This will start:
 
 ## Next Steps
 
-- [Installation Guide](./installation.md)
-- [Configuration](./configuration.md)
 - [Architecture Overview](../architecture/overview.md)
+- [Deployment & Monitoring](../operations/deployment.md)
+- [Contributing](../contributing/overview.md)

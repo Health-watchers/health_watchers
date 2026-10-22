@@ -72,7 +72,15 @@ export interface IClinicSettings {
     enabled: boolean;
     voiceDictation: boolean;
   };
+  /** HIPAA §164.312(a)(2)(iii) automatic logoff — minutes of inactivity before sign-out. */
+  security: {
+    idleTimeoutMinutes: number;
+  };
 }
+
+export const DEFAULT_IDLE_TIMEOUT_MINUTES = 15;
+export const MIN_IDLE_TIMEOUT_MINUTES = 2;
+export const MAX_IDLE_TIMEOUT_MINUTES = 60;
 
 const clinicSettingsSchema = new Schema<IClinicSettings>(
   {
@@ -127,6 +135,14 @@ const clinicSettingsSchema = new Schema<IClinicSettings>(
     ai: {
       enabled: { type: Boolean, default: false },
       voiceDictation: { type: Boolean, default: false },
+    },
+    security: {
+      idleTimeoutMinutes: {
+        type: Number,
+        default: DEFAULT_IDLE_TIMEOUT_MINUTES,
+        min: MIN_IDLE_TIMEOUT_MINUTES,
+        max: MAX_IDLE_TIMEOUT_MINUTES,
+      },
     },
   },
   { timestamps: true, versionKey: false }

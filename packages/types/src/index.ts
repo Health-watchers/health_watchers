@@ -267,3 +267,68 @@ export interface StaffMember {
   createdAt: string;
   updatedAt?: string;
 }
+
+// ─── Appointment Status (Issue #1643) ────────────────────────────────────────
+// Canonical source for the magic strings previously duplicated across
+// apps/api/src/modules/appointments's model, controller, and validation files.
+
+export const APPOINTMENT_STATUSES = [
+  'scheduled',
+  'confirmed',
+  'cancelled',
+  'completed',
+  'no-show',
+  'patient_arrived',
+] as const;
+
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
+
+// ─── Encounter Status (Issue #1643) ──────────────────────────────────────────
+
+export const ENCOUNTER_STATUSES = [
+  'open',
+  'closed',
+  'follow-up',
+  'cancelled',
+  'pending_cosignature',
+] as const;
+
+export type EncounterStatus = (typeof ENCOUNTER_STATUSES)[number];
+
+// ─── Payment Record Status (Issue #1643) ─────────────────────────────────────
+// Status of an individual payment record. Not to be confused with
+// `DisputeStatus` above, which tracks a dispute opened against a payment.
+
+export const PAYMENT_STATUSES = ['pending', 'confirmed', 'failed'] as const;
+
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+// ─── Notification Types (Issue #1643) ────────────────────────────────────────
+// Canonical source; apps/api/src/modules/notifications/notification.model.ts
+// imports this instead of maintaining its own copy.
+
+export const NOTIFICATION_TYPES = [
+  'referral_received',
+  'payment_confirmed',
+  'appointment_reminder',
+  'appointment_status_update',
+  'ai_summary_ready',
+  'lab_result_ready',
+  'high_risk_patient',
+  'system',
+  'balance_low_warning',
+  'balance_critical',
+  'large_transaction',
+  'unrecognized_transaction',
+  'waitlist_available',
+  'claimable_expiring',
+  'subscription_warning',
+  'follow_up_reminder',
+  'report_ready',
+] as const;
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// ─── Real-time (Socket.IO) Event Contract (Issue #1504) ──────────────────────
+
+export * from './realtime';

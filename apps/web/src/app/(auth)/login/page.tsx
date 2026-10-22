@@ -10,7 +10,8 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { PasswordInput } from '@/components/ui/PasswordInput';
-import { useAuth } from '@/context/AuthContext';
+import { mapUserData, useAuth } from '@/context/AuthContext';
+import { passkeyErrorMessage, passkeysSupported, signInWithPasskey } from '@/lib/passkeys';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -21,11 +22,12 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, setUser } = useAuth();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get('returnTo') ?? '/';
+  const sessionExpired = searchParams.get('session') === 'expired';
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
 
   const {
     register,
@@ -44,6 +46,7 @@ export default function LoginPage() {
         if (result.tempToken) {
           sessionStorage.setItem('mfa_temp_token', result.tempToken);
         }
+        sessionStorage.setItem('mfa_methods', JSON.stringify(result.methods ?? ['totp']));
         router.push('/mfa');
         return;
       }
@@ -56,18 +59,34 @@ export default function LoginPage() {
     }
   };
 
-  const handleBiometricLogin = async () => {
+  const handlePasskeyLogin = async () => {
+    if (!passkeysSupported()) {
+      setServerError('Passkeys are not supported on this device.');
+      return;
+    }
+
+    setServerError(null);
+    setPasskeyPending(true);
     try {
-      if (!window.PublicKeyCredential) {
-        setServerError('Biometric authentication is not supported on this device.');
+      const result = await signInWithPasskey();
+
+      if (result.status === 'mfa_required') {
+        sessionStorage.setItem('mfa_temp_token', result.tempToken);
+        sessionStorage.setItem('mfa_methods', JSON.stringify(result.methods));
+        router.push('/mfa');
         return;
       }
 
-      setServerError(null);
+      const meRes = await fetch('/api/settings/me', { credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData?.data) setUser(mapUserData(meData.data));
+      }
+      router.push(returnTo);
     } catch (err) {
-      setServerError(
-        err instanceof Error ? err.message : 'Biometric authentication failed. Please try again.'
-      );
+      setServerError(passkeyErrorMessage(err));
+    } finally {
+      setPasskeyPending(false);
     }
   };
 
@@ -85,6 +104,15 @@ export default function LoginPage() {
             Secure access to your healthcare records
           </p>
         </div>
+
+        {sessionExpired && !serverError && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            You were signed out after a period of inactivity. Please sign in again.
+          </div>
+        )}
 
         {serverError && (
           <div
@@ -161,11 +189,13 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={handleBiometricLogin}
-            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            title="Biometric authentication"
+            onClick={handlePasskeyLogin}
+            disabled={passkeyPending}
+            aria-busy={passkeyPending}
+            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            title="Use your device's fingerprint, face, PIN or a security key"
           >
-            🔐 Biometric
+            🔐 Passkey
           </button>
         </div>
 

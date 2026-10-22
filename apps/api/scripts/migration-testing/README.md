@@ -35,7 +35,7 @@ Reports are written to `apps/api/.migration-reports/`:
 ## Notes / follow-ups
 
 This is a first-pass framework wired for the existing `migrate-mongo`
-tooling already in the repo (`migrate-mongo-config.js`). Data integrity
+tooling already in the repo (`migrate-mongo-config.ts`). Data integrity
 checks currently use a placeholder comparator — a follow-up should replace
 `checkDataIntegrity` with real snapshot diffing against staging data.
 CI wiring (running this before every deploy) should be added as a pipeline

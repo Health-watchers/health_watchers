@@ -370,7 +370,7 @@ Returns per-clinic counts broken down by delivery status.
 
 ## Inbound Stellar Payment Webhook
 
-Health Watchers exposes an **inbound** webhook for the Stellar service to notify the platform of on-chain payments. Used internally by the Stellar stream service — no Bearer token required, but the HMAC signature must be verified:
+Health Watchers exposes an **inbound** webhook for the Stellar service to notify the platform of on-chain payments. Used internally by the Stellar stream service — no Bearer token required, but the HMAC signature must be verified.
 
 ```http
 POST /api/v1/webhooks/stellar-payment
@@ -385,6 +385,86 @@ Content-Type: application/json
   "status": "confirmed"
 }
 ```
+
+### Configuring an inbound webhook receiver
+
+1. **Set the signing secret(s)** on the API via environment variables:
+
+   | Variable | Purpose |
+   |----------|---------|
+   | `WEBHOOK_INBOUND_SECRET` | Current HMAC-SHA256 signing secret |
+   | `WEBHOOK_INBOUND_SECRET_PREVIOUS` | Optional previous secret, accepted during rotation |
+   | `WEBHOOK_INBOUND_SECRET_ROTATED_AT` | ISO-8601 timestamp of the last rotation |
+
+   Secrets should be at least 32 random bytes (e.g. `openssl rand -hex 32`).
+
+2. **Compute the signature** over the **raw request body** (exact bytes, before JSON parsing):
+
+   ```
+   X-Webhook-Signature = hex(HMAC_SHA256(secret, rawBody))
+   ```
+
+3. **Send the header** on every request. The header name is case-insensitive (`X-Webhook-Signature`).
+
+### Verification and error behaviour
+
+The API verifies `X-Webhook-Signature` on **every** incoming webhook request:
+
+| Condition | Response |
+|-----------|----------|
+| Header missing | `401 Unauthorized` — `{ "error": "Missing webhook signature" }` |
+| Header present but does not match | `401 Unauthorized` — `{ "error": "Invalid webhook signature" }` |
+| Signature matches current or previous secret | Request is processed normally |
+
+Signature comparison is constant-time. The raw body must be preserved — frameworks that re-serialize JSON will produce a different signature.
+
+### Secret rotation
+
+Rotate the inbound signing secret without downtime:
+
+1. Generate a new secret: `openssl rand -hex 32`.
+2. Move the current value of `WEBHOOK_INBOUND_SECRET` into `WEBHOOK_INBOUND_SECRET_PREVIOUS`.
+3. Set `WEBHOOK_INBOUND_SECRET` to the new value and update `WEBHOOK_INBOUND_SECRET_ROTATED_AT`.
+4. Deploy. During the overlap window the API accepts signatures produced with **either** the current or the previous secret, so senders can migrate at their own pace.
+5. Once all senders use the new secret, clear `WEBHOOK_INBOUND_SECRET_PREVIOUS` and redeploy. After this point only the current secret is accepted.
+
+> Rotate immediately if a secret is suspected to be compromised, and treat the previous-secret window as short as operationally possible.
+
+---
+
+## Idempotency for Payment Endpoints
+
+Network retries can cause duplicate payment submissions. The following endpoints accept an `Idempotency-Key` header:
+
+| Endpoint | Method |
+|----------|--------|
+| `/api/v1/payments` | `POST` |
+| `/api/v1/payments/batch` | `POST` |
+| `/api/v1/payments/recurring` | `POST` |
+
+### Header
+
+```http
+POST /api/v1/payments
+Authorization: Bearer <token>
+Idempotency-Key: 4f1c2b9e-8a3d-4c6f-9b2e-1d7a5c3e9f01
+Content-Type: application/json
+
+{ "amount": "10.0000000", "destination": "GCEZ...", "memo": "HW-abc123" }
+```
+
+- The key is a client-generated string (a UUIDv4 is recommended). Maximum length 255 characters.
+- The header is **required** on all three endpoints. A request without it is rejected with `400 Bad Request` — `{ "error": "Idempotency-Key header is required" }`.
+- Keys are scoped per authenticated user/clinic; reusing a key for a different endpoint or payload is treated as a new request only if the key has expired.
+
+### Replay semantics
+
+- The first request with a given key is processed normally. The response (status code and body) is stored in Redis under the key with a **24-hour TTL**.
+- Any subsequent request with the **same key** within 24 hours returns the **cached response** — identical status code and body — without re-executing the payment. This makes retries safe.
+- A unique index on the idempotency key in MongoDB acts as a fallback if the Redis entry is evicted; a duplicate insert is resolved to the original stored response.
+- After 24 hours the key expires and may be reused for a new payment.
+
+> **Tip:** Generate a fresh key per logical payment attempt and reuse the same key for every retry of that attempt.
 
 ---
 

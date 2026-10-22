@@ -1,19 +1,21 @@
 # Health Watchers
 
-> **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
-
-[![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
-[![Docs](https://github.com/OWNER/health-watchers/actions/workflows/docs.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/docs.yml)
-[![Docs Site](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://OWNER.github.io/health-watchers/)
-[![Lighthouse CI](https://github.com/OWNER/health-watchers/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/lighthouse.yml)
-[![SonarCloud Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=alert_status&token=)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=coverage)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Health-watchers_health_watchers)[![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI/CD Pipeline](https://github.com/Health-watchers/health_watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/ci.yml)
+[![Docs](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml)
+[![Lighthouse CI](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![npm Version](https://img.shields.io/badge/npm-10.9.2-blue.svg)](https://www.npmjs.com/)
 
 A HIPAA-compliant healthcare management platform built with Next.js, Express, and Stellar blockchain integration for secure patient data management and payment processing.
+
+## Documentation
+
+- **Documentation site**: [`apps/docs`](apps/docs/README.md) (Docusaurus). It has module guides for every API module and a User Guide for clinic staff, and is published to GitHub Pages by the [Docs workflow](.github/workflows/docs.yml). Run it locally with `cd apps/docs && npm ci && npm start`.
+- **Engineering docs index**: [`docs/README.md`](docs/README.md)
+- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- **Security policy**: [`SECURITY.md`](SECURITY.md)
+- **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Features
 
@@ -23,7 +25,22 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 - 🔐 HIPAA-compliant authentication and authorization
 - 🌐 Internationalization support (English, French)
 - 🎨 Modern, accessible UI with Tailwind CSS
+- 🌙 Dark mode support with persistent theme preference
 - 🔄 Real-time data synchronization with React Query
+
+## Dark Mode
+
+Health Watchers ships with a full dark theme across every page — dashboards, patient cards,
+payment tables, CDS panels, encounter forms, the portal subsection, and charts
+(`VitalSignsChart`, `PaymentAnalyticsCharts`).
+
+Toggle the theme from the header using the sun/moon button (`ThemeToggle`). The choice is
+persisted in `localStorage` and re-applied on load by `ThemeSync`, so your preference survives
+reloads and new sessions. If no preference is stored, the app follows your OS setting.
+
+![Health Watchers dashboard in dark mode](docs/assets/dark-mode-dashboard.png)
+
+*Dashboard in dark mode — charts, tables, and cards all use `dark:` Tailwind variants.*
 
 ## Tech Stack
 
@@ -46,20 +63,42 @@ A HIPAA-compliant healthcare management platform built with Next.js, Express, an
 
 We've consolidated all Docker Compose configurations into a single file with profiles. Choose what you need:
 
-#### Core Services Only (Recommended for Development)
+#### Development Environment (Recommended)
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/OWNER/health-watchers.git
-cd health-watchers
+git clone https://github.com/Health-watchers/health_watchers.git
+cd health_watchers
 
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start core services (API, web, MongoDB, Redis, Jaeger)
-docker compose --profile core up -d
+# 3. Start development services using docker-compose.dev.yml
+# Includes: MongoDB, Redis, API, Web
+docker compose -f docker-compose.dev.yml up -d
 
 # 4. Access the application
+# Web UI: http://localhost:3000
+# API: http://localhost:3001
+# MongoDB: localhost:27017
+# Redis: localhost:6379
+```
+
+**Why Redis in Development?**
+
+Redis is now required in the development environment for:
+- Rate limiting (prevents abuse, tracks API usage)
+- Session caching (faster authentication)
+- Idempotency keys (prevents duplicate payments)
+
+Without Redis, some features will fail. The dev environment mirrors production more closely.
+
+#### Core Services Only
+
+```bash
+# Start core + Jaeger for distributed tracing
+docker compose --profile core up -d
+
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
 # Jaeger UI: http://localhost:16686
@@ -164,15 +203,27 @@ See [`docs/IDE_SETUP.md`](docs/IDE_SETUP.md) for recommended VS Code extensions,
 ## Project Structure
 
 ```
-health-watchers/
+health_watchers/
 ├── apps/
-│   ├── api/              # Express.js REST API
-│   ├── web/              # Next.js frontend application
-│   └── stellar-service/  # Stellar blockchain integration
-├── packages/             # Shared packages (types, utils)
-├── scripts/              # Database seeding and utilities
+│   ├── api/              # Express.js REST API (modules, migrations, jobs)
+│   ├── web/              # Next.js web application (staff app + patient portal)
+│   ├── mobile/           # React Native (Expo) mobile app
+│   ├── stellar-service/  # Stellar blockchain integration service
+│   └── docs/             # Docusaurus documentation site
+├── packages/
+│   ├── types/            # Shared TypeScript types
+│   ├── config/           # Shared ESLint and tooling configuration
+│   └── anonymize/        # PHI de-identification utilities
+├── contracts/            # Soroban smart contracts (e.g. escrow)
+├── docs/                 # Engineering, operations and compliance docs (see docs/README.md)
+├── k8s/                  # Kubernetes manifests
+├── helm/                 # Helm chart
+├── terraform/            # Infrastructure as code
+├── monitoring/           # Prometheus, Alertmanager and Grafana configuration
+├── k6/                   # k6 load, stress and spike tests
+├── scripts/              # Seeding, security, DR and utility scripts
 ├── .env.example          # Environment configuration template
-└── docker-compose.yml    # Docker orchestration
+└── docker-compose.yml    # Docker Compose with profiles
 ```
 
 ## Development
@@ -185,7 +236,52 @@ npm run build    # Build all apps for production
 npm run start    # Start all apps in production mode
 npm run lint     # Run linting across all apps
 npm run seed     # Seed database with sample data
+npm run test     # Run all tests across monorepo
 ```
+
+### Testing
+
+Health Watchers has comprehensive test coverage across multiple test types. See [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) for the complete testing guide.
+
+**Quick Start:**
+
+```bash
+# Run all tests
+npm run test
+
+# API tests
+npm run test --workspace=api                    # Unit tests
+npm run test:integration --workspace=api        # Integration tests (with DB isolation)
+npm run test:coverage --workspace=api           # With coverage report
+
+# Web tests
+npm run test --workspace=web                    # Unit tests
+npm run test:e2e --workspace=web                # E2E tests with Playwright
+
+# Mobile tests
+npm run test --workspace=mobile                 # React Native tests
+```
+
+**Key Testing Features:**
+
+- **Database Isolation**: Integration tests use `mongodb-memory-server` for per-test DB isolation
+- **Fixture Factories**: Type-safe test data builders (Patient, User, Payment, Encounter, Clinic)
+- **Serial Execution**: Integration tests run with `--runInBand` to ensure complete isolation
+- **Comprehensive Security Tests**: HIPAA-compliant security header validation
+- **Mobile Testing**: Full Jest + React Native Testing Library setup with mocked Expo modules
+
+**Test Structure:**
+
+- `apps/api/src/__tests__/` - Integration tests
+- `apps/api/src/**/__tests__/` - Unit tests
+- `apps/web/e2e/` - Playwright E2E tests
+- `apps/mobile/src/**/__tests__/` - Mobile unit and component tests
+
+**Minimum Coverage Requirements:**
+
+- Global: 80% lines, 80% branches
+- Payments module: 85% lines, 85% branches
+- Auth module: 85% lines, 85% branches
 
 ### Environment Variables
 
@@ -208,7 +304,7 @@ Health Watchers is designed with HIPAA compliance in mind:
 - 🛡️ Input validation and sanitization
 - 🔐 Secrets management with AWS Secrets Manager support
 
-For detailed security guidelines, see `SECURITY.md` and [`docs/SECURITY_POLICY.md`](docs/SECURITY_POLICY.md). For day-to-day rules on handling patient data in code, see [`docs/PHI_HANDLING_GUIDE.md`](docs/PHI_HANDLING_GUIDE.md); for onboarding a new vendor that will touch PHI, see [`docs/BAA_TEMPLATE.md`](docs/BAA_TEMPLATE.md).
+For detailed security guidelines, see [`SECURITY.md`](SECURITY.md) and [`docs/SECURITY_POLICY.md`](docs/SECURITY_POLICY.md). For day-to-day rules on handling patient data in code, see [`docs/PHI_HANDLING_GUIDE.md`](docs/PHI_HANDLING_GUIDE.md); for onboarding a new vendor that will touch PHI, see [`docs/BAA_TEMPLATE.md`](docs/BAA_TEMPLATE.md).
 
 ## Logging & Tracing
 
@@ -311,7 +407,7 @@ npm run start
 
 ## Contributing
 
-We welcome contributions! Please follow these steps:
+We welcome contributions! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide. In short:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -328,8 +424,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions, issues, or feature requests:
 
 - 📧 Email: support@healthwatchers.com
-- 🐛 Issues: [GitHub Issues](https://github.com/OWNER/health-watchers/issues)
-- 📖 Documentation: [Wiki](https://github.com/OWNER/health-watchers/wiki)
+- 🐛 Issues: [GitHub Issues](https://github.com/Health-watchers/health_watchers/issues)
+- 📖 Documentation: [Documentation site](apps/docs/README.md) and [docs index](docs/README.md)
 
 ## Acknowledgments
 
