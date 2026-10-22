@@ -54,6 +54,7 @@
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
+    "tippy.js": "6.3.7",
     "zod": "^3.23.0"
   },
   "devDependencies": {

@@ -12,6 +12,8 @@ import { CosignatureWorkflow } from './CosignatureWorkflow';
 import type { EncounterRecord } from './EncounterTable';
 import { usePreAuths } from '@/lib/queries/usePreAuth';
 import { PreAuthStatusBadge } from '@/components/pre-auth/PreAuthStatusBadge';
+import { usePatients } from '@/lib/queries/usePatients';
+import { useEncounters } from '@/lib/queries/useEncounters';
 
 interface SoapNotes {
   subjective?: string;
@@ -40,6 +42,8 @@ interface EncounterDetailData extends Omit<EncounterRecord, 'status'> {
   versionHistory?: EncounterVersion[];
   documents?: EncounterDocument[];
   cosignatureStatus?: string;
+  /** ISO timestamp of the last server-side update — used for conflict detection */
+  updatedAt?: string;
 }
 
 interface EncounterDetailProps {
@@ -79,17 +83,34 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Fetch patients & encounters for @mention suggestions (best-effort)
+  const { data: patients = [] } = usePatients({});
+  const { data: encountersPage } = useEncounters(1, 50);
+  const mentionItems = [
+    ...patients.map((p) => ({
+      id: p._id,
+      label: `${p.firstName} ${p.lastName}`,
+      type: 'patient' as const,
+    })),
+    ...(encountersPage?.data ?? []).map((e) => ({
+      id: e.id,
+      label: e.chiefComplaint ?? e.id,
+      type: 'encounter' as const,
+    })),
+  ];
+
   useEffect(() => {
     setSoapNotes(encounter.soapNotes ?? {});
   }, [encounter.soapNotes]);
 
-  const saveSoapNotes = async () => {
-    setIsSaving(true);
+  /** Shared save logic used by both the manual button and auto-save */
+  const persistSoapNotes = async (notes: SoapNotes, silent = false) => {
+    if (!silent) setIsSaving(true);
     try {
       const res = await fetchWithAuth(`${API_V1}/encounters/${encodeURIComponent(encounter.id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ soapNotes }),
+        body: JSON.stringify({ soapNotes: notes }),
       });
 
       if (!res.ok) {
@@ -97,17 +118,22 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
         throw new Error(body.message || `Save failed (${res.status})`);
       }
 
-      setToast({ message: 'SOAP notes saved successfully.', type: 'success' });
-      setIsEditing(false);
+      if (!silent) {
+        setToast({ message: 'SOAP notes saved successfully.', type: 'success' });
+        setIsEditing(false);
+      }
     } catch (error) {
       setToast({
         message: error instanceof Error ? error.message : 'Unable to save SOAP notes.',
         type: 'error',
       });
     } finally {
-      setIsSaving(false);
+      if (!silent) setIsSaving(false);
     }
   };
+
+  const saveSoapNotes = () => persistSoapNotes(soapNotes, false);
+  const handleAutoSave = (notes: SoapNotes) => persistSoapNotes(notes, true);
 
   return (
     <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm">
@@ -173,7 +199,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
       <AiSummaryCard
         encounterId={encounter.id}
         patientName={encounter.patientName}
-        initialSummary={encounter.aiSummary}
+        {...(encounter.aiSummary !== undefined ? { initialSummary: encounter.aiSummary } : {})}
         tags={['clinical-insight', 'encounter-summary']}
       />
 
@@ -220,7 +246,16 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
               )}
             </div>
             {isEditing ? (
-              <SoapNotesEditor value={soapNotes} onChange={setSoapNotes} />
+              <SoapNotesEditor
+                value={soapNotes}
+                onChange={setSoapNotes}
+                onAutoSave={handleAutoSave}
+                {...(encounter.updatedAt !== undefined
+                  ? { serverLastUpdatedAt: encounter.updatedAt }
+                  : {})}
+                mentionItems={mentionItems}
+                encounterId={encounter.id}
+              />
             ) : (
               <SoapNotesView soapNotes={soapNotes} />
             )}

@@ -11,6 +11,10 @@ import { useVoiceDictation, type VoiceDictation } from '@/hooks/useVoiceDictatio
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface SoapNotes {
   subjective?: string;
   objective?: string;
@@ -18,14 +22,25 @@ interface SoapNotes {
   plan?: string;
 }
 
+export interface MentionItem {
+  id: string;
+  label: string;
+  type: 'patient' | 'encounter';
+}
+
 interface Props {
   value: SoapNotes;
   onChange: (notes: SoapNotes) => void;
+  /** Called on auto-save (every 30 s) and on Ctrl+S */
   onAutoSave?: (notes: SoapNotes) => void;
   readOnly?: boolean;
   /** Called with true the first time the user edits any SOAP section. */
   onDirtyChange?: (isDirty: boolean) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const SOAP_TABS = [
   {
@@ -62,13 +77,17 @@ function EditorToolbar({ editor, children }: { editor: Editor; children?: React.
     <div className="border-secondary-200 bg-secondary-50 flex flex-wrap gap-1 border-b px-3 py-2">
       <button
         type="button"
+        aria-label="Bold (Ctrl+B)"
+        title="Bold (Ctrl+B)"
         className={btn(editor.isActive('bold'))}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
-        B
+        <strong>B</strong>
       </button>
       <button
         type="button"
+        aria-label="Italic"
+        title="Italic"
         className={btn(editor.isActive('italic'))}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
@@ -76,14 +95,28 @@ function EditorToolbar({ editor, children }: { editor: Editor; children?: React.
       </button>
       <button
         type="button"
+        aria-label="Underline"
+        title="Underline"
         className={btn(editor.isActive('underline'))}
         onClick={() => editor.chain().focus().toggleUnderline().run()}
       >
         <u>U</u>
       </button>
-      <span className="text-secondary-300 mx-1">|</span>
       <button
         type="button"
+        aria-label="Strikethrough"
+        title="Strikethrough"
+        className={btn(editor.isActive('strike'))}
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+      >
+        <s>S</s>
+      </button>
+      <span className="text-secondary-300 mx-1">|</span>
+
+      <button
+        type="button"
+        aria-label="Heading 2"
+        title="Heading 2"
         className={btn(editor.isActive('heading', { level: 2 }))}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
@@ -91,14 +124,19 @@ function EditorToolbar({ editor, children }: { editor: Editor; children?: React.
       </button>
       <button
         type="button"
+        aria-label="Heading 3"
+        title="Heading 3"
         className={btn(editor.isActive('heading', { level: 3 }))}
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
       >
         H3
       </button>
       <span className="text-secondary-300 mx-1">|</span>
+
       <button
         type="button"
+        aria-label="Bullet list"
+        title="Bullet list"
         className={btn(editor.isActive('bulletList'))}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
@@ -106,6 +144,8 @@ function EditorToolbar({ editor, children }: { editor: Editor; children?: React.
       </button>
       <button
         type="button"
+        aria-label="Ordered list"
+        title="Ordered list"
         className={btn(editor.isActive('orderedList'))}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
       >
@@ -223,6 +263,7 @@ function SoapTabEditor({
   content,
   placeholder,
   onChange,
+  onSave,
   readOnly,
   dictation,
 }: {
@@ -239,35 +280,53 @@ function SoapTabEditor({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, CharacterCount, Placeholder.configure({ placeholder })],
+    extensions: [
+      StarterKit,
+      Underline,
+      CharacterCount,
+      Placeholder.configure({ placeholder }),
+      buildMentionExtension(mentionItems),
+    ],
     content,
     editable: !readOnly,
-    onUpdate({ editor }) {
-      onChange(editor.getHTML());
+    onUpdate({ editor: e }) {
+      onChange(e.getHTML());
 
-      // Shorthand autocomplete: get the word before cursor
-      const { from } = editor.state.selection;
-      const text = editor.state.doc.textBetween(Math.max(0, from - 20), from, ' ');
+      // Medical shorthand autocomplete
+      const { from } = e.state.selection;
+      const text = e.state.doc.textBetween(Math.max(0, from - 20), from, ' ');
       const lastWord = text.split(/\s/).pop() ?? '';
       const matches = getSuggestions(lastWord);
       setSuggestions(matches);
 
-      // Position dropdown near cursor
-      const coords = editor.view.coordsAtPos(from);
-      const wrapper = wrapperRef.current?.getBoundingClientRect();
-      if (wrapper) {
-        setSuggestionPos({
-          top: coords.bottom - wrapper.top + 4,
-          left: coords.left - wrapper.left,
-        });
+      if (matches.length > 0) {
+        const coords = e.view.coordsAtPos(from);
+        const wrapper = wrapperRef.current?.getBoundingClientRect();
+        if (wrapper) {
+          setSuggestionPos({
+            top: coords.bottom - wrapper.top + 4,
+            left: coords.left - wrapper.left,
+          });
+        }
       }
     },
     onBlur() {
       setSuggestions([]);
     },
+    editorProps: {
+      handleKeyDown(_view, event) {
+        // Ctrl/Cmd+S → trigger save
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+          event.preventDefault();
+          onSave?.();
+          return true;
+        }
+        return false;
+      },
+    },
   });
 
-  // Sync external content changes (e.g. template load)
+  // Sync external content changes (e.g. template load or voice transcript)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content || '');
@@ -370,6 +429,7 @@ function SoapTabEditor({
           ))}
         </div>
       )}
+
       {!readOnly && (
         <div className="border-secondary-100 text-secondary-400 border-t px-4 py-1 text-right text-xs">
           {charCount} characters
@@ -400,7 +460,24 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
   const notesRef = useRef<SoapNotes>(value);
   notesRef.current = value;
 
-  // Auto-save every 30 seconds
+  // Track the server timestamp we started editing with
+  const serverTsRef = useRef<string | undefined>(serverLastUpdatedAt);
+  useEffect(() => {
+    serverTsRef.current = serverLastUpdatedAt;
+  }, [serverLastUpdatedAt]);
+
+  // ------------------------------------------------------------------
+  // Save helper — used by auto-save timer and Ctrl+S
+  // ------------------------------------------------------------------
+  const triggerSave = useCallback(() => {
+    if (onAutoSave === undefined) return;
+    setAutoSaveStatus('saving');
+    onAutoSave(notesRef.current);
+    setTimeout(() => setAutoSaveStatus('saved'), 600);
+    setTimeout(() => setAutoSaveStatus('idle'), 3000);
+  }, [onAutoSave]);
+
+  // Auto-save interval (every 30 seconds)
   useEffect(() => {
     if (readOnly || !onAutoSave) return;
     const interval = setInterval(() => {
@@ -413,8 +490,39 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
     }, 30_000);
     return () => clearInterval(interval);
-  }, [readOnly, onAutoSave]);
+  }, [readOnly, onAutoSave, triggerSave]);
 
+  // ------------------------------------------------------------------
+  // Conflict detection — poll the API every 60 s via HEAD request
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (readOnly || encounterId === undefined || serverLastUpdatedAt === undefined) return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/v1/encounters/${encodeURIComponent(encounterId)}`, {
+          method: 'HEAD',
+          credentials: 'include',
+        });
+        const remoteTs = res.headers.get('x-last-updated-at') ?? res.headers.get('last-modified');
+        const currentTs = serverTsRef.current;
+        if (remoteTs !== null && currentTs !== undefined) {
+          if (new Date(remoteTs).getTime() > new Date(currentTs).getTime()) {
+            setConflictDetected(true);
+          }
+        }
+      } catch {
+        // Ignore network errors during polling
+      }
+    };
+
+    const id = setInterval(poll, 60_000);
+    return () => clearInterval(id);
+  }, [readOnly, encounterId, serverLastUpdatedAt]);
+
+  // ------------------------------------------------------------------
+  // Tab helpers
+  // ------------------------------------------------------------------
   const handleTabChange = useCallback(
     (key: keyof SoapNotes, html: string) => {
       onChange({ ...notesRef.current, [key]: html });
@@ -426,26 +534,35 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
     [onChange, isDirty, onDirtyChange]
   );
 
+  // ------------------------------------------------------------------
+  // Voice transcript → append to active tab as new paragraph
+  // ------------------------------------------------------------------
+  const handleVoiceTranscript = useCallback(
+    (text: string) => {
+      const existing = notesRef.current[activeTab] ?? '';
+      const appended = existing !== '' ? `${existing}<p>${text}</p>` : `<p>${text}</p>`;
+      onChange({ ...notesRef.current, [activeTab]: appended });
+    },
+    [activeTab, onChange]
+  );
+
   return (
     <>
     <div className="border-secondary-200 overflow-hidden rounded-lg border">
       {/* Tab bar */}
       <div className="border-secondary-200 bg-secondary-50 flex border-b">
         {SOAP_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary-600 text-primary-700 border-b-2 bg-white'
-                : 'text-secondary-600 hover:text-secondary-900'
-            }`}
-          >
-            {tab.label}
-          </button>
+          <div key={tab.key} className={activeTab === tab.key ? 'block' : 'hidden'}>
+            <SoapTabEditor
+              content={value[tab.key] ?? ''}
+              placeholder={tab.placeholder}
+              onChange={(html) => handleTabChange(tab.key, html)}
+              onSave={triggerSave}
+              readOnly={readOnly}
+              mentionItems={mentionItems}
+            />
+          </div>
         ))}
-      </div>
 
       {/* Active tab editor */}
       {SOAP_TABS.map((tab) => (
