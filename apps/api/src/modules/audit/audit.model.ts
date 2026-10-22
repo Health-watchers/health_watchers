@@ -66,7 +66,8 @@ export type AuditAction =
   | 'EMERGENCY_ACCESS_ENDED'
   | 'EMERGENCY_ACCESS_REVIEWED'
   | 'NEW_DEVICE_LOGIN'
-  | 'UNRECOGNIZED_LOGIN_REPORTED';
+  | 'UNRECOGNIZED_LOGIN_REPORTED'
+  | 'CLAIM_FORM_EXPORT';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -162,6 +163,7 @@ const auditLogSchema = new Schema<AuditLog>(
         'EMERGENCY_ACCESS_REVIEWED',
         'NEW_DEVICE_LOGIN',
         'UNRECOGNIZED_LOGIN_REPORTED',
+        'CLAIM_FORM_EXPORT',
       ],
       index: true,
     },

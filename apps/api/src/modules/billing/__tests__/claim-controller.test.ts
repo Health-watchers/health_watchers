@@ -22,7 +22,14 @@ jest.mock('../claim.model', () => ({
     updateMany: jest.fn(),
     countDocuments: jest.fn(),
   },
-  CLAIM_STATUSES: ['draft', 'submitted', 'accepted', 'rejected', 'paid', 'resubmitted', 'written_off'],
+  CLAIM_STATUSES: ['draft', 'submitted', 'accepted', 'rejected', 'denied', 'paid', 'resubmitted', 'written_off'],
+}));
+
+jest.mock('../claim-lifecycle.service', () => ({
+  transmitClaim: jest.fn().mockImplementation(async (claim: any) => ({
+    claimId: String(claim._id),
+    transmitted: true,
+  })),
 }));
 
 jest.mock('../../encounters/encounter.model', () => ({
@@ -76,6 +83,25 @@ function makeReqRes(body: Record<string, any> = {}, user: Record<string, any> = 
   return { req, res };
 }
 
+/** A draft claim whose stored CMS-1500 data passes field validation */
+function validDraft(id: string) {
+  return {
+    _id: { toString: () => id },
+    encounterId: 'enc1',
+    patientId: 'pat1',
+    clinicId: 'clinic1',
+    cptCodes: ['99213'],
+    diagnosisCodes: ['J06.9'],
+    totalAmount: 150,
+    cms1500Data: {
+      box2_patientName: 'Doe, Jane',
+      box3_patientDob: '1980-01-01',
+      box33_billingProviderNpi: '1234567893',
+      box24_servicelines: [{ dateOfService: '2024-03-01', cptCode: '99213', charges: 150 }],
+    },
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -84,7 +110,7 @@ beforeEach(() => {
 
 describe('submitClaims', () => {
   it('emits claim.submitted webhook for each eligible claim', async () => {
-    const eligibleId = { _id: { toString: () => 'claimId1' } };
+    const eligibleId = validDraft('claimId1');
     (InsuranceClaimModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([eligibleId]) }),
     });
@@ -121,7 +147,7 @@ describe('submitClaims', () => {
   });
 
   it('records audit log for each submitted claim', async () => {
-    const eligibleId = { _id: { toString: () => 'claimId2' } };
+    const eligibleId = validDraft('claimId2');
     (InsuranceClaimModel.find as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([eligibleId]) }),
     });
@@ -304,5 +330,105 @@ describe('writeOffClaim', () => {
     const { req, res } = makeReqRes({ reason: 'ab' }, {}, { claimId: 'c1' });
     await writeOffClaim(req, res);
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+});
+
+// ── #1689: validation & clearinghouse transmission ────────────────────────────
+
+describe('submitClaims — field validation (#1689)', () => {
+  it('holds back drafts with invalid CMS-1500 fields and reports their errors', async () => {
+    const bad = { ...validDraft('badClaim'), diagnosisCodes: [] };
+    (InsuranceClaimModel.find as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([bad]) }),
+    });
+    (InsuranceClaimModel.updateMany as jest.Mock).mockResolvedValue({});
+
+    const { req, res } = makeReqRes({ claimIds: ['badClaim'] });
+    await submitClaims(req, res);
+
+    const body = (res.json as jest.Mock).mock.calls[0][0];
+    expect(body.data.submitted).toEqual([]);
+    expect(body.data.invalid[0]).toMatchObject({
+      claimId: 'badClaim',
+      errors: expect.arrayContaining([expect.objectContaining({ field: '21' })]),
+    });
+  });
+
+  it('transmits each valid claim to the clearinghouse as an original claim', async () => {
+    const { transmitClaim } = jest.requireMock('../claim-lifecycle.service');
+    (InsuranceClaimModel.find as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([validDraft('ok1')]) }),
+    });
+    (InsuranceClaimModel.updateMany as jest.Mock).mockResolvedValue({});
+    (InsuranceClaimModel.findById as jest.Mock).mockResolvedValue(null);
+
+    const { req, res } = makeReqRes({ claimIds: ['ok1'] });
+    await submitClaims(req, res);
+
+    expect(transmitClaim).toHaveBeenCalledWith(expect.anything(), '1', 'user1');
+  });
+});
+
+describe('generateClaim — field validation (#1689)', () => {
+  it('returns 422 with field errors for an invalid claim', async () => {
+    const { req, res } = makeReqRes(
+      {
+        patientId: 'pat1',
+        clinicNpi: '1234567890',
+        patientDob: '1980-01-01',
+        patientName: 'Doe, Jane',
+        serviceDate: '2024-03-01',
+        cptCodes: ['99213'],
+        diagnosisCodes: ['J06.9'],
+        amounts: [150],
+      },
+      {},
+      { id: 'enc1' }
+    );
+    await generateClaim(req, res);
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(InsuranceClaimModel.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('denyClaim — status (#1689)', () => {
+  it('moves the claim to denied', async () => {
+    (InsuranceClaimModel.findOneAndUpdate as jest.Mock).mockResolvedValue({
+      _id: 'c9',
+      status: 'denied',
+      clinicId: 'clinic1',
+      patientId: 'p9',
+    });
+    const { req, res } = makeReqRes({ reason: 'CO-50 not medically necessary' }, {}, { claimId: 'c9' });
+    await denyClaim(req, res);
+    const update = (InsuranceClaimModel.findOneAndUpdate as jest.Mock).mock.calls[0][1];
+    expect(update.$set.status).toBe('denied');
+    expect(update.$push.statusHistory.status).toBe('denied');
+  });
+});
+
+describe('resubmitClaim — denied claims (#1689)', () => {
+  it('allows resubmitting a denied claim and sends it as a replacement', async () => {
+    const { transmitClaim } = jest.requireMock('../claim-lifecycle.service');
+    const claim: any = {
+      _id: 'c10',
+      status: 'denied',
+      clinicId: 'clinic1',
+      patientId: 'p10',
+      encounterId: 'e10',
+      cptCodes: ['99213'],
+      diagnosisCodes: ['J06.9'],
+      resubmissionCount: 0,
+      statusHistory: [],
+      cms1500Data: {},
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    (InsuranceClaimModel.findOne as jest.Mock).mockResolvedValue(claim);
+
+    const { req, res } = makeReqRes({ note: 'Added modifier 25' }, {}, { claimId: 'c10' });
+    await resubmitClaim(req, res);
+
+    expect(claim.status).toBe('resubmitted');
+    expect(transmitClaim).toHaveBeenCalledWith(claim, '7', 'user1');
   });
 });
