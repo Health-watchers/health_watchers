@@ -1,3 +1,5 @@
+import * as fc from 'fast-check';
+
 import {
   calculateRiskScore,
   scoreToLevel,
@@ -40,6 +42,27 @@ describe('calculateRiskScore', () => {
     const { score, factors } = calculateRiskScore({ ...base, ageYears: 70 });
     expect(score).toBe(10);
     expect(factors).toContain('Age > 65');
+  });
+
+  it('does not add age points at exactly 65 (boundary is strictly >)', () => {
+    const { score, factors } = calculateRiskScore({ ...base, ageYears: 65 });
+    expect(score).toBe(0);
+    expect(factors).not.toContain('Age > 65');
+  });
+
+  it('adds age points at 66, one past the boundary', () => {
+    const { score, factors } = calculateRiskScore({ ...base, ageYears: 66 });
+    expect(score).toBe(10);
+    expect(factors).toContain('Age > 65');
+  });
+
+  it('a diagnosis that matches no chronic keyword adds no points', () => {
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Fractured left wrist'],
+    });
+    expect(score).toBe(0);
+    expect(factors).toHaveLength(0);
   });
 
   it('adds 15 points for diabetes diagnosis', () => {
@@ -231,158 +254,6 @@ describe('calculateRiskScore — factorWeights', () => {
   });
 });
 
-describe('scoreToLevel', () => {
-  it('returns low for score < 20', () => expect(scoreToLevel(0)).toBe('low'));
-  it('returns low for score 19', () => expect(scoreToLevel(19)).toBe('low'));
-  it('returns medium for score 20', () => expect(scoreToLevel(20)).toBe('medium'));
-  it('returns medium for score 44', () => expect(scoreToLevel(44)).toBe('medium'));
-  it('returns high for score 45', () => expect(scoreToLevel(45)).toBe('high'));
-  it('returns high for score 69', () => expect(scoreToLevel(69)).toBe('high'));
-  it('returns critical for score 70', () => expect(scoreToLevel(70)).toBe('critical'));
-  it('returns critical for score 100', () => expect(scoreToLevel(100)).toBe('critical'));
-});
-
-describe('calculateRiskScore', () => {
-  const base = {
-    ageYears: 30,
-    diagnoses: [],
-    recentHospitalization: false,
-    missedAppointments: 0,
-    abnormalLabCount: 0,
-    highBloodPressure: false,
-    bmiOver30: false,
-    smokingHistory: false,
-  };
-
-  it('returns score 0 and level low for healthy young patient', () => {
-    const { score, level, factors } = calculateRiskScore(base);
-    expect(score).toBe(0);
-    expect(level).toBe('low');
-    expect(factors).toHaveLength(0);
-  });
-
-  it('adds 10 points for age > 65', () => {
-    const { score, factors } = calculateRiskScore({ ...base, ageYears: 70 });
-    expect(score).toBe(10);
-    expect(factors).toContain('Age > 65');
-  });
-
-  it('adds 15 points for diabetes diagnosis', () => {
-    const { score, factors } = calculateRiskScore({
-      ...base,
-      diagnoses: ['Type 2 Diabetes Mellitus'],
-    });
-    expect(score).toBe(15);
-    expect(factors).toContain('Diabetes');
-  });
-
-  it('adds 15 points for hypertension diagnosis', () => {
-    const { score, factors } = calculateRiskScore({
-      ...base,
-      diagnoses: ['Essential Hypertension'],
-    });
-    expect(score).toBe(15);
-    expect(factors).toContain('Hypertension');
-  });
-
-  it('adds 15 points for COPD diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['COPD exacerbation'] });
-    expect(score).toBe(15);
-    expect(factors).toContain('COPD');
-  });
-
-  it('does not double-count same chronic condition', () => {
-    const { score } = calculateRiskScore({
-      ...base,
-      diagnoses: ['Diabetes type 1', 'Diabetes type 2'],
-    });
-    expect(score).toBe(15);
-  });
-
-  it('adds 20 points for recent hospitalization', () => {
-    const { score, factors } = calculateRiskScore({ ...base, recentHospitalization: true });
-    expect(score).toBe(20);
-    expect(factors).toContain('Recent hospitalization');
-  });
-
-  it('adds 5 points per missed appointment (capped at 20)', () => {
-    const { score: s1 } = calculateRiskScore({ ...base, missedAppointments: 1 });
-    expect(s1).toBe(5);
-    const { score: s4 } = calculateRiskScore({ ...base, missedAppointments: 4 });
-    expect(s4).toBe(20);
-    const { score: s10 } = calculateRiskScore({ ...base, missedAppointments: 10 });
-    expect(s10).toBe(20); // capped
-  });
-
-  it('adds 10 points per abnormal lab (capped at 30)', () => {
-    const { score: s1 } = calculateRiskScore({ ...base, abnormalLabCount: 1 });
-    expect(s1).toBe(10);
-    const { score: s5 } = calculateRiskScore({ ...base, abnormalLabCount: 5 });
-    expect(s5).toBe(30); // capped
-  });
-
-  it('adds 10 points for high blood pressure', () => {
-    const { score, factors } = calculateRiskScore({ ...base, highBloodPressure: true });
-    expect(score).toBe(10);
-    expect(factors).toContain('High blood pressure readings');
-  });
-
-  it('adds 10 points for BMI > 30', () => {
-    const { score, factors } = calculateRiskScore({ ...base, bmiOver30: true });
-    expect(score).toBe(10);
-    expect(factors).toContain('BMI > 30');
-  });
-
-  it('adds 5 points for smoking history', () => {
-    const { score, factors } = calculateRiskScore({ ...base, smokingHistory: true });
-    expect(score).toBe(5);
-    expect(factors).toContain('Smoking history');
-  });
-
-  it('caps total score at 100', () => {
-    const { score } = calculateRiskScore({
-      ageYears: 70,
-      diagnoses: ['Diabetes', 'Hypertension', 'COPD'],
-      recentHospitalization: true,
-      missedAppointments: 10,
-      abnormalLabCount: 10,
-      highBloodPressure: true,
-      bmiOver30: true,
-      smokingHistory: true,
-    });
-    expect(score).toBe(100);
-  });
-
-  it('returns critical level for high-risk patient', () => {
-    const { level } = calculateRiskScore({
-      ageYears: 70,
-      diagnoses: ['Diabetes', 'Hypertension'],
-      recentHospitalization: true,
-      missedAppointments: 3,
-      abnormalLabCount: 2,
-      highBloodPressure: true,
-      bmiOver30: false,
-      smokingHistory: false,
-    });
-    // 10 + 15 + 15 + 20 + 15 + 20 + 10 = 105 → capped 100 → critical
-    expect(level).toBe('critical');
-  });
-
-  it('lists all contributing factors', () => {
-    const { factors } = calculateRiskScore({
-      ...base,
-      ageYears: 70,
-      diagnoses: ['Diabetes'],
-      recentHospitalization: true,
-      smokingHistory: true,
-    });
-    expect(factors).toContain('Age > 65');
-    expect(factors).toContain('Diabetes');
-    expect(factors).toContain('Recent hospitalization');
-    expect(factors).toContain('Smoking history');
-  });
-});
-
 describe('buildFactorBreakdown (risk explanation generation)', () => {
   const weights = {
     'Recent hospitalization': 20,
@@ -437,5 +308,74 @@ describe('getImprovedFactors (risk explanation generation)', () => {
 
   it('returns empty when there is no prior assessment', () => {
     expect(getImprovedFactors(['Diabetes'], [])).toEqual([]);
+  });
+});
+
+describe('calculateRiskScore — property-based (fuzz)', () => {
+  const riskInputArbitrary = fc.record({
+    ageYears: fc.integer({ min: 0, max: 130 }),
+    diagnoses: fc.array(
+      fc.constantFrom(
+        'Type 2 Diabetes Mellitus',
+        'Essential Hypertension',
+        'COPD exacerbation',
+        'Fractured left wrist',
+        'Seasonal allergy'
+      ),
+      { maxLength: 6 }
+    ),
+    recentHospitalization: fc.boolean(),
+    missedAppointments: fc.integer({ min: 0, max: 50 }),
+    abnormalLabCount: fc.integer({ min: 0, max: 50 }),
+    highBloodPressure: fc.boolean(),
+    bmiOver30: fc.boolean(),
+    smokingHistory: fc.boolean(),
+  });
+
+  it('score is always within [0, 100] regardless of input', () => {
+    fc.assert(
+      fc.property(riskInputArbitrary, (input) => {
+        const { score } = calculateRiskScore(input);
+        expect(score).toBeGreaterThanOrEqual(0);
+        expect(score).toBeLessThanOrEqual(100);
+      })
+    );
+  });
+
+  it('level is always one of the four valid risk levels', () => {
+    fc.assert(
+      fc.property(riskInputArbitrary, (input) => {
+        const { level } = calculateRiskScore(input);
+        expect(['low', 'medium', 'high', 'critical']).toContain(level);
+      })
+    );
+  });
+
+  it('level is always consistent with scoreToLevel(score)', () => {
+    fc.assert(
+      fc.property(riskInputArbitrary, (input) => {
+        const { score, level } = calculateRiskScore(input);
+        expect(level).toBe(scoreToLevel(score));
+      })
+    );
+  });
+
+  it('factors and factorWeights always have the same number of entries', () => {
+    fc.assert(
+      fc.property(riskInputArbitrary, (input) => {
+        const { factors, factorWeights } = calculateRiskScore(input);
+        expect(factors.length).toBe(Object.keys(factorWeights).length);
+      })
+    );
+  });
+
+  it('score equals the sum of factorWeights, capped at 100', () => {
+    fc.assert(
+      fc.property(riskInputArbitrary, (input) => {
+        const { score, factorWeights } = calculateRiskScore(input);
+        const sum = Object.values(factorWeights).reduce((s, v) => s + v, 0);
+        expect(score).toBe(Math.min(sum, 100));
+      })
+    );
   });
 });

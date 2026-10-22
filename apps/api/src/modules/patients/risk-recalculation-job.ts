@@ -3,7 +3,6 @@ import { calculateRiskScore } from '../ai/risk-calculator';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const BATCH_SIZE = 100; // Process patients in batches of 100
-let jobTimer: NodeJS.Timeout | null = null;
 
 interface BatchProgress {
   total: number;
@@ -162,22 +161,4 @@ export async function runRiskRecalculation(): Promise<void> {
 function isEscalation(prev: string | undefined, next: string): boolean {
   const order = ['low', 'medium', 'high', 'critical'];
   return order.indexOf(next) > order.indexOf(prev ?? 'low');
-}
-
-export function startRiskRecalculationJob(): void {
-  // Run immediately then weekly
-  runRiskRecalculation().catch((err) => logger.error({ err }, 'Initial risk recalculation failed'));
-  jobTimer = setInterval(() => {
-    runRiskRecalculation().catch((err) =>
-      logger.error({ err }, 'Weekly risk recalculation failed')
-    );
-  }, WEEK_MS);
-  logger.info('Weekly risk recalculation job scheduled');
-}
-
-export function stopRiskRecalculationJob(): void {
-  if (jobTimer) {
-    clearInterval(jobTimer);
-    jobTimer = null;
-  }
 }

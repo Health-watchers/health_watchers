@@ -6,6 +6,7 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import {
   LoginDto,
+  LogoutDto,
   RefreshDto,
   RegisterDto,
   MfaVerifyDto,
@@ -16,6 +17,7 @@ import {
   MfaDisableDto,
   MfaBackupCodesRegenerateDto,
   loginSchema,
+  logoutSchema,
   refreshSchema,
   registerSchema,
   mfaVerifySchema,
@@ -25,6 +27,7 @@ import {
   mfaBackupCodeSchema,
   mfaDisableSchema,
   mfaBackupCodesRegenerateSchema,
+  loginAlertRevokeSchema,
 } from './auth.validation';
 import {
   sendPasswordResetEmail,
@@ -33,6 +36,10 @@ import {
 } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
+import {
+  ClinicSettingsModel,
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
+} from '../clinics/clinic-settings.model';
 import {
   signAccessToken,
   signRefreshToken,
@@ -47,6 +54,15 @@ import { sendVerificationEmail, sendWelcomeEmail } from '@api/lib/email.service'
 import { encrypt, decrypt } from '@api/lib/encrypt';
 import { auditLog } from '../audit/audit.service';
 import { addToDenylist, setUserInvalidatedAt } from '@api/services/token-denylist.service';
+import { handleSuccessfulLogin, revokeSessionsForAlert } from './services/login-alert.service';
+import {
+  MFA_REQUIRED_ROLES,
+  availableMfaMethods,
+  generateBackupCodes,
+  hashToken,
+  passkeySatisfiesMfa,
+} from './mfa-policy';
+import { passkeyRoutes } from './passkey.controller';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -54,21 +70,7 @@ const MAX_FAILED_ATTEMPTS = 5;
 const MAX_MFA_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-// Roles that must have 2FA enabled
-const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'NURSE']);
 const MFA_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-/** SHA-256 hash of a token for safe storage */
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-/** Generate 10 single-use backup codes */
-function generateBackupCodes(): { plain: string[]; hashed: string[] } {
-  const plain = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex'));
-  const hashed = plain.map(hashToken);
-  return { plain, hashed };
-}
 
 // ── Role hierarchy: who can create whom ──────────────────────────────────────
 const ROLE_CREATE_PERMISSIONS: Record<string, string[]> = {
@@ -192,10 +194,14 @@ router.post(
       await user.save();
     }
 
-    if (user.mfaEnabled) {
+    if (user.mfaEnabled || passkeySatisfiesMfa(user)) {
       return res.json({
         status: 'mfa_required',
-        data: { mfaRequired: true, tempToken: signTempToken(user.id) },
+        data: {
+          mfaRequired: true,
+          tempToken: signTempToken(user.id),
+          methods: availableMfaMethods(user),
+        },
       });
     }
 
@@ -229,6 +235,7 @@ router.post(
         consumed: false,
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
       });
+      void handleSuccessfulLogin(user, req);
       return res.json({
         status: 'success',
         data: {
@@ -254,6 +261,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
@@ -327,12 +335,27 @@ router.post(
  */
 router.post(
   '/logout',
-  validateRequest({ body: refreshSchema }),
-  async (req: RefreshReq, res: Response) => {
+  validateRequest({ body: logoutSchema }),
+  async (req: Request<Record<string, never>, unknown, LogoutDto>, res: Response) => {
     // Revoke refresh token
     const decoded = verifyRefreshToken(req.body.refreshToken);
     if (decoded) {
-      await RefreshTokenModel.deleteOne({ jti: decoded.jti });
+      if (req.body.reason === 'idle_timeout') {
+        // Automatic logoff (HIPAA §164.312(a)(2)(iii)) — revoke the whole rotation family so
+        // no earlier refresh token from this session can be replayed.
+        await RefreshTokenModel.deleteMany({ family: decoded.family });
+        await auditLog(
+          {
+            action: 'LOGIN_SUCCESS',
+            userId: decoded.userId,
+            clinicId: decoded.clinicId,
+            metadata: { event: 'session_idle_timeout' },
+          },
+          req
+        );
+      } else {
+        await RefreshTokenModel.deleteOne({ jti: decoded.jti });
+      }
     }
 
     // Denylist the current access token if present
@@ -352,6 +375,28 @@ router.post(
 
 /**
  * @swagger
+ * /auth/session-policy:
+ *   get:
+ *     summary: Session policy for the caller's clinic (idle timeout before automatic logoff)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/session-policy', authenticate, async (req: Request, res: Response) => {
+  const settings = await ClinicSettingsModel.findOne({ clinicId: req.user!.clinicId })
+    .select('security')
+    .lean();
+  return res.json({
+    status: 'success',
+    data: {
+      idleTimeoutMinutes: settings?.security?.idleTimeoutMinutes ?? DEFAULT_IDLE_TIMEOUT_MINUTES,
+      warningSeconds: 60,
+    },
+  });
+});
+
+/**
+ * @swagger
  * /auth/logout-all:
  *   post:
  *     summary: Revoke all sessions for the authenticated user
@@ -367,6 +412,46 @@ router.post('/logout-all', authenticate, async (req: Request, res: Response) => 
   await setUserInvalidatedAt(userId, Math.floor(Date.now() / 1000));
   return res.json({ status: 'success', data: { loggedOut: true } });
 });
+
+/**
+ * @swagger
+ * /auth/login-alerts/revoke:
+ *   post:
+ *     summary: '"This wasn''t me" — revoke every session from a new sign-in alert (#1497)'
+ *     description: >
+ *       Public endpoint behind the link in new-device / new-country sign-in alerts.
+ *       The single-use token revokes all refresh tokens and access tokens for the
+ *       account and forgets the reported device.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token: { type: string }
+ *     responses:
+ *       200:
+ *         description: All sessions revoked
+ *       400:
+ *         description: Invalid, expired or already used link
+ */
+router.post(
+  '/login-alerts/revoke',
+  validateRequest({ body: loginAlertRevokeSchema }),
+  async (req: Request, res: Response) => {
+    const result = await revokeSessionsForAlert(req.body.token, req);
+    if (!result) {
+      return res.status(400).json({
+        error: 'InvalidToken',
+        message: 'This link is invalid, has expired or was already used',
+      });
+    }
+    return res.json({ status: 'success', data: { sessionsRevoked: true } });
+  }
+);
 
 /**
  * @swagger
@@ -503,6 +588,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
@@ -528,7 +614,12 @@ router.post(
         .json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
 
     const user = await UserModel.findById(userId).select('+mfaBackupCodes');
-    if (!user || !user.isActive || !user.mfaEnabled || !user.mfaBackupCodes)
+    if (
+      !user ||
+      !user.isActive ||
+      !(user.mfaEnabled || passkeySatisfiesMfa(user)) ||
+      !user.mfaBackupCodes
+    )
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
 
     const codeHash = hashToken(req.body.backupCode);
@@ -557,6 +648,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: {
@@ -840,7 +932,7 @@ router.get('/mfa/backup-codes/count', authenticate, async (req: Request, res: Re
   const user = await UserModel.findById(req.user!.userId).select('+mfaBackupCodes');
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-  if (!user.mfaEnabled) {
+  if (!user.mfaEnabled && !passkeySatisfiesMfa(user)) {
     return res
       .status(409)
       .json({ error: 'Conflict', message: 'MFA is not enabled on this account' });
@@ -941,5 +1033,7 @@ router.post(
     });
   }
 );
+
+router.use('/passkeys', passkeyRoutes);
 
 export const authRoutes = router;

@@ -1,4 +1,4 @@
-# Security Policy
+# Security Guidelines & Threat Model
 
 ## Table of Contents
 
@@ -9,6 +9,8 @@
 - [Security Checklist](#security-checklist)
 
 ## Threat Model
+
+> The full STRIDE threat model for PHI and payment flows, with per-boundary risk ratings, is in [`security/THREAT_MODEL.md`](security/THREAT_MODEL.md).
 
 ### Assets
 
@@ -540,62 +542,7 @@ Resources:
 
 ## Vulnerability Reporting
 
-### Report Security Issues
-
-**DO NOT:**
-- Create public GitHub issues for security vulnerabilities
-- Post on social media before a fix is deployed
-- Share details with competitors or third parties
-- Publicly disclose before coordinated disclosure is agreed
-
-**DO:**
-- Email: **security@healthwatchers.com**
-- Include:
-  - Steps to reproduce (proof-of-concept if available)
-  - Affected component(s) and version(s)
-  - Impact assessment — what data or functionality is at risk
-  - Suggested remediation (optional but appreciated)
-- Optionally sign with your PGP key for confidential communication
-
-### Expected Response Timeline
-
-| Step | Timeline |
-|------|----------|
-| Acknowledgement | Within 24 hours |
-| Initial severity assessment | Within 3 business days |
-| Fix or workaround | Within 30 days (critical: 7 days) |
-| Coordinated public disclosure | Agreed with reporter |
-
-### Responsible Disclosure Policy
-
-1. **Report** the vulnerability to security@healthwatchers.com
-2. **Wait** for acknowledgement (within 24 hours)
-3. **Work with us** on a fix — we aim to resolve critical issues within 7 days
-4. **Coordinate** public disclosure date — we will publish a CVE and credit you
-5. **Receive** credit in the release notes and our Hall of Thanks
-
-We will not pursue legal action against researchers who follow this policy in good faith.
-
-### Scope
-
-**In scope:**
-- Authentication bypass (all endpoints)
-- Authorisation/IDOR flaws in patient and payment data
-- NoSQL, command, or template injection
-- Sensitive data exposure (PHI, credentials, private keys)
-- Cryptographic weaknesses (weak algorithms, poor key management)
-- Server-side vulnerabilities in `apps/api`, `apps/stellar-service`
-- Cross-site scripting (XSS) that accesses PHI
-- Insecure direct object references to patient records
-
-**Out of scope:**
-- Social engineering or phishing attacks
-- Physical security
-- Issues in dependencies that are already publicly disclosed (CVE assigned)
-- Vulnerabilities that require physical access to a device
-- Performance-only issues with no security impact
-- Automated scan results without reproduction steps
-- Issues on test/development environments not reachable from the internet
+Vulnerability reporting, response timelines, and the responsible disclosure policy are defined in the root [`SECURITY.md`](../SECURITY.md).
 
 ## Security Checklist
 

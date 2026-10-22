@@ -1,0 +1,109 @@
+{
+  "title": "Capacity Planning",
+  "uid": "hw-capacity-planning",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "tags": ["health-watchers", "capacity"],
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Dependency Note",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Note:** `kube_pod_container_resource_requests` / `_limits` and `kube_horizontalpodautoscaler_*` panels below require **kube-state-metrics** to be deployed and scraped by Prometheus. This is not currently a configured scrape job in `monitoring/prometheus.yml`; add one (and confirm kube-state-metrics is running in the cluster) before these panels will populate. `container_cpu_usage_seconds_total` / `container_memory_working_set_bytes` (cAdvisor) are already used elsewhere in this repo's dashboards (e.g. `stellar-service-scaling.json`)."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "CPU Usage vs Requests/Limits by Service",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container=~\"api|stellar-service|web\"}[5m])) by (container)",
+          "legendFormat": "usage: {{ container }}"
+        },
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "request: {{ container }}"
+        },
+        {
+          "expr": "sum(kube_pod_container_resource_limits{resource=\"cpu\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "limit: {{ container }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory Usage vs Requests/Limits by Service",
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(container_memory_working_set_bytes{container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "usage: {{ container }}"
+        },
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "request: {{ container }}"
+        },
+        {
+          "expr": "sum(kube_pod_container_resource_limits{resource=\"memory\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "limit: {{ container }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HPA Current Replicas vs Max Replicas",
+      "gridPos": { "x": 0, "y": 19, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"health-watchers\"}",
+          "legendFormat": "current: {{ horizontalpodautoscaler }}"
+        },
+        {
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"health-watchers\"}",
+          "legendFormat": "max: {{ horizontalpodautoscaler }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Memory Growth Projection (7d)",
+      "description": "Linear projection of API container memory usage 7 days into the future, based on the trend over the last 6 hours. Use to anticipate when a service will approach its memory limit.",
+      "gridPos": { "x": 12, "y": 19, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "predict_linear(container_memory_working_set_bytes{container=\"api\"}[6h], 7 * 24 * 3600)",
+          "legendFormat": "predicted (+7d): {{ pod }}"
+        },
+        {
+          "expr": "container_memory_working_set_bytes{container=\"api\"}",
+          "legendFormat": "current: {{ pod }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    }
+  ]
+}

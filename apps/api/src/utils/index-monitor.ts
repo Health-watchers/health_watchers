@@ -55,7 +55,11 @@ export async function logIndexUsage(): Promise<void> {
         );
       }
       logger.info(
-        { collection: col, indexCount: report.indexes.length, unusedCount: report.unusedIndexes.length },
+        {
+          collection: col,
+          indexCount: report.indexes.length,
+          unusedCount: report.unusedIndexes.length,
+        },
         'Index usage report'
       );
     } catch {

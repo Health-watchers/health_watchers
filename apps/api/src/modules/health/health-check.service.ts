@@ -5,7 +5,10 @@ import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getErrorMetrics } from '../../middlewares/error.middleware';
-import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
+import {
+  getClusterJobStatus,
+  CHECK_INTERVAL_MS,
+} from '../payments/services/payment-expiration-job';
 import logger from '../../utils/logger';
 
 export type ServiceStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
@@ -158,7 +161,11 @@ function checkMemory(): ServiceCheck {
   const mem = process.memoryUsage();
   const percentage = Math.round((mem.heapUsed / mem.heapTotal) * 100);
   if (percentage > 90) {
-    return { status: 'unhealthy', message: `Heap usage at ${percentage}%`, details: { percentage } };
+    return {
+      status: 'unhealthy',
+      message: `Heap usage at ${percentage}%`,
+      details: { percentage },
+    };
   }
   if (percentage > 75) {
     return { status: 'degraded', message: `Heap usage at ${percentage}%`, details: { percentage } };
@@ -166,8 +173,8 @@ function checkMemory(): ServiceCheck {
   return { status: 'healthy', details: { percentage } };
 }
 
-function checkBackgroundJobs(): ServiceCheck {
-  const expiration = getJobStatus();
+async function checkBackgroundJobs(): Promise<ServiceCheck> {
+  const expiration = await getClusterJobStatus();
   const intervalSeconds = CHECK_INTERVAL_MS / 1000;
   const stalledThreshold = intervalSeconds * 2;
   const isStalled =
@@ -192,10 +199,18 @@ function checkErrorRate(): ServiceCheck {
   const metrics = getErrorMetrics();
   const criticalErrors = metrics.bySeverity.critical + metrics.bySeverity.high;
   if (criticalErrors > 10) {
-    return { status: 'unhealthy', message: `${criticalErrors} critical/high errors`, details: metrics };
+    return {
+      status: 'unhealthy',
+      message: `${criticalErrors} critical/high errors`,
+      details: metrics,
+    };
   }
   if (criticalErrors > 5) {
-    return { status: 'degraded', message: `${criticalErrors} critical/high errors`, details: metrics };
+    return {
+      status: 'degraded',
+      message: `${criticalErrors} critical/high errors`,
+      details: metrics,
+    };
   }
   return { status: 'healthy', details: metrics };
 }
@@ -215,7 +230,7 @@ export async function runComprehensiveHealthCheck(): Promise<ComprehensiveHealth
     checkStellar(),
     Promise.resolve(checkGemini()),
     Promise.resolve(checkMemory()),
-    Promise.resolve(checkBackgroundJobs()),
+    checkBackgroundJobs(),
     Promise.resolve(checkErrorRate()),
   ]);
 
@@ -253,9 +268,7 @@ export async function runComprehensiveHealthCheck(): Promise<ComprehensiveHealth
   healthHistory.push({
     timestamp: result.timestamp,
     status: result.status,
-    services: Object.fromEntries(
-      Object.entries(services).map(([k, v]) => [k, v.status])
-    ),
+    services: Object.fromEntries(Object.entries(services).map(([k, v]) => [k, v.status])),
   });
   if (healthHistory.length > MAX_HISTORY) {
     healthHistory.shift();

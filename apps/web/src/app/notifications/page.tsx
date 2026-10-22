@@ -53,13 +53,13 @@ function NotificationRow({ n }: { n: Notification }) {
     <div
       className={[
         'flex items-start gap-4 rounded-lg border p-4 transition-colors',
-        n.isRead ? 'border-neutral-200 bg-white' : 'bg-primary-50 border-primary-200',
+        n.isRead ? 'border-neutral-200 bg-white' : 'border-primary-200 bg-primary-50',
       ].join(' ')}
     >
       {/* Unread dot */}
       <div className="mt-1 w-2 shrink-0">
         {!n.isRead && (
-          <span className="bg-primary-500 block h-2 w-2 rounded-full" aria-label="Unread" />
+          <span className="block h-2 w-2 rounded-full bg-primary-500" aria-label="Unread" />
         )}
       </div>
 
@@ -74,7 +74,7 @@ function NotificationRow({ n }: { n: Notification }) {
         <button
           type="button"
           onClick={handleClick}
-          className="hover:text-primary-600 mt-1 text-left text-sm font-semibold text-neutral-900 focus:underline focus:outline-none"
+          className="mt-1 text-left text-sm font-semibold text-neutral-900 hover:text-primary-600 focus:underline focus:outline-none"
         >
           {n.title}
         </button>
@@ -87,7 +87,7 @@ function NotificationRow({ n }: { n: Notification }) {
           <button
             type="button"
             onClick={() => markRead.mutate(n._id)}
-            className="text-primary-600 text-xs hover:underline focus:underline focus:outline-none"
+            className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
             aria-label="Mark as read"
           >
             Mark read
@@ -139,13 +139,21 @@ export default function NotificationsPage() {
               type="button"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
-              className="text-primary-600 text-sm hover:underline focus:underline focus:outline-none disabled:opacity-50"
+              className="text-sm text-primary-600 hover:underline focus:underline focus:outline-none disabled:opacity-50"
             >
               Mark all as read
             </button>
           ) : undefined
         }
       />
+
+      {/* Announce loading and status changes to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isLoading && 'Loading notifications…'}
+        {!isLoading && notifications.length === 0 && 'No notifications. You are all caught up.'}
+        {markAllRead.isPending && 'Marking all notifications as read…'}
+        {markAllRead.isSuccess && 'All notifications marked as read.'}
+      </div>
 
       {isLoading ? (
         <div className="flex justify-center py-16">

@@ -1,6 +1,8 @@
 import { Request, Response, Router } from 'express';
 import { Types } from 'mongoose';
 import { AuditLogModel } from './audit.model';
+import { verifyChain } from './audit-chain.service';
+import { GLOBAL_CHAIN_ID } from './audit-chain.plugin';
 import { authenticate } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
 
@@ -65,24 +67,27 @@ const router = Router();
  *       403:
  *         description: Forbidden
  */
-router.get('/', authenticate, async (req: Request, res: Response) => {
-  if (req.user?.role !== 'SUPER_ADMIN') {
-    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
-  }
+const AUDIT_VIEWER_ROLES = ['SUPER_ADMIN', 'CLINIC_ADMIN'];
 
-  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
-  const sortDir = req.query.sort === 'asc' ? 1 : -1;
-
-  // Build filter
+/**
+ * Builds the Mongo filter shared by the list and export endpoints.
+ * CLINIC_ADMIN is always scoped to their own clinic; SUPER_ADMIN may pass clinicId.
+ */
+function buildAuditFilter(req: Request): Record<string, unknown> {
   const filter: Record<string, unknown> = {};
 
+  if (req.user!.role === 'CLINIC_ADMIN') {
+    filter.clinicId = new Types.ObjectId(String(req.user!.clinicId));
+  } else if (req.query.clinicId) {
+    filter.clinicId = new Types.ObjectId(req.query.clinicId as string);
+  }
+
   if (req.query.userId) filter.userId = new Types.ObjectId(req.query.userId as string);
-  if (req.query.clinicId) filter.clinicId = new Types.ObjectId(req.query.clinicId as string);
-  if (req.query.action) filter.action = req.query.action;
-  if (req.query.resourceType) filter.resourceType = req.query.resourceType;
-  if (req.query.resourceId) filter.resourceId = req.query.resourceId;
-  if (req.query.outcome) filter.outcome = req.query.outcome;
-  if (req.query.ipAddress) filter.ipAddress = req.query.ipAddress;
+  if (req.query.action) filter.action = String(req.query.action);
+  if (req.query.resourceType) filter.resourceType = String(req.query.resourceType);
+  if (req.query.resourceId) filter.resourceId = String(req.query.resourceId);
+  if (req.query.outcome) filter.outcome = String(req.query.outcome);
+  if (req.query.ipAddress) filter.ipAddress = String(req.query.ipAddress);
 
   if (req.query.dateFrom || req.query.dateTo) {
     const range: Record<string, Date> = {};
@@ -91,7 +96,27 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     filter.timestamp = range;
   }
 
- // Full-text search (requires text index on action + metadata)
+  return filter;
+}
+
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  if (!req.user || !AUDIT_VIEWER_ROLES.includes(req.user.role)) {
+    return res
+      .status(403)
+      .json({ error: 'Forbidden', message: 'SUPER_ADMIN or CLINIC_ADMIN role required' });
+  }
+
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+  const sortDir = req.query.sort === 'asc' ? 1 : -1;
+
+  let filter: Record<string, unknown>;
+  try {
+    filter = buildAuditFilter(req);
+  } catch {
+    return res.status(400).json({ error: 'BadRequest', message: 'Invalid filter value' });
+  }
+
+  // Full-text search (requires text index on action + metadata)
   if (req.query.q) {
     const searchTerm = String(req.query.q).slice(0, 200);
     filter.$text = { $search: searchTerm };
@@ -253,19 +278,17 @@ router.get('/summary', authenticate, async (req: Request, res: Response) => {
  *               type: string
  */
 router.get('/export', authenticate, async (req: Request, res: Response) => {
-  if (req.user?.role !== 'SUPER_ADMIN') {
-    return res.status(403).json({ error: 'Forbidden', message: 'SUPER_ADMIN role required' });
+  if (!req.user || !AUDIT_VIEWER_ROLES.includes(req.user.role)) {
+    return res
+      .status(403)
+      .json({ error: 'Forbidden', message: 'SUPER_ADMIN or CLINIC_ADMIN role required' });
   }
 
-  const filter: Record<string, unknown> = {};
-  if (req.query.userId) filter.userId = new Types.ObjectId(req.query.userId as string);
-  if (req.query.action) filter.action = req.query.action;
-  if (req.query.outcome) filter.outcome = req.query.outcome;
-  if (req.query.dateFrom || req.query.dateTo) {
-    const range: Record<string, Date> = {};
-    if (req.query.dateFrom) range.$gte = new Date(req.query.dateFrom as string);
-    if (req.query.dateTo) range.$lte = new Date(req.query.dateTo as string);
-    filter.timestamp = range;
+  let filter: Record<string, unknown>;
+  try {
+    filter = buildAuditFilter(req);
+  } catch {
+    return res.status(400).json({ error: 'BadRequest', message: 'Invalid filter value' });
   }
 
   try {
@@ -415,6 +438,68 @@ router.get('/hipaa-report', authenticate, async (req: Request, res: Response) =>
     return res
       .status(500)
       .json({ error: 'InternalServerError', message: 'Failed to generate HIPAA report' });
+  }
+});
+
+/**
+ * @swagger
+ * /audit/verify:
+ *   get:
+ *     summary: Verify the audit log hash chain for a time range (#1494)
+ *     description: >
+ *       Recomputes every entry hash in the clinic's audit chain between `from` and `to`
+ *       and reports modified, deleted or re-ordered entries. CLINIC_ADMIN is scoped to
+ *       their own clinic; SUPER_ADMIN may pass any `clinicId` (or `global`).
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: clinicId
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Verification result (`valid: false` lists each break)
+ *       400:
+ *         description: Invalid date range or clinicId
+ *       403:
+ *         description: Forbidden
+ */
+router.get('/verify', authenticate, async (req: Request, res: Response) => {
+  if (!req.user || !AUDIT_VIEWER_ROLES.includes(req.user.role)) {
+    return res
+      .status(403)
+      .json({ error: 'Forbidden', message: 'SUPER_ADMIN or CLINIC_ADMIN role required' });
+  }
+
+  let chainId = String(req.user.clinicId);
+  if (req.user.role === 'SUPER_ADMIN' && req.query.clinicId) {
+    chainId = String(req.query.clinicId);
+    if (chainId !== GLOBAL_CHAIN_ID && !Types.ObjectId.isValid(chainId)) {
+      return res.status(400).json({ error: 'BadRequest', message: 'Invalid clinicId' });
+    }
+  }
+
+  const from = req.query.from ? new Date(String(req.query.from)) : undefined;
+  const to = req.query.to ? new Date(String(req.query.to)) : undefined;
+  if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime())) || (from && to && from > to)) {
+    return res.status(400).json({ error: 'BadRequest', message: 'Invalid date range' });
+  }
+
+  try {
+    const result = await verifyChain(chainId, { from, to });
+    return res.json({ status: 'success', data: result });
+  } catch (error) {
+    logger.error({ err: error, chainId }, 'Error verifying audit chain');
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to verify audit chain' });
   }
 });
 

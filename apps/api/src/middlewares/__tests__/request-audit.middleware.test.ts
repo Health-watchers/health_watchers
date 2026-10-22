@@ -70,6 +70,42 @@ describe('requestAuditMiddleware', () => {
     expect(entry.body.password).toBe('[REDACTED]');
   });
 
+  it('redacts patient identifiers (PHI) from the audit entry body', async () => {
+    const req = {
+      method: 'POST',
+      path: '/api/v1/patients',
+      headers: {},
+      body: {
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        dateOfBirth: '1815-12-10',
+        contactNumber: '+15551234567',
+        address: '1 Main St',
+        sex: 'F',
+        insurance: { policyNumber: 'POL-1', provider: 'Acme' },
+      },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as Request;
+    const res = mockRes({ statusCode: 201 });
+
+    requestAuditMiddleware(req, res, jest.fn());
+    res.emit('finish');
+    await flush();
+
+    const [, contents] = (fs.appendFileSync as jest.Mock).mock.calls[0];
+    const entry = JSON.parse(contents as string);
+
+    expect(entry.body).toEqual({
+      firstName: '[REDACTED]',
+      lastName: '[REDACTED]',
+      dateOfBirth: '[REDACTED]',
+      contactNumber: '[REDACTED]',
+      address: '[REDACTED]',
+      sex: 'F',
+      insurance: { policyNumber: '[REDACTED]', provider: 'Acme' },
+    });
+  });
+
   it('omits the body field when the request body is empty', async () => {
     const req = {
       method: 'GET',

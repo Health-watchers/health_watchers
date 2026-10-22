@@ -138,6 +138,55 @@ Returns comprehensive version information:
 - **Better Performance**: Optimized queries and caching
 - **New Endpoints**: Additional functionality like check-in
 
+## V2 Resources
+
+| Resource | v2 endpoint | v1 predecessor | Notes |
+| --- | --- | --- | --- |
+| Appointments | `/api/v2/appointments` | `/api/v1/appointments` | Real-time Socket.IO events |
+| Patients (list) | `GET /api/v2/patients` | `GET /api/v1/patients` | Cursor pagination, sparse fieldsets (#1434) |
+
+### Standard v2 list envelope
+
+```json
+{
+  "success": true,
+  "version": "2.0",
+  "items": [{ "id": "…", "firstName": "Jane" }],
+  "meta": { "limit": 20, "count": 20, "hasMore": true, "nextCursor": "eyJ2IjoxLC…", "fields": ["id", "firstName"] },
+  "links": { "self": "/api/v2/patients?fields=id,firstName", "next": "/api/v2/patients?fields=id,firstName&cursor=eyJ2IjoxLC…" }
+}
+```
+
+Errors use `{ "success": false, "version": "2.0", "error": { "code", "message" } }`.
+
+### Cursor pagination
+
+`cursor` is opaque — pass back `meta.nextCursor` (or follow `links.next`) unchanged.
+Pages are ordered newest first and the server resolves a cursor to a range on the
+`{ clinicId, isActive, createdAt, _id }` index, so page 100 costs the same single
+index seek as page 1 (no `skip`). A malformed cursor returns `400 InvalidCursor`.
+
+### Sparse fieldsets
+
+`?fields=id,firstName,lastName` returns only those properties. Allowed fields are
+registered with `utils/field-selector.ts`; unknown fields return `400 InvalidFields`
+with the allowed list.
+
+### v1 → v2 deprecation headers
+
+Every v1 response carries `Deprecation`, `Sunset`, `Link` and `Warning`. Endpoints
+with a direct v2 successor point `Link` at it instead of the generic `/api/v2`, and
+use the published v1 sunset date:
+
+```http
+GET /api/v1/patients
+Deprecation: true
+Sunset: 2026-12-01
+Link: </api/v2/patients>; rel="successor-version"
+```
+
+v1 response bodies are unchanged.
+
 ## Implementation Details
 
 ### Middleware Stack

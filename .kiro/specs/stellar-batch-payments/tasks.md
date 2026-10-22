@@ -66,7 +66,7 @@ Implement batch payment processing for the Health Watchers platform. Tasks follo
 - [ ] 5. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Batch API controller
+- [x] 6. Batch API controller
   - Create `apps/api/src/modules/payments/batch.controller.ts` with an Express router
   - Implement `POST /` handler: authenticate, check role (CLINIC_ADMIN/SUPER_ADMIN), validate with `createBatchSchema`, check for duplicate destinations, check balance via `stellarClient.getBalance`, create `BatchPayment` (status: pending), call `stellarClient.submitBatch`, update `BatchPayment` (status: submitted, txHash, submittedAt), then trigger confirmation polling
   - Implement `GET /` handler: paginated list scoped to `clinicId`, support `status`/`page`/`limit` query params
@@ -110,7 +110,7 @@ Implement batch payment processing for the Health Watchers platform. Tasks follo
     - Generate random confirmed batches of N instructions; verify exactly N PaymentRecords are created with correct txHash, confirmedAt, clinicId, batchId, and status
     - Tag: `Feature: stellar-batch-payments, Property 10: Confirmed batch produces correct PaymentRecord count and fields`
 
-- [ ] 8. Wire batch routes into the payments router
+- [x] 8. Wire batch routes into the payments router
   - Import `batchRoutes` from `batch.controller.ts` in `apps/api/src/modules/payments/payments.routes.ts`
   - Mount at `/batch` so routes resolve to `/api/v1/payments/batch`
   - _Requirements: 1.1, 6.1, 6.4_
@@ -177,7 +177,29 @@ Implement batch payment processing for the Health Watchers platform. Tasks follo
   - Add a "Batch Payments" button to `apps/web/src/app/payments/PaymentsClient.tsx` that navigates to `/payments/batch`
   - _Requirements: 8.1_
 
-- [ ] 17. Final checkpoint — Ensure all tests pass
+- [x] 17. Retry logic for failed transactions within a batch
+  - Implement retry handling in `apps/api/src/modules/payments/batch.controller.ts` (and/or `batch-processor.ts`) so transient submission failures are retried with bounded attempts and backoff
+  - Record per-payment attempt counts and last error on the `BatchPayment` record
+  - _Requirements: 3.6, 4.6_
+
+- [x] 18. Partial success handling
+  - Report which payments succeeded and which failed in the batch response and on the `BatchPayment` record (per-instruction status)
+  - Expose per-instruction results via `GET /:batchId`
+  - _Requirements: 5.4, 5.5, 9.4_
+
+- [x] 19. Batch cancellation before submission
+  - Implement a cancel endpoint (`POST /:batchId/cancel`) that transitions a `pending` batch to `cancelled` and rejects cancellation once submitted
+  - _Requirements: 4.4, 4.5_
+
+- [x] 20. Batch metrics
+  - Add metrics for batch throughput (batches/payments submitted per interval) and failure rate
+  - _Requirements: 3.7, 4.6_
+
+- [x] 21. End-to-end test: 50-payment batch on testnet
+  - Write an e2e test that builds and submits a 50-payment batch against Stellar testnet and verifies confirmation, PaymentRecord creation, and per-instruction results
+  - _Requirements: 3.1, 3.4, 5.1, 5.2_
+
+- [ ] 22. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

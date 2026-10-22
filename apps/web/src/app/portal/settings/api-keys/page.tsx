@@ -137,13 +137,9 @@ export default function APIKeysPage() {
           </div>
         )}
 
-        {success && (
-          <Toast type="success" message="API key revoked successfully!" />
-        )}
+        {success && <Toast type="success" message="API key revoked successfully!" />}
 
-        {showCopyNotice && (
-          <Toast type="success" message="Copied to clipboard!" />
-        )}
+        {showCopyNotice && <Toast type="success" message="Copied to clipboard!" />}
 
         {/* API Keys List */}
         <div className="rounded-lg bg-white p-6 shadow">
@@ -160,8 +156,7 @@ export default function APIKeysPage() {
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{key.name}</p>
                     <p className="text-xs text-gray-600">
-                      {key.prefix}... • Created{' '}
-                      {new Date(key.createdAt).toLocaleDateString()}
+                      {key.prefix}... • Created {new Date(key.createdAt).toLocaleDateString()}
                     </p>
                     {key.lastUsed && (
                       <p className="text-xs text-gray-500">
@@ -191,7 +186,7 @@ export default function APIKeysPage() {
 
         {/* Create Modal */}
         {showCreateModal && (
-          <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
             <div className="w-full max-w-md rounded-lg bg-white p-6">
               <h3 className="mb-4 text-lg font-semibold">Generate New API Key</h3>
 
@@ -235,7 +230,7 @@ export default function APIKeysPage() {
                   <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                     <p className="text-xs text-gray-600">API Key for: {generatedKey.name}</p>
                     <div className="mt-2 flex items-center gap-2">
-                      <code className="flex-1 overflow-auto truncate text-xs font-mono">
+                      <code className="flex-1 overflow-auto truncate font-mono text-xs">
                         {generatedKey.key}
                       </code>
                       <Button

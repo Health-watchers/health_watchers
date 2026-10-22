@@ -1,0 +1,209 @@
+name: Smoke Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Nightly sanity check of the deployment
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  # Fast, dependency-free API contract smoke tests against a live server.
+  # Every critical check retries internally (flaky-safe), enforces a
+  # per-request latency budget, and the whole job is capped at 5 minutes.
+  api-smoke:
+    name: API Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Start API server
+        run: npm run dev --workspace=api &
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_smoke
+          JWT_ACCESS_TOKEN_SECRET: smoke-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: smoke-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: development
+          PORT: 3001
+
+      - name: Seed deterministic test data
+        run: npm run seed || echo "Seed script not found, skipping"
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_smoke
+
+      - name: Wait for API health
+        run: npx wait-on http://localhost:3001/health/live --timeout 60000
+
+      - name: Run smoke suite (API)
+        run: smoke/run-smoke.sh
+        env:
+          SMOKE_API_URL: http://localhost:3001
+          SMOKE_BUDGET_MS: '300000'
+          SMOKE_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          SMOKE_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      - name: Upload smoke report artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: smoke-api-report
+          path: smoke/reports/
+          retention-days: 14
+
+  # Cross-browser critical-path web flows via Playwright.
+  web-smoke:
+    name: Web Smoke Tests (Cross-browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Install Playwright browsers (smoke set)
+        run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: apps/web
+
+      - name: Start API server
+        run: npm run dev --workspace=api &
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_smoke_web
+          JWT_ACCESS_TOKEN_SECRET: smoke-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: smoke-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: development
+          PORT: 3001
+
+      - name: Seed deterministic test data
+        run: npm run seed || echo "Seed script not found, skipping"
+        env:
+          MONGO_URI: mongodb://localhost:27017/health_watchers_smoke_web
+
+      - name: Start web server
+        run: npm run dev --workspace=web &
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+
+      - name: Wait for servers
+        run: npx wait-on http://localhost:3001/health/live http://localhost:3000 --timeout 90000
+
+      - name: Run smoke suite (web + report)
+        run: |
+          smoke/run-smoke.sh --web
+        env:
+          SMOKE_API_URL: http://localhost:3001
+          SMOKE_WEB_URL: http://localhost:3000
+          SMOKE_BUDGET_MS: '480000'
+          SMOKE_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          SMOKE_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: smoke-web-report
+          path: smoke/reports/
+          retention-days: 14
+
+      - name: Upload screenshots/videos on failure
+        if: failure()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: smoke-web-results
+          path: apps/web/test-results/
+          retention-days: 14
+
+  # Web smoke is optional for the API-only runs and slower for full browsers.
+  # The summary job keeps a single source of truth for the report and alerts.
+  summarize:
+    name: Summarize Smoke Report
+    runs-on: ubuntu-latest
+    needs: [api-smoke, web-smoke]
+    if: always()
+
+    steps:
+      - name: Download API smoke report
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: smoke-api-report
+          path: smoke/reports/
+        continue-on-error: true
+
+      - name: Download web smoke report
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: smoke-web-report
+          path: smoke/reports/
+        continue-on-error: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Generate summary report
+        run: node smoke/report.js
+        env:
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/_github_step_summary
+
+      - name: Upload smoke dashboard
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: smoke-dashboard
+          path: smoke/reports/smoke-dashboard.html
+          retention-days: 30
+
+      - name: Notify Slack on smoke failure
+        if: failure() || needs.api-smoke.result == 'failure' || needs.web-smoke.result == 'failure'
+        uses: slackapi/slack-github-action@v1.24.0
+        continue-on-error: true
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ *Smoke tests FAILED* — `${{ github.repository }}` @ `${{ github.ref_name }}` (${{ github.sha }}) by ${{ github.actor }}\nAPI: ${{ needs.api-smoke.result }} | Web: ${{ needs.web-smoke.result }}\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }

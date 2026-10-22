@@ -27,6 +27,7 @@ export function CreatePaymentIntentForm({ onSubmit, onCancel, defaultPatientId }
   } = useForm<CreatePaymentData>({
     resolver: zodResolver(schema),
     defaultValues: { patientId: defaultPatientId ?? '' },
+    mode: 'onBlur',
   });
 
   const submit = async (data: CreatePaymentData) => {
@@ -39,16 +40,26 @@ export function CreatePaymentIntentForm({ onSubmit, onCancel, defaultPatientId }
   };
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-4">
+    <form noValidate onSubmit={handleSubmit(submit)} className="space-y-4">
       {errors.root && (
-        <p role="alert" className="text-sm text-red-600">
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="bg-danger-50 text-danger-700 rounded-md px-3 py-2 text-sm"
+        >
           {errors.root.message}
         </p>
       )}
 
-      <Input label="Patient ID" {...register('patientId')} error={errors.patientId?.message} />
+      <Input
+        label="Patient ID"
+        required
+        {...register('patientId')}
+        error={errors.patientId?.message}
+      />
       <Input
         label="Amount (XLM)"
+        required
         type="text"
         inputMode="decimal"
         placeholder="0.00"

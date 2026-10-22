@@ -21,6 +21,26 @@ const recurringPaymentSchema = new Schema(
       index: true,
     },
     description: String,
+    /** Patient card used for this plan (see PatientPaymentMethod) */
+    paymentMethodId: { type: Schema.Types.ObjectId, ref: 'PatientPaymentMethod' },
+    pausedAt: Date,
+    cancelledAt: Date,
+    cancellationReason: { type: String, maxlength: 500 },
+    /** Who changed the plan and how — patients self-serve through the portal */
+    changeLog: [
+      {
+        _id: false,
+        action: {
+          type: String,
+          enum: ['created', 'paused', 'resumed', 'cancelled', 'updated', 'payment_method_changed'],
+          required: true,
+        },
+        at: { type: Date, default: () => new Date() },
+        by: { type: Schema.Types.ObjectId, ref: 'User' },
+        byRole: String,
+        reason: String,
+      },
+    ],
     paymentHistory: [
       {
         date: Date,

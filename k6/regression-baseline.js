@@ -44,7 +44,7 @@ export const options = {
   scenarios: {
     baseline: {
       executor: 'constant-arrival-rate',
-      rate: 5,           // 5 requests/second per VU group
+      rate: 5, // 5 requests/second per VU group
       timeUnit: '1s',
       duration: '60s',
       preAllocatedVUs: 10,

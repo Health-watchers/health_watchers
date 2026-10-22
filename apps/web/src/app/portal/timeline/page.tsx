@@ -48,19 +48,24 @@ const EVENT_ICONS: Record<string, string> = {
 };
 
 const EVENT_COLORS: Record<string, string> = {
-  encounter: 'bg-blue-100 text-blue-700 border-blue-200',
-  lab_result: 'bg-purple-100 text-purple-700 border-purple-200',
-  immunization: 'bg-green-100 text-green-700 border-green-200',
-  prescription: 'bg-amber-100 text-amber-700 border-amber-200',
-  appointment: 'bg-teal-100 text-teal-700 border-teal-200',
+  encounter:
+    'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+  lab_result:
+    'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+  immunization:
+    'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800',
+  prescription:
+    'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+  appointment:
+    'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800',
 };
 
 const EVENT_CONNECTOR_COLORS: Record<string, string> = {
-  encounter: 'border-blue-500 bg-white',
-  lab_result: 'border-purple-500 bg-white',
-  immunization: 'border-green-500 bg-white',
-  prescription: 'border-amber-500 bg-white',
-  appointment: 'border-teal-500 bg-white',
+  encounter: 'border-blue-500 bg-white dark:bg-neutral-900',
+  lab_result: 'border-purple-500 bg-white dark:bg-neutral-900',
+  immunization: 'border-green-500 bg-white dark:bg-neutral-900',
+  prescription: 'border-amber-500 bg-white dark:bg-neutral-900',
+  appointment: 'border-teal-500 bg-white dark:bg-neutral-900',
 };
 
 const EVENT_DOT_COLORS: Record<string, string> = {
@@ -157,22 +162,28 @@ function EventDetailModal({
     <Modal open={open} onClose={onClose} title={event.title} size="lg">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>
-            {event.type.replace(/_/g, ' ')}
-          </Badge>
-          <span className="text-sm text-neutral-500">{formatDateTime(event.date)}</span>
+          <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>{event.type.replace(/_/g, ' ')}</Badge>
+          <span className="text-sm text-neutral-500 dark:text-neutral-400">
+            {formatDateTime(event.date)}
+          </span>
         </div>
 
-        <p className="text-sm text-neutral-700">{event.description}</p>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">{event.description}</p>
 
         {detailRows.length > 0 && (
-          <div className="border-t border-neutral-200 pt-4">
-            <h4 className="mb-2 text-sm font-semibold text-neutral-700">Details</h4>
-            <dl className="divide-y divide-neutral-100 rounded-lg border border-neutral-100 bg-neutral-50">
+          <div className="border-t border-neutral-200 pt-4 dark:border-neutral-700">
+            <h4 className="mb-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+              Details
+            </h4>
+            <dl className="divide-y divide-neutral-100 rounded-lg border border-neutral-100 bg-neutral-50 dark:divide-neutral-700 dark:border-neutral-700 dark:bg-neutral-800/50">
               {detailRows.map(([key, value]) => (
                 <div key={key} className="flex px-3 py-2 text-sm">
-                  <dt className="w-2/5 font-medium text-neutral-500">{humaniseKey(key)}</dt>
-                  <dd className="w-3/5 text-neutral-800">{renderDetailValue(value)}</dd>
+                  <dt className="w-2/5 font-medium text-neutral-500 dark:text-neutral-400">
+                    {humaniseKey(key)}
+                  </dt>
+                  <dd className="w-3/5 text-neutral-800 dark:text-neutral-200">
+                    {renderDetailValue(value)}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -187,17 +198,17 @@ function EventDetailModal({
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+    <div className="animate-pulse rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-800">
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 rounded-full bg-neutral-200" />
+        <div className="h-10 w-10 shrink-0 rounded-full bg-neutral-200 dark:bg-neutral-700" />
         <div className="flex-1 space-y-2">
           <div className="flex gap-2">
-            <div className="h-4 w-40 rounded bg-neutral-200" />
-            <div className="h-4 w-16 rounded bg-neutral-100" />
+            <div className="h-4 w-40 rounded bg-neutral-200 dark:bg-neutral-700" />
+            <div className="h-4 w-16 rounded bg-neutral-100 dark:bg-neutral-700/60" />
           </div>
-          <div className="h-3 w-3/4 rounded bg-neutral-100" />
+          <div className="h-3 w-3/4 rounded bg-neutral-100 dark:bg-neutral-700/60" />
         </div>
-        <div className="h-3 w-20 shrink-0 rounded bg-neutral-100" />
+        <div className="h-3 w-20 shrink-0 rounded bg-neutral-100 dark:bg-neutral-700/60" />
       </div>
     </div>
   );
@@ -205,20 +216,17 @@ function SkeletonCard() {
 
 // ── TimelineEventCard ─────────────────────────────────────────────────────────
 
-function TimelineEventCard({
-  event,
-  onClick,
-}: {
-  event: TimelineEvent;
-  onClick: () => void;
-}) {
+function TimelineEventCard({ event, onClick }: { event: TimelineEvent; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded-lg"
+      className="w-full rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       aria-label={`View details for ${event.title}`}
     >
-      <Card padding="sm" className="transition-all duration-150 hover:shadow-md hover:border-neutral-300">
+      <Card
+        padding="sm"
+        className="transition-all duration-150 hover:border-neutral-300 hover:shadow-md dark:hover:border-neutral-600"
+      >
         <CardContent>
           <div className="flex items-start gap-3">
             <div
@@ -229,16 +237,20 @@ function TimelineEventCard({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-semibold text-neutral-800">
+                <span className="truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">
                   {event.title}
                 </span>
                 <Badge variant={EVENT_BADGE_VARIANTS[event.type]}>
                   {event.type.replace(/_/g, ' ')}
                 </Badge>
               </div>
-              <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{event.description}</p>
+              <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
+                {event.description}
+              </p>
             </div>
-            <span className="shrink-0 text-xs text-neutral-400 pt-0.5">{formatDateTime(event.date)}</span>
+            <span className="shrink-0 pt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+              {formatDateTime(event.date)}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -250,13 +262,13 @@ function TimelineEventCard({
 
 function DateGroupHeader({ label, firstType }: { label: string; firstType: string }) {
   return (
-    <div className="sticky top-0 z-10 mb-3 flex items-center gap-3 bg-gray-50 py-2">
+    <div className="sticky top-0 z-10 mb-3 flex items-center gap-3 bg-gray-50 py-2 dark:bg-neutral-900">
       <div
         className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${EVENT_CONNECTOR_COLORS[firstType]}`}
       >
         <div className={`h-2 w-2 rounded-full ${EVENT_DOT_COLORS[firstType]}`} />
       </div>
-      <span className="text-sm font-semibold text-neutral-600">{label}</span>
+      <span className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">{label}</span>
     </div>
   );
 }
@@ -288,14 +300,17 @@ function FilterBar({
         <div className="flex flex-wrap items-end gap-4">
           {/* Event type */}
           <div className="flex flex-col gap-1">
-            <label htmlFor="event-type" className="text-xs font-medium text-neutral-600">
+            <label
+              htmlFor="event-type"
+              className="text-xs font-medium text-neutral-600 dark:text-neutral-300"
+            >
               Event Type
             </label>
             <select
               id="event-type"
               value={eventType}
               onChange={(e) => onEventTypeChange(e.target.value)}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             >
               {EVENT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -307,7 +322,10 @@ function FilterBar({
 
           {/* Start date */}
           <div className="flex flex-col gap-1">
-            <label htmlFor="start-date" className="text-xs font-medium text-neutral-600">
+            <label
+              htmlFor="start-date"
+              className="text-xs font-medium text-neutral-600 dark:text-neutral-300"
+            >
               From
             </label>
             <input
@@ -315,13 +333,16 @@ function FilterBar({
               type="date"
               value={startDate}
               onChange={(e) => onStartDateChange(e.target.value)}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             />
           </div>
 
           {/* End date */}
           <div className="flex flex-col gap-1">
-            <label htmlFor="end-date" className="text-xs font-medium text-neutral-600">
+            <label
+              htmlFor="end-date"
+              className="text-xs font-medium text-neutral-600 dark:text-neutral-300"
+            >
               To
             </label>
             <input
@@ -329,7 +350,7 @@ function FilterBar({
               type="date"
               value={endDate}
               onChange={(e) => onEndDateChange(e.target.value)}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100"
             />
           </div>
 
@@ -337,7 +358,7 @@ function FilterBar({
           {hasFilters && (
             <button
               onClick={onReset}
-              className="mb-0.5 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+              className="mb-0.5 rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Clear filters
             </button>
@@ -411,9 +432,9 @@ export default function PortalTimelinePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Health Timeline</h1>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-neutral-100">Health Timeline</h1>
           {meta && (
-            <p className="mt-0.5 text-sm text-neutral-500">
+            <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
               {meta.total} event{meta.total !== 1 ? 's' : ''} in your health record
             </p>
           )}
@@ -425,15 +446,24 @@ export default function PortalTimelinePage() {
         eventType={eventType}
         startDate={startDate}
         endDate={endDate}
-        onEventTypeChange={(v) => { setEventType(v); setPage(1); }}
-        onStartDateChange={(v) => { setStartDate(v); setPage(1); }}
-        onEndDateChange={(v) => { setEndDate(v); setPage(1); }}
+        onEventTypeChange={(v) => {
+          setEventType(v);
+          setPage(1);
+        }}
+        onStartDateChange={(v) => {
+          setStartDate(v);
+          setPage(1);
+        }}
+        onEndDateChange={(v) => {
+          setEndDate(v);
+          setPage(1);
+        }}
         onReset={handleFilterReset}
       />
 
       {/* Error state */}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
           {error}
           <button onClick={fetchTimeline} className="ml-2 font-medium underline">
             Retry
@@ -456,9 +486,13 @@ export default function PortalTimelinePage() {
       {!loading && !error && events.length === 0 && (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="text-4xl mb-3" aria-hidden="true">📋</div>
-            <p className="font-medium text-neutral-700">No health events found</p>
-            <p className="mt-1 text-sm text-neutral-500">
+            <div className="mb-3 text-4xl" aria-hidden="true">
+              📋
+            </div>
+            <p className="font-medium text-neutral-700 dark:text-neutral-300">
+              No health events found
+            </p>
+            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
               {eventType || startDate || endDate
                 ? 'Try adjusting your filters to see more results.'
                 : 'Your health timeline will appear here once events are recorded.'}
@@ -466,7 +500,7 @@ export default function PortalTimelinePage() {
             {(eventType || startDate || endDate) && (
               <button
                 onClick={handleFilterReset}
-                className="mt-4 text-sm font-medium text-blue-600 hover:underline"
+                className="mt-4 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
               >
                 Clear all filters
               </button>
@@ -480,12 +514,18 @@ export default function PortalTimelinePage() {
         <>
           {/* Vertical spine + events */}
           <div className="relative">
-            <div className="absolute top-0 bottom-0 left-6 w-0.5 bg-neutral-200" aria-hidden="true" />
+            <div
+              className="absolute bottom-0 left-6 top-0 w-0.5 bg-neutral-200 dark:bg-neutral-700"
+              aria-hidden="true"
+            />
 
             <div className="space-y-6">
               {Object.entries(groupedByDate).map(([dateLabel, dateEvents]) => (
                 <div key={dateLabel}>
-                  <DateGroupHeader label={dateLabel} firstType={dateEvents[0]?.type ?? 'encounter'} />
+                  <DateGroupHeader
+                    label={dateLabel}
+                    firstType={dateEvents[0]?.type ?? 'encounter'}
+                  />
                   <div className="ml-9 space-y-3">
                     {dateEvents.map((event) => (
                       <TimelineEventCard
@@ -506,7 +546,7 @@ export default function PortalTimelinePage() {
           {/* Pagination */}
           {meta && meta.totalPages > 1 && (
             <div className="flex items-center justify-between pt-4">
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 Page {meta.page} of {meta.totalPages} ({meta.total} events)
               </p>
               <Pagination page={meta.page} totalPages={meta.totalPages} onPageChange={setPage} />

@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Select } from '@/components/ui';
 import { queryKeys } from '@/lib/queryKeys';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 export interface PatientFormData {
   firstName: string;
@@ -36,6 +38,14 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
     const [errors, setErrors] = useState<Partial<Record<keyof PatientFormData, string>>>({});
     const [submitting, setSubmitting] = useState(false);
 
+    // Dirty state: becomes true as soon as any field changes from its initial value.
+    const [isDirty, setIsDirty] = useState(false);
+    const [showingCancelModal, setShowingCancelModal] = useState(false);
+    const { showModal, confirmLeave, cancelLeave } = useUnsavedChangesGuard(
+      isDirty,
+      'You have unsaved patient changes. Are you sure you want to leave?'
+    );
+
     const validateForm = useCallback((): boolean => {
       const newErrors: typeof errors = {};
 
@@ -66,6 +76,7 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
           ...prev,
           [name]: value,
         }));
+        setIsDirty(true);
         // Clear error when user starts typing
         if (errors[name as keyof PatientFormData]) {
           setErrors((prev) => ({
@@ -87,6 +98,7 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
       setSubmitting(true);
       try {
         await onSubmit(formData);
+        setIsDirty(false);
         // Invalidate patient list queries after successful submission
         await queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
       } catch (error) {
@@ -97,7 +109,8 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
     };
 
     return (
-      <form ref={ref} onSubmit={handleSubmit} className="space-y-4">
+      <>
+        <form ref={ref} onSubmit={handleSubmit} className="space-y-4">
         {/* First Name */}
         <Input
           label="First Name"
@@ -180,7 +193,15 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
           <Button
             type="button"
             variant="outline"
-            onClick={onCancel}
+            onClick={() => {
+              if (isDirty) {
+                // guardedPush with an empty string signals "no URL" — we handle
+                // the confirm callback manually via onConfirm below.
+                setShowingCancelModal(true);
+              } else {
+                onCancel();
+              }
+            }}
             disabled={submitting || isLoading}
             className="flex-1"
           >
@@ -196,6 +217,26 @@ const PatientForm = React.forwardRef<HTMLFormElement, PatientFormProps>(
           </Button>
         </div>
       </form>
+
+      {/* ── Unsaved Changes Modal ── */}
+      <UnsavedChangesModal
+        isOpen={showModal || showingCancelModal}
+        onConfirm={() => {
+          setShowingCancelModal(false);
+          // confirmLeave handles URL-based navigation; for Cancel we call onCancel directly.
+          if (showModal) {
+            confirmLeave();
+          } else {
+            setIsDirty(false);
+            onCancel();
+          }
+        }}
+        onCancel={() => {
+          setShowingCancelModal(false);
+          cancelLeave();
+        }}
+      />
+      </>
     );
   }
 );

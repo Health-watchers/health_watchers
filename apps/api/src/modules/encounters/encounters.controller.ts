@@ -26,12 +26,16 @@ import { UserModel } from '../auth/models/user.model';
 import { auditLog } from '../audit/audit.service';
 import crypto from 'crypto';
 import { emitToClinic } from '@api/realtime/socket';
+import { withOutboxTransaction } from '../outbox/outbox.service';
 import { encountersCreatedTotal } from '../../services/metrics.service';
-import cdsRulesEngine from '../cds/cds-rules-engine.js';
+import cdsRulesEngine from '../cds/cds-rules-engine';
 import { EncounterValidationService } from './encounter-validation.service';
 import { incrementUsage } from '../subscriptions/usage.service';
 import { sendMail } from '@api/lib/email.service';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
+import { cache } from '@api/services/cache.service';
+import { dashboardCacheKey } from '../dashboard/dashboard.controller';
+import { textSearch } from '../../utils/textSearch';
 
 async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<string | null> {
   if (!diagnoses || diagnoses.length === 0) return null;
@@ -116,6 +120,20 @@ router.use(authenticate);
 // GET /encounters — paginated list scoped to the authenticated clinic
 // Supports: q (full-text), patientId, doctorId, status, date, dateFrom, dateTo,
 //           diagnosisCode, hasAiSummary, hasPrescriptions, sort, page, limit
+//
+// Full-text search (`q`):
+//   - Uses the MongoDB text index on the Encounter model (`soapNotes`,
+//     `diagnosis`, `chiefComplaint`).
+//   - Results are always scoped to the authenticated clinic and active records.
+//   - Results are sorted by relevance (`textScore`) descending; each result
+//     includes a `score` field. Other filters (patientId, status, dates, etc.)
+//     are applied alongside the text query.
+//   - Multi-word queries are treated as OR by default (MongoDB text search);
+//     wrap a phrase in double quotes for an exact-phrase match.
+//   - Partial/prefix matches are NOT supported by MongoDB text indexes — only
+//     whole stemmed words match (e.g. "head" will not match "headache").
+//   - When no documents match, an empty `data` array is returned with
+//     `meta.total === 0`.
 router.get(
   '/',
   validateRequest({ query: listEncountersQuerySchema }),
@@ -138,7 +156,7 @@ router.get(
 
     const clinicId = req.user!.clinicId;
 
-    // ── Build aggregation pipeline ────────────────────────────────────────────
+    // ── Build base filter (shared by text and non-text paths) ─────────────────
     const matchStage: Record<string, unknown> = {
       clinicId: new Types.ObjectId(clinicId),
       isActive: true,
@@ -181,26 +199,55 @@ router.get(
       matchStage['prescriptions.0'] = { $exists: true };
     }
 
-    // Full-text search
+    const skip = (page - 1) * limit;
+
+    // ── Full-text search path ─────────────────────────────────────────────────
     if (q && q.trim().length > 0) {
-      matchStage.$text = { $search: q.trim() };
+      const { data, total } = await textSearch(EncounterModel, q, {
+        filter: matchStage,
+        page,
+        limit,
+      });
+
+      // Resolve patient names for the matched encounters
+      const patientIds = data
+        .map((doc: any) => doc.patientId)
+        .filter((id: unknown): id is Types.ObjectId => Boolean(id));
+      const patients = patientIds.length
+        ? await PatientModel.find({ _id: { $in: patientIds } })
+            .select('firstName lastName systemId')
+            .lean()
+        : [];
+      const patientMap = new Map(patients.map((p: any) => [String(p._id), p]));
+
+      return res.json({
+        status: 'success',
+        data: data.map((doc: any) => {
+          const patient = patientMap.get(String(doc.patientId));
+          return {
+            ...toEncounterResponse(doc),
+            score: doc.score,
+            patient: patient
+              ? {
+                  firstName: patient.firstName,
+                  lastName: patient.lastName,
+                  systemId: patient.systemId,
+                }
+              : undefined,
+          };
+        }),
+        meta: { total, page, limit },
+      });
     }
 
-    // ── Sort ──────────────────────────────────────────────────────────────────
-    let sortStage: Record<string, 1 | -1 | { $meta: string }> = { createdAt: -1 };
+    // ── Non-search path (existing list behavior) ──────────────────────────────
+    let sortStage: Record<string, 1 | -1> = { createdAt: -1 };
     if (sort === 'createdAt_asc') sortStage = { createdAt: 1 };
     else if (sort === 'patientName_asc') sortStage = { 'patientInfo.firstName': 1 };
-    // Add text score sort when doing full-text search
-    if (q && q.trim().length > 0) {
-      sortStage = { score: { $meta: 'textScore' }, ...sortStage };
-    }
-
-    const skip = (page - 1) * limit;
 
     // ── Aggregation pipeline with patient name lookup ─────────────────────────
     const pipeline: import('mongoose').PipelineStage[] = [
       { $match: matchStage },
-      ...(q ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
       {
         $lookup: {
           from: 'patients',
@@ -370,11 +417,29 @@ router.post(
           );
       }
     }
-    const doc = await EncounterModel.create(req.body);
-
-    emitToClinic(req.user!.clinicId, 'encounter:created', {
-      encounterId: String(doc._id),
-      patientId: String(doc.patientId),
+    // The encounter and its `encounter:created` socket event + `encounter.created`
+    // webhook commit together (#1432).
+    const doc = await withOutboxTransaction(async (session, emit) => {
+      const [created] = await EncounterModel.create([req.body], { session });
+      const payload = { encounterId: String(created._id), patientId: String(created.patientId) };
+      await emit({
+        type: 'encounter.created',
+        aggregateType: 'Encounter',
+        aggregateId: payload.encounterId,
+        clinicId: String(req.user!.clinicId),
+        payload,
+        targets: [
+          {
+            kind: 'socket',
+            room: 'clinic',
+            id: String(req.user!.clinicId),
+            event: 'encounter:created',
+            data: payload,
+          },
+          { kind: 'webhook', event: 'encounter.created' },
+        ],
+      });
+      return created;
     });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
@@ -564,12 +629,38 @@ router.patch(
       }
     }
 
-    const doc = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
+    // The update and its `encounter:updated` socket event + `encounter.updated`
+    // webhook commit together (#1432).
+    const doc = await withOutboxTransaction(async (session, emit) => {
+      const updated = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
+        new: true,
+        runValidators: true,
+        session,
+      });
+      const payload = {
+        encounterId: req.params.id,
+        patientId: updated ? String(updated.patientId) : undefined,
+        fields: Object.keys(updateData),
+      };
+      await emit({
+        type: 'encounter.updated',
+        aggregateType: 'Encounter',
+        aggregateId: req.params.id,
+        clinicId: String(req.user!.clinicId),
+        payload,
+        targets: [
+          {
+            kind: 'socket',
+            room: 'clinic',
+            id: String(req.user!.clinicId),
+            event: 'encounter:updated',
+            data: { encounterId: req.params.id },
+          },
+          { kind: 'webhook', event: 'encounter.updated' },
+        ],
+      });
+      return updated;
     });
-
-    emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
     // Trigger survey if encounter is being closed
     if (updateData.status === 'closed' && (encounter.status as string) !== 'closed') {
       await triggerSurveyAfterEncounter(req.params.id, doc!);

@@ -1,0 +1,104 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: api-worker-scaler
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: api-worker
+  annotations:
+    description: "Scales API workers based on Redis queue depth using BullMQ"
+spec:
+  scaleTargetRef:
+    name: api-worker
+  pollingInterval: 15  # Check queue depth every 15 seconds
+  cooldownPeriod: 300  # Wait 5 minutes after last scaling event before scaling down
+  minReplicaCount: 1   # Always keep at least 1 worker running
+  maxReplicaCount: 10  # Cap at 10 workers
+  
+  # Advanced scaling behavior
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+          policies:
+            - type: Percent
+              value: 50  # Scale down by max 50% at a time
+              periodSeconds: 60
+            - type: Pods
+              value: 1  # Or remove 1 pod at a time
+              periodSeconds: 60
+          selectPolicy: Min  # Use the more conservative policy
+        scaleUp:
+          stabilizationWindowSeconds: 60  # Quick scale up (1 minute)
+          policies:
+            - type: Percent
+              value: 100  # Can double replicas
+              periodSeconds: 30
+            - type: Pods
+              value: 4  # Or add up to 4 pods at once
+              periodSeconds: 30
+          selectPolicy: Max  # Use the more aggressive policy
+  
+  # Trigger based on Redis queue depth
+  triggers:
+    # BullMQ stores jobs in Redis lists with specific key patterns
+    # Monitor the main job queues used by the worker
+    - type: redis
+      metadata:
+        # Redis connection - uses in-cluster Redis service
+        address: redis:6379
+        # BullMQ queue name pattern
+        # Adjust these to match your actual BullMQ queue names
+        listName: "bull:payment-expiration:wait"
+        listLength: "5"  # Scale up when 5+ jobs waiting
+        activationListLength: "1"  # Activate scaling when at least 1 job
+        databaseIndex: "0"
+      authenticationRef:
+        name: redis-auth  # Optional: Reference to TriggerAuthentication with Redis password
+    
+    - type: redis
+      metadata:
+        address: redis:6379
+        listName: "bull:reconciliation:wait"
+        listLength: "5"
+        activationListLength: "1"
+        databaseIndex: "0"
+      authenticationRef:
+        name: redis-auth
+    
+    - type: redis
+      metadata:
+        address: redis:6379
+        listName: "bull:notification-dispatch:wait"
+        listLength: "10"  # Notifications can queue up more
+        activationListLength: "1"
+        databaseIndex: "0"
+      authenticationRef:
+        name: redis-auth
+    
+    - type: redis
+      metadata:
+        address: redis:6379
+        listName: "bull:webhook-retry:wait"
+        listLength: "10"
+        activationListLength: "1"
+        databaseIndex: "0"
+      authenticationRef:
+        name: redis-auth
+
+---
+# Optional: TriggerAuthentication for Redis with password
+# Remove this if Redis doesn't require authentication
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: redis-auth
+  namespace: health-watchers
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: health-watchers-secrets
+      key: REDIS_PASSWORD

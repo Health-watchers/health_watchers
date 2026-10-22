@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { authenticate } from '@/middleware/auth';
-import { authorize } from '@/middleware/authorization';
-import { validateRequest } from '@/middleware/validation';
+import { authenticate } from '@/middlewares/auth.middleware';
+import { authorize } from '@/middlewares/rbac.middleware';
+import { validateRequest } from '@/middlewares/validate.middleware';
 import { z } from 'zod';
 
 const router = Router();
@@ -36,14 +36,15 @@ router.post(
       if (!validPaths) {
         return res.status(400).json({
           error: 'Invalid path format',
-          message: 'Paths can only contain alphanumeric characters, hyphens, underscores, forward slashes, and dots',
+          message:
+            'Paths can only contain alphanumeric characters, hyphens, underscores, forward slashes, and dots',
         });
       }
 
       const results = await invalidateCDNCache(
         payload.paths,
         payload.provider || 'all',
-        payload.priority,
+        payload.priority
       );
 
       res.json({
@@ -59,7 +60,7 @@ router.post(
         message: errorMessage,
       });
     }
-  },
+  }
 );
 
 /**
@@ -100,7 +101,7 @@ router.post(
         message: errorMessage,
       });
     }
-  },
+  }
 );
 
 /**
@@ -154,7 +155,7 @@ router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, 
 async function invalidateCDNCache(
   paths: string[],
   provider: string,
-  priority: string,
+  priority: string
 ): Promise<Record<string, unknown>> {
   const results: Record<string, unknown> = {};
 
@@ -192,17 +193,14 @@ async function invalidateCloudflare(paths: string[]): Promise<Record<string, unk
     throw new Error('Cloudflare credentials not configured');
   }
 
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ files: paths }),
+  const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({ files: paths }),
+  });
 
   const data = (await response.json()) as Record<string, unknown>;
 
@@ -254,7 +252,7 @@ async function invalidateFastly(paths: string[]): Promise<Record<string, unknown
  * Process bulk invalidation with priority queuing
  */
 async function processBulkInvalidation(
-  invalidations: Array<{ paths: string[]; priority: 'high' | 'normal' }>,
+  invalidations: Array<{ paths: string[]; priority: 'high' | 'normal' }>
 ): Promise<Array<Record<string, unknown>>> {
   // Sort by priority
   const sorted = invalidations.sort((a, b) => {
@@ -268,8 +266,8 @@ async function processBulkInvalidation(
       invalidateCDNCache(inv.paths, 'all', inv.priority).catch((error) => ({
         error: error instanceof Error ? error.message : 'Unknown error',
         paths: inv.paths,
-      })),
-    ),
+      }))
+    )
   );
 }
 

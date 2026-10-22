@@ -104,8 +104,8 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
             ⚠️
           </span>
           <p>
-            <strong>Low backup codes:</strong> You have{' '}
-            <strong>{codeCount.remaining}</strong> backup code
+            <strong>Low backup codes:</strong> You have <strong>{codeCount.remaining}</strong>{' '}
+            backup code
             {codeCount.remaining !== 1 ? 's' : ''} remaining. Regenerate them now to avoid being
             locked out if you lose your authenticator.
           </p>
@@ -135,7 +135,7 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
 
       {/* New codes display (after regeneration) */}
       {newCodes && (
-        <div className="rounded-md border border-neutral-200 bg-neutral-50 p-4 space-y-3">
+        <div className="space-y-3 rounded-md border border-neutral-200 bg-neutral-50 p-4">
           <p className="text-sm font-semibold text-neutral-900">
             New backup codes generated. Save them now — they won&apos;t be shown again.
           </p>
@@ -159,11 +159,9 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
 
       {/* Regeneration modal */}
       {showRegenModal && (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="mb-1 text-lg font-semibold text-neutral-900">
-              Regenerate Backup Codes
-            </h3>
+            <h3 className="mb-1 text-lg font-semibold text-neutral-900">Regenerate Backup Codes</h3>
             <p className="mb-4 text-sm text-neutral-600">
               All existing codes will be invalidated. Enter your password and a verification code to
               continue.
@@ -183,7 +181,7 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoComplete="current-password"
                 />
               </div>
@@ -217,7 +215,7 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
                     value={backupCode}
                     onChange={(e) => setBackupCode(e.target.value.trim())}
                     placeholder="XXXX-XXXX"
-                    className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     autoComplete="off"
                   />
                 </div>
@@ -239,7 +237,7 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="000000"
-                    className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-center text-lg tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-2 text-center font-mono text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
                     autoComplete="one-time-code"
                   />
                 </div>
@@ -257,10 +255,7 @@ export function BackupCodeManager({ onRegenerated }: BackupCodeManagerProps) {
                   variant="danger"
                   size="sm"
                   loading={isLoading}
-                  disabled={
-                    !password ||
-                    (useBackupCode ? !backupCode : totpCode.length !== 6)
-                  }
+                  disabled={!password || (useBackupCode ? !backupCode : totpCode.length !== 6)}
                 >
                   Regenerate
                 </Button>

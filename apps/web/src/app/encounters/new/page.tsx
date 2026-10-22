@@ -8,6 +8,9 @@ import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
 import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
+import { OfflineSync, useOnlineStatus } from '@/lib/offline-sync';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +107,13 @@ export default function NewEncounterPage() {
   const searchParams = useSearchParams();
   const prefilledPatientId = searchParams.get('patientId') ?? '';
 
+  // Track whether the form has been touched — used by the unsaved-changes guard.
+  const [isDirty, setIsDirty] = useState(false);
+  const { showModal, confirmLeave, cancelLeave, guardedPush } = useUnsavedChangesGuard(
+    isDirty,
+    'You have unsaved encounter data. Are you sure you want to leave?'
+  );
+
   // Patient selector
   const [patientQuery, setPatientQuery] = useState('');
   const [patientHits, setPatientHits] = useState<PatientHit[]>([]);
@@ -136,6 +146,7 @@ export default function NewEncounterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const isOnline = useOnlineStatus();
 
   // AI Suggestions
   const [aiSuggestions, setAiSuggestions] = useState<AiResponse | null>(null);
@@ -392,6 +403,20 @@ export default function NewEncounterPage() {
     setSubmitting(true);
     setSubmitError('');
     try {
+      // ── Offline path ────────────────────────────────────────────────────
+      if (!isOnline) {
+        await OfflineSync.storePendingForm({
+          url: `${API_V1}/encounters`,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          label: 'Encounter Creation',
+        });
+        router.push('/encounters?queued=1');
+        return;
+      }
+
+      // ── Online path ─────────────────────────────────────────────────────
       const res = await fetch(`${API_V1}/encounters`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -403,9 +428,22 @@ export default function NewEncounterPage() {
       }
       const data = await res.json();
       const id = data.data?.id ?? data.data?._id;
+      setIsDirty(false);
       router.push(id ? `/encounters/${id}` : '/encounters');
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Submission failed');
+      // Network failure fallback — queue for later
+      try {
+        await OfflineSync.storePendingForm({
+          url: `${API_V1}/encounters`,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          label: 'Encounter Creation',
+        });
+        router.push('/encounters?queued=1');
+      } catch {
+        setSubmitError(err instanceof Error ? err.message : 'Submission failed');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -420,29 +458,45 @@ export default function NewEncounterPage() {
       {/* Breadcrumb */}
       <nav
         aria-label="Breadcrumb"
-        className="mb-6 flex items-center gap-2 text-sm text-neutral-500"
+        className="mb-6 flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400"
       >
-        <Link href="/" className="hover:text-neutral-800">
+        <Link href="/" className="hover:text-neutral-800 dark:hover:text-neutral-200">
           Home
         </Link>
         <span aria-hidden="true">/</span>
-        <Link href="/encounters" className="hover:text-neutral-800">
+        <Link href="/encounters" className="hover:text-neutral-800 dark:hover:text-neutral-200">
           Encounters
         </Link>
         <span aria-hidden="true">/</span>
-        <span className="font-medium text-neutral-900" aria-current="page">
+        <span className="font-medium text-neutral-900 dark:text-neutral-100" aria-current="page">
           New Encounter
         </span>
       </nav>
 
-      <h1 className="mb-8 text-2xl font-bold text-neutral-900">New Encounter</h1>
+      <h1 className="mb-8 text-2xl font-bold text-neutral-900 dark:text-neutral-100">
+        New Encounter
+      </h1>
 
       {submitError && (
         <div
           role="alert"
-          className="border-danger-200 bg-danger-50 text-danger-700 mb-6 rounded-md border px-4 py-3 text-sm"
+          className="border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-800 dark:bg-danger-950 dark:text-danger-300 mb-6 rounded-md border px-4 py-3 text-sm"
         >
           {submitError}
+        </div>
+      )}
+
+      {!isOnline && (
+        <div
+          role="status"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          data-testid="offline-notice"
+        >
+          <span className="mt-0.5 shrink-0">⚡</span>
+          <p>
+            You are offline. Submitting this form will queue the encounter and sync it automatically
+            when your connection is restored.
+          </p>
         </div>
       )}
 
@@ -451,18 +505,18 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-patient">
           <h2
             id="section-patient"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
-            Patient <span className="text-danger-500">*</span>
+            Patient <span className="text-danger-500 dark:text-danger-400">*</span>
           </h2>
 
           {selectedPatient ? (
-            <div className="border-primary-200 bg-primary-50 flex items-center justify-between rounded-lg border px-4 py-3">
+            <div className="border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-950 flex items-center justify-between rounded-lg border px-4 py-3">
               <div>
-                <p className="font-medium text-neutral-900">
+                <p className="font-medium text-neutral-900 dark:text-neutral-100">
                   {selectedPatient.firstName} {selectedPatient.lastName}
                 </p>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   {selectedPatient.systemId} · DOB {formatDate(selectedPatient.dateOfBirth)}
                 </p>
               </div>
@@ -472,13 +526,13 @@ export default function NewEncounterPage() {
                   setSelectedPatient(null);
                   setPatientQuery('');
                 }}
-                className="text-primary-600 focus-visible:ring-primary-500 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
+                className="text-primary-600 focus-visible:ring-primary-500 dark:text-primary-400 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
               >
                 Change
               </button>
             </div>
           ) : prefilledPatientId ? (
-            <p className="rounded-lg border border-neutral-200 px-4 py-3 text-sm text-neutral-600">
+            <p className="rounded-lg border border-neutral-200 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
               Patient ID: <span className="font-mono">{prefilledPatientId}</span>
             </p>
           ) : (
@@ -502,23 +556,26 @@ export default function NewEncounterPage() {
                   id="patient-listbox"
                   role="listbox"
                   aria-label="Patient suggestions"
-                  className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg"
+                  className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
                 >
                   {patientSearching && (
-                    <li className="px-4 py-2 text-sm text-neutral-400">Searching…</li>
+                    <li className="px-4 py-2 text-sm text-neutral-400 dark:text-neutral-500">
+                      Searching…
+                    </li>
                   )}
                   {patientHits.map((p) => (
                     <li
                       key={p._id}
                       role="option"
                       aria-selected={false}
-                      className="hover:bg-primary-50 focus:bg-primary-50 cursor-pointer px-4 py-2 text-sm outline-none"
+                      className="hover:bg-primary-50 focus:bg-primary-50 dark:hover:bg-primary-950 dark:focus:bg-primary-950 cursor-pointer px-4 py-2 text-sm outline-none"
                       tabIndex={0}
                       onClick={() => {
                         setSelectedPatient(p);
                         fetchFullPatient(p._id);
                         setPatientHits([]);
                         setPatientQuery('');
+                        setIsDirty(true);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -526,13 +583,14 @@ export default function NewEncounterPage() {
                           fetchFullPatient(p._id);
                           setPatientHits([]);
                           setPatientQuery('');
+                          setIsDirty(true);
                         }
                       }}
                     >
                       <span className="font-medium">
                         {p.firstName} {p.lastName}
                       </span>
-                      <span className="ml-2 text-xs text-neutral-400">
+                      <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">
                         {p.systemId} · {formatDate(p.dateOfBirth)}
                       </span>
                     </li>
@@ -547,21 +605,27 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-complaint">
           <h2
             id="section-complaint"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
-            Chief Complaint <span className="text-danger-500">*</span>
+            Chief Complaint <span className="text-danger-500 dark:text-danger-400">*</span>
           </h2>
           <div className="relative">
             <Textarea
               label="Chief complaint"
               value={chiefComplaint}
-              onChange={(e) => setChiefComplaint(e.target.value)}
+              onChange={(e) => {
+                setChiefComplaint(e.target.value);
+                setIsDirty(true);
+              }}
               maxLength={500}
               rows={3}
               placeholder="Describe the primary reason for this visit…"
               error={errors.chiefComplaint}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
+            <span
+              className="absolute right-3 bottom-2 text-xs text-neutral-400 dark:text-neutral-500"
+              aria-live="polite"
+            >
               {chiefComplaint.length}/500
             </span>
           </div>
@@ -573,7 +637,7 @@ export default function NewEncounterPage() {
               onClick={getAiSuggestions}
               loading={fetchingAi}
               disabled={fetchingAi || !chiefComplaint.trim()}
-              className="border-blue-200 text-blue-700 hover:bg-blue-50"
+              className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950"
             >
               <span className="mr-2">✨</span>
               Get AI Suggestions
@@ -582,7 +646,7 @@ export default function NewEncounterPage() {
 
           {/* AI Suggestions Panel */}
           {aiSuggestions && (
-            <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5 shadow-sm">
+            <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5 shadow-sm dark:border-blue-900 dark:bg-blue-950/30">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white uppercase">
@@ -602,7 +666,7 @@ export default function NewEncounterPage() {
                 </div>
                 <button
                   onClick={() => setAiSuggestions(null)}
-                  className="text-neutral-400 hover:text-neutral-600"
+                  className="text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
                 >
                   ✕
                 </button>
@@ -610,20 +674,25 @@ export default function NewEncounterPage() {
 
               <div className="space-y-4">
                 {aiSuggestions.differentials.map((diff, i) => (
-                  <div key={i} className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+                  <div
+                    key={i}
+                    className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm dark:border-blue-900 dark:bg-neutral-800"
+                  >
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-neutral-900">{diff.diagnosis}</h3>
-                          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500">
+                          <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                            {diff.diagnosis}
+                          </h3>
+                          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400">
                             {diff.icdCode}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs leading-relaxed text-neutral-600">
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300">
                           {diff.reasoning}
                         </p>
                         {diff.recommendedTests?.length > 0 && (
-                          <p className="mt-2 text-[10px] text-neutral-400">
+                          <p className="mt-2 text-[10px] text-neutral-400 dark:text-neutral-500">
                             Recommended: {diff.recommendedTests.join(', ')}
                           </p>
                         )}
@@ -632,10 +701,10 @@ export default function NewEncounterPage() {
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                             diff.probability === 'high'
-                              ? 'bg-red-50 text-red-700'
+                              ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
                               : diff.probability === 'medium'
-                                ? 'bg-orange-50 text-orange-700'
-                                : 'bg-green-50 text-green-700'
+                                ? 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300'
+                                : 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300'
                           }`}
                         >
                           {diff.probability} probability
@@ -662,7 +731,9 @@ export default function NewEncounterPage() {
                 ))}
               </div>
 
-              <p className="mt-4 text-[10px] text-neutral-400 italic">{aiSuggestions.disclaimer}</p>
+              <p className="mt-4 text-[10px] text-neutral-400 italic dark:text-neutral-500">
+                {aiSuggestions.disclaimer}
+              </p>
             </div>
           )}
         </section>
@@ -675,11 +746,13 @@ export default function NewEncounterPage() {
             aria-expanded={vitalsOpen}
             aria-controls="vitals-panel"
             onClick={() => setVitalsOpen((v) => !v)}
-            className="focus-visible:ring-primary-500 flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase hover:bg-neutral-100 focus:outline-none focus-visible:ring-2"
+            className="focus-visible:ring-primary-500 flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700"
           >
             <span>
               Vital Signs{' '}
-              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+              <span className="font-normal text-neutral-400 normal-case dark:text-neutral-500">
+                (optional)
+              </span>
             </span>
             <span aria-hidden="true">{vitalsOpen ? '▲' : '▼'}</span>
           </button>
@@ -687,7 +760,7 @@ export default function NewEncounterPage() {
           {vitalsOpen && (
             <div
               id="vitals-panel"
-              className="mt-3 grid grid-cols-1 gap-4 rounded-lg border border-neutral-200 p-4 sm:grid-cols-2"
+              className="mt-3 grid grid-cols-1 gap-4 rounded-lg border border-neutral-200 p-4 sm:grid-cols-2 dark:border-neutral-700"
             >
               <Input
                 label="Blood Pressure (mmHg)"
@@ -721,7 +794,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setTempUnit((u) => (u === 'C' ? 'F' : 'C'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   aria-label={`Switch to °${tempUnit === 'C' ? 'F' : 'C'}`}
                 >
                   °{tempUnit === 'C' ? 'F' : 'C'}
@@ -743,7 +816,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setWeightUnit((u) => (u === 'kg' ? 'lbs' : 'kg'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   aria-label={`Switch to ${weightUnit === 'kg' ? 'lbs' : 'kg'}`}
                 >
                   {weightUnit === 'kg' ? 'lbs' : 'kg'}
@@ -765,7 +838,7 @@ export default function NewEncounterPage() {
                 <button
                   type="button"
                   onClick={() => setHeightUnit((u) => (u === 'cm' ? 'in' : 'cm'))}
-                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2"
+                  className="focus-visible:ring-primary-500 mb-0.5 rounded border border-neutral-200 px-2 py-2 text-xs text-neutral-600 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   aria-label={`Switch to ${heightUnit === 'cm' ? 'inches' : 'cm'}`}
                 >
                   {heightUnit === 'cm' ? 'in' : 'cm'}
@@ -790,7 +863,7 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-notes">
           <h2
             id="section-notes"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
             Clinical Notes
           </h2>
@@ -798,13 +871,19 @@ export default function NewEncounterPage() {
             <Textarea
               label="Notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setIsDirty(true);
+              }}
               rows={6}
               maxLength={10000}
               placeholder="Clinical observations, history, examination findings…"
               error={errors.notes}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
+            <span
+              className="absolute right-3 bottom-2 text-xs text-neutral-400 dark:text-neutral-500"
+              aria-live="polite"
+            >
               {notes.length}/10,000
             </span>
           </div>
@@ -814,10 +893,12 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-dx">
           <h2
             id="section-dx"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
             Diagnosis (ICD-10){' '}
-            <span className="font-normal text-neutral-400 normal-case">— up to 10</span>
+            <span className="font-normal text-neutral-400 normal-case dark:text-neutral-500">
+              — up to 10
+            </span>
           </h2>
 
           {diagnoses.length > 0 && (
@@ -825,18 +906,26 @@ export default function NewEncounterPage() {
               {diagnoses.map((d, i) => (
                 <li
                   key={d.code}
-                  className="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
                 >
                   <span>
-                    <span className="text-primary-700 font-mono font-medium">{d.code}</span>
-                    <span className="ml-2 text-neutral-700">{d.description}</span>
-                    {i === 0 && <span className="ml-2 text-xs text-neutral-400">(primary)</span>}
+                    <span className="text-primary-700 dark:text-primary-400 font-mono font-medium">
+                      {d.code}
+                    </span>
+                    <span className="ml-2 text-neutral-700 dark:text-neutral-300">
+                      {d.description}
+                    </span>
+                    {i === 0 && (
+                      <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">
+                        (primary)
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
                     onClick={() => removeDiagnosis(d.code)}
                     aria-label={`Remove ${d.code}`}
-                    className="hover:text-danger-500 focus-visible:ring-primary-500 ml-3 rounded text-neutral-400 focus:outline-none focus-visible:ring-2"
+                    className="hover:text-danger-500 focus-visible:ring-primary-500 ml-3 rounded text-neutral-400 focus:outline-none focus-visible:ring-2 dark:text-neutral-500"
                   >
                     ✕
                   </button>
@@ -862,20 +951,24 @@ export default function NewEncounterPage() {
                   id="dx-listbox"
                   role="listbox"
                   aria-label="ICD-10 suggestions"
-                  className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg"
+                  className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
                 >
                   {dxSuggestions.map((d) => (
                     <li
                       key={d.code}
                       role="option"
                       aria-selected={diagnoses.some((x) => x.code === d.code)}
-                      className="hover:bg-primary-50 focus:bg-primary-50 cursor-pointer px-4 py-2 text-sm outline-none"
+                      className="hover:bg-primary-50 focus:bg-primary-50 dark:hover:bg-primary-950 dark:focus:bg-primary-950 cursor-pointer px-4 py-2 text-sm outline-none"
                       tabIndex={0}
                       onClick={() => addDiagnosis(d)}
                       onKeyDown={(e) => e.key === 'Enter' && addDiagnosis(d)}
                     >
-                      <span className="text-primary-700 font-mono font-medium">{d.code}</span>
-                      <span className="ml-2 text-neutral-600">{d.description}</span>
+                      <span className="text-primary-700 dark:text-primary-400 font-mono font-medium">
+                        {d.code}
+                      </span>
+                      <span className="ml-2 text-neutral-600 dark:text-neutral-300">
+                        {d.description}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -889,10 +982,12 @@ export default function NewEncounterPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2
               id="section-rx"
-              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
             >
               Prescriptions{' '}
-              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+              <span className="font-normal text-neutral-400 normal-case dark:text-neutral-500">
+                (optional)
+              </span>
             </h2>
             <Button size="sm" variant="outline" onClick={addPrescriptionRow}>
               + Add Medication
@@ -900,21 +995,26 @@ export default function NewEncounterPage() {
           </div>
 
           {prescriptions.length === 0 && (
-            <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-400">
+            <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-400 dark:border-neutral-700 dark:text-neutral-500">
               No prescriptions added. Click &ldquo;Add Medication&rdquo; to start.
             </p>
           )}
 
           <div className="space-y-3">
             {prescriptions.map((rx) => (
-              <div key={rx.id} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <div
+                key={rx.id}
+                className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800"
+              >
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-medium text-neutral-500">Medication</span>
+                  <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    Medication
+                  </span>
                   <button
                     type="button"
                     onClick={() => removePrescriptionRow(rx.id)}
                     aria-label="Remove prescription"
-                    className="text-xs text-neutral-400 hover:text-red-500"
+                    className="text-xs text-neutral-400 hover:text-red-500 dark:text-neutral-500 dark:hover:text-red-400"
                   >
                     Remove
                   </button>
@@ -923,7 +1023,7 @@ export default function NewEncounterPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {/* Drug name + Calculate Dose button */}
                   <div className="sm:col-span-2">
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
                       Drug Name *
                     </label>
                     <div className="flex gap-2">
@@ -931,13 +1031,13 @@ export default function NewEncounterPage() {
                         value={rx.drugName}
                         onChange={(e) => updatePrescriptionRow(rx.id, 'drugName', e.target.value)}
                         placeholder="e.g. Amoxicillin"
-                        className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                       />
                       <button
                         type="button"
                         onClick={() => openDosageCalculator(rx.id)}
                         title="AI Dosage Calculator"
-                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium whitespace-nowrap text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium whitespace-nowrap text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
                       >
                         <span aria-hidden="true">✨</span> Calculate Dose
                       </button>
@@ -945,35 +1045,37 @@ export default function NewEncounterPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
                       Dosage
                     </label>
                     <input
                       value={rx.dosage}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'dosage', e.target.value)}
                       placeholder="e.g. 500 mg"
-                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
                       Frequency
                     </label>
                     <input
                       value={rx.frequency}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'frequency', e.target.value)}
                       placeholder="e.g. every 8 hours"
-                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">Route</label>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                      Route
+                    </label>
                     <select
                       value={rx.route}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'route', e.target.value)}
-                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
                     >
                       <option value="oral">Oral</option>
                       <option value="injection">Injection</option>
@@ -984,14 +1086,14 @@ export default function NewEncounterPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
                       Duration
                     </label>
                     <input
                       value={rx.duration}
                       onChange={(e) => updatePrescriptionRow(rx.id, 'duration', e.target.value)}
                       placeholder="e.g. 7 days"
-                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                     />
                   </div>
                 </div>
@@ -1004,7 +1106,7 @@ export default function NewEncounterPage() {
         <section aria-labelledby="section-followup">
           <h2
             id="section-followup"
-            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
             Follow-up Date
           </h2>
@@ -1019,7 +1121,7 @@ export default function NewEncounterPage() {
         </section>
 
         {/* ── Actions ── */}
-        <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-2">
+        <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-2 dark:border-neutral-700">
           <Button
             variant="primary"
             onClick={() => submit('closed')}
@@ -1036,17 +1138,18 @@ export default function NewEncounterPage() {
           >
             Save Draft
           </Button>
-          <Link
-            href={patientId ? `/patients/${patientId}` : '/encounters'}
-            className="focus-visible:ring-primary-500 ml-auto rounded text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus-visible:ring-2"
-            onClick={(e) => {
-              if (!confirm('Discard this encounter?')) e.preventDefault();
-            }}
+          <button
+            type="button"
+            className="focus-visible:ring-primary-500 ml-auto rounded text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus-visible:ring-2 dark:text-neutral-400 dark:hover:text-neutral-200"
+            onClick={() => guardedPush(patientId ? `/patients/${patientId}` : '/encounters')}
           >
             Cancel
-          </Link>
+          </button>
         </div>
       </div>
+
+      {/* ── Unsaved Changes Modal ── */}
+      <UnsavedChangesModal isOpen={showModal} onConfirm={confirmLeave} onCancel={cancelLeave} />
 
       {/* ── Dosage Calculator Modal ── */}
       <DosageCalculatorModal

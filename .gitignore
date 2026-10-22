@@ -69,12 +69,27 @@ jest-results.json
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
 
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
+
 # Playwright test artifacts
 playwright-report/
+playwright-visual-report/
+pseudo-locale-report/
 test-results/
 blob-report/
 playwright/.cache/
 .playwright/
+
+# NOTE: Playwright visual-regression baseline screenshots live in
+# `<specfile>-snapshots/` directories (e.g. apps/web/e2e/visual-regression.spec.ts-snapshots/).
+# These golden baselines are intentionally NOT ignored — they are committed to
+# version control as the reference for visual regression tests. Only the
+# `**/__snapshots__/` (Jest) pattern above is ignored.
+
+# Dev-only pseudo-locale generated from en.json (apps/web/scripts/generate-pseudo-locale.mjs)
+apps/web/messages/en-XA.json
 
 # Stryker mutation testing output
 .stryker-tmp/
@@ -83,6 +98,10 @@ stryker-report/
 # which would accidentally ignore apps/api/src/modules/reports/
 apps/api/reports/
 apps/api/stryker-reports/
+
+# Generated performance & quality pipeline reports
+performance/reports/
+scripts/quality/reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -260,3 +279,4 @@ benchmark-*.json
 *.repl.ts
 *.debug.ts
 scratch.*
+scripts/translation-report.json

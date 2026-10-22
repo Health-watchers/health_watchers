@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Schema, Types, model, models } from 'mongoose';
 import { AppRole } from '@api/types/express';
+import { baseSchema } from '@api/shared';
 
 const ROLES: AppRole[] = [
   'SUPER_ADMIN',
@@ -15,6 +16,7 @@ const ROLES: AppRole[] = [
 export interface UserPreferences {
   language: string;
   theme: 'light' | 'dark' | 'system';
+  defaultView: 'dashboard' | 'patients' | 'appointments' | 'encounters';
   emailNotifications: boolean;
   inAppNotifications: boolean;
   notificationTypes: {
@@ -41,11 +43,13 @@ export interface User {
   clinicId: Types.ObjectId;
   patientId?: Types.ObjectId; // set when role === 'PATIENT'
   isActive: boolean;
+  createdBy?: Types.ObjectId;
   emailVerified: boolean;
   emailVerificationTokenHash?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
   mfaBackupCodes?: string[]; // hashed backup codes
+  passkeyCount: number; // registered WebAuthn passkeys (see passkey.model.ts)
   resetPasswordTokenHash?: string;
   resetPasswordExpiresAt?: Date;
   failedLoginAttempts: number;
@@ -54,6 +58,9 @@ export interface User {
   mustChangePassword?: boolean; // Force password change on next login
   mfaGracePeriodEndsAt?: Date; // DOCTOR/NURSE: deadline to enable MFA before login is blocked
   preferences: UserPreferences;
+  avatarUrl?: string;
+  avatarStorageKey?: string;
+  timezone?: string; // IANA timezone for the user, e.g. 'Africa/Lagos'
   stellarPublicKey?: string; // Doctor's personal Stellar wallet for payment splits
   // Portal MFA fields (for PATIENT role)
   portalMfaEnabled?: boolean;
@@ -78,9 +85,7 @@ const userSchema = new Schema(
     },
     password: { type: String, required: true },
     role: { type: String, enum: ROLES, required: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', default: undefined },
-    isActive: { type: Boolean, default: true, index: true },
     emailVerified: { type: Boolean, default: false },
     emailVerificationTokenHash: {
       type: String,
@@ -101,6 +106,7 @@ const userSchema = new Schema(
       select: false,
       default: undefined,
     },
+    passkeyCount: { type: Number, default: 0, min: 0 },
     resetPasswordTokenHash: {
       type: String,
       required: false,
@@ -132,6 +138,11 @@ const userSchema = new Schema(
     preferences: {
       language: { type: String, default: 'en' },
       theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
+      defaultView: {
+        type: String,
+        enum: ['dashboard', 'patients', 'appointments', 'encounters'],
+        default: 'dashboard',
+      },
       emailNotifications: { type: Boolean, default: true },
       inAppNotifications: { type: Boolean, default: true },
       notificationTypes: {
@@ -150,6 +161,9 @@ const userSchema = new Schema(
       },
     },
     stellarPublicKey: { type: String, sparse: true, index: true },
+    avatarUrl: { type: String, default: undefined },
+    avatarStorageKey: { type: String, default: undefined, select: false },
+    timezone: { type: String, default: undefined },
     portalMfaEnabled: { type: Boolean, default: false },
     portalMfaSecret: {
       type: String,
@@ -182,6 +196,8 @@ const userSchema = new Schema(
   },
   { timestamps: true, versionKey: false }
 );
+
+userSchema.add(baseSchema);
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;

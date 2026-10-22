@@ -35,13 +35,57 @@ test.describe('Dark mode — persistence', () => {
     await expect(page.locator('html')).toHaveClass(/dark/);
 
     // The body background should actually be the dark token, not white.
-    const bg = await page.evaluate(
-      () => getComputedStyle(document.body).backgroundColor
-    );
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bg).not.toBe('rgb(255, 255, 255)');
 
     await page.reload();
     await expect(page.locator('html')).toHaveClass(/dark/);
+  });
+
+  test('a persisted light preference survives reloads', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('theme', 'light'));
+
+    await page.goto('/login');
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
+
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
+  });
+
+  test('the preference is stored under localStorage["theme"] across sessions', async ({
+    page,
+    context,
+  }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    await loginPage.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).not.toHaveURL(/\/login/);
+
+    await page.getByRole('button', { name: /switch to dark mode/i }).click();
+    await expect(page.locator('html')).toHaveClass(/dark/);
+
+    // The toggle must write the choice to localStorage so it can be restored.
+    const stored = await page.evaluate(() => window.localStorage.getItem('theme'));
+    expect(stored).toBe('dark');
+
+    // Simulate a brand-new session: drop all in-memory state but keep storage.
+    const storageState = await context.storageState();
+    const newPage = await context.newPage();
+    await newPage.addInitScript(() => {
+      // no-op; storage state is applied by the context below
+    });
+    await context.addInitScript(() => {
+      // ensure the persisted value is present before the app boots
+    });
+    await newPage.close();
+
+    const freshContext = await page.context().browser()!.newContext({ storageState });
+    const freshPage = await freshContext.newPage();
+    await freshPage.goto('/');
+    await expect(freshPage.locator('html')).toHaveClass(/dark/);
+    const freshStored = await freshPage.evaluate(() => window.localStorage.getItem('theme'));
+    expect(freshStored).toBe('dark');
+    await freshContext.close();
   });
 });
 
@@ -68,5 +112,42 @@ test.describe('Dark mode — toggle from the UI', () => {
     // And can be switched back.
     await page.getByRole('button', { name: /switch to light mode/i }).click();
     await expect(html).not.toHaveClass(/dark/);
+  });
+});
+
+test.describe('Dark mode — applied across pages', () => {
+  test.use({ colorScheme: 'light' });
+
+  // Routes that should honour the persisted dark preference. The portal
+  // subsection is included explicitly so its pages are covered too.
+  const routes = [
+    '/',
+    '/patients',
+    '/encounters',
+    '/payments',
+    '/cds',
+    '/analytics',
+    '/portal',
+    '/portal/appointments',
+    '/portal/messages',
+    '/portal/records',
+  ];
+
+  test('the dark class is applied on every page', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('theme', 'dark'));
+
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    await loginPage.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).not.toHaveURL(/\/login/);
+
+    for (const route of routes) {
+      await page.goto(route);
+      await expect(page.locator('html')).toHaveClass(/dark/);
+
+      // The page background should be the dark token, not white.
+      const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      expect(bg, `body background on ${route}`).not.toBe('rgb(255, 255, 255)');
+    }
   });
 });

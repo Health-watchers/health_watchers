@@ -1,5 +1,78 @@
+/**
+ * SMS OTP Service (Issue #1430)
+ *
+ * Thin OTP management layer that delegates actual SMS delivery to the
+ * provider selected by the SMS_PROVIDER environment variable:
+ *
+ *   SMS_PROVIDER=console  (default) – logs to stdout, no external call
+ *   SMS_PROVIDER=twilio             – Twilio REST API
+ *   SMS_PROVIDER=sns                – AWS SNS
+ *
+ * Each provider validates required env vars at module load time and
+ * throws during startup (not at request time) if configuration is missing.
+ *
+ * Actual delivery goes through the smsQueue (BullMQ) so failures are
+ * retried with exponential back-off without blocking the HTTP response.
+ */
+
 import crypto from 'crypto';
 import logger from '@api/utils/logger';
+import {
+  SmsProvider,
+  ConsoleSmsProvider,
+  TwilioSmsProvider,
+  SnsSmsProvider,
+} from './sms-providers';
+import { enqueueSms } from './sms-queue';
+
+// ── Provider factory (validates env at startup) ───────────────────────────────
+
+function createSmsProvider(): SmsProvider {
+  const provider = (process.env.SMS_PROVIDER ?? 'console').toLowerCase();
+
+  switch (provider) {
+    case 'twilio': {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+      if (!accountSid || !authToken || !fromNumber) {
+        throw new Error(
+          '[SMS] SMS_PROVIDER=twilio requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to be set'
+        );
+      }
+      logger.info('[SMS] Using Twilio provider');
+      return new TwilioSmsProvider(accountSid, authToken, fromNumber);
+    }
+
+    case 'sns': {
+      const region = process.env.AWS_REGION ?? 'us-east-1';
+      logger.info({ region }, '[SMS] Using AWS SNS provider');
+      return new SnsSmsProvider(region);
+    }
+
+    case 'console':
+    default:
+      logger.info('[SMS] Using console provider (development mode)');
+      return new ConsoleSmsProvider();
+  }
+}
+
+// Singleton provider — initialised once at module load
+let _provider: SmsProvider | null = null;
+
+export function getSmsProvider(): SmsProvider {
+  if (!_provider) {
+    _provider = createSmsProvider();
+  }
+  return _provider;
+}
+
+/** Replace the provider (used in tests). */
+export function setSmsProvider(p: SmsProvider): void {
+  _provider = p;
+}
+
+// ── OTP store ─────────────────────────────────────────────────────────────────
 
 interface SmsOtpStore {
   [phoneNumber: string]: {
@@ -64,23 +137,29 @@ export const smsOtpService = {
   },
 
   /**
-   * Send SMS (mock implementation - integrate with Twilio/AWS SNS in production)
+   * Send SMS OTP via the configured provider.
+   *
+   * In test environments the call is skipped entirely.
+   * In all other environments the message is enqueued in BullMQ for delivery
+   * with automatic exponential-backoff retry on failure.
    */
-  async sendSms(phoneNumber: string, code: string): Promise<void> {
+  async sendSms(
+    phoneNumber: string,
+    code: string,
+    opts?: { patientId?: string; clinicId?: string; sentById?: string }
+  ): Promise<void> {
     if (process.env.NODE_ENV === 'test') return;
 
-    try {
-      // TODO: Integrate with Twilio or AWS SNS
-      // const message = `Your Health Watchers verification code is: ${code}. Valid for 10 minutes.`;
-      // await twilioClient.messages.create({
-      //   body: message,
-      //   from: process.env.TWILIO_PHONE_NUMBER,
-      //   to: phoneNumber,
-      // });
-      logger.info({ phoneNumber }, 'SMS OTP sent (mock)');
-    } catch (err) {
-      logger.error({ err, phoneNumber }, 'Failed to send SMS OTP');
-      throw err;
-    }
+    const message = `Your Health Watchers verification code is: ${code}. Valid for 10 minutes.`;
+
+    await enqueueSms({
+      to: phoneNumber,
+      body: message,
+      patientId: opts?.patientId,
+      clinicId: opts?.clinicId,
+      sentById: opts?.sentById,
+    });
+
+    logger.info({ phoneNumber }, 'SMS OTP enqueued for delivery');
   },
 };

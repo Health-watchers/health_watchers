@@ -19,8 +19,9 @@ export function cacheResponse(ttl: number, keyFn?: (req: Request) => string): Re
     // Intercept res.json to cache the outgoing response
     const originalJson = res.json.bind(res);
     res.json = (body: unknown) => {
-      // Only cache successful responses
-      if (res.statusCode >= 200 && res.statusCode < 300) {
+      // Only cache successful responses; handlers can opt out via res.locals.skipCache
+      // (e.g. records served under a time-limited emergency access grant)
+      if (res.statusCode >= 200 && res.statusCode < 300 && !res.locals.skipCache) {
         cache.set(key, body, ttl).catch(() => {
           /* already logged inside cache.set */
         });

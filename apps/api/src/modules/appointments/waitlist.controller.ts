@@ -9,6 +9,8 @@ import { asyncHandler } from '@api/utils/asyncHandler';
 const objectIdRegex = /^[a-f\d]{24}$/i;
 
 const joinSchema = z.object({
+  // Staff may add a patient on their behalf; patients always join as themselves
+  patientId: z.string().regex(objectIdRegex).optional(),
   doctorId: z.string().regex(objectIdRegex).optional(),
   requestedDate: z.string().datetime({ offset: true }),
   appointmentType: z.enum(['consultation', 'follow-up', 'procedure', 'emergency']),
@@ -23,7 +25,11 @@ router.post(
   '/',
   validateRequest({ body: joinSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { clinicId, patientId } = req.user!;
+    const { clinicId, role } = req.user!;
+    const patientId = role === 'PATIENT' ? req.user!.patientId : req.body.patientId;
+    if (!patientId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'patientId is required' });
+    }
 
     // Prevent duplicate active entries
     const existing = await WaitlistModel.findOne({
@@ -66,10 +72,10 @@ router.post(
   })
 );
 
-// GET /waitlist — list (CLINIC_ADMIN only)
+// GET /waitlist — list (clinic staff)
 router.get(
   '/',
-  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT'),
   asyncHandler(async (req: Request, res: Response) => {
     const { clinicId } = req.user!;
     const status = (req.query.status as string) || 'waiting';
@@ -79,6 +85,7 @@ router.get(
       ...(status !== 'all' ? { status } : {}),
     })
       .sort({ priorityOrder: -1, addedAt: 1 }) // urgent first, then FIFO
+      .populate('patientId', 'firstName lastName systemId')
       .lean();
 
     return res.json({ status: 'success', data: entries });

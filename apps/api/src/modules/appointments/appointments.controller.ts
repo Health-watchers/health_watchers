@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { z } from 'zod';
 import { AppointmentModel } from './appointment.model';
 import { toAppointmentResponse } from './appointments.transformer';
 import { authenticate } from '@api/middlewares/auth.middleware';
@@ -14,7 +15,8 @@ import {
   doctorIdParamsSchema,
   videoStartSchema,
 } from './appointments.validation';
-import { SocketService } from '../../services/socket.service';
+import { withOutboxTransaction, OutboxEventInput } from '../outbox/outbox.service';
+import type { OutboxTarget } from '../outbox/outbox-event.model';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
@@ -57,42 +59,123 @@ async function hasConflict(
   });
 }
 
-async function emitAppointmentStatusChange(
+const STATUS_SOCKET_EVENTS: Record<string, string> = {
+  confirmed: 'appointment:confirmed',
+  cancelled: 'appointment:cancelled',
+  rescheduled: 'appointment:rescheduled',
+  patient_arrived: 'appointment:patient_arrived',
+};
+
+const STATUS_WEBHOOK_EVENTS: Record<string, string> = {
+  scheduled: 'appointment.created',
+  cancelled: 'appointment.cancelled',
+};
+
+/**
+ * Build the outbox event for an appointment status change (#1432): the
+ * Socket.IO updates to the appointment and clinic rooms plus, for creation and
+ * cancellation, the outbound webhook. Returns null when nothing is published.
+ */
+function appointmentStatusEvent(
   appointmentId: string,
   status: string,
   appointment: any,
-  additionalData?: any
-) {
-  try {
-    const socketService = SocketService.getInstance();
-    const eventMap = {
-      confirmed: 'appointment:confirmed',
-      cancelled: 'appointment:cancelled',
-      rescheduled: 'appointment:rescheduled',
-      patient_arrived: 'appointment:patient_arrived',
-    };
-
-    const event = eventMap[status as keyof typeof eventMap];
-    if (event) {
-      socketService.emitAppointmentUpdate(appointmentId, event, {
-        appointment,
-        ...additionalData,
-      });
-
-      // Also emit to clinic for staff notifications
-      socketService.emitToClinic(appointment.clinicId.toString(), event, {
-        appointmentId,
-        appointment,
-        ...additionalData,
-      });
-    }
-  } catch (error) {
-    // Log error but don't fail the request
-    console.error('Failed to emit socket event:', error);
+  additionalData?: Record<string, unknown>
+): OutboxEventInput | null {
+  const clinicId = String(appointment.clinicId);
+  const targets: OutboxTarget[] = [];
+  const socketEvent = STATUS_SOCKET_EVENTS[status];
+  if (socketEvent) {
+    targets.push(
+      {
+        kind: 'socket',
+        via: 'socket-service',
+        room: 'appointment',
+        id: appointmentId,
+        event: socketEvent,
+        data: { appointment, ...additionalData },
+      },
+      {
+        kind: 'socket',
+        via: 'socket-service',
+        room: 'clinic',
+        id: clinicId,
+        event: socketEvent,
+        data: { appointmentId, appointment, ...additionalData },
+      }
+    );
   }
+  const webhookEvent = STATUS_WEBHOOK_EVENTS[status];
+  if (webhookEvent) targets.push({ kind: 'webhook', event: webhookEvent });
+  if (targets.length === 0) return null;
+
+  return {
+    type: `appointment.${status}`,
+    aggregateType: 'Appointment',
+    aggregateId: appointmentId,
+    clinicId,
+    payload: { appointmentId, status, appointment, ...additionalData },
+    targets,
+  };
 }
 
 // ── POST /appointments/:id/check-in ───────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}/check-in:
+ *   post:
+ *     summary: Check in a patient for their appointment
+ *     description: Marks a confirmed or scheduled appointment as patient_arrived and notifies the assigned doctor.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Patient checked in successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, example: '507f1f77bcf86cd799439020' }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer, example: 30 }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, example: patient_arrived, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                     notes: { type: string, nullable: true }
+ *                     checkedInAt: { type: string, format: date-time, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *                 message: { type: string, example: 'Patient checked in successfully' }
+ *       400:
+ *         description: Appointment is not in a confirmed or scheduled state
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.post(
   '/:id/check-in',
   validateRequest({ params: appointmentIdParamsSchema }),
@@ -118,22 +201,24 @@ appointmentRoutes.post(
         });
       }
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        { 
-          status: 'patient_arrived',
-          checkedInAt: new Date(),
-        },
-        { new: true, runValidators: true }
-      ).lean();
-
-      // Emit real-time event
-      await emitAppointmentStatusChange(
-        req.params.id,
-        'patient_arrived',
-        updated!,
-        { checkedInAt: updated?.checkedInAt }
-      );
+      // The status change and its real-time event commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          {
+            status: 'patient_arrived',
+            checkedInAt: new Date(),
+          },
+          { new: true, runValidators: true, session }
+        ).lean();
+        const event =
+          doc &&
+          appointmentStatusEvent(req.params.id, 'patient_arrived', doc, {
+            checkedInAt: doc.checkedInAt,
+          });
+        if (event) await emit(event);
+        return doc;
+      });
 
       // Create notification for staff
       await NotificationModel.create({
@@ -163,6 +248,53 @@ appointmentRoutes.post(
 );
 
 // ── GET /appointments/doctor/:doctorId/availability ───────────────────────────
+/**
+ * @swagger
+ * /appointments/doctor/{doctorId}/availability:
+ *   get:
+ *     summary: Get a doctor's 30-minute appointment slot availability for a given day
+ *     description: Generates slots from 08:00 to 17:00 local time and marks each as available or booked based on existing scheduled/confirmed appointments.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: doctorId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Doctor's user MongoDB ObjectId
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$', example: '2026-09-15' }
+ *         description: Date to check availability for, in YYYY-MM-DD format
+ *     responses:
+ *       200:
+ *         description: List of 30-minute slots with availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       time: { type: string, format: date-time }
+ *                       available: { type: boolean }
+ *       400:
+ *         description: Invalid date format
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.get(
   '/doctor/:doctorId/availability',
   validateRequest({ params: doctorIdParamsSchema, query: availabilityQuerySchema }),
@@ -215,6 +347,84 @@ appointmentRoutes.get(
 );
 
 // ── GET /appointments ─────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments:
+ *   get:
+ *     summary: List appointments for the caller's clinic
+ *     description: Patients only see their own appointments (patientId is forced to the caller's ID); other roles may filter by doctorId/patientId.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: doctorId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: patientId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show] }
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Paginated list of appointments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       patientId: { type: string }
+ *                       doctorId: { type: string }
+ *                       clinicId: { type: string }
+ *                       scheduledAt: { type: string, format: date-time }
+ *                       duration: { type: integer, example: 30 }
+ *                       type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                       status: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                       notes: { type: string, nullable: true }
+ *                       checkedInAt: { type: string, format: date-time, nullable: true }
+ *                       createdAt: { type: string, format: date-time }
+ *                       updatedAt: { type: string, format: date-time }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer, example: 1 }
+ *                     limit: { type: integer, example: 20 }
+ *                     total: { type: integer, example: 42 }
+ *                     pages: { type: integer, example: 3 }
+ *                     totalPages: { type: integer, example: 3 }
+ *                     hasNext: { type: boolean }
+ *                     hasPrev: { type: boolean }
+ *       400:
+ *         description: Invalid query parameters
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.get(
   '/',
   validateRequest({ query: listAppointmentsQuerySchema }),
@@ -262,6 +472,56 @@ appointmentRoutes.get(
 );
 
 // ── GET /appointments/:id ─────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}:
+ *   get:
+ *     summary: Get a single appointment
+ *     description: Patients may only fetch their own appointments; other roles are scoped to their clinic.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Appointment details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer, example: 30 }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                     notes: { type: string, nullable: true }
+ *                     checkedInAt: { type: string, format: date-time, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.get(
   '/:id',
   validateRequest({ params: appointmentIdParamsSchema }),
@@ -283,6 +543,74 @@ appointmentRoutes.get(
 );
 
 // ── POST /appointments ────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments:
+ *   post:
+ *     summary: Create a new appointment
+ *     description: Checks the doctor's existing appointments and staff schedule for conflicts before creating.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [patientId, doctorId, scheduledAt, type]
+ *             properties:
+ *               patientId: { type: string, example: '507f1f77bcf86cd799439011' }
+ *               doctorId: { type: string, example: '507f1f77bcf86cd799439012' }
+ *               scheduledAt: { type: string, format: date-time, example: '2026-09-15T14:00:00.000Z' }
+ *               duration: { type: integer, minimum: 1, default: 30, description: 'Duration in minutes' }
+ *               type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *               chiefComplaint: { type: string }
+ *               notes: { type: string }
+ *     responses:
+ *       201:
+ *         description: Appointment created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer, example: 30 }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, example: scheduled, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                     notes: { type: string, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: The doctor already has an appointment during this time slot, or is not available per their schedule
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *             examples:
+ *               timeSlotUnavailable:
+ *                 value: { error: TimeSlotUnavailable, message: 'The doctor already has an appointment during this time slot' }
+ *               doctorUnavailable:
+ *                 value: { error: DoctorUnavailable, message: 'The doctor is not available at this time' }
+ */
 appointmentRoutes.post(
   '/',
   validateRequest({ body: createAppointmentSchema }),
@@ -309,19 +637,27 @@ appointmentRoutes.post(
         });
       }
 
-      const appointment = await AppointmentModel.create({
-        patientId,
-        doctorId,
-        clinicId,
-        scheduledAt: start,
-        duration: duration ?? 30,
-        type,
-        chiefComplaint,
-        notes,
+      // The appointment and its `appointment.created` webhook commit together (#1432).
+      const appointment = await withOutboxTransaction(async (session, emit) => {
+        const [doc] = await AppointmentModel.create(
+          [
+            {
+              patientId,
+              doctorId,
+              clinicId,
+              scheduledAt: start,
+              duration: duration ?? 30,
+              type,
+              chiefComplaint,
+              notes,
+            },
+          ],
+          { session }
+        );
+        const event = appointmentStatusEvent(doc._id.toString(), 'scheduled', doc.toObject());
+        if (event) await emit(event);
+        return doc;
       });
-
-      // Emit appointment created event
-      await emitAppointmentStatusChange(appointment._id.toString(), 'scheduled', appointment);
 
       // Create notification for doctor
       await NotificationModel.create({
@@ -344,6 +680,80 @@ appointmentRoutes.post(
 );
 
 // ── PUT /appointments/:id ─────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}:
+ *   put:
+ *     summary: Update an appointment
+ *     description: Re-checks for scheduling conflicts if scheduledAt or duration changes, and emits status/reschedule events as applicable.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               scheduledAt: { type: string, format: date-time }
+ *               duration: { type: integer, minimum: 1 }
+ *               type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *               status: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show] }
+ *               chiefComplaint: { type: string }
+ *               notes: { type: string }
+ *               encounterId: { type: string }
+ *     responses:
+ *       200:
+ *         description: Appointment updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                     notes: { type: string, nullable: true }
+ *                     checkedInAt: { type: string, format: date-time, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: The doctor already has an appointment during this time slot, or is not available per their schedule
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.put(
   '/:id',
   validateRequest({ params: appointmentIdParamsSchema, body: updateAppointmentSchema }),
@@ -377,16 +787,31 @@ appointmentRoutes.put(
         }
       }
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
-        { new: true, runValidators: true },
-      ).lean();
+      const statusChanged = !!status && status !== existing.status;
+      const rescheduled = !!scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime();
 
-      // Emit real-time events for status changes
-      if (status && status !== existing.status) {
-        await emitAppointmentStatusChange(req.params.id, status, updated);
-        
+      // The update and its real-time events commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
+          { new: true, runValidators: true, session },
+        ).lean();
+        if (!doc) return doc;
+        const events = [
+          statusChanged ? appointmentStatusEvent(req.params.id, status, doc) : null,
+          rescheduled
+            ? appointmentStatusEvent(req.params.id, 'rescheduled', doc, {
+                oldScheduledAt: existing.scheduledAt.toISOString(),
+                newScheduledAt: newStart.toISOString(),
+              })
+            : null,
+        ];
+        for (const event of events) if (event) await emit(event);
+        return doc;
+      });
+
+      if (statusChanged) {
         // Create notification
         await NotificationModel.create({
           userId: existing.patientId,
@@ -402,14 +827,6 @@ appointmentRoutes.put(
         });
       }
 
-      // Emit rescheduled event if time changed
-      if (scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime()) {
-        await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
-          oldScheduledAt: existing.scheduledAt.toISOString(),
-          newScheduledAt: newStart.toISOString(),
-        });
-      }
-
       return res.json({ status: 'success', data: toAppointmentResponse(updated, req.user!.role) });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -418,6 +835,69 @@ appointmentRoutes.put(
 );
 
 // ── DELETE /appointments/:id (cancel) ─────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}:
+ *   delete:
+ *     summary: Cancel an appointment
+ *     description: Sets status to cancelled, notifies the patient and doctor, and offers the freed slot to the next patient on the waitlist.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [cancellationReason]
+ *             properties:
+ *               cancellationReason: { type: string, minLength: 1, example: 'Patient requested reschedule' }
+ *     responses:
+ *       200:
+ *         description: Appointment cancelled
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, example: cancelled }
+ *                     notes: { type: string, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Validation error (missing cancellationReason)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.delete(
   '/:id',
   validateRequest({ params: appointmentIdParamsSchema, body: cancelAppointmentSchema }),
@@ -430,21 +910,27 @@ appointmentRoutes.delete(
 
       const { cancellationReason } = req.body;
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
-        {
-          status: 'cancelled',
-          cancelledBy: new Types.ObjectId(userId),
-          cancelledAt: new Date(),
-          cancellationReason,
-        },
-        { new: true },
-      ).lean();
-
-      // Emit real-time cancellation event
-      await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
-        cancelledBy: userId,
-        cancellationReason,
+      // The cancellation, its real-time event and the `appointment.cancelled`
+      // webhook commit together (#1432).
+      const updated = await withOutboxTransaction(async (session, emit) => {
+        const doc = await AppointmentModel.findByIdAndUpdate(
+          req.params.id,
+          {
+            status: 'cancelled',
+            cancelledBy: new Types.ObjectId(userId),
+            cancelledAt: new Date(),
+            cancellationReason,
+          },
+          { new: true, session },
+        ).lean();
+        const event =
+          doc &&
+          appointmentStatusEvent(req.params.id, 'cancelled', doc, {
+            cancelledBy: userId,
+            cancellationReason,
+          });
+        if (event) await emit(event);
+        return doc;
       });
 
       // Create notifications for both patient and doctor
@@ -491,6 +977,62 @@ appointmentRoutes.delete(
 
 
 // ── POST /appointments/:id/video-room (create video room) ──────────────────────
+/**
+ * @swagger
+ * /appointments/{id}/video-room:
+ *   post:
+ *     summary: Create a telemedicine video room for an appointment
+ *     description: Provisions a video room with the appointment's configured provider (defaults to daily.co) and marks the appointment as telemedicine.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Video room created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     appointment:
+ *                       type: object
+ *                       description: Full appointment document (raw, not the trimmed response shape)
+ *                       properties:
+ *                         _id: { type: string }
+ *                         patientId: { type: string }
+ *                         doctorId: { type: string }
+ *                         clinicId: { type: string }
+ *                         isTelemedicine: { type: boolean, example: true }
+ *                         videoRoomId: { type: string, example: 'room-9c6b8f2a-...' }
+ *                         videoRoomUrl: { type: string, example: 'https://health-watchers.daily.co/room-9c6b8f2a-...' }
+ *                         videoProvider: { type: string, enum: [daily.co, jitsi, twilio_video] }
+ *                     videoRoom:
+ *                       type: object
+ *                       properties:
+ *                         roomId: { type: string }
+ *                         roomUrl: { type: string }
+ *                         provider: { type: string, enum: [daily.co, jitsi, twilio_video] }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.post(
   '/:id/video-room',
   validateRequest({ params: appointmentIdParamsSchema }),
@@ -530,6 +1072,52 @@ appointmentRoutes.post(
 );
 
 // ── GET /appointments/:id/video-token (get video access token) ────────────────
+/**
+ * @swagger
+ * /appointments/{id}/video-token:
+ *   get:
+ *     summary: Get a video access token for an appointment's video room
+ *     description: The video room must already exist (created via POST /appointments/{id}/video-room). Participant name is derived from whether the caller is the assigned doctor.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Video access token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     token: { type: string, example: 'daily-token-9c6b8f2a-...' }
+ *                     roomId: { type: string }
+ *                     provider: { type: string, enum: [daily.co, jitsi, twilio_video] }
+ *       400:
+ *         description: Video room not created for this appointment
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.get(
   '/:id/video-token',
   validateRequest({ params: appointmentIdParamsSchema }),
@@ -559,6 +1147,68 @@ appointmentRoutes.get(
 );
 
 // ── POST /appointments/:id/video/start ────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}/video/start:
+ *   post:
+ *     summary: Mark a telemedicine video session as started
+ *     description: Records the start time and recording consent, then notifies both the doctor and patient over Socket.IO.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               recordingConsent: { type: boolean, example: true }
+ *     responses:
+ *       200:
+ *         description: Video session started
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     patientId: { type: string }
+ *                     doctorId: { type: string }
+ *                     clinicId: { type: string }
+ *                     scheduledAt: { type: string, format: date-time }
+ *                     duration: { type: integer }
+ *                     type: { type: string, enum: [consultation, follow-up, procedure, emergency] }
+ *                     status: { type: string, enum: [scheduled, confirmed, cancelled, completed, no-show, patient_arrived] }
+ *                     notes: { type: string, nullable: true }
+ *                     createdAt: { type: string, format: date-time }
+ *                     updatedAt: { type: string, format: date-time }
+ *       400:
+ *         description: Video room not created for this appointment
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.post(
   '/:id/video/start',
   validateRequest({ params: appointmentIdParamsSchema, body: videoStartSchema }),
@@ -598,6 +1248,69 @@ appointmentRoutes.post(
 );
 
 // ── POST /appointments/:id/video/end ──────────────────────────────────────────
+/**
+ * @swagger
+ * /appointments/{id}/video/end:
+ *   post:
+ *     summary: End a telemedicine video session and create an encounter
+ *     description: Records the end time and computed duration, marks the appointment completed, notifies both parties over Socket.IO, and creates a telemedicine encounter linked to the appointment.
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Appointment MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: Video session ended and encounter created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     appointment:
+ *                       type: object
+ *                       description: Full appointment document (raw, not the trimmed response shape)
+ *                       properties:
+ *                         _id: { type: string }
+ *                         status: { type: string, example: completed }
+ *                         videoEndedAt: { type: string, format: date-time }
+ *                         videoDuration: { type: integer, description: 'Minutes' }
+ *                         encounterId: { type: string }
+ *                     encounter:
+ *                       type: object
+ *                       properties:
+ *                         _id: { type: string }
+ *                         patientId: { type: string }
+ *                         doctorId: { type: string }
+ *                         clinicId: { type: string }
+ *                         type: { type: string, example: telemedicine }
+ *                         status: { type: string, example: open }
+ *                         chiefComplaint: { type: string, nullable: true }
+ *                         appointmentId: { type: string }
+ *       400:
+ *         description: Video session was not started
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Appointment not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 appointmentRoutes.post(
   '/:id/video/end',
   validateRequest({ params: appointmentIdParamsSchema }),
@@ -648,92 +1361,137 @@ appointmentRoutes.post(
   },
 );
 
-// ── GET /appointments/doctor/:doctorId/availability/enhanced ──────────────────
-// Enhanced availability endpoint with configurable slot sizes, buffer times,
-// cluster context, and clinic-hours awareness.
-//
-// Query params:
-//   date         – YYYY-MM-DD (required)
-//   duration     – slot duration in minutes (default 30)
-//   bufferBefore – buffer before each slot in minutes (default 0)
-//   bufferAfter  – buffer after each slot in minutes (default 0)
-//   openHour     – clinic opens at this hour, 0-23 (default 8)
-//   closeHour    – clinic closes at this hour, 0-23 (default 17)
-const enhancedAvailabilityQuerySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-  duration: z.coerce.number().int().positive().max(480).optional().default(30),
-  bufferBefore: z.coerce.number().int().min(0).max(60).optional().default(0),
-  bufferAfter: z.coerce.number().int().min(0).max(60).optional().default(0),
-  openHour: z.coerce.number().int().min(0).max(23).optional().default(8),
-  closeHour: z.coerce.number().int().min(0).max(23).optional().default(17),
-});
-
-// We need zod inline since the controller imports it transitively through validation
-import { z } from 'zod';
-import { getDoctorAvailability } from './appointment-availability.service';
-
-appointmentRoutes.get(
-  '/doctor/:doctorId/availability/enhanced',
+// ── POST /appointments/bulk (bulk reschedule/cancel) ────────────────────────────
+/**
+ * @swagger
+ * /appointments/bulk:
+ *   post:
+ *     summary: Bulk reschedule or cancel appointments
+ *     description: Reschedule or cancel multiple appointments in bulk for a provider's day
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [actions]
+ *             properties:
+ *               actions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     appointmentId: { type: string }
+ *                     action: { type: string, enum: [reschedule, cancel] }
+ *                     rescheduleData:
+ *                       type: object
+ *                       properties:
+ *                         newDoctorId: { type: string }
+ *                         newScheduledAt: { type: string, format: date-time }
+ *                     cancelReason: { type: string }
+ *               dryRun: { type: boolean, default: false }
+ *     responses:
+ *       200:
+ *         description: Bulk operation results
+ */
+appointmentRoutes.post(
+  '/bulk',
   validateRequest({
-    params: doctorIdParamsSchema,
-    query: enhancedAvailabilityQuerySchema,
-  }),
-  async (req: Request, res: Response) => {
-    try {
-      const { clinicId } = req.user!;
-      const { doctorId } = req.params;
-      const { date, duration, bufferBefore, bufferAfter, openHour, closeHour } =
-        req.query as {
-          date: string;
-          duration?: string;
-          bufferBefore?: string;
-          bufferAfter?: string;
-          openHour?: string;
-          closeHour?: string;
-        };
-
-      const result = await getDoctorAvailability(
-        doctorId,
-        clinicId,
-        new Date(date),
-        Number(duration ?? 30),
-        Number(bufferBefore ?? 0),
-        Number(bufferAfter ?? 0),
-        Number(openHour ?? 8),
-        Number(closeHour ?? 17),
-      );
-
-      return res.json({ status: 'success', data: result });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
-    }
-  },
-);
-
-// ── GET /appointments/doctor/:doctorId/clusters ───────────────────────────────
-// Returns appointment clustering stats for a doctor on a given day.
-// Useful for the scheduler to understand busy windows vs. fragmented slots.
-import { clusterAppointmentsForDoctor } from './appointment-clustering.service';
-
-appointmentRoutes.get(
-  '/doctor/:doctorId/clusters',
-  validateRequest({
-    params: doctorIdParamsSchema,
-    query: z.object({
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    body: z.object({
+      actions: z.array(
+        z.object({
+          appointmentId: z.string(),
+          action: z.enum(['reschedule', 'cancel']),
+          rescheduleData: z
+            .object({
+              newDoctorId: z.string().optional(),
+              newScheduledAt: z.string().datetime().optional(),
+            })
+            .optional(),
+          cancelReason: z.string().optional(),
+        })
+      ),
+      dryRun: z.boolean().default(false),
     }),
   }),
   async (req: Request, res: Response) => {
     try {
-      const { clinicId } = req.user!;
-      const { doctorId } = req.params;
-      const { date } = req.query as { date: string };
+      const { clinicId, userId } = req.user!;
+      const { appointmentsBulkService } = await import('./appointments-bulk.service');
 
-      const stats = await clusterAppointmentsForDoctor(doctorId, clinicId, new Date(date));
+      const actions = req.body.actions.map((a: any) => ({
+        ...a,
+        rescheduleData: a.rescheduleData ? {
+          ...a.rescheduleData,
+          newScheduledAt: a.rescheduleData.newScheduledAt ? new Date(a.rescheduleData.newScheduledAt) : undefined,
+        } : undefined,
+      }));
 
-      return res.json({ status: 'success', data: stats });
+      if (req.body.dryRun) {
+        const conflicts = await appointmentsBulkService.dryRun(actions);
+        return res.json({ dryRun: true, conflicts });
+      }
+
+      const results = await appointmentsBulkService.executeBulk(actions, userId, clinicId);
+      return res.json({ results });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
   },
 );
+
+// ── POST /appointments/check-in/:token (QR check-in) ──────────────────────────
+/**
+ * @swagger
+ * /appointments/check-in/{token}:
+ *   post:
+ *     summary: Check in using QR code token
+ *     description: Patient self check-in using signed token from QR code
+ *     tags: [Appointments]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Successfully checked in
+ *       400:
+ *         description: Token invalid or check-in window closed
+ *       404:
+ *         description: Appointment not found
+ */
+appointmentRoutes.post('/check-in/:token', async (req: Request, res: Response) => {
+  try {
+    const clinicId = req.user?.clinicId || req.query.clinicId;
+    if (!clinicId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'Clinic ID required' });
+    }
+
+    const { qrCheckinService } = await import('./qr-checkin.service');
+    const result = await qrCheckinService.validateAndCheckIn(req.params.token, String(clinicId));
+
+    if (!result.success) {
+      return res.status(400).json({ error: 'BadRequest', message: result.error });
+    }
+
+    // Emit socket event for real-time update
+    const { SocketService } = await import('../../services/socket.service');
+    const socketService = SocketService.getInstance();
+    const appointment = await AppointmentModel.findById(result.appointmentId).lean();
+
+    if (appointment) {
+      socketService.emitToClinic(String(appointment.clinicId), 'appointment:checked_in', {
+        appointmentId: result.appointmentId,
+        patientId: String(appointment.patientId),
+      });
+    }
+
+    return res.json({ status: 'success', data: { appointmentId: result.appointmentId } });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'InternalError', message: err.message });
+  }
+});

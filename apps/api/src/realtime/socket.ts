@@ -1,7 +1,11 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
+import { verifyAccessTokenAsync, TokenPayload } from '../modules/auth/token.service';
 import { config } from '@health-watchers/config';
+import { CollaborationHandler } from './collaboration.handler';
+import { PresenceHandler } from './presence.handler';
+import { SyncHandler } from './sync.handler';
+import logger from '../utils/logger';
 
 let io: SocketIOServer | null = null;
 
@@ -23,10 +27,12 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
       },
       credentials: true,
     },
+    transports: ['websocket', 'polling'],
   });
 
-  // JWT authentication middleware
-  io.use((socket: Socket, next: (err?: Error) => void) => {
+  // JWT authentication middleware — checks signature, expiry and the denylist
+  // so revoked (logged-out) tokens cannot open a realtime channel.
+  io.use(async (socket: Socket, next: (err?: Error) => void) => {
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.replace('Bearer ', '');
@@ -35,7 +41,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
       return next(new Error('Authentication required'));
     }
 
-    const payload = verifyAccessToken(token);
+    const payload = await verifyAccessTokenAsync(token);
     if (!payload) {
       return next(new Error('Invalid or expired token'));
     }
@@ -53,9 +59,23 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     socket.join(clinicRoom);
     socket.join(userRoom);
 
+    logger.info(`User connected: ${user.userId} (socket: ${socket.id})`);
+
+    // Register real-time collaboration handlers (Issue #1234)
+    CollaborationHandler.registerHandlers(socket, user.userId, user.userName || user.email);
+
+    // Register presence handlers (Issue #1234)
+    PresenceHandler.registerHandlers(
+      socket,
+      user.userId,
+      user.userName || user.email,
+      user.clinicId
+    );
+
     socket.on('disconnect', () => {
       socket.leave(clinicRoom);
       socket.leave(userRoom);
+      logger.info(`User disconnected: ${user.userId} (socket: ${socket.id})`);
     });
   });
 

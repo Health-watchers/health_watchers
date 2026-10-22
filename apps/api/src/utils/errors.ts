@@ -20,6 +20,8 @@
 import { AppError } from './app-error';
 import { ApiErrorCode } from '@health-watchers/types';
 
+export { AppError };
+
 // ─── Auth Errors ──────────────────────────────────────────────────────────────
 
 const auth = {
@@ -40,11 +42,15 @@ const auth = {
     const hint = unlockAfterMinutes
       ? ` Your account will be unlocked in ${unlockAfterMinutes} minute(s).`
       : ' Please contact support to unlock your account.';
-    return new AppError(`Your account has been locked due to too many failed login attempts.${hint}`, 401, {
-      severity: 'medium',
-      category: 'authentication',
-      code: ApiErrorCode.ACCOUNT_LOCKED,
-    });
+    return new AppError(
+      `Your account has been locked due to too many failed login attempts.${hint}`,
+      401,
+      {
+        severity: 'medium',
+        category: 'authentication',
+        code: ApiErrorCode.ACCOUNT_LOCKED,
+      }
+    );
   },
 
   /**
@@ -81,31 +87,31 @@ const auth = {
    * JWT has expired.
    */
   tokenExpired: () =>
-    new AppError(
-      'Your session has expired. Please log in again to continue.',
-      401,
-      { severity: 'low', category: 'authentication', code: ApiErrorCode.TOKEN_EXPIRED }
-    ),
+    new AppError('Your session has expired. Please log in again to continue.', 401, {
+      severity: 'low',
+      category: 'authentication',
+      code: ApiErrorCode.TOKEN_EXPIRED,
+    }),
 
   /**
    * JWT signature is invalid or the token has been tampered with.
    */
   tokenInvalid: () =>
-    new AppError(
-      'The authentication token is invalid. Please log in again.',
-      401,
-      { severity: 'low', category: 'authentication', code: ApiErrorCode.INVALID_TOKEN }
-    ),
+    new AppError('The authentication token is invalid. Please log in again.', 401, {
+      severity: 'low',
+      category: 'authentication',
+      code: ApiErrorCode.INVALID_TOKEN,
+    }),
 
   /**
    * Refresh token is missing, expired, or has already been used.
    */
   refreshTokenInvalid: () =>
-    new AppError(
-      'Your session is no longer valid. Please log in again.',
-      401,
-      { severity: 'low', category: 'authentication', code: ApiErrorCode.INVALID_TOKEN }
-    ),
+    new AppError('Your session is no longer valid. Please log in again.', 401, {
+      severity: 'low',
+      category: 'authentication',
+      code: ApiErrorCode.INVALID_TOKEN,
+    }),
 
   /**
    * User does not have the required role for this action.
@@ -241,9 +247,7 @@ const payment = {
 
   insufficientBalance: (required?: string, available?: string) => {
     const detail =
-      required && available
-        ? ` Required: ${required} XLM, available: ${available} XLM.`
-        : '';
+      required && available ? ` Required: ${required} XLM, available: ${available} XLM.` : '';
     return new AppError(
       `Insufficient wallet balance to complete this payment.${detail} Please top up your Stellar wallet and try again.`,
       402,
@@ -252,18 +256,18 @@ const payment = {
   },
 
   alreadyConfirmed: () =>
-    new AppError(
-      'This payment has already been confirmed and cannot be modified.',
-      409,
-      { severity: 'low', category: 'conflict', code: ApiErrorCode.CONFLICT }
-    ),
+    new AppError('This payment has already been confirmed and cannot be modified.', 409, {
+      severity: 'low',
+      category: 'conflict',
+      code: ApiErrorCode.CONFLICT,
+    }),
 
   expired: () =>
-    new AppError(
-      'This payment intent has expired. Please create a new payment to proceed.',
-      410,
-      { severity: 'low', category: 'conflict', code: ApiErrorCode.BAD_REQUEST }
-    ),
+    new AppError('This payment intent has expired. Please create a new payment to proceed.', 410, {
+      severity: 'low',
+      category: 'conflict',
+      code: ApiErrorCode.BAD_REQUEST,
+    }),
 
   disputeAlreadyOpen: () =>
     new AppError(
@@ -277,19 +281,19 @@ const payment = {
 
 const validation = {
   missingField: (fieldName: string) =>
-    new AppError(
-      `"${fieldName}" is required and cannot be empty.`,
-      400,
-      { severity: 'low', category: 'validation', code: ApiErrorCode.VALIDATION_ERROR }
-    ),
+    new AppError(`"${fieldName}" is required and cannot be empty.`, 400, {
+      severity: 'low',
+      category: 'validation',
+      code: ApiErrorCode.VALIDATION_ERROR,
+    }),
 
   invalidFormat: (fieldName: string, expectedFormat?: string) => {
     const hint = expectedFormat ? ` Expected format: ${expectedFormat}.` : '';
-    return new AppError(
-      `"${fieldName}" has an invalid format.${hint}`,
-      400,
-      { severity: 'low', category: 'validation', code: ApiErrorCode.VALIDATION_ERROR }
-    );
+    return new AppError(`"${fieldName}" has an invalid format.${hint}`, 400, {
+      severity: 'low',
+      category: 'validation',
+      code: ApiErrorCode.VALIDATION_ERROR,
+    });
   },
 
   invalidObjectId: (fieldName: string) =>
@@ -300,11 +304,11 @@ const validation = {
     ),
 
   pageLimitExceeded: (max: number) =>
-    new AppError(
-      `Page size cannot exceed ${max}. Please reduce the "limit" parameter.`,
-      400,
-      { severity: 'low', category: 'validation', code: ApiErrorCode.BAD_REQUEST }
-    ),
+    new AppError(`Page size cannot exceed ${max}. Please reduce the "limit" parameter.`, 400, {
+      severity: 'low',
+      category: 'validation',
+      code: ApiErrorCode.BAD_REQUEST,
+    }),
 
   invalidCursor: () =>
     new AppError(
@@ -321,11 +325,11 @@ const rateLimit = {
     const hint = retryAfterSeconds
       ? ` Please wait ${retryAfterSeconds} second(s) before retrying.`
       : ' Please slow down and try again shortly.';
-    return new AppError(
-      `Too many requests.${hint}`,
-      429,
-      { severity: 'medium', category: 'rate_limit', code: ApiErrorCode.RATE_LIMITED }
-    );
+    return new AppError(`Too many requests.${hint}`, 429, {
+      severity: 'medium',
+      category: 'rate_limit',
+      code: ApiErrorCode.RATE_LIMITED,
+    });
   },
 
   auth: () =>
@@ -435,3 +439,38 @@ export const Errors = {
   external,
   generic,
 } as const;
+
+/**
+ * Normalise any thrown value into an `AppError` instance.
+ *
+ * Controllers should forward unknown errors to the central error handler via
+ * `next(err)`; this helper guarantees the handler always receives a
+ * structured `AppError` (with `statusCode`, `code` and `message`) instead of
+ * an ad-hoc object or plain string.
+ *
+ * @example
+ *   } catch (err) {
+ *     throw toAppError(err, 'Failed to load patients');
+ *   }
+ */
+export function toAppError(err: unknown, fallbackMessage?: string): AppError {
+  if (err instanceof AppError) {
+    return err;
+  }
+
+  if (err instanceof Error) {
+    const wrapped = AppError.internal(fallbackMessage ?? err.message, {
+      originalName: err.name,
+      originalMessage: err.message,
+    });
+    return wrapped;
+  }
+
+  if (typeof err === 'string') {
+    return AppError.internal(fallbackMessage ?? err, { originalMessage: err });
+  }
+
+  return AppError.internal(fallbackMessage ?? 'An unexpected error occurred.', {
+    originalError: err,
+  });
+}

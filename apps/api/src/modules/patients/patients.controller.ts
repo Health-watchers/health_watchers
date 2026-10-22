@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
@@ -8,6 +9,7 @@ import { portalMessageCreateSchema } from '../portal/portal.validation';
 import { sendMail } from '@api/lib/email.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
+import { textSearch } from '../../utils/text-search';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
@@ -25,6 +27,7 @@ import {
   patientSearchQuerySchema,
 } from './patients.validation';
 import { DuplicateDetectionService } from './duplicate-detection.service';
+import { DuplicateController } from './duplicate.controller';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
 import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
@@ -33,6 +36,7 @@ import {
   updateEmergencyContactSchema,
 } from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
+import { findActiveGrant } from '../emergency-access/emergency-access.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
@@ -79,7 +83,29 @@ async function nextSystemId(clinicId: string): Promise<string> {
   return `HW-${short}-${padded}`;
 }
 
-// GET /patients?page=1&limit=20&clinicId=
+/**
+ * GET /patients?page=1&limit=20&clinicId=&q=<search>
+ *
+ * Full-text search (#1604):
+ * When `q` is supplied, patients are matched against the compound text index on
+ * `name`, `phone`, and `nationalId` (see PatientModel). Results are always scoped to the
+ * caller's clinic and to active patients, and are ranked by MongoDB `textScore`
+ * (descending) with a `score` field attached to each result.
+ *
+ * Search behaviour & limitations:
+ * - Word-prefix matching only: a term matches whole words or word prefixes (e.g. "joh"
+ *   matches "John"), but not arbitrary substrings in the middle of a word.
+ * - No fuzzy matching: typos and misspellings will not match.
+ * - Stop-word handling: MongoDB's default text analyzer ignores language stop words
+ *   (e.g. "the", "and") and applies basic stemming, so very common words may not narrow
+ *   results as expected.
+ * - Multi-word queries are treated as a space-separated OR of terms by default; results
+ *   are ranked by how many terms match and their relevance.
+ * - Empty results are returned as a normal `200` with an empty `data` array.
+ *
+ * When `q` is absent, the endpoint falls back to the standard paginated list behaviour
+ * (cached, sorted by `createdAt` descending).
+ */
 router.get(
   '/',
   validateRequest({ query: patientQuerySchema }),
@@ -93,6 +119,22 @@ router.get(
       req.user!.role === 'SUPER_ADMIN' && req.query.clinicId
         ? req.query.clinicId
         : req.user!.clinicId;
+
+    // #1604 — Full-text search path: when `q` is present, use the text index and rank by score.
+    const q = String(req.query.q ?? '')
+      .trim()
+      .slice(0, 100);
+    if (q) {
+      const result = await textSearch(PatientModel, q, filter, page, limit);
+      return res.json({
+        status: 'success',
+        data: result.data.map((doc: any) => ({
+          ...toPatientResponse(doc),
+          score: doc.score,
+        })),
+        meta: result.meta,
+      });
+    }
 
     // #1069 — Cache patient list by clinicId + page + limit (TTL: 60 s)
     const cacheKey = `patients:list:${filter.clinicId}:page=${page}:limit=${limit}`;
@@ -118,10 +160,17 @@ router.get(
     };
 
     // #1069 — Force the compound index that covers clinicId + isActive for this list query
-    const result = await paginate(PatientModel, filter, page, limit, { createdAt: -1 }, {
-      projection: listProjection,
-      hint: 'clinicId_1_isActive_1',
-    });
+    const result = await paginate(
+      PatientModel,
+      filter,
+      page,
+      limit,
+      { createdAt: -1 },
+      {
+        projection: listProjection,
+        hint: 'clinicId_1_isActive_1',
+      }
+    );
 
     const payload = {
       data: result.data.map(toPatientResponse),
@@ -189,18 +238,10 @@ router.get(
     let total: number;
 
     if (q) {
-      // Use MongoDB text index for full-text search with relevance scoring
-      filter.$text = { $search: q };
-      const [docs, count] = await Promise.all([
-        PatientModel.find(filter, { score: { $meta: 'textScore' } })
-          .sort({ score: { $meta: 'textScore' } })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .lean(),
-        PatientModel.countDocuments(filter),
-      ]);
-      data = docs;
-      total = count;
+      // #1604 — Use the shared text-search helper (text index + relevance scoring)
+      const result = await textSearch(PatientModel, q, filter, page, limit);
+      data = result.data;
+      total = result.meta.total;
     } else {
       // No query — return paginated list sorted by lastName
       const result = await paginate(PatientModel, filter, page, limit, { lastName: 1 });
@@ -240,6 +281,27 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const doc = await PatientModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    // Patients outside the caller's care team (clinic) need a break-the-glass grant (#1493)
+    if (!req.user!.isSuperAdmin && String(doc.clinicId) !== String(req.user!.clinicId)) {
+      const grant = await findActiveGrant(req.user!.userId, String(doc._id));
+      if (!grant) {
+        return res.status(403).json({
+          error: 'EmergencyAccessRequired',
+          message:
+            'This patient is outside your care team. Request emergency access to view the record.',
+        });
+      }
+      req.emergencyAccess = {
+        grantId: String(grant._id),
+        patientId: String(doc._id),
+        expiresAt: grant.expiresAt,
+      };
+      // Never cache a record served under a time-limited grant
+      res.locals.skipCache = true;
+      res.set('X-Emergency-Access-Expires', grant.expiresAt.toISOString());
+    }
+
     // Does not fire on cache hits (served above by cacheResponse), so repeat views by the
     // same user within the 300s TTL are not individually logged — acceptable since the
     // originating access within that window is always recorded.

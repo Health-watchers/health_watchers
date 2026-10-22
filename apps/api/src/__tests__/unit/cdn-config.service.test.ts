@@ -115,9 +115,7 @@ describe('CdnConfigService', () => {
       process.env.NEXT_PUBLIC_CDN_URL = 'https://cdn.example.com';
       process.env.NEXT_PUBLIC_CDN_PROVIDER = 'cloudflare';
       const svc = CdnConfigService.getInstance();
-      expect(svc.getCdnUrl('/static/logo.png')).toBe(
-        'https://cdn.example.com/static/logo.png',
-      );
+      expect(svc.getCdnUrl('/static/logo.png')).toBe('https://cdn.example.com/static/logo.png');
     });
 
     it('handles missing leading slash in asset path', () => {
@@ -126,7 +124,7 @@ describe('CdnConfigService', () => {
       process.env.NEXT_PUBLIC_CDN_PROVIDER = 'cloudflare';
       const svc = CdnConfigService.getInstance();
       expect(svc.getCdnUrl('fonts/roboto.woff2')).toBe(
-        'https://cdn.example.com/fonts/roboto.woff2',
+        'https://cdn.example.com/fonts/roboto.woff2'
       );
     });
 

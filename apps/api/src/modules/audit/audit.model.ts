@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { auditHashChainPlugin } from './audit-chain.plugin';
 
 export type AuditAction =
   | 'LOGIN_SUCCESS'
@@ -25,6 +26,9 @@ export type AuditAction =
   | 'IMMUNIZATION_UPDATE'
   | 'IMMUNIZATION_DELETE'
   | 'IMMUNIZATION_CERTIFICATE'
+  | 'IMMUNIZATION_ANALYTICS'
+  | 'IMMUNIZATION_LOT_RECALL'
+  | 'IMMUNIZATION_RECALL'
   | 'PATIENT_PHOTO_UPLOAD'
   | 'PATIENT_PHOTO_ACCESS'
   | 'PATIENT_PHOTO_DELETE'
@@ -46,7 +50,24 @@ export type AuditAction =
   | 'COMMUNICATION_LOG_CREATED'
   | 'COMMUNICATION_LOG_VIEWED'
   | 'ACCOUNT_LOCKED'
-  | 'ACCOUNT_UNLOCKED';
+  | 'ACCOUNT_UNLOCKED'
+  | 'INTERACTION_DATA_REFRESH'
+  | 'NOTIFICATION_DISPATCH'
+  | 'NOTIFICATION_TEMPLATE_UPDATE'
+  | 'TELEHEALTH_SESSION_CREATE'
+  | 'TELEHEALTH_SESSION_JOIN'
+  | 'TELEHEALTH_SESSION_END'
+  | 'TELEHEALTH_RECORDING_CONSENT'
+  | 'TELEHEALTH_RECORDING_START'
+  | 'TELEHEALTH_RECORDING_STOP'
+  | 'TELEHEALTH_SESSION_ARCHIVE'
+  | 'FHIR_ACCESS'
+  | 'EMERGENCY_ACCESS_GRANTED'
+  | 'EMERGENCY_ACCESS_ENDED'
+  | 'EMERGENCY_ACCESS_REVIEWED'
+  | 'NEW_DEVICE_LOGIN'
+  | 'UNRECOGNIZED_LOGIN_REPORTED'
+  | 'CLAIM_FORM_EXPORT';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -59,7 +80,14 @@ export interface AuditLog {
   requestId?: string;
   outcome: 'SUCCESS' | 'FAILURE';
   metadata?: Record<string, unknown>;
+  /** Set when the access happened under a break-the-glass grant (#1493) */
+  emergencyAccess?: boolean;
   timestamp: Date;
+  // Hash chain (#1494) — set by auditHashChainPlugin on insert
+  chainId?: string;
+  chainSeq?: number;
+  prevHash?: string;
+  hash?: string;
 }
 
 const auditLogSchema = new Schema<AuditLog>(
@@ -94,6 +122,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'IMMUNIZATION_UPDATE',
         'IMMUNIZATION_DELETE',
         'IMMUNIZATION_CERTIFICATE',
+        'IMMUNIZATION_ANALYTICS',
+        'IMMUNIZATION_LOT_RECALL',
+        'IMMUNIZATION_RECALL',
         'PATIENT_PHOTO_UPLOAD',
         'PATIENT_PHOTO_ACCESS',
         'PATIENT_PHOTO_DELETE',
@@ -116,6 +147,23 @@ const auditLogSchema = new Schema<AuditLog>(
         'COMMUNICATION_LOG_VIEWED',
         'ACCOUNT_LOCKED',
         'ACCOUNT_UNLOCKED',
+        'INTERACTION_DATA_REFRESH',
+        'NOTIFICATION_DISPATCH',
+        'NOTIFICATION_TEMPLATE_UPDATE',
+        'TELEHEALTH_SESSION_CREATE',
+        'TELEHEALTH_SESSION_JOIN',
+        'TELEHEALTH_SESSION_END',
+        'TELEHEALTH_RECORDING_CONSENT',
+        'TELEHEALTH_RECORDING_START',
+        'TELEHEALTH_RECORDING_STOP',
+        'TELEHEALTH_SESSION_ARCHIVE',
+        'FHIR_ACCESS',
+        'EMERGENCY_ACCESS_GRANTED',
+        'EMERGENCY_ACCESS_ENDED',
+        'EMERGENCY_ACCESS_REVIEWED',
+        'NEW_DEVICE_LOGIN',
+        'UNRECOGNIZED_LOGIN_REPORTED',
+        'CLAIM_FORM_EXPORT',
       ],
       index: true,
     },
@@ -126,6 +174,7 @@ const auditLogSchema = new Schema<AuditLog>(
     requestId: { type: String, required: false, index: true },
     outcome: { type: String, enum: ['SUCCESS', 'FAILURE'], required: true, default: 'SUCCESS' },
     metadata: { type: Schema.Types.Mixed, required: false },
+    emergencyAccess: { type: Boolean, required: false },
     timestamp: { type: Date, required: true, default: () => new Date(), index: true },
   },
   {
@@ -134,6 +183,9 @@ const auditLogSchema = new Schema<AuditLog>(
     collection: 'audit_logs',
   }
 );
+
+// Tamper evidence: per-clinic SHA-256 hash chain (#1494)
+auditLogSchema.plugin(auditHashChainPlugin);
 
 // Prevent updates and deletes - immutable logs
 auditLogSchema.pre('updateOne', function () {
@@ -160,6 +212,10 @@ auditLogSchema.index({ action: 1, timestamp: -1 });
 auditLogSchema.index({ outcome: 1, timestamp: -1 });
 auditLogSchema.index({ resourceType: 1, timestamp: -1 });
 auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
+auditLogSchema.index(
+  { emergencyAccess: 1, timestamp: -1 },
+  { partialFilterExpression: { emergencyAccess: true } }
+);
 // Full-text search across action field (metadata is Mixed so not indexable as text)
 auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
 // Retention policy: the 6-year HIPAA-mandated TTL index (`audit_logs_ttl_6yr`) on `timestamp`

@@ -3,8 +3,131 @@ name: Performance Regression Tests
 on:
   pull_request:
     branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
+  smoke-test-pr:
+    name: Quick Smoke Test (PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup k6
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Start API with dependencies
+        run: docker compose up -d mongodb redis api
+        env:
+          NODE_ENV: test
+
+      - name: Wait for API readiness
+        run: |
+          echo "Waiting for API to be ready..."
+          for _i in {1..30}; do
+            if curl -sf http://localhost:3001/health > /dev/null; then
+              echo "✅ API is ready"
+              exit 0
+            fi
+            echo "Waiting..."
+            sleep 2
+          done
+          echo "❌ API failed to start"
+          docker compose logs api
+          exit 1
+
+      - name: Run smoke test
+        id: smoke
+        run: |
+          k6 run k6/smoke-test.js \
+            --env BASE_URL=http://localhost:3001 \
+            --summary-export=smoke-summary.json
+        continue-on-error: true
+
+      - name: Check for performance regressions
+        if: always()
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const baselines = require('./performance/baselines/baselines.json');
+          
+          if (!fs.existsSync('./smoke-summary.json')) {
+            console.error('No smoke test results found');
+            process.exit(1);
+          }
+          
+          const summary = JSON.parse(fs.readFileSync('./smoke-summary.json', 'utf8'));
+          const threshold = baselines.regression_threshold_percent / 100;
+          const results = [];
+          let hasRegression = false;
+          
+          // Check key endpoints from smoke test
+          const endpointMap = {
+            'health_check_duration': 'baseline_health',
+            'auth_login_duration': 'baseline_patient_list', // proxy for auth latency
+            'patient_list_duration': 'baseline_patient_list',
+          };
+          
+          for (const [metric, baselineKey] of Object.entries(endpointMap)) {
+            const actual = summary.metrics?.[metric]?.values?.['p(95)'];
+            const baseline = baselines.baselines[baselineKey];
+            
+            if (!actual || !baseline) continue;
+            
+            const limit = baseline * (1 + threshold);
+            const pass = actual <= limit;
+            const percentChange = ((actual - baseline) / baseline * 100).toFixed(1);
+            
+            if (!pass) hasRegression = true;
+            
+            results.push({
+              metric,
+              baseline,
+              actual: Math.round(actual),
+              limit: Math.round(limit),
+              change: percentChange + '%',
+              status: pass ? '✅' : '❌'
+            });
+          }
+          
+          console.log('\n═══════════════════════════════════════════════');
+          console.log(' PR SMOKE TEST - PERFORMANCE CHECK');
+          console.log('═══════════════════════════════════════════════\n');
+          
+          results.forEach(r => {
+            console.log(`${r.status} ${r.metric}:`);
+            console.log(`   Baseline: ${r.baseline}ms`);
+            console.log(`   Actual:   ${r.actual}ms (${r.change})`);
+            console.log(`   Limit:    ${r.limit}ms`);
+            console.log('');
+          });
+          
+          if (hasRegression) {
+            console.error('❌ Performance regression detected!');
+            console.error('   One or more endpoints exceed the 20% threshold.');
+            console.error('   Review the changes or update baselines if intentional.');
+            process.exit(1);
+          } else {
+            console.log('✅ No performance regressions detected');
+          }
+          NODE
+
+      - name: Upload smoke test results
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: smoke-test-results-pr-${{ github.event.pull_request.number }}
+          path: smoke-summary.json
+          retention-days: 14
+
   performance:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -28,7 +28,6 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       <input
         ref={ref}
         type="search"
-        role="searchbox"
         value={value}
         className={[
           'bg-neutral-0 w-full rounded-md border border-neutral-200 py-2 pr-9 pl-9 text-sm text-neutral-900 placeholder:text-neutral-500',

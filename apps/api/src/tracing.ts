@@ -12,6 +12,7 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import { context, trace, isSpanContextValid } from '@opentelemetry/api';
 
 const isDev = process.env.NODE_ENV !== 'production';
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
@@ -61,3 +62,19 @@ sdk.start();
 
 process.on('SIGTERM', () => sdk.shutdown());
 process.on('SIGINT', () => sdk.shutdown());
+
+/** Span attribute key used to correlate request IDs with trace IDs. */
+export const REQUEST_ID_SPAN_ATTRIBUTE = 'http.request_id';
+
+/**
+ * Returns the trace ID of the currently active span, or undefined when no
+ * valid span is active. Useful for including trace IDs in structured logs
+ * alongside the request ID.
+ */
+export function getActiveTraceId(): string | undefined {
+  const spanContext = trace.getSpan(context.active())?.spanContext();
+  if (!spanContext || !isSpanContextValid(spanContext)) {
+    return undefined;
+  }
+  return spanContext.traceId;
+}

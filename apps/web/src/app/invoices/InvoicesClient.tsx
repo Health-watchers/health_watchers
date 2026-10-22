@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Button, EmptyState, ErrorMessage, PageWrapper, Toast } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 
@@ -33,6 +35,7 @@ async function fetchInvoices(): Promise<Invoice[]> {
 }
 
 export default function InvoicesClient() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -142,21 +145,28 @@ export default function InvoicesClient() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
+                        onClick={() => router.push(`/invoices/${inv._id}/print`)}
+                        className="text-xs text-primary-600 hover:underline no-print:hidden"
+                        aria-label={`Print invoice ${inv.invoiceNumber}`}
+                      >
+                        Print
+                      </button>
+                      <button
                         onClick={() => handlePreviewPDF(inv._id)}
-                        className="text-primary-600 text-xs hover:underline"
+                        className="text-xs text-primary-600 hover:underline"
                       >
                         Preview
                       </button>
                       <button
                         onClick={() => handleDownloadPDF(inv._id, inv.invoiceNumber)}
-                        className="text-primary-600 text-xs hover:underline"
+                        className="text-xs text-primary-600 hover:underline"
                       >
                         Download
                       </button>
                       {inv.status === 'draft' && (
                         <button
                           onClick={() => handleSend(inv._id)}
-                          className="text-primary-600 text-xs hover:underline"
+                          className="text-xs text-primary-600 hover:underline"
                         >
                           Send
                         </button>
