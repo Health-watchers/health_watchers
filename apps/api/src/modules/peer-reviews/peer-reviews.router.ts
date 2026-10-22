@@ -6,18 +6,90 @@ import { PeerReviewModel } from './peer-review.model';
 import { EncounterModel } from '../encounters/encounter.model';
 import { UserModel } from '../auth/models/user.model';
 import { createNotification } from '../notifications/notification.service';
+import { summariseThemes } from './peer-review-themes';
 
 const router = Router();
 
 const CATEGORY_KEYS = ['documentation', 'diagnosis', 'treatment', 'followUp'] as const;
 
-// POST /peer-reviews — CLINIC_ADMIN assigns an encounter for peer review
+const REVIEWER_ROLES = ['DOCTOR', 'CLINIC_ADMIN'];
+
+// GET /peer-reviews/reviewers — clinicians in the clinic who can be asked to review
+router.get(
+  '/reviewers',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    const { excludeUserId } = req.query as { excludeUserId?: string };
+    const exclude = [req.user!.userId];
+    if (excludeUserId && isValidObjectId(excludeUserId)) exclude.push(excludeUserId);
+
+    const users = await UserModel.find(
+      {
+        clinicId: req.user!.clinicId,
+        isActive: true,
+        role: { $in: REVIEWER_ROLES },
+        _id: { $nin: exclude },
+      },
+      { fullName: 1, role: 1 }
+    )
+      .sort({ fullName: 1 })
+      .lean();
+
+    return res.json({
+      status: 'success',
+      data: users.map((u: any) => ({ id: String(u._id), fullName: u.fullName, role: u.role })),
+    });
+  }
+);
+
+// GET /peer-reviews/encounter/:encounterId — review attached to an encounter, if any
+router.get(
+  '/encounter/:encounterId',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    const { encounterId } = req.params;
+    if (!isValidObjectId(encounterId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Invalid encounterId' });
+    }
+
+    const review: any = await PeerReviewModel.findOne({
+      encounterId,
+      clinicId: req.user!.clinicId,
+    })
+      .populate('reviewerId', 'fullName role')
+      .populate('revieweeId', 'fullName role')
+      .lean();
+
+    if (!review) return res.json({ status: 'success', data: null });
+
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role === 'CLINIC_ADMIN';
+    const reviewerId = String(review.reviewerId?._id ?? review.reviewerId);
+    const revieweeId = String(review.revieweeId?._id ?? review.revieweeId);
+    if (!isAdmin && userId !== reviewerId && userId !== revieweeId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Not a participant in this review' });
+    }
+
+    // The reviewee must never learn who reviewed them anonymously
+    const data =
+      review.isAnonymous && !isAdmin && userId !== reviewerId
+        ? { ...review, reviewerId: null }
+        : review;
+    return res.json({ status: 'success', data });
+  }
+);
+
+// POST /peer-reviews — request a peer review of an encounter.
+// CLINIC_ADMIN can assign any encounter in the clinic; a DOCTOR can request review of an
+// encounter they authored.
 router.post(
   '/',
   authenticate,
-  requireRoles('CLINIC_ADMIN'),
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
   async (req: Request, res: Response) => {
-    const { encounterId, reviewerId, isAnonymous = false } = req.body;
+    const { encounterId, reviewerId, isAnonymous = false, requestNote } = req.body;
     const clinicId = req.user!.clinicId;
 
     if (!encounterId || !reviewerId) {
@@ -43,6 +115,13 @@ router.post(
 
     const revieweeId = String(encounter.attendingDoctorId);
 
+    if (req.user!.role === 'DOCTOR' && revieweeId !== req.user!.userId) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Doctors can only request peer review of their own encounters',
+      });
+    }
+
     if (revieweeId === reviewerId) {
       return res
         .status(400)
@@ -50,7 +129,12 @@ router.post(
     }
 
     // Verify reviewer belongs to the same clinic
-    const reviewer = await UserModel.findOne({ _id: reviewerId, clinicId, isActive: true }).lean();
+    const reviewer = await UserModel.findOne({
+      _id: reviewerId,
+      clinicId,
+      isActive: true,
+      role: { $in: REVIEWER_ROLES },
+    }).lean();
     if (!reviewer) {
       return res
         .status(404)
@@ -69,8 +153,22 @@ router.post(
       reviewerId,
       revieweeId,
       clinicId,
-      isAnonymous,
+      isAnonymous: Boolean(isAnonymous),
+      requestedBy: req.user!.userId,
+      requestNote: typeof requestNote === 'string' ? requestNote.slice(0, 1000) : undefined,
       status: 'pending',
+    });
+
+    await createNotification({
+      userId: review.reviewerId,
+      clinicId: review.clinicId,
+      type: 'system',
+      title: 'Peer Review Requested',
+      message: `You have been asked to peer review an encounter: ${
+        (encounter as any).chiefComplaint ?? 'encounter'
+      }.`,
+      link: `/peer-reviews`,
+      metadata: { peerReviewId: String(review._id), encounterId: String(encounterId) },
     });
 
     return res.status(201).json({ status: 'success', data: review });
@@ -137,7 +235,7 @@ router.put(
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN'),
   async (req: Request, res: Response) => {
-    const { rating, feedback, categories, requiresFollowUp } = req.body;
+    const { rating, feedback, recommendations, categories, requiresFollowUp } = req.body;
 
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return res
@@ -188,6 +286,8 @@ router.put(
 
     review.rating = rating;
     review.feedback = typeof feedback === 'string' ? feedback.slice(0, 5000) : undefined;
+    review.recommendations =
+      typeof recommendations === 'string' ? recommendations.slice(0, 5000) : undefined;
     review.categories = categories;
     review.requiresFollowUp = Boolean(requiresFollowUp);
     review.status = 'completed';
@@ -204,9 +304,16 @@ router.put(
       clinicId: review.clinicId,
       type: 'system',
       title: 'Peer Review Completed',
-      message: `${reviewerName} has completed a peer review of your encounter. Score: ${rating}/5.`,
-      link: `/encounters`,
-      metadata: { peerReviewId: String(review._id), rating },
+      message: `${reviewerName} has completed a peer review of your encounter. Score: ${rating}/5.${
+        review.recommendations ? ' Recommendations are included.' : ''
+      }`,
+      link: `/encounters/${String(review.encounterId)}`,
+      metadata: {
+        peerReviewId: String(review._id),
+        encounterId: String(review.encounterId),
+        rating,
+        requiresFollowUp: review.requiresFollowUp,
+      },
     });
 
     return res.json({ status: 'success', data: review });
@@ -250,6 +357,108 @@ router.get(
     ]);
 
     return res.json({ status: 'success', data: stats });
+  }
+);
+
+// GET /peer-reviews/analytics — clinic-wide peer review analytics (CLINIC_ADMIN).
+// Doctors get the same view scoped to reviews of their own encounters.
+router.get(
+  '/analytics',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const match: Record<string, unknown> = {
+      clinicId: new Types.ObjectId(req.user!.clinicId),
+      status: 'completed',
+    };
+    if (req.user!.role !== 'CLINIC_ADMIN') {
+      match.revieweeId = new Types.ObjectId(req.user!.userId);
+    }
+    const range: Record<string, Date> = {};
+    for (const [key, value] of [
+      ['$gte', from],
+      ['$lte', to],
+    ] as const) {
+      if (!value) continue;
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ error: 'ValidationError', message: 'Invalid date range' });
+      }
+      range[key] = d;
+    }
+    if (Object.keys(range).length) match.completedAt = range;
+
+    const [summary] = await PeerReviewModel.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalReviews: { $sum: 1 },
+          averageRating: { $avg: '$rating' },
+          avgDocumentation: { $avg: '$categories.documentation' },
+          avgDiagnosis: { $avg: '$categories.diagnosis' },
+          avgTreatment: { $avg: '$categories.treatment' },
+          avgFollowUp: { $avg: '$categories.followUp' },
+          followUpCount: { $sum: { $cond: ['$requiresFollowUp', 1, 0] } },
+        },
+      },
+    ]);
+
+    const distribution = await PeerReviewModel.aggregate([
+      { $match: match },
+      { $group: { _id: '$rating', count: { $sum: 1 } } },
+    ]);
+
+    const monthly = await PeerReviewModel.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: '$completedAt' } },
+          averageRating: { $avg: '$rating' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const pendingMatch: Record<string, unknown> = {
+      clinicId: match.clinicId,
+      status: { $in: ['pending', 'in_review'] },
+    };
+    if (match.revieweeId) pendingMatch.revieweeId = match.revieweeId;
+    const pendingCount = await PeerReviewModel.countDocuments(pendingMatch);
+
+    const texts = await PeerReviewModel.find(match, { feedback: 1, recommendations: 1 })
+      .sort({ completedAt: -1 })
+      .limit(500)
+      .lean();
+
+    return res.json({
+      status: 'success',
+      data: {
+        totalReviews: summary?.totalReviews ?? 0,
+        pendingCount,
+        averageRating: summary?.averageRating ?? null,
+        categoryAverages: {
+          documentation: summary?.avgDocumentation ?? null,
+          diagnosis: summary?.avgDiagnosis ?? null,
+          treatment: summary?.avgTreatment ?? null,
+          followUp: summary?.avgFollowUp ?? null,
+        },
+        followUpCount: summary?.followUpCount ?? 0,
+        ratingDistribution: [1, 2, 3, 4, 5].map((rating) => ({
+          rating,
+          count: distribution.find((d: any) => d._id === rating)?.count ?? 0,
+        })),
+        monthlyTrend: monthly.map((m: any) => ({
+          month: m._id,
+          averageRating: m.averageRating,
+          count: m.count,
+        })),
+        commonThemes: summariseThemes(texts as any[]),
+      },
+    });
   }
 );
 
