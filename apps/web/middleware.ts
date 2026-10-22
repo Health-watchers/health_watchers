@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { locales, defaultLocale } from './i18n.config';
+import { locales, enabledLocales, defaultLocale } from './i18n.config';
 
 const protectedRoutes = ['/patients', '/encounters', '/payments', '/settings', '/wallet'];
 const publicRoutes = ['/login'];
@@ -31,7 +31,7 @@ export function middleware(request: NextRequest) {
   const headerLocale = request.headers.get('accept-language')?.split(',')[0].split('-')[0];
 
   const locale =
-    locales.find((l) => l === cookieLocale) ||
+    enabledLocales.find((l) => l === cookieLocale) ||
     locales.find((l) => l === headerLocale) ||
     defaultLocale;
 

@@ -31,7 +31,7 @@ export default function LanguageSwitcher({ current }: { current: Locale }) {
         value={current}
         disabled={isPending}
         onChange={(e) => change(e.target.value as Locale)}
-        className="focus-visible:ring-primary-500 rounded-md border border-neutral-200 bg-transparent px-2 py-1 text-xs font-medium text-neutral-600 focus:outline-none focus-visible:ring-2 disabled:opacity-60 dark:border-neutral-600 dark:text-neutral-300"
+        className="focus-visible:ring-primary-500 max-w-28 truncate rounded-md border border-neutral-200 bg-transparent px-2 py-1 text-xs font-medium text-neutral-600 focus:outline-none focus-visible:ring-2 disabled:opacity-60 dark:border-neutral-600 dark:text-neutral-300"
       >
         {locales.map((loc) => (
           <option key={loc} value={loc}>
