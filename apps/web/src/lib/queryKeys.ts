@@ -90,6 +90,8 @@ export const queryKeys = {
     claim: (id: string) => [...queryKeys.billing.all, 'claim', id] as const,
     unbilled: () => [...queryKeys.billing.all, 'unbilled'] as const,
     aging: () => [...queryKeys.billing.all, 'aging'] as const,
+    era: (page: number) => [...queryKeys.billing.all, 'era', page] as const,
+    validation: (id: string) => [...queryKeys.billing.all, 'validation', id] as const,
   },
   communications: {
     all: ['communications'] as const,

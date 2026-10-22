@@ -23,16 +23,59 @@ import {
 } from '@/components/billing/ClaimLineItemsEditor';
 import { queryKeys } from '@/lib/queryKeys';
 import {
+  ADJUSTMENT_GROUP_LABEL,
   billingFetch,
+  BillingError,
   CLAIM_STATUS_LABEL,
   CLAIM_STATUS_VARIANT,
+  CLEARINGHOUSE_LABEL,
+  CORRECTABLE_STATUSES,
+  downloadCms1500,
   formatMoney,
+  MANUAL_TRANSITIONS,
   patientName,
+  REMITTABLE_STATUSES,
+  RESUBMITTABLE_STATUSES,
   type Claim,
+  type ClaimFieldError,
+  type ClaimValidationResult,
+  type RemittanceAdjustment,
   type ServiceLine,
 } from '@/lib/billing';
 
-type Dialog = 'deny' | 'resubmit' | 'write-off' | null;
+type Dialog = 'deny' | 'resubmit' | 'correct' | 'write-off' | 'reject' | 'era' | null;
+
+interface EraDraft {
+  eraId: string;
+  payerName: string;
+  checkNumber: string;
+  paidAmount: string;
+  allowedAmount: string;
+  patientResponsibility: string;
+  adjustments: { groupCode: RemittanceAdjustment['groupCode']; reasonCode: string; amount: string }[];
+}
+
+const emptyEra = (): EraDraft => ({
+  eraId: '',
+  payerName: '',
+  checkNumber: '',
+  paidAmount: '',
+  allowedAmount: '',
+  patientResponsibility: '0',
+  adjustments: [{ groupCode: 'CO', reasonCode: '', amount: '' }],
+});
+
+function FieldErrors({ errors }: { errors: ClaimFieldError[] }) {
+  return (
+    <ul className="text-danger-700 list-disc space-y-0.5 pl-5 text-sm">
+      {errors.map((e, i) => (
+        <li key={i}>
+          <span className="font-mono text-xs">Box {e.field}</span> — {e.message}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function formatDateTime(value?: string) {
   return value
@@ -58,6 +101,9 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
   const [attachment, setAttachment] = useState({ name: '', url: '' });
+  const [fieldErrors, setFieldErrors] = useState<ClaimFieldError[]>([]);
+  const [era, setEra] = useState<EraDraft>(emptyEra);
+  const [downloading, setDownloading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const { data: claim, isLoading, error, refetch } = useQuery<Claim>({
@@ -66,16 +112,32 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
       (await billingFetch<{ data: Claim }>(`/claims/${encodeURIComponent(claimId)}`)).data,
   });
 
+  const correctable = !!claim && CORRECTABLE_STATUSES.includes(claim.status);
+  const validation = useQuery<ClaimValidationResult>({
+    queryKey: queryKeys.billing.validation(claimId),
+    queryFn: async () =>
+      (
+        await billingFetch<{ data: ClaimValidationResult }>(
+          `/claims/${encodeURIComponent(claimId)}/validation`
+        )
+      ).data,
+    enabled: correctable,
+  });
+
   const action = useMutation({
-    mutationFn: ({ path, method, body }: { path: string; method: string; body: unknown }) =>
+    mutationFn: ({ path, method, body }: { path: string; method: string; body?: unknown }) =>
       billingFetch(`/claims/${encodeURIComponent(claimId)}${path}`, {
         method,
-        body: JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     onSuccess: (_d, vars) => {
       const messages: Record<string, string> = {
         '/deny': 'Denial recorded.',
         '/resubmit': 'Claim corrected and resubmitted.',
+        '/correct': 'Corrections saved.',
+        '/status': 'Claim status updated.',
+        '/remittances': 'Remittance posted.',
+        '/sync': 'Claim status refreshed from the clearinghouse.',
         '/write-off': 'Claim written off.',
         '/attachments': 'Attachment added.',
       };
@@ -84,7 +146,16 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
       setAttachment({ name: '', url: '' });
       queryClient.invalidateQueries({ queryKey: queryKeys.billing.all });
     },
-    onError: (e: Error) => setFormError(e.message),
+    onError: (e: Error) => {
+      // 422 responses carry per-box CMS-1500 validation errors
+      if (e instanceof BillingError && e.fieldErrors.length) {
+        setFieldErrors(e.fieldErrors);
+        setFormError('The corrected claim has invalid fields.');
+      } else {
+        setFormError(e.message);
+      }
+      if (!dialog) setToast({ message: e.message, type: 'error' });
+    },
   });
 
   const closeDialog = () => {
@@ -92,12 +163,30 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
     setReason('');
     setNote('');
     setFormError('');
+    setFieldErrors([]);
+    setEra(emptyEra());
   };
 
-  const openResubmit = (c: Claim) => {
+  const openCorrection = (c: Claim, mode: 'resubmit' | 'correct') => {
     setLines(serviceLines(c).map((l) => ({ cptCode: l.cptCode, amount: l.charges.toFixed(2) })));
     setDiagnoses(c.diagnosisCodes.join(', '));
-    setDialog('resubmit');
+    setDialog(mode);
+  };
+
+  const openEra = (c: Claim) => {
+    setEra({ ...emptyEra(), eraId: `ERA-${Date.now()}`, allowedAmount: c.totalAmount.toFixed(2) });
+    setDialog('era');
+  };
+
+  const download = async () => {
+    setDownloading(true);
+    try {
+      await downloadCms1500(claimId);
+    } catch (e) {
+      setToast({ message: (e as Error).message, type: 'error' });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (isLoading) {
@@ -121,6 +210,14 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
   );
   const canDeny = ['submitted', 'resubmitted', 'accepted'].includes(claim.status);
   const canWriteOff = !['paid', 'written_off'].includes(claim.status);
+  const canResubmit = RESUBMITTABLE_STATUSES.includes(claim.status);
+  const canPostEra = REMITTABLE_STATUSES.includes(claim.status);
+  const manual = MANUAL_TRANSITIONS[claim.status] ?? [];
+  const canSync =
+    !!claim.clearinghouse?.submissionId &&
+    ['submitted', 'resubmitted', 'accepted'].includes(claim.status);
+  const remittances = claim.remittances ?? [];
+  const corrections = [...(claim.corrections ?? [])].reverse();
 
   return (
     <PageWrapper className="space-y-6 py-8">
@@ -155,8 +252,49 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {claim.status === 'rejected' && (
-            <Button onClick={() => openResubmit(claim)}>Correct & resubmit</Button>
+          <Button variant="outline" onClick={download} loading={downloading}>
+            Download CMS-1500
+          </Button>
+          {canSync && (
+            <Button
+              variant="outline"
+              loading={action.isPending && action.variables?.path === '/sync'}
+              onClick={() => action.mutate({ path: '/sync', method: 'POST' })}
+            >
+              Check claim status
+            </Button>
+          )}
+          {canResubmit && (
+            <Button onClick={() => openCorrection(claim, 'resubmit')}>Correct & resubmit</Button>
+          )}
+          {claim.status === 'draft' && (
+            <Button variant="outline" onClick={() => openCorrection(claim, 'correct')}>
+              Edit claim
+            </Button>
+          )}
+          {manual.includes('accepted') && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                action.mutate({
+                  path: '/status',
+                  method: 'PATCH',
+                  body: { status: 'accepted', note: 'Payer acknowledged receipt' },
+                })
+              }
+            >
+              Mark accepted
+            </Button>
+          )}
+          {manual.includes('rejected') && (
+            <Button variant="outline" onClick={() => setDialog('reject')}>
+              Mark rejected
+            </Button>
+          )}
+          {canPostEra && (
+            <Button variant="outline" onClick={() => openEra(claim)}>
+              Post ERA
+            </Button>
           )}
           {canDeny && (
             <Button variant="outline" onClick={() => setDialog('deny')}>
@@ -171,9 +309,25 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
         </div>
       </header>
 
-      {claim.status === 'rejected' && claim.rejectionReason && (
-        <div className="border-danger-200 bg-danger-50 text-danger-800 rounded-md border p-4 text-sm" role="alert">
-          <strong>Denied:</strong> {claim.rejectionReason}
+      {(claim.status === 'rejected' || claim.status === 'denied') &&
+        (claim.denialReason || claim.rejectionReason) && (
+          <div className="border-danger-200 bg-danger-50 text-danger-800 rounded-md border p-4 text-sm" role="alert">
+            <strong>{claim.status === 'denied' ? 'Denied by payer' : 'Rejected'}:</strong>{' '}
+            {claim.status === 'denied' ? (claim.denialReason ?? claim.rejectionReason) : claim.rejectionReason}
+            <p className="mt-1 text-xs">
+              {claim.status === 'denied'
+                ? 'Correct the claim and resubmit it as a replacement (frequency code 7), or write it off.'
+                : 'The claim did not reach adjudication. Fix the flagged fields and resubmit.'}
+            </p>
+          </div>
+        )}
+      {correctable && validation.data && !validation.data.valid && (
+        <div className="border-warning-200 bg-warning-50 rounded-md border p-4" role="status">
+          <p className="text-warning-800 mb-2 text-sm font-medium">
+            This claim has {validation.data.errors.length} field issue
+            {validation.data.errors.length === 1 ? '' : 's'} that will block submission:
+          </p>
+          <FieldErrors errors={validation.data.errors} />
         </div>
       )}
       {claim.status === 'written_off' && claim.writeOffReason && (
@@ -230,9 +384,130 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
                 <dd className="font-mono">{claim.cms1500Data?.box33_billingProviderNpi ?? '—'}</dd>
                 <dt className="text-neutral-500">Submitted</dt>
                 <dd>{formatDateTime(claim.submittedAt)}</dd>
+                <dt className="text-neutral-500">Clearinghouse</dt>
+                <dd>
+                  {claim.clearinghouse
+                    ? `${CLEARINGHOUSE_LABEL[claim.clearinghouse.provider] ?? claim.clearinghouse.provider}${
+                        claim.clearinghouse.lastStatus ? ` · ${claim.clearinghouse.lastStatus}` : ''
+                      }`
+                    : 'Not transmitted'}
+                </dd>
+                {claim.clearinghouse?.submissionId && (
+                  <>
+                    <dt className="text-neutral-500">Tracking ID</dt>
+                    <dd className="font-mono text-xs">{claim.clearinghouse.submissionId}</dd>
+                  </>
+                )}
+                {claim.clearinghouse?.payerClaimId && (
+                  <>
+                    <dt className="text-neutral-500">Payer claim #</dt>
+                    <dd className="font-mono text-xs">{claim.clearinghouse.payerClaimId}</dd>
+                  </>
+                )}
+                {claim.clearinghouse?.lastCheckedAt && (
+                  <>
+                    <dt className="text-neutral-500">Last checked</dt>
+                    <dd>{formatDateTime(claim.clearinghouse.lastCheckedAt)}</dd>
+                  </>
+                )}
+                <dt className="text-neutral-500">Paid to date</dt>
+                <dd className="tabular-nums">{formatMoney(claim.paidAmount ?? 0)}</dd>
               </dl>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Remittance advice (ERA)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {remittances.length === 0 ? (
+                <p className="text-sm text-neutral-500">No remittances received yet.</p>
+              ) : (
+                <ul className="space-y-4" aria-label="Remittances">
+                  {remittances.map((r) => (
+                    <li key={r.eraId} className="rounded-md border border-neutral-200 p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium">
+                          {r.payerName ?? 'Payer'} · <span className="font-mono text-xs">{r.eraId}</span>
+                        </p>
+                        <Badge variant={r.paidAmount > 0 ? 'success' : 'danger'}>
+                          {r.paidAmount > 0 ? `Paid ${formatMoney(r.paidAmount)}` : 'Denied'}
+                        </Badge>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                        <dt className="text-xs text-neutral-500">Billed</dt>
+                        <dd className="tabular-nums">{formatMoney(r.billedAmount)}</dd>
+                        <dt className="text-xs text-neutral-500">Allowed</dt>
+                        <dd className="tabular-nums">{r.allowedAmount != null ? formatMoney(r.allowedAmount) : '—'}</dd>
+                        <dt className="text-xs text-neutral-500">Patient resp.</dt>
+                        <dd className="tabular-nums">{formatMoney(r.patientResponsibility)}</dd>
+                        <dt className="text-xs text-neutral-500">Received</dt>
+                        <dd>{formatDateTime(r.receivedAt)}</dd>
+                      </dl>
+                      {r.adjustments.length > 0 && (
+                        <table className="mt-2 w-full text-xs">
+                          <thead className="text-left text-neutral-500">
+                            <tr>
+                              <th scope="col" className="py-1">Adjustment</th>
+                              <th scope="col" className="py-1">Reason</th>
+                              <th scope="col" className="py-1 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {r.adjustments.map((a, i) => (
+                              <tr key={i} className="border-t border-neutral-100">
+                                <td className="py-1" title={ADJUSTMENT_GROUP_LABEL[a.groupCode]}>
+                                  {a.groupCode}
+                                </td>
+                                <td className="py-1 font-mono">
+                                  CARC {a.reasonCode}
+                                  {a.remarkCode ? ` / ${a.remarkCode}` : ''}
+                                </td>
+                                <td className="py-1 text-right tabular-nums">{formatMoney(a.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                      {r.checkNumber && (
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {r.paymentMethod ?? 'Payment'} #{r.checkNumber}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {corrections.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Corrections</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y divide-neutral-100 text-sm">
+                  {corrections.map((c, i) => (
+                    <li key={i} className="py-2">
+                      <p className="text-xs text-neutral-500">{formatDateTime(c.at)}</p>
+                      {c.note && <p className="mt-0.5">{c.note}</p>}
+                      <ul className="mt-1 space-y-0.5 text-xs">
+                        {Object.entries(c.changes).map(([key, v]) => (
+                          <li key={key}>
+                            <span className="font-medium">{key}</span>:{' '}
+                            <span className="line-through text-neutral-500">{JSON.stringify(v.from)}</span>{' '}
+                            → <span className="font-mono">{JSON.stringify(v.to)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -325,13 +600,21 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
       </div>
 
       <Modal
-        open={dialog === 'deny' || dialog === 'write-off'}
+        open={dialog === 'deny' || dialog === 'write-off' || dialog === 'reject'}
         onClose={closeDialog}
-        title={dialog === 'deny' ? 'Record payer denial' : 'Write off claim'}
+        title={
+          dialog === 'deny'
+            ? 'Record payer denial'
+            : dialog === 'reject'
+              ? 'Record clearinghouse rejection'
+              : 'Write off claim'
+        }
         description={
           dialog === 'deny'
             ? 'Enter the denial reason from the remittance (e.g. CARC code and description).'
-            : `Write off ${formatMoney(claim.totalAmount)}. This closes the claim.`
+            : dialog === 'reject'
+              ? 'Enter the rejection reason from the 999/277CA acknowledgement.'
+              : `Write off ${formatMoney(claim.totalAmount)}. This closes the claim.`
         }
       >
         <form
@@ -340,6 +623,14 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
             e.preventDefault();
             if (reason.trim().length < 3) {
               setFormError('Please enter a reason.');
+              return;
+            }
+            if (dialog === 'reject') {
+              action.mutate({
+                path: '/status',
+                method: 'PATCH',
+                body: { status: 'rejected', reason: reason.trim() },
+              });
               return;
             }
             action.mutate({
@@ -385,17 +676,21 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
               Cancel
             </Button>
             <Button type="submit" variant={dialog === 'write-off' ? 'danger' : 'primary'} loading={action.isPending}>
-              {dialog === 'deny' ? 'Record denial' : 'Write off'}
+              {dialog === 'deny' ? 'Record denial' : dialog === 'reject' ? 'Record rejection' : 'Write off'}
             </Button>
           </div>
         </form>
       </Modal>
 
       <Modal
-        open={dialog === 'resubmit'}
+        open={dialog === 'resubmit' || dialog === 'correct'}
         onClose={closeDialog}
-        title="Correct & resubmit"
-        description={claim.rejectionReason ? `Denied: ${claim.rejectionReason}` : undefined}
+        title={dialog === 'correct' ? 'Edit claim' : 'Correct & resubmit'}
+        description={
+          dialog === 'resubmit' && (claim.denialReason || claim.rejectionReason)
+            ? `${CLAIM_STATUS_LABEL[claim.status]}: ${claim.denialReason ?? claim.rejectionReason}`
+            : undefined
+        }
         size="lg"
       >
         <form
@@ -411,8 +706,9 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
               setFormError(problem);
               return;
             }
+            setFieldErrors([]);
             action.mutate({
-              path: '/resubmit',
+              path: dialog === 'correct' ? '/correct' : '/resubmit',
               method: 'PATCH',
               body: {
                 cptCodes: lines.map((l) => l.cptCode.toUpperCase()),
@@ -455,12 +751,203 @@ export default function ClaimDetailClient({ claimId }: { claimId: string }) {
               {formError}
             </p>
           )}
+          {fieldErrors.length > 0 && <FieldErrors errors={fieldErrors} />}
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+            {dialog === 'resubmit' && (
+              <Button
+                type="button"
+                variant="outline"
+                loading={action.isPending && action.variables?.path === '/correct'}
+                onClick={() => {
+                  const dx = diagnoses
+                    .split(',')
+                    .map((d) => d.trim().toUpperCase())
+                    .filter(Boolean);
+                  const problem = validateLineItems(lines) || (dx.length === 0 && 'Add a diagnosis code');
+                  if (problem) {
+                    setFormError(problem);
+                    return;
+                  }
+                  action.mutate({
+                    path: '/correct',
+                    method: 'PATCH',
+                    body: {
+                      cptCodes: lines.map((l) => l.cptCode.toUpperCase()),
+                      amounts: lines.map((l) => Number(l.amount)),
+                      diagnosisCodes: dx,
+                      ...(note.trim() ? { note: note.trim() } : {}),
+                    },
+                  });
+                }}
+              >
+                Save without sending
+              </Button>
+            )}
+            <Button type="submit" loading={action.isPending && action.variables?.path !== '/correct'}>
+              {dialog === 'correct' ? 'Save corrections' : 'Resubmit claim'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={dialog === 'era'}
+        onClose={closeDialog}
+        title="Post remittance (ERA)"
+        description="Enter the 835 remittance details for this claim. A zero payment marks the claim denied."
+        size="lg"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const paid = Number(era.paidAmount);
+            if (!era.eraId.trim() || era.paidAmount === '' || Number.isNaN(paid) || paid < 0) {
+              setFormError('ERA ID and a paid amount of 0 or more are required.');
+              return;
+            }
+            const adjustments = era.adjustments
+              .filter((a) => a.reasonCode.trim() && a.amount !== '')
+              .map((a) => ({ groupCode: a.groupCode, reasonCode: a.reasonCode.trim(), amount: Number(a.amount) }));
+            if (adjustments.some((a) => Number.isNaN(a.amount))) {
+              setFormError('Adjustment amounts must be numbers.');
+              return;
+            }
+            action.mutate({
+              path: '/remittances',
+              method: 'POST',
+              body: {
+                eraId: era.eraId.trim(),
+                payerName: era.payerName.trim() || undefined,
+                checkNumber: era.checkNumber.trim() || undefined,
+                paymentMethod: paid > 0 ? 'ACH' : 'NON',
+                billedAmount: claim.totalAmount,
+                allowedAmount: era.allowedAmount === '' ? undefined : Number(era.allowedAmount),
+                paidAmount: paid,
+                patientResponsibility: Number(era.patientResponsibility || 0),
+                adjustments,
+              },
+            });
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ['eraId', 'ERA / trace ID *'],
+                ['payerName', 'Payer'],
+                ['checkNumber', 'Check / EFT number'],
+                ['allowedAmount', 'Allowed amount'],
+                ['paidAmount', 'Paid amount *'],
+                ['patientResponsibility', 'Patient responsibility'],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key}>
+                <label htmlFor={`era-${key}`} className="mb-1 block text-sm font-medium text-neutral-700">
+                  {label}
+                </label>
+                <input
+                  id={`era-${key}`}
+                  className={field}
+                  inputMode={key.endsWith('Amount') || key === 'patientResponsibility' ? 'decimal' : undefined}
+                  value={era[key]}
+                  onChange={(e) => setEra((d) => ({ ...d, [key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium text-neutral-700">Adjustments (CAS)</legend>
+            <div className="space-y-2">
+              {era.adjustments.map((a, i) => (
+                <div key={i} className="flex flex-wrap gap-2">
+                  <select
+                    aria-label={`Adjustment ${i + 1} group`}
+                    className={`${field} w-28`}
+                    value={a.groupCode}
+                    onChange={(e) =>
+                      setEra((d) => ({
+                        ...d,
+                        adjustments: d.adjustments.map((x, j) =>
+                          j === i ? { ...x, groupCode: e.target.value as RemittanceAdjustment['groupCode'] } : x
+                        ),
+                      }))
+                    }
+                  >
+                    {Object.keys(ADJUSTMENT_GROUP_LABEL).map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label={`Adjustment ${i + 1} reason code`}
+                    placeholder="CARC, e.g. 45"
+                    className={`${field} w-32`}
+                    value={a.reasonCode}
+                    onChange={(e) =>
+                      setEra((d) => ({
+                        ...d,
+                        adjustments: d.adjustments.map((x, j) => (j === i ? { ...x, reasonCode: e.target.value } : x)),
+                      }))
+                    }
+                  />
+                  <input
+                    aria-label={`Adjustment ${i + 1} amount`}
+                    placeholder="Amount"
+                    inputMode="decimal"
+                    className={`${field} w-32`}
+                    value={a.amount}
+                    onChange={(e) =>
+                      setEra((d) => ({
+                        ...d,
+                        adjustments: d.adjustments.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)),
+                      }))
+                    }
+                  />
+                  {era.adjustments.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setEra((d) => ({ ...d, adjustments: d.adjustments.filter((_, j) => j !== i) }))
+                      }
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() =>
+                setEra((d) => ({
+                  ...d,
+                  adjustments: [...d.adjustments, { groupCode: 'CO', reasonCode: '', amount: '' }],
+                }))
+              }
+            >
+              + Add adjustment
+            </Button>
+          </fieldset>
+          {formError && (
+            <p className="text-danger-600 text-sm" role="alert">
+              {formError}
+            </p>
+          )}
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
             <Button type="submit" loading={action.isPending}>
-              Resubmit claim
+              Post remittance
             </Button>
           </div>
         </form>
