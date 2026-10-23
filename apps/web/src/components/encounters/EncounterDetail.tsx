@@ -6,7 +6,7 @@ import { API_V1 } from '@/lib/api';
 import { Toast } from '@/components/ui';
 import AiSummaryCard from './AiSummaryCard';
 import { SoapNotesView } from './SoapNotesView';
-import { SoapNotesEditor } from './SoapNotesEditor';
+import { SoapNotesEditor, type MentionItem } from './SoapNotesEditor';
 import { VersionHistory } from './VersionHistory';
 import { CosignatureWorkflow } from './CosignatureWorkflow';
 import type { EncounterRecord } from './EncounterTable';

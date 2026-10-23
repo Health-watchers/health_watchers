@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import CharacterCount from '@tiptap/extension-character-count';
 import Placeholder from '@tiptap/extension-placeholder';
+import Mention from '@tiptap/extension-mention';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getSuggestions, expandShorthandInText } from '@/lib/medicalShorthand';
 import { useVoiceDictation, type VoiceDictation } from '@/hooks/useVoiceDictation';
@@ -272,6 +273,7 @@ function SoapTabEditor({
   content: string;
   placeholder: string;
   onChange: (html: string) => void;
+  onSave?: () => void;
   readOnly?: boolean;
   dictation?: VoiceDictation;
 }) {
@@ -577,7 +579,6 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
             readOnly={readOnly}
           />
         </div>
-      ))}
 
       {/* Dictation problems (permission denied, network, transcription failure) */}
       {!readOnly && dictation.error && (
