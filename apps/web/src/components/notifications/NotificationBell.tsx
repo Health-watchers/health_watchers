@@ -22,6 +22,8 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ─── Single notification item inside the dropdown ─────────────────────────────
+
 function NotificationItem({ n, onRead }: { n: Notification; onRead: (id: string) => void }) {
   const router = useRouter();
 
@@ -58,20 +60,50 @@ function NotificationItem({ n, onRead }: { n: Notification; onRead: (id: string)
   );
 }
 
+// ─── Badge ────────────────────────────────────────────────────────────────────
+
+function Badge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className={[
+        'absolute top-0.5 right-0.5 flex h-4 min-w-[1rem] items-center justify-center',
+        'rounded-full bg-red-500 px-0.5 text-[10px] leading-none font-bold text-white',
+        'ring-2 ring-white dark:ring-neutral-800',
+      ].join(' ')}
+      aria-hidden="true"
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+// ─── NotificationBell ─────────────────────────────────────────────────────────
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
 
   const { data: count = 0 } = useUnreadCount();
-  const { data } = useNotifications(1, 10);
+  const { data } = useNotifications(1, 8);
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
   const { data: cosignData } = usePendingCosignatures();
-  const cosignCount: number = (cosignData as any)?.count ?? 0;
+  const cosignCount: number = (cosignData as { count?: number } | undefined)?.count ?? 0;
 
   const notifications = data?.data ?? [];
 
-  // Close on outside click
+  // ── Real-time: listen for notification:new events dispatched by RealtimeProvider ──
+  useEffect(() => {
+    const onNewNotification = () => {
+      qc.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    };
+    window.addEventListener('notification:new', onNewNotification);
+    return () => window.removeEventListener('notification:new', onNewNotification);
+  }, [qc]);
+
+  // ── Close on outside click ──
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -81,7 +113,7 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Close on Escape
+  // ── Close on Escape ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -90,8 +122,11 @@ export default function NotificationBell() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  const totalBadge = count; // primary badge = unread notifications
+
   return (
     <div className="relative" ref={ref}>
+      {/* ── Bell button ── */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -128,13 +163,14 @@ export default function NotificationBell() {
           <span
             className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[10px] font-bold leading-none text-white"
             title={`${cosignCount} pending co-signature${cosignCount !== 1 ? 's' : ''}`}
-            aria-label={`${cosignCount} pending co-signatures`}
+            aria-hidden="true"
           >
             {cosignCount > 9 ? '9+' : cosignCount}
           </span>
         )}
       </button>
 
+      {/* ── Dropdown panel ── */}
       {open && (
         <div
           id="notification-panel"
@@ -152,7 +188,7 @@ export default function NotificationBell() {
                 onClick={() => markAllRead.mutate()}
                 className="text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
               >
-                Mark all read
+                {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
               </button>
             )}
           </div>
@@ -169,13 +205,13 @@ export default function NotificationBell() {
           )}
 
           {/* Footer */}
-          <div className="border-t border-neutral-200 px-4 py-2">
+          <div className="border-t border-neutral-200 px-4 py-2 dark:border-neutral-700">
             <Link
               href="/notifications"
               onClick={() => setOpen(false)}
               className="block py-1 text-center text-xs text-primary-600 hover:underline focus:underline focus:outline-none"
             >
-              View all notifications
+              View all notifications →
             </Link>
           </div>
         </div>

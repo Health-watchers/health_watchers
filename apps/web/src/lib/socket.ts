@@ -75,6 +75,12 @@ class SocketManager {
       console.log('Patient arrived:', data);
       window.dispatchEvent(new CustomEvent('appointment:patient_arrived', { detail: data }));
     });
+
+    // Notification events — dispatch custom DOM event so NotificationBell can react
+    this.socket.on('notification:new', (data) => {
+      console.log('New notification:', data);
+      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
+    });
   }
 
   // Join appointment room for real-time updates

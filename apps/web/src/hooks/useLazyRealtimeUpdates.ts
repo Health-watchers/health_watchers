@@ -58,6 +58,11 @@ export function useLazyRealtimeUpdates(accessToken: string | null) {
       });
 
       socket.on('notification:new', () => {
+        // Optimistically bump unread count, then invalidate to reconcile
+        queryClient.setQueryData<number>(
+          queryKeys.notifications.unreadCount(),
+          (old) => (old ?? 0) + 1
+        );
         queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
       });
 
