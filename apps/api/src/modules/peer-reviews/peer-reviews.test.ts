@@ -232,3 +232,149 @@ describe('GET /assigned — review queue', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 });
+
+// ── Doctor-initiated requests ─────────────────────────────────────────────────
+
+describe('POST / — doctor requests review of own encounter', () => {
+  const doctorApp = buildApp(DOCTOR_ID, 'DOCTOR');
+
+  it('lets the attending doctor request a review and notifies the reviewer', async () => {
+    mockEncFindOne.mockReturnValue({
+      lean: () =>
+        Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: DOCTOR_ID, chiefComplaint: 'Cough' }),
+    });
+    mockUserFindOne.mockReturnValue({ lean: () => Promise.resolve({ _id: REVIEWER_ID }) });
+    mockPRFindOne.mockReturnValue({ lean: () => Promise.resolve(null) });
+    mockPRCreate.mockImplementation(async (doc: any) => ({ _id: new Types.ObjectId(), ...doc }));
+
+    const res = await request(doctorApp)
+      .post('/')
+      .send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID, requestNote: 'Check dosing' });
+
+    expect(res.status).toBe(201);
+    expect(mockPRCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedBy: DOCTOR_ID, requestNote: 'Check dosing' })
+    );
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: REVIEWER_ID, title: 'Peer Review Requested' })
+    );
+  });
+
+  it("returns 403 when a doctor requests review of someone else's encounter", async () => {
+    mockEncFindOne.mockReturnValue({
+      lean: () => Promise.resolve({ _id: ENCOUNTER_ID, attendingDoctorId: ADMIN_ID }),
+    });
+
+    const res = await request(doctorApp)
+      .post('/')
+      .send({ encounterId: ENCOUNTER_ID, reviewerId: REVIEWER_ID });
+    expect(res.status).toBe(403);
+    expect(mockPRCreate).not.toHaveBeenCalled();
+  });
+});
+
+// ── Recommendations ───────────────────────────────────────────────────────────
+
+describe('PUT /:id — recommendations', () => {
+  it('stores recommendations and links the notification to the encounter', async () => {
+    const reviewId = new Types.ObjectId().toHexString();
+    const mockReview: any = {
+      _id: reviewId,
+      encounterId: ENCOUNTER_ID,
+      reviewerId: REVIEWER_ID,
+      revieweeId: DOCTOR_ID,
+      clinicId: CLINIC_ID,
+      status: 'pending',
+      isAnonymous: true,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    mockPRFindOne.mockResolvedValue(mockReview);
+    (EncounterModel.findById as jest.Mock).mockReturnValue({
+      lean: () => Promise.resolve({ attendingDoctorId: DOCTOR_ID }),
+    });
+
+    const res = await request(reviewerApp)
+      .put(`/${reviewId}`)
+      .send({ rating: 3, recommendations: 'Document a differential diagnosis' });
+
+    expect(res.status).toBe(200);
+    expect(mockReview.recommendations).toBe('Document a differential diagnosis');
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ link: `/encounters/${ENCOUNTER_ID}` })
+    );
+  });
+});
+
+// ── Encounter lookup ──────────────────────────────────────────────────────────
+
+describe('GET /encounter/:encounterId', () => {
+  const mockLookup = (review: unknown) => {
+    const lean = { lean: jest.fn().mockResolvedValue(review) };
+    const pop2 = { populate: jest.fn().mockReturnValue(lean) };
+    mockPRFindOne.mockReturnValue({ populate: jest.fn().mockReturnValue(pop2) });
+  };
+
+  it('returns null when the encounter has no review', async () => {
+    mockLookup(null);
+    const res = await request(adminApp).get(`/encounter/${ENCOUNTER_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+  });
+
+  it('hides the reviewer from the reviewee on anonymous reviews', async () => {
+    mockLookup({
+      _id: 'r1',
+      isAnonymous: true,
+      reviewerId: { _id: REVIEWER_ID, fullName: 'Dr Reviewer' },
+      revieweeId: { _id: DOCTOR_ID, fullName: 'Dr Author' },
+    });
+    const res = await request(buildApp(DOCTOR_ID, 'DOCTOR')).get(`/encounter/${ENCOUNTER_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.reviewerId).toBeNull();
+  });
+
+  it('returns 403 for clinicians who are not part of the review', async () => {
+    mockLookup({ _id: 'r1', reviewerId: REVIEWER_ID, revieweeId: DOCTOR_ID });
+    const outsider = new Types.ObjectId().toHexString();
+    const res = await request(buildApp(outsider, 'DOCTOR')).get(`/encounter/${ENCOUNTER_ID}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+describe('GET /analytics', () => {
+  it('returns averages, distribution and common feedback themes', async () => {
+    (PeerReviewModel.aggregate as jest.Mock)
+      .mockResolvedValueOnce([{ totalReviews: 2, averageRating: 3.5, followUpCount: 1 }])
+      .mockResolvedValueOnce([
+        { _id: 3, count: 1 },
+        { _id: 4, count: 1 },
+      ])
+      .mockResolvedValueOnce([{ _id: '2026-10', averageRating: 3.5, count: 2 }]);
+    (PeerReviewModel.countDocuments as jest.Mock).mockResolvedValue(4);
+    mockPRFind.mockReturnValue({
+      sort: () => ({
+        limit: () => ({
+          lean: () =>
+            Promise.resolve([
+              { feedback: 'SOAP note was incomplete', recommendations: 'Review dosage' },
+              { feedback: 'Missing documentation of vitals' },
+            ]),
+        }),
+      }),
+    });
+
+    const res = await request(adminApp).get('/analytics');
+    expect(res.status).toBe(200);
+    expect(res.body.data.averageRating).toBe(3.5);
+    expect(res.body.data.pendingCount).toBe(4);
+    expect(res.body.data.ratingDistribution).toHaveLength(5);
+    expect(res.body.data.commonThemes[0]).toMatchObject({ key: 'documentation', count: 2 });
+  });
+
+  it('rejects an invalid date range', async () => {
+    const res = await request(adminApp).get('/analytics?from=not-a-date');
+    expect(res.status).toBe(400);
+  });
+});

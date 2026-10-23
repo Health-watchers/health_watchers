@@ -27,6 +27,7 @@ import {
   mfaBackupCodeSchema,
   mfaDisableSchema,
   mfaBackupCodesRegenerateSchema,
+  loginAlertRevokeSchema,
 } from './auth.validation';
 import {
   sendPasswordResetEmail,
@@ -53,6 +54,7 @@ import { sendVerificationEmail, sendWelcomeEmail } from '@api/lib/email.service'
 import { encrypt, decrypt } from '@api/lib/encrypt';
 import { auditLog } from '../audit/audit.service';
 import { addToDenylist, setUserInvalidatedAt } from '@api/services/token-denylist.service';
+import { handleSuccessfulLogin, revokeSessionsForAlert } from './services/login-alert.service';
 import {
   MFA_REQUIRED_ROLES,
   availableMfaMethods,
@@ -233,6 +235,7 @@ router.post(
         consumed: false,
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
       });
+      void handleSuccessfulLogin(user, req);
       return res.json({
         status: 'success',
         data: {
@@ -258,6 +261,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
@@ -411,6 +415,46 @@ router.post('/logout-all', authenticate, async (req: Request, res: Response) => 
 
 /**
  * @swagger
+ * /auth/login-alerts/revoke:
+ *   post:
+ *     summary: '"This wasn''t me" — revoke every session from a new sign-in alert (#1497)'
+ *     description: >
+ *       Public endpoint behind the link in new-device / new-country sign-in alerts.
+ *       The single-use token revokes all refresh tokens and access tokens for the
+ *       account and forgets the reported device.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token: { type: string }
+ *     responses:
+ *       200:
+ *         description: All sessions revoked
+ *       400:
+ *         description: Invalid, expired or already used link
+ */
+router.post(
+  '/login-alerts/revoke',
+  validateRequest({ body: loginAlertRevokeSchema }),
+  async (req: Request, res: Response) => {
+    const result = await revokeSessionsForAlert(req.body.token, req);
+    if (!result) {
+      return res.status(400).json({
+        error: 'InvalidToken',
+        message: 'This link is invalid, has expired or was already used',
+      });
+    }
+    return res.json({ status: 'success', data: { sessionsRevoked: true } });
+  }
+);
+
+/**
+ * @swagger
  * /auth/mfa/setup:
  *   post:
  *     summary: Generate a TOTP secret and QR code URI for MFA setup
@@ -544,6 +588,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
@@ -603,6 +648,7 @@ router.post(
       consumed: false,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
+    void handleSuccessfulLogin(user, req);
     return res.json({
       status: 'success',
       data: {

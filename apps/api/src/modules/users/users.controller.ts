@@ -11,6 +11,11 @@ import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
 import { addToDenylist } from '@api/services/token-denylist.service';
 import { passwordSchema } from '../auth/auth.validation';
+import {
+  countryName,
+  fingerprintDevice,
+  listKnownDevices,
+} from '../auth/services/login-alert.service';
 import { imageUpload } from '@api/middlewares/upload.middleware';
 import { uploadFile, getDownloadUrl, deleteFile } from '../documents/storage.service';
 
@@ -624,6 +629,41 @@ router.post('/me/deactivate', authenticate, async (req: Request, res: Response) 
   }
 
   return res.json({ status: 'success', message: 'Account deactivated.' });
+});
+
+/**
+ * @swagger
+ * /users/devices:
+ *   get:
+ *     summary: Devices recognised for the current user (#1497)
+ *     description: >
+ *       Devices the account has signed in from, with the approximate (country-level)
+ *       locations seen for each. A sign-in from a device or country not on this list
+ *       triggers a security alert.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Recognised devices, most recently used first
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/devices', authenticate, async (req: Request, res: Response) => {
+  const devices = await listKnownDevices(req.user!.userId);
+  const current = fingerprintDevice(req.headers['user-agent']);
+  return res.json({
+    status: 'success',
+    data: devices.map((d) => ({
+      id: String(d._id),
+      deviceLabel: d.deviceLabel,
+      countries: (d.countries ?? []).map((code) => ({ code, name: countryName(code) })),
+      lastLocation: countryName(d.lastCountry),
+      firstSeenAt: d.firstSeenAt,
+      lastSeenAt: d.lastSeenAt,
+      isCurrent: d.fingerprint === current,
+    })),
+  });
 });
 
 export const userRoutes = router;

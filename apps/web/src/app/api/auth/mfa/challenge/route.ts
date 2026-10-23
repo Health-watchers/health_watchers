@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_URL } from '@/lib/api';
 import { webConfig } from '@/lib/config';
+import { clientContextHeaders } from '@/lib/clientContextHeaders';
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function POST(request: NextRequest) {
 
     const res = await fetch(`${API_URL}/api/v1/auth/mfa/challenge`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...clientContextHeaders(request) },
       body: JSON.stringify(body),
     });
 

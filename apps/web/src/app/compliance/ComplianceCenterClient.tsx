@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,6 +19,10 @@ import {
 import { BreachIncidentBoard, useNow } from '@/components/compliance/BreachIncidentBoard';
 import { BreachIncidentForm } from '@/components/compliance/BreachIncidentForm';
 import { BAARegistry } from '@/components/compliance/BAARegistry';
+import {
+  EmergencyAccessReviewQueue,
+  fetchEmergencyAccesses,
+} from '@/components/compliance/EmergencyAccessReviewQueue';
 import { ApiError, apiV1Fetch } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import {
@@ -88,6 +92,19 @@ export default function ComplianceCenterClient() {
     retry: (count, err) => !(err instanceof ApiError && err.status === 403) && count < 2,
   });
   const baasQuery = useQuery({ queryKey: queryKeys.compliance.baas(), queryFn: fetchBaas });
+  // #1493 — break-the-glass accesses awaiting compliance review
+  const pendingEmergencyQuery = useQuery({
+    queryKey: queryKeys.compliance.emergencyAccess('PENDING'),
+    queryFn: () => fetchEmergencyAccesses('PENDING'),
+    refetchInterval: 30_000,
+  });
+  const pendingEmergency = pendingEmergencyQuery.data?.total ?? 0;
+
+  // Deep link from emergency access alerts: /compliance?tab=emergency-access
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    if (requested) setTab(requested);
+  }, []);
 
   const incidents = incidentsQuery.data ?? [];
   const baas = baasQuery.data ?? [];
@@ -153,7 +170,7 @@ export default function ComplianceCenterClient() {
     <PageWrapper className="space-y-6 py-6">
       <PageHeader
         title="Compliance Center"
-        subtitle="HIPAA breach notifications and business associate agreements"
+        subtitle="HIPAA breach notifications, business associate agreements and emergency access reviews"
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -210,6 +227,9 @@ export default function ComplianceCenterClient() {
         <TabsList>
           <TabsTrigger value="incidents">Breach incidents</TabsTrigger>
           <TabsTrigger value="baas">BAA registry</TabsTrigger>
+          <TabsTrigger value="emergency-access">
+            Emergency access{pendingEmergency > 0 ? ` (${pendingEmergency})` : ''}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="incidents" className="pt-4">
@@ -245,6 +265,10 @@ export default function ComplianceCenterClient() {
           ) : (
             <BAARegistry baas={baas} now={now} />
           )}
+        </TabsContent>
+
+        <TabsContent value="emergency-access" className="pt-4">
+          <EmergencyAccessReviewQueue />
         </TabsContent>
       </Tabs>
 

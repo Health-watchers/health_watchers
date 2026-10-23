@@ -1,8 +1,22 @@
 /**
  * Strips ALL HTML tags — use for plain-text fields.
+ *
+ * Equivalent to `input.replace(/<[^>]*>/g, '')` but runs in linear time: the
+ * regex rescans to the end of the string for every unclosed `<`, which is
+ * quadratic (ReDoS) on input such as `'<'.repeat(50_000)`.
  */
 export function sanitizeText(input: string): string {
-  return input.replace(/<[^>]*>/g, '');
+  let out = '';
+  let pos = 0;
+  while (pos < input.length) {
+    const open = input.indexOf('<', pos);
+    if (open === -1) break;
+    const close = input.indexOf('>', open + 1);
+    if (close === -1) break;
+    out += input.slice(pos, open);
+    pos = close + 1;
+  }
+  return out + input.slice(pos);
 }
 
 // Tags and attributes allowed in rich-text (TipTap) SOAP notes
@@ -27,6 +41,50 @@ const ALLOWED_ATTRS = new Set(['class']);
 // Dangerous URL schemes that can execute script in browsers
 const DANGEROUS_URL_RE = /^\s*(javascript|vbscript|data)\s*:/i;
 
+const DANGEROUS_OPEN_TAG_RE =
+  /<(script|style|iframe|object|embed|form|base|link|meta|svg|math|template)(\s[^>]*)?>/gi;
+
+/**
+ * Removes dangerous block elements entirely (including all inner content).
+ *
+ * Linear-time replacement for `/<(tag)(\s[^>]*)?>[\s\S]*?<\/\s*\1\s*>/gi`: once a
+ * tag has no closing tag ahead, later openers of that tag are not rescanned.
+ */
+function stripDangerousBlocks(input: string): string {
+  const unclosed = new Set<string>();
+  const openRe = new RegExp(DANGEROUS_OPEN_TAG_RE.source, 'gi');
+  let out = '';
+  let pos = 0;
+  let open: RegExpExecArray | null;
+  while ((open = openRe.exec(input)) !== null) {
+    const tag = open[1].toLowerCase();
+    if (unclosed.has(tag)) continue;
+
+    const closeRe = new RegExp(`<\\/\\s*${tag}\\s*>`, 'gi');
+    closeRe.lastIndex = openRe.lastIndex;
+    const close = closeRe.exec(input);
+    if (!close) {
+      unclosed.add(tag);
+      continue;
+    }
+
+    out += input.slice(pos, open.index);
+    pos = close.index + close[0].length;
+    openRe.lastIndex = pos;
+  }
+  return out + input.slice(pos);
+}
+
+/**
+ * Applies `transform` only up to the last `>`. Every tag pattern below must end
+ * on a `>`, so nothing after it can match; leaving that tail out keeps unclosed
+ * `<` runs from triggering quadratic backtracking (ReDoS).
+ */
+function beforeLastClose(input: string, transform: (head: string) => string): string {
+  const lastClose = input.lastIndexOf('>');
+  return transform(input.slice(0, lastClose + 1)) + input.slice(lastClose + 1);
+}
+
 /**
  * Strips disallowed HTML tags and attributes to prevent stored XSS.
  * Handles quoted and unquoted attributes, event handlers (on*), and
@@ -34,32 +92,25 @@ const DANGEROUS_URL_RE = /^\s*(javascript|vbscript|data)\s*:/i;
  * Keeps safe formatting tags produced by TipTap.
  */
 export function sanitizeHtml(input: string): string {
-  // Remove dangerous block elements entirely (including all inner content)
-  let out = input.replace(
-    /<(script|style|iframe|object|embed|form|base|link|meta|svg|math|template)(\s[^>]*)?>[\s\S]*?<\/\s*\1\s*>/gi,
-    ''
-  );
+  let out = beforeLastClose(input, stripDangerousBlocks);
   // Also strip self-closing or unclosed dangerous tags
-  out = out.replace(
-    /<(script|style|iframe|object|embed|form|base|link|meta|svg|math|template)(\s[^>]*)?>/gi,
-    ''
-  );
+  out = beforeLastClose(out, (head) => head.replace(DANGEROUS_OPEN_TAG_RE, ''));
 
   // Strip disallowed tags but keep their inner text
-  out = out.replace(
-    /<(\/?)([a-zA-Z][a-zA-Z0-9]*)(\b[^>]*)>/g,
-    (match, slash: string, tag: string, attrs: string) => {
-      const lower = tag.toLowerCase();
-      if (!ALLOWED_TAGS.has(lower)) return '';
+  return beforeLastClose(out, (head) =>
+    head.replace(
+      /<(\/?)([a-zA-Z][a-zA-Z0-9]*)(\b[^>]*)>/g,
+      (match, slash: string, tag: string, attrs: string) => {
+        const lower = tag.toLowerCase();
+        if (!ALLOWED_TAGS.has(lower)) return '';
 
-      if (slash) return `</${tag}>`;
+        if (slash) return `</${tag}>`;
 
-      const safeAttrs = buildSafeAttrs(attrs);
-      return `<${tag}${safeAttrs}>`;
-    }
+        const safeAttrs = buildSafeAttrs(attrs);
+        return `<${tag}${safeAttrs}>`;
+      }
+    )
   );
-
-  return out;
 }
 
 /**

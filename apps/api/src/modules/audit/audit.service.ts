@@ -12,6 +12,7 @@ interface AuditLogParams {
   clinicId?: string | Types.ObjectId;
   outcome?: 'SUCCESS' | 'FAILURE';
   metadata?: Record<string, unknown>;
+  emergencyAccess?: boolean;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -31,6 +32,12 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
 
     const userAgent = req?.headers['user-agent'];
     const requestId = req ? extractRequestId(req) : undefined;
+    // Break-the-glass (#1493): tag everything done under an emergency access grant
+    const emergencyGrantId = req?.emergencyAccess?.grantId;
+    const emergencyAccess = params.emergencyAccess || Boolean(emergencyGrantId);
+    const metadata = emergencyGrantId
+      ? { ...params.metadata, emergencyAccessGrantId: emergencyGrantId }
+      : params.metadata;
 
     await AuditLogModel.create({
       userId: params.userId ? new Types.ObjectId(params.userId) : undefined,
@@ -42,7 +49,8 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
       userAgent,
       requestId,
       outcome: params.outcome || 'SUCCESS',
-      metadata: params.metadata,
+      metadata,
+      ...(emergencyAccess ? { emergencyAccess: true } : {}),
       timestamp: new Date(),
     });
   } catch (error) {

@@ -40,6 +40,7 @@ import { sendMail } from '@api/utils/mailer';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
 import { sanitizeText } from '@api/utils/sanitize';
 import crypto from 'crypto';
+import { handleSuccessfulLogin } from '../auth/services/login-alert.service';
 const router = Router();
 
 const loginSchema = z.object({
@@ -183,6 +184,7 @@ router.post(
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
 
+    void handleSuccessfulLogin(user, req);
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
   })
 );
@@ -264,6 +266,7 @@ router.post(
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
 
+    void handleSuccessfulLogin(user, req);
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
   })
 );

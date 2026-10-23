@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Toast, TableSkeleton, ErrorMessage, Button } from '@/components/ui';
 import { useEncounter } from '@/lib/queries/useEncounter';
 import EncounterDetail from '@/components/encounters/EncounterDetail';
+import { PeerReviewRequestCard } from '@/components/peer-reviews/PeerReviewRequestCard';
 
 interface EncounterPageProps {
   params: {
@@ -60,6 +61,7 @@ export default function EncounterDetailPage({ params }: EncounterPageProps) {
         </div>
       </div>
       <EncounterDetail encounter={data} onBack={() => router.push('/encounters')} />
+      <PeerReviewRequestCard encounterId={params.id} />
     </main>
   );
 }

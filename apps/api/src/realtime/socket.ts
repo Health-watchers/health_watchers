@@ -1,6 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
+import { verifyAccessTokenAsync, TokenPayload } from '../modules/auth/token.service';
 import { config } from '@health-watchers/config';
 import { CollaborationHandler } from './collaboration.handler';
 import { PresenceHandler } from './presence.handler';
@@ -30,8 +30,9 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     transports: ['websocket', 'polling'],
   });
 
-  // JWT authentication middleware
-  io.use((socket: Socket, next: (err?: Error) => void) => {
+  // JWT authentication middleware — checks signature, expiry and the denylist
+  // so revoked (logged-out) tokens cannot open a realtime channel.
+  io.use(async (socket: Socket, next: (err?: Error) => void) => {
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.replace('Bearer ', '');
@@ -40,7 +41,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
       return next(new Error('Authentication required'));
     }
 
-    const payload = verifyAccessToken(token);
+    const payload = await verifyAccessTokenAsync(token);
     if (!payload) {
       return next(new Error('Invalid or expired token'));
     }

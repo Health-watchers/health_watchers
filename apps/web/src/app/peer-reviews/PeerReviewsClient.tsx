@@ -31,31 +31,17 @@ import {
 import { SoapNotesView } from '@/components/encounters/SoapNotesView';
 import { useAuth } from '@/context/AuthContext';
 import { authJson } from '@/lib/authJson';
+import {
+  peerReviewKeys,
+  peerReviewsApi,
+  type PeerReview,
+  type PeerReviewAnalytics,
+  type PeerReviewCategoryKey,
+} from '@/lib/peerReviews';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type CategoryKey = 'documentation' | 'diagnosis' | 'treatment' | 'followUp';
-
-interface PeerReview {
-  _id: string;
-  encounterId: {
-    _id: string;
-    chiefComplaint?: string;
-    patientId?: string;
-    createdAt?: string;
-    status?: string;
-  } | null;
-  reviewerId?: { _id: string; fullName: string; role: string } | string | null;
-  revieweeId?: { _id: string; fullName: string; role: string } | string | null;
-  status: 'pending' | 'in_review' | 'completed';
-  rating?: number;
-  feedback?: string;
-  categories?: Partial<Record<CategoryKey, number>>;
-  requiresFollowUp?: boolean;
-  isAnonymous: boolean;
-  completedAt?: string;
-  createdAt: string;
-}
+type CategoryKey = PeerReviewCategoryKey;
 
 interface ProviderStat {
   _id: string;
@@ -315,6 +301,16 @@ function SubmittedReview({ review, showReviewer }: { review: PeerReview; showRev
       ) : (
         <p className="text-xs italic text-neutral-500">No written comments.</p>
       )}
+      {review.recommendations && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Recommendations
+          </p>
+          <p className="mt-1 whitespace-pre-line text-neutral-800 dark:text-neutral-200">
+            {review.recommendations}
+          </p>
+        </div>
+      )}
       <p className="text-xs text-neutral-500">Submitted reviews are final and cannot be edited.</p>
     </div>
   );
@@ -327,6 +323,7 @@ function ReviewForm({ review, onDone }: { review: PeerReview; onDone: () => void
   const [rating, setRating] = useState<number>();
   const [scores, setScores] = useState<Partial<Record<CategoryKey, number>>>({});
   const [feedback, setFeedback] = useState('');
+  const [recommendations, setRecommendations] = useState('');
   const [requiresFollowUp, setRequiresFollowUp] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -336,7 +333,13 @@ function ReviewForm({ review, onDone }: { review: PeerReview; onDone: () => void
     mutationFn: () =>
       authJson<PeerReview>(`/peer-reviews/${review._id}`, {
         method: 'PUT',
-        body: JSON.stringify({ rating, categories: scores, feedback, requiresFollowUp }),
+        body: JSON.stringify({
+          rating,
+          categories: scores,
+          feedback,
+          recommendations: recommendations.trim() || undefined,
+          requiresFollowUp,
+        }),
       }),
     onSuccess: () => {
       toast.success('Peer review submitted');
@@ -393,6 +396,19 @@ function ReviewForm({ review, onDone }: { review: PeerReview; onDone: () => void
           setFeedback(e.target.value);
         }}
         placeholder="What was done well, and what could be improved?"
+      />
+
+      <Textarea
+        id="review-recommendations"
+        label="Recommendations"
+        rows={3}
+        maxLength={5000}
+        value={recommendations}
+        onChange={(e) => {
+          setConfirming(false);
+          setRecommendations(e.target.value);
+        }}
+        placeholder="Specific, actionable steps for the author (e.g. document a differential diagnosis)"
       />
 
       <label className="flex items-start gap-2 text-sm">
@@ -477,6 +493,11 @@ function ReviewPanel({
             <h3 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
               {mode === 'received' ? 'Peer feedback' : 'Your review'}
             </h3>
+            {review.requestNote && mode === 'review' && review.status !== 'completed' && (
+              <div className="border-primary-200 bg-primary-50 text-primary-800 dark:bg-primary-900/30 dark:text-primary-200 mb-4 rounded-md border px-3 py-2 text-sm">
+                <span className="font-medium">Requested focus:</span> {review.requestNote}
+              </div>
+            )}
             {review.status === 'completed' ? (
               <SubmittedReview review={review} showReviewer={mode === 'received'} />
             ) : (
@@ -566,8 +587,8 @@ function AssignedTab({ userId }: { userId: string }) {
   const [filter, setFilter] = useState<'pending' | 'completed' | 'all'>('pending');
   const [open, setOpen] = useState<PeerReview | null>(null);
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['peer-reviews', 'assigned'],
-    queryFn: () => authJson<PeerReview[]>('/peer-reviews/assigned'),
+    queryKey: peerReviewKeys.assigned,
+    queryFn: () => peerReviewsApi.assigned(),
   });
 
   // Defence in depth: the API excludes these too, but never offer a clinician their own encounter
@@ -617,8 +638,8 @@ function AssignedTab({ userId }: { userId: string }) {
 function ReceivedTab() {
   const [open, setOpen] = useState<PeerReview | null>(null);
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['peer-reviews', 'received'],
-    queryFn: () => authJson<PeerReview[]>('/peer-reviews/received'),
+    queryKey: peerReviewKeys.received,
+    queryFn: () => peerReviewsApi.received(),
   });
 
   return (
@@ -729,6 +750,162 @@ function SummaryTab() {
   );
 }
 
+function DistributionBars({
+  rows,
+}: {
+  rows: { label: string; count: number; hint?: string }[];
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <ul className="space-y-2">
+      {rows.map((r) => (
+        <li key={r.label} className="grid grid-cols-[8rem_1fr_2.5rem] items-center gap-3 text-sm">
+          <span className="truncate text-neutral-700 dark:text-neutral-300" title={r.hint}>
+            {r.label}
+          </span>
+          <span className="h-2.5 rounded-full bg-neutral-100 dark:bg-neutral-800" aria-hidden="true">
+            <span
+              className="bg-primary-600 block h-full rounded-full"
+              style={{ width: `${(r.count / max) * 100}%` }}
+            />
+          </span>
+          <span className="text-right tabular-nums text-neutral-600 dark:text-neutral-400">
+            {r.count}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AnalyticsTab() {
+  const { data, isLoading, error, refetch } = useQuery<PeerReviewAnalytics>({
+    queryKey: peerReviewKeys.analytics,
+    queryFn: () => peerReviewsApi.analytics(),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Spinner />
+      </div>
+    );
+  }
+  if (error) return <ErrorMessage message={(error as Error).message} onRetry={() => refetch()} />;
+  if (!data || data.totalReviews === 0) {
+    return (
+      <EmptyState
+        icon={<span className="text-4xl">📈</span>}
+        title="No analytics yet"
+        description="Analytics appear once peer reviews have been completed."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="peer-review-analytics">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card>
+          <p className="text-sm text-neutral-500">Average rating</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {fmtScore(data.averageRating)}
+            <span className="text-sm font-normal text-neutral-500">/5</span>
+          </p>
+        </Card>
+        <Card>
+          <p className="text-sm text-neutral-500">Completed reviews</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{data.totalReviews}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-neutral-500">Pending reviews</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{data.pendingCount}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-neutral-500">Flagged for follow-up</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{data.followUpCount}</p>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            Rating distribution
+          </h3>
+          <DistributionBars
+            rows={[...data.ratingDistribution].reverse().map((d) => ({
+              label: `${d.rating} – ${SCORE_LABELS[d.rating]}`,
+              count: d.count,
+            }))}
+          />
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            Rubric averages
+          </h3>
+          <dl className="grid grid-cols-2 gap-3">
+            {RUBRIC.map((c) => (
+              <div key={c.key} className="rounded-md bg-neutral-50 p-3 dark:bg-neutral-800">
+                <dt className="text-xs text-neutral-500">{c.label}</dt>
+                <dd className="text-lg font-semibold tabular-nums">
+                  {fmtScore(data.categoryAverages[c.key])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      </div>
+
+      <Card>
+        <h3 className="mb-1 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+          Common feedback themes
+        </h3>
+        <p className="mb-3 text-xs text-neutral-500">
+          Recurring topics detected in reviewer comments and recommendations.
+        </p>
+        {data.commonThemes.length === 0 ? (
+          <p className="text-sm text-neutral-500">No recurring themes detected yet.</p>
+        ) : (
+          <DistributionBars
+            rows={data.commonThemes.map((t) => ({
+              label: t.label,
+              count: t.count,
+              hint: `${Math.round(t.share * 100)}% of reviews`,
+            }))}
+          />
+        )}
+      </Card>
+
+      {data.monthlyTrend.length > 1 && (
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            Monthly trend
+          </h3>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Month</TableTh>
+                  <TableTh className="text-right">Reviews</TableTh>
+                  <TableTh className="text-right">Average rating</TableTh>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.monthlyTrend.map((m) => (
+                  <TableRow key={m.month}>
+                    <TableTd>{m.month}</TableTd>
+                    <TableTd className="text-right tabular-nums">{m.count}</TableTd>
+                    <TableTd className="text-right tabular-nums">{fmtScore(m.averageRating)}</TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PeerReviewsClient() {
@@ -772,6 +949,7 @@ export default function PeerReviewsClient() {
             <TabsList>
               <TabsTrigger value="assigned">Assigned to me</TabsTrigger>
               <TabsTrigger value="received">My encounters reviewed</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
               {isAdmin && <TabsTrigger value="summary">Provider summary</TabsTrigger>}
             </TabsList>
             <TabsContent value="assigned">
@@ -779,6 +957,9 @@ export default function PeerReviewsClient() {
             </TabsContent>
             <TabsContent value="received">
               <ReceivedTab />
+            </TabsContent>
+            <TabsContent value="analytics">
+              <AnalyticsTab />
             </TabsContent>
             {isAdmin && (
               <TabsContent value="summary">

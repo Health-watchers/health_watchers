@@ -17,6 +17,7 @@ import {
   getFeeStats,
   buildFeeBumpTransaction,
   issueRefund,
+  anchorDigest,
   streamAccountTransactions,
   getNetworkStatus,
   getHorizonServer,
@@ -665,6 +666,23 @@ app.post('/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, re
       3,
       1000
     );
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /anchor (requires secret) — audit chain anchoring (#1494)
+app.post('/anchor', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { name, digest } = req.body;
+    if (typeof name !== 'string' || typeof digest !== 'string') {
+      return res.status(400).json({ error: 'name and digest are required' });
+    }
+    const result = await retryWithBackoff(() => anchorDigest(name, digest), 3, 1000);
     recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {

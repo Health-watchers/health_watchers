@@ -13,6 +13,17 @@ import {
   addClaimAttachment,
 } from './claim.controller';
 import {
+  downloadCms1500,
+  validateClaimPayload,
+  validateStoredClaim,
+  transitionClaimStatus,
+  recordRemittance,
+  syncClaimStatus,
+  syncOpenClaims,
+  correctClaim,
+  getEraDashboard,
+} from './claim-lifecycle.controller';
+import {
   getUnbilledEncounters,
   getDeniedEncounters,
   getAgingReport,
@@ -43,8 +54,17 @@ const BILLING_WRITE_ROLES = [
  *  GET  /billing/claims/counts                   Per-status queue totals (+ unbilled)
  *  POST /billing/claims/submit                   Bulk-submit draft claims
  *  GET  /billing/claims/:claimId                 Claim detail
+ *  POST /billing/claims/validate                 Validate CMS-1500 fields before generating (#1689)
+ *  POST /billing/claims/sync                     Poll the clearinghouse for every open claim (#1689)
+ *  GET  /billing/claims/era                      ERA (835) remittance dashboard (#1689)
+ *  GET  /billing/claims/:claimId/cms1500.pdf     CMS-1500 claim form as PDF (#1689)
+ *  GET  /billing/claims/:claimId/validation      Re-validate a stored claim (#1689)
+ *  PATCH /billing/claims/:claimId/status         State-machine status update (#1689)
+ *  PATCH /billing/claims/:claimId/correct        Correct a draft/rejected/denied claim (#1689)
+ *  POST /billing/claims/:claimId/remittances     Post an ERA remittance (#1689)
+ *  POST /billing/claims/:claimId/sync            Poll the clearinghouse for one claim (#1689)
  *  PATCH /billing/claims/:claimId/deny           Record a payer denial
- *  PATCH /billing/claims/:claimId/resubmit       Correct & resubmit a denied claim
+ *  PATCH /billing/claims/:claimId/resubmit       Correct & resubmit a rejected/denied claim
  *  PATCH /billing/claims/:claimId/write-off      Write off with reason
  *  POST /billing/claims/:claimId/attachments     Link a supporting document
  *  GET  /billing/unbilled                        Unbilled encounters (paginated, sortable) [RBAC]
@@ -69,7 +89,16 @@ router.post('/encounters/:id/generate-claim', authorize(BILLING_WRITE_ROLES), ge
 router.get('/claims', authorize(BILLING_READ_ROLES), listClaims);
 router.get('/claims/counts', authorize(BILLING_READ_ROLES), getClaimCounts);
 router.post('/claims/submit', authorize(BILLING_WRITE_ROLES), submitClaims);
+router.post('/claims/validate', authorize(BILLING_READ_ROLES), validateClaimPayload);
+router.post('/claims/sync', authorize(BILLING_WRITE_ROLES), syncOpenClaims);
+router.get('/claims/era', authorize(BILLING_READ_ROLES), getEraDashboard);
 router.get('/claims/:claimId', authorize(BILLING_READ_ROLES), getClaim);
+router.get('/claims/:claimId/cms1500.pdf', authorize(BILLING_READ_ROLES), downloadCms1500);
+router.get('/claims/:claimId/validation', authorize(BILLING_READ_ROLES), validateStoredClaim);
+router.patch('/claims/:claimId/status', authorize(BILLING_WRITE_ROLES), transitionClaimStatus);
+router.patch('/claims/:claimId/correct', authorize(BILLING_WRITE_ROLES), correctClaim);
+router.post('/claims/:claimId/remittances', authorize(BILLING_WRITE_ROLES), recordRemittance);
+router.post('/claims/:claimId/sync', authorize(BILLING_WRITE_ROLES), syncClaimStatus);
 router.patch('/claims/:claimId/deny', authorize(BILLING_WRITE_ROLES), denyClaim);
 router.patch('/claims/:claimId/resubmit', authorize(BILLING_WRITE_ROLES), resubmitClaim);
 router.patch('/claims/:claimId/write-off', authorize(BILLING_WRITE_ROLES), writeOffClaim);

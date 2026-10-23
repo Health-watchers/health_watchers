@@ -86,7 +86,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
   // Fetch patients & encounters for @mention suggestions (best-effort)
   const { data: patients = [] } = usePatients({});
   const { data: encountersPage } = useEncounters(1, 50);
-  const mentionItems: MentionItem[] = [
+  const mentionItems = [
     ...patients.map((p) => ({
       id: p._id,
       label: `${p.firstName} ${p.lastName}`,
@@ -199,7 +199,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
       <AiSummaryCard
         encounterId={encounter.id}
         patientName={encounter.patientName}
-        {...(encounter.aiSummary ? { initialSummary: encounter.aiSummary } : {})}
+        {...(encounter.aiSummary !== undefined ? { initialSummary: encounter.aiSummary } : {})}
         tags={['clinical-insight', 'encounter-summary']}
       />
 
@@ -250,9 +250,11 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
                 value={soapNotes}
                 onChange={setSoapNotes}
                 onAutoSave={handleAutoSave}
+                {...(encounter.updatedAt !== undefined
+                  ? { serverLastUpdatedAt: encounter.updatedAt }
+                  : {})}
                 mentionItems={mentionItems}
                 encounterId={encounter.id}
-                {...(encounter.updatedAt ? { serverLastUpdatedAt: encounter.updatedAt } : {})}
               />
             ) : (
               <SoapNotesView soapNotes={soapNotes} />

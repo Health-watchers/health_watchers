@@ -325,6 +325,8 @@ export const NOTIFICATION_TYPES = [
   'subscription_warning',
   'follow_up_reminder',
   'report_ready',
+  'emergency_access',
+  'security_alert',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

@@ -4,6 +4,9 @@ import { type Patient } from '@health-watchers/types';
 import { queryKeys } from '@/lib/queryKeys';
 import { API_V1 } from '@/lib/api';
 
+/** Thrown by the patient query when the record needs break-the-glass access (#1493). */
+export const EMERGENCY_ACCESS_REQUIRED = 'EMERGENCY_ACCESS_REQUIRED';
+
 export interface EncounterResponse {
   id: string;
   patientId: string;
@@ -47,6 +50,13 @@ export function usePatientDetail(patientId: string) {
     queryFn: async () => {
       const res = await fetch(`${API_V1}/patients/${patientId}`);
       if (res.status === 404) throw new Error('404');
+      if (res.status === 403) {
+        // #1493 — patient outside the care team: offer break-the-glass access
+        const body = await res.json().catch(() => ({}));
+        if (body.error === 'EmergencyAccessRequired') {
+          throw new Error(EMERGENCY_ACCESS_REQUIRED);
+        }
+      }
       if (!res.ok) throw new Error('Failed to load patient');
       const data = await res.json();
       return data.data;

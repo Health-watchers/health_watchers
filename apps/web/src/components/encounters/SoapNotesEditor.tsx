@@ -12,6 +12,10 @@ import { useVoiceDictation, type VoiceDictation } from '@/hooks/useVoiceDictatio
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface SoapNotes {
   subjective?: string;
   objective?: string;
@@ -283,7 +287,7 @@ function SoapTabEditor({
       Underline,
       CharacterCount,
       Placeholder.configure({ placeholder }),
-      buildMentionExtension(mentionItems ?? []),
+      buildMentionExtension(mentionItems),
     ],
     content,
     editable: !readOnly,
@@ -313,13 +317,12 @@ function SoapTabEditor({
     },
     editorProps: {
       handleKeyDown(_view, event) {
-        // Ctrl/Cmd+S → trigger immediate save
+        // Ctrl/Cmd+S → trigger save
         if ((event.ctrlKey || event.metaKey) && event.key === 's') {
           event.preventDefault();
           onSave?.();
           return true;
         }
-        // Ctrl+B and Ctrl+I are handled natively by Tiptap StarterKit
         return false;
       },
     },
@@ -459,34 +462,24 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
   const notesRef = useRef<SoapNotes>(value);
   notesRef.current = value;
 
-  // Track server timestamp for conflict detection
+  // Track the server timestamp we started editing with
   const serverTsRef = useRef<string | undefined>(serverLastUpdatedAt);
   useEffect(() => {
     serverTsRef.current = serverLastUpdatedAt;
   }, [serverLastUpdatedAt]);
 
-  const { showModal, confirmLeave, cancelLeave } = useUnsavedChangesGuard(
-    isDirty && !readOnly,
-    'You have unsaved SOAP notes. Are you sure you want to leave?'
-  );
-
-  // Stop dictation when switching tabs
-  useEffect(() => {
-    stopDictation();
-  }, [activeTab, stopDictation]);
-
-  // ── Save helper (used by auto-save timer and Ctrl+S) ──────────────────────
+  // ------------------------------------------------------------------
+  // Save helper — used by auto-save timer and Ctrl+S
+  // ------------------------------------------------------------------
   const triggerSave = useCallback(() => {
     if (onAutoSave === undefined) return;
     setAutoSaveStatus('saving');
     onAutoSave(notesRef.current);
-    setIsDirty(false);
-    onDirtyChange?.(false);
     setTimeout(() => setAutoSaveStatus('saved'), 600);
     setTimeout(() => setAutoSaveStatus('idle'), 3000);
-  }, [onAutoSave, onDirtyChange]);
+  }, [onAutoSave]);
 
-  // ── Auto-save interval (every 30 seconds) ────────────────────────────────
+  // Auto-save interval (every 30 seconds)
   useEffect(() => {
     if (readOnly || !onAutoSave) return;
     const interval = setInterval(() => {
@@ -499,15 +492,17 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
       setTimeout(() => setAutoSaveStatus('idle'), 3000);
     }, 30_000);
     return () => clearInterval(interval);
-  }, [readOnly, onAutoSave, onDirtyChange]);
+  }, [readOnly, onAutoSave, triggerSave]);
 
-  // ── Conflict detection — poll every 60 s via HEAD request ─────────────────
+  // ------------------------------------------------------------------
+  // Conflict detection — poll the API every 60 s via HEAD request
+  // ------------------------------------------------------------------
   useEffect(() => {
     if (readOnly || encounterId === undefined || serverLastUpdatedAt === undefined) return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`${API_V1}/encounters/${encodeURIComponent(encounterId)}`, {
+        const res = await fetch(`/api/v1/encounters/${encodeURIComponent(encounterId)}`, {
           method: 'HEAD',
           credentials: 'include',
         });
@@ -527,7 +522,9 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
     return () => clearInterval(id);
   }, [readOnly, encounterId, serverLastUpdatedAt]);
 
-  // ── Tab change handler ────────────────────────────────────────────────────
+  // ------------------------------------------------------------------
+  // Tab helpers
+  // ------------------------------------------------------------------
   const handleTabChange = useCallback(
     (key: keyof SoapNotes, html: string) => {
       onChange({ ...notesRef.current, [key]: html });
@@ -539,48 +536,35 @@ export function SoapNotesEditor({ value, onChange, onAutoSave, readOnly = false,
     [onChange, isDirty, onDirtyChange]
   );
 
+  // ------------------------------------------------------------------
+  // Voice transcript → append to active tab as new paragraph
+  // ------------------------------------------------------------------
+  const handleVoiceTranscript = useCallback(
+    (text: string) => {
+      const existing = notesRef.current[activeTab] ?? '';
+      const appended = existing !== '' ? `${existing}<p>${text}</p>` : `<p>${text}</p>`;
+      onChange({ ...notesRef.current, [activeTab]: appended });
+    },
+    [activeTab, onChange]
+  );
+
   return (
     <>
     <div className="border-secondary-200 overflow-hidden rounded-lg border">
       {/* Tab bar */}
       <div className="border-secondary-200 bg-secondary-50 flex border-b">
         {SOAP_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary-600 text-primary-700 border-b-2 bg-white'
-                : 'text-secondary-600 hover:text-secondary-900'
-            }`}
-          >
-            <svg
-              className="h-4 w-4 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"
-              />
-            </svg>
-            <span className="font-medium">
-              This encounter was modified by another user. Your changes may conflict.
-            </span>
-            <button
-              type="button"
-              onClick={() => setConflictDetected(false)}
-              className="ml-auto text-xs font-medium underline hover:no-underline"
-            >
-              Dismiss
-            </button>
+          <div key={tab.key} className={activeTab === tab.key ? 'block' : 'hidden'}>
+            <SoapTabEditor
+              content={value[tab.key] ?? ''}
+              placeholder={tab.placeholder}
+              onChange={(html) => handleTabChange(tab.key, html)}
+              onSave={triggerSave}
+              readOnly={readOnly}
+              mentionItems={mentionItems}
+            />
           </div>
-        )}
+        ))}
 
       {/* Active tab editor */}
       {SOAP_TABS.map((tab) => (
