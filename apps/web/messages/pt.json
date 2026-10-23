@@ -536,5 +536,62 @@
     "pt": "Português",
     "ha": "Hausa",
     "yo": "Yorùbá"
+  },
+  "portal": {
+    "brand": "Health Watchers — Portal do Paciente",
+    "signOut": "Sair",
+    "nav": {
+      "dashboard": "Painel",
+      "timeline": "Linha do tempo",
+      "records": "Meus registros",
+      "encounters": "Minhas consultas",
+      "appointments": "Agendamentos",
+      "payments": "Pagamentos",
+      "consent": "Consentimento",
+      "healthLog": "Diário de saúde"
+    },
+    "profile": {
+      "title": "Configurações do perfil",
+      "firstName": "Nome",
+      "lastName": "Sobrenome",
+      "email": "E-mail",
+      "emailNote": "O e-mail não pode ser alterado",
+      "phone": "Número de telefone",
+      "bio": "Biografia",
+      "bioPlaceholder": "Conte-nos sobre você",
+      "preferredLanguage": "Idioma preferido",
+      "save": "Salvar alterações",
+      "saving": "Salvando...",
+      "cancel": "Cancelar",
+      "success": "Perfil atualizado com sucesso!",
+      "error": "Ocorreu um erro ao atualizar o perfil",
+      "loadError": "Falha ao carregar o perfil"
+    }
+  },
+  "emptyStates": {
+    "patients": {
+      "title": "Nenhum paciente ainda",
+      "description": "Comece adicionando seu primeiro paciente ao sistema. Clique no botão abaixo para começar."
+    },
+    "encounters": {
+      "title": "Nenhuma consulta registrada",
+      "description": "Crie sua primeira consulta de paciente para começar a documentar visitas médicas."
+    },
+    "payments": {
+      "title": "Nenhum pagamento encontrado",
+      "description": "As transações de pagamento aparecerão aqui assim que forem processadas na blockchain Stellar."
+    },
+    "appointments": {
+      "title": "Nenhum agendamento marcado",
+      "description": "Agende seu primeiro agendamento para gerenciar as visitas dos pacientes e o fluxo da clínica."
+    },
+    "notifications": {
+      "title": "Nenhuma notificação",
+      "description": "Você está em dia! Notificações sobre eventos importantes aparecerão aqui."
+    },
+    "search": {
+      "title": "Nenhum resultado encontrado",
+      "description": "Tente ajustar seus termos de pesquisa ou filtros para encontrar o que você procura."
+    }
   }
 }

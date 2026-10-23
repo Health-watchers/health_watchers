@@ -226,6 +226,23 @@ class StellarClient {
   }
 
   /**
+   * Anchor a 32-byte digest on Stellar (audit chain tamper evidence, #1494)
+   * Calls the stellar-service POST /anchor endpoint
+   */
+  async anchorDigest(
+    name: string,
+    digest: string
+  ): Promise<{ transactionHash: string; ledger?: number; dryRun?: boolean }> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.post(
+      '/anchor',
+      { name, digest },
+      { headers: { Authorization: `Bearer ${secret}` } }
+    );
+    return response.data;
+  }
+
+  /**
    * Wrap an inner transaction in a platform-sponsored fee bump tx
    * Calls the stellar-service POST /fee-bump endpoint
    */

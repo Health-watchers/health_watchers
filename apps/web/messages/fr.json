@@ -536,5 +536,62 @@
     "pt": "Português",
     "ha": "Hausa",
     "yo": "Yorùbá"
+  },
+  "portal": {
+    "brand": "Health Watchers — Portail Patient",
+    "signOut": "Se déconnecter",
+    "nav": {
+      "dashboard": "Tableau de bord",
+      "timeline": "Chronologie",
+      "records": "Mes dossiers",
+      "encounters": "Mes consultations",
+      "appointments": "Rendez-vous",
+      "payments": "Paiements",
+      "consent": "Consentement",
+      "healthLog": "Journal de santé"
+    },
+    "profile": {
+      "title": "Paramètres du profil",
+      "firstName": "Prénom",
+      "lastName": "Nom de famille",
+      "email": "Adresse e-mail",
+      "emailNote": "L'adresse e-mail ne peut pas être modifiée",
+      "phone": "Numéro de téléphone",
+      "bio": "Biographie",
+      "bioPlaceholder": "Parlez-nous de vous",
+      "preferredLanguage": "Langue préférée",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler",
+      "success": "Profil mis à jour avec succès !",
+      "error": "Une erreur s'est produite lors de la mise à jour du profil",
+      "loadError": "Échec du chargement du profil"
+    }
+  },
+  "emptyStates": {
+    "patients": {
+      "title": "Aucun patient pour le moment",
+      "description": "Commencez par ajouter votre premier patient au système. Cliquez sur le bouton ci-dessous pour démarrer."
+    },
+    "encounters": {
+      "title": "Aucune consultation enregistrée",
+      "description": "Créez votre première consultation patient pour commencer à documenter les visites médicales."
+    },
+    "payments": {
+      "title": "Aucun paiement trouvé",
+      "description": "Les transactions de paiement apparaîtront ici une fois traitées sur la blockchain Stellar."
+    },
+    "appointments": {
+      "title": "Aucun rendez-vous planifié",
+      "description": "Planifiez votre premier rendez-vous pour gérer les visites des patients et le flux de la clinique."
+    },
+    "notifications": {
+      "title": "Aucune notification",
+      "description": "Vous êtes à jour ! Les notifications concernant les événements importants apparaîtront ici."
+    },
+    "search": {
+      "title": "Aucun résultat trouvé",
+      "description": "Essayez d'ajuster vos termes de recherche ou vos filtres pour trouver ce que vous cherchez."
+    }
   }
 }

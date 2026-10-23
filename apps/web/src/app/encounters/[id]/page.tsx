@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Toast, TableSkeleton, ErrorMessage, Button } from '@/components/ui';
 import { useEncounter } from '@/lib/queries/useEncounter';
 import EncounterDetail from '@/components/encounters/EncounterDetail';
+import { PeerReviewRequestCard } from '@/components/peer-reviews/PeerReviewRequestCard';
 
 interface EncounterPageProps {
   params: {
@@ -46,11 +47,21 @@ export default function EncounterDetailPage({ params }: EncounterPageProps) {
           <p className="text-sm text-gray-500 dark:text-gray-400">Encounter record — {data.id}</p>
           <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">{data.patientName}</h1>
         </div>
-        <Button variant="outline" onClick={() => router.push('/encounters')}>
-          Back to encounters
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/encounters/${params.id}/print`)}
+            aria-label="Open print preview for this encounter"
+          >
+            🖨 Print
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/encounters')}>
+            Back to encounters
+          </Button>
+        </div>
       </div>
       <EncounterDetail encounter={data} onBack={() => router.push('/encounters')} />
+      <PeerReviewRequestCard encounterId={params.id} />
     </main>
   );
 }

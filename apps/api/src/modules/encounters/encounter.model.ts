@@ -1,6 +1,7 @@
 import { Schema, model, models } from 'mongoose';
 import { sanitizeText, sanitizeHtml } from '../../utils/sanitize';
 import { ENCOUNTER_STATUSES, type EncounterStatus } from '@health-watchers/types';
+import { baseSchema } from '@api/shared';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -66,7 +67,6 @@ export interface Attachment {
 }
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
-  clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
   type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
@@ -85,7 +85,6 @@ export interface Encounter {
   aiSummary?: string;
   patientFriendlySummary?: string;
   patientNotes?: Array<{ note: string; createdAt: Date }>;
-  isActive?: boolean;
   billing?: BillingInfo;
   attachments?: Attachment[];
   requiresCoSignature?: boolean;
@@ -101,8 +100,6 @@ export interface Encounter {
   followUpCompleted?: boolean;
   followUpEncounterId?: Schema.Types.ObjectId;
   patientAdherence?: 'full' | 'partial' | 'none' | 'unknown';
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -203,7 +200,6 @@ const attachmentSchema = new Schema<Attachment>(
 const encounterSchema = new Schema<Encounter>(
   {
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     encounteredBy: { type: Schema.Types.ObjectId, ref: 'User' },
     type: {
@@ -238,7 +234,6 @@ const encounterSchema = new Schema<Encounter>(
       ],
       default: [],
     },
-    isActive: { type: Boolean, default: true, index: true },
     billing: { type: billingInfoSchema },
     attachments: { type: [attachmentSchema], default: [] },
     // Outcome tracking fields
@@ -254,6 +249,8 @@ const encounterSchema = new Schema<Encounter>(
   },
   { timestamps: true, versionKey: false }
 );
+
+encounterSchema.add(baseSchema);
 
 // Compound index for paginated clinic-scoped queries
 encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });

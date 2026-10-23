@@ -8,20 +8,17 @@
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
   "mutate": [
-    "src/modules/auth/token.service.ts",
-    "src/modules/auth/jwt-claim-validator.ts",
+    "src/modules/auth/**/*.ts",
+    "!src/modules/auth/**/*.test.ts",
+    "!src/modules/auth/**/*.spec.ts",
+    "!src/modules/auth/models/**",
     "src/services/token-denylist.service.ts",
-    "src/modules/auth/services/backup-code.service.ts",
-    "src/utils/paginate.ts",
-    "src/utils/sanitize.ts",
-    "src/lib/encrypt.ts",
-    "src/modules/patients/duplicate-detection.service.ts",
-    "src/utils/app-error.ts"
+    "src/lib/encrypt.ts"
   ],
   "thresholds": {
     "high": 80,
     "low": 60,
-    "break": 50
+    "break": 80
   },
   "reporters": ["html", "clear-text", "json", "progress"],
   "htmlReporter": {

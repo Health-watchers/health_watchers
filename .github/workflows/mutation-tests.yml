@@ -55,18 +55,48 @@ jobs:
             apps/api/reports/mutation/mutation.json
           retention-days: 30
 
-      - name: Print mutation score summary
+      - name: Analyze mutation results
+        if: always()
+        run: npm run test:mutation:analyze --workspace=api -- --threshold 80
+
+      - name: Check auth module mutation score
         if: always()
         run: |
           if [ -f apps/api/reports/mutation/mutation.json ]; then
             node -e "
               const r = require('./apps/api/reports/mutation/mutation.json');
-              const m = r.mutationScore ?? r.metrics?.mutationScore ?? 'N/A';
-              console.log('Mutation score: ' + m + '%');
-              console.log('Killed:   ' + (r.killed ?? r.metrics?.killed ?? 'N/A'));
-              console.log('Survived: ' + (r.survived ?? r.metrics?.survived ?? 'N/A'));
-              console.log('Total:    ' + (r.totalMutants ?? r.metrics?.totalMutants ?? 'N/A'));
+              const files = r.files || {};
+              let authKilled = 0, authTotal = 0;
+              
+              for (const [path, fileData] of Object.entries(files)) {
+                if (!path.includes('modules/auth')) continue;
+                const mutants = fileData.mutants || [];
+                for (const m of mutants) {
+                  if (m.status !== 'NoCoverage' && m.status !== 'Ignored') {
+                    authTotal++;
+                    if (m.status === 'Killed' || m.status === 'Timeout') {
+                      authKilled++;
+                    }
+                  }
+                }
+              }
+              
+              const authScore = authTotal > 0 ? Math.round((authKilled / authTotal) * 100) : 100;
+              console.log('\\n═══════════════════════════════════════════');
+              console.log('AUTH MODULE MUTATION SCORE: ' + authScore + '%');
+              console.log('  Killed: ' + authKilled + '/' + authTotal);
+              console.log('  Threshold: 80%');
+              console.log('═══════════════════════════════════════════\\n');
+              
+              if (authScore < 80) {
+                console.error('❌ FAIL: Auth module mutation score ' + authScore + '% is below 80% threshold');
+                console.error('The auth module is security-critical and must maintain 80%+ mutation coverage.');
+                process.exit(1);
+              } else {
+                console.log('✅ PASS: Auth module mutation score meets 80% threshold');
+              }
             "
           else
             echo "No mutation report found."
+            exit 1
           fi

@@ -11,6 +11,7 @@
  * │  v2Router       │ /api/v2                  │ Next-gen API (breaking)    │
  * │  cdnRouter      │ /api/v1/cdn              │ CDN cache management       │
  * │  replicationRtr │ /api/v1/replication      │ DB replication ops (admin) │
+ * │  readyRouter    │ /ready                   │ Readiness probe (DB check) │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * app.ts wires these into express — see app.ts for middleware stacks applied
@@ -54,6 +55,7 @@ export { v1Router } from './v1';
 export { v2Router } from './v2';
 export { cdnRouter } from './cdn';
 export { default as replicationRouter } from './replication';
+export { readyRouter } from './ready';
 
 /**
  * Sensitive route groups that require stricter rate limiting.

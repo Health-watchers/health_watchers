@@ -63,7 +63,7 @@ reloads and new sessions. If no preference is stored, the app follows your OS se
 
 We've consolidated all Docker Compose configurations into a single file with profiles. Choose what you need:
 
-#### Core Services Only (Recommended for Development)
+#### Development Environment (Recommended)
 
 ```bash
 # 1. Clone the repository
@@ -73,10 +73,32 @@ cd health_watchers
 # 2. Copy environment configuration
 cp .env.example .env
 
-# 3. Start core services (API, web, MongoDB, Redis, Jaeger)
-docker compose --profile core up -d
+# 3. Start development services using docker-compose.dev.yml
+# Includes: MongoDB, Redis, API, Web
+docker compose -f docker-compose.dev.yml up -d
 
 # 4. Access the application
+# Web UI: http://localhost:3000
+# API: http://localhost:3001
+# MongoDB: localhost:27017
+# Redis: localhost:6379
+```
+
+**Why Redis in Development?**
+
+Redis is now required in the development environment for:
+- Rate limiting (prevents abuse, tracks API usage)
+- Session caching (faster authentication)
+- Idempotency keys (prevents duplicate payments)
+
+Without Redis, some features will fail. The dev environment mirrors production more closely.
+
+#### Core Services Only
+
+```bash
+# Start core + Jaeger for distributed tracing
+docker compose --profile core up -d
+
 # Web UI: http://localhost:3000
 # API: http://localhost:3001
 # Jaeger UI: http://localhost:16686
@@ -214,7 +236,52 @@ npm run build    # Build all apps for production
 npm run start    # Start all apps in production mode
 npm run lint     # Run linting across all apps
 npm run seed     # Seed database with sample data
+npm run test     # Run all tests across monorepo
 ```
+
+### Testing
+
+Health Watchers has comprehensive test coverage across multiple test types. See [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) for the complete testing guide.
+
+**Quick Start:**
+
+```bash
+# Run all tests
+npm run test
+
+# API tests
+npm run test --workspace=api                    # Unit tests
+npm run test:integration --workspace=api        # Integration tests (with DB isolation)
+npm run test:coverage --workspace=api           # With coverage report
+
+# Web tests
+npm run test --workspace=web                    # Unit tests
+npm run test:e2e --workspace=web                # E2E tests with Playwright
+
+# Mobile tests
+npm run test --workspace=mobile                 # React Native tests
+```
+
+**Key Testing Features:**
+
+- **Database Isolation**: Integration tests use `mongodb-memory-server` for per-test DB isolation
+- **Fixture Factories**: Type-safe test data builders (Patient, User, Payment, Encounter, Clinic)
+- **Serial Execution**: Integration tests run with `--runInBand` to ensure complete isolation
+- **Comprehensive Security Tests**: HIPAA-compliant security header validation
+- **Mobile Testing**: Full Jest + React Native Testing Library setup with mocked Expo modules
+
+**Test Structure:**
+
+- `apps/api/src/__tests__/` - Integration tests
+- `apps/api/src/**/__tests__/` - Unit tests
+- `apps/web/e2e/` - Playwright E2E tests
+- `apps/mobile/src/**/__tests__/` - Mobile unit and component tests
+
+**Minimum Coverage Requirements:**
+
+- Global: 80% lines, 80% branches
+- Payments module: 85% lines, 85% branches
+- Auth module: 85% lines, 85% branches
 
 ### Environment Variables
 

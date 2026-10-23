@@ -9,6 +9,7 @@ export const queryKeys = {
     all: ['patients'] as const,
     list: (query?: string) => [...queryKeys.patients.all, 'list', query] as const,
     detail: (id: string) => [...queryKeys.patients.all, 'detail', id] as const,
+    emergencyAccess: (id: string) => [...queryKeys.patients.all, 'emergency-access', id] as const,
   },
   encounters: {
     all: ['encounters'] as const,
@@ -43,6 +44,8 @@ export const queryKeys = {
     all: ['compliance'] as const,
     breachIncidents: () => [...queryKeys.compliance.all, 'breach-incidents'] as const,
     baas: () => [...queryKeys.compliance.all, 'baas'] as const,
+    emergencyAccess: (status: string) =>
+      [...queryKeys.compliance.all, 'emergency-access', status] as const,
   },
   auditLogs: {
     all: ['audit-logs'] as const,
@@ -87,6 +90,8 @@ export const queryKeys = {
     claim: (id: string) => [...queryKeys.billing.all, 'claim', id] as const,
     unbilled: () => [...queryKeys.billing.all, 'unbilled'] as const,
     aging: () => [...queryKeys.billing.all, 'aging'] as const,
+    era: (page: number) => [...queryKeys.billing.all, 'era', page] as const,
+    validation: (id: string) => [...queryKeys.billing.all, 'validation', id] as const,
   },
   communications: {
     all: ['communications'] as const,

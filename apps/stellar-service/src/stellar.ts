@@ -6,6 +6,7 @@ import {
   Networks,
   Operation,
   Asset,
+  Memo,
 } from '@stellar/stellar-sdk';
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
@@ -717,6 +718,75 @@ export async function issueRefund(toPublicKey: string, amount: string, memo: str
         error: toErrorContext(error),
       },
       'Failed to issue refund'
+    );
+    throw error;
+  }
+}
+
+/**
+ * Anchor a 32-byte digest on-chain for external tamper evidence (#1494).
+ *
+ * Writes the digest into a single, reused manage-data entry on the platform
+ * account (so the base reserve does not grow) and repeats it as a hash memo,
+ * leaving every anchored value in the account's transaction history.
+ */
+export async function anchorDigest(name: string, digestHex: string) {
+  if (!/^[0-9a-f]{64}$/i.test(digestHex)) {
+    throw new Error('digest must be a 32-byte hex string');
+  }
+  if (!name || Buffer.byteLength(name) > 64) {
+    throw new Error('name must be 1-64 bytes');
+  }
+
+  const start = Date.now();
+  try {
+    const server = getHorizonServer();
+    const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const account = await withHorizonCall(
+      'loadAccount',
+      { publicKey: sourceKeypair.publicKey() },
+      () => server.loadAccount(sourceKeypair.publicKey())
+    );
+    const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+
+    const transaction = new TransactionBuilder(account, {
+      fee: String(fee),
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(Operation.manageData({ name, value: digestHex.toLowerCase() }))
+      .addMemo(Memo.hash(digestHex.toLowerCase()))
+      .setTimeout(300)
+      .build();
+
+    transaction.sign(sourceKeypair);
+
+    if (stellarConfig.dryRun) {
+      const hash = 'dry-run-' + transaction.hash().toString('hex');
+      logger.info(
+        { operation: 'anchorDigest', name, hash, dryRun: true, durationMs: Date.now() - start },
+        'Anchor transaction built (dry run)'
+      );
+      return { transactionHash: hash, dryRun: true };
+    }
+
+    const result = await withHorizonCall('submitTransaction', { name }, () =>
+      server.submitTransaction(transaction)
+    );
+    logger.info(
+      { operation: 'anchorDigest', name, hash: result.hash, durationMs: Date.now() - start },
+      'Digest anchored'
+    );
+    return { transactionHash: result.hash, ledger: result.ledger };
+  } catch (error) {
+    logger.error(
+      {
+        operation: 'anchorDigest',
+        name,
+        outcome: 'failure',
+        durationMs: Date.now() - start,
+        error: toErrorContext(error),
+      },
+      'Failed to anchor digest'
     );
     throw error;
   }

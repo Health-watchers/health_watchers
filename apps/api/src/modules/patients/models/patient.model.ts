@@ -1,6 +1,7 @@
 import { Schema, model, models } from 'mongoose';
 import { encrypt, decrypt } from '@api/lib/encrypt';
 import { sanitizeText } from '@api/utils/sanitize';
+import { baseSchema } from '@api/shared';
 
 const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
 
@@ -63,8 +64,6 @@ export interface PatientDocument {
   sex: 'M' | 'F' | 'O';
   contactNumber?: string;
   address?: string;
-  clinicId: Schema.Types.ObjectId;
-  isActive: boolean;
   allergies: IAllergy[];
   emergencyContacts?: IEmergencyContact[];
   insurance?: IInsurance[];
@@ -79,8 +78,6 @@ export interface PatientDocument {
   thumbnailUrl?: string;
   isDuplicate?: boolean;
   mergedInto?: Schema.Types.ObjectId;
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 /** @deprecated Use PatientDocument for persistence-layer values. */
@@ -147,8 +144,6 @@ const patientSchema = new Schema<PatientDocument>(
     sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
     address: { type: String },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    isActive: { type: Boolean, default: true, index: true },
     allergies: { type: [allergySchema], default: [] },
     emergencyContacts: { type: [emergencyContactSchema], default: [] },
     insurance: { type: [insuranceSchema], default: [] },
@@ -164,6 +159,8 @@ const patientSchema = new Schema<PatientDocument>(
   },
   { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+patientSchema.add(baseSchema);
 
 // Dashboard aggregation: filter by clinic + date range, sorted by createdAt
 patientSchema.index({ clinicId: 1, createdAt: -1 }, { name: 'clinicId_1_createdAt_-1' });

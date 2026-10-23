@@ -17,6 +17,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import { connectDB, getPoolMetrics } from './config/db';
 import { healthRoutes } from './modules/health/health.controller';
 import { backupHealthRoutes } from './modules/health/backup-health.controller';
+import { readyRoutes } from './modules/health/ready.controller';
 import { initSocket } from './realtime/socket';
 import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
@@ -195,8 +196,13 @@ app.use((req, res, next) => {
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
+// /health is a lightweight liveness endpoint (no dependency checks).
 app.use('/health', healthRoutes);
 app.use('/health', backupHealthRoutes);
+// /ready (and /health/ready) is the readiness endpoint — verifies DB connectivity
+// so Kubernetes stops routing traffic to a pod that cannot serve requests.
+app.use('/ready', readyRoutes);
+app.use('/health/ready', readyRoutes);
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // Must be registered before API routes so all requests are measured

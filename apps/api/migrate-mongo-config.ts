@@ -1,12 +1,11 @@
 // migrate-mongo configuration
 // See: https://github.com/seppevs/migrate-mongo#configuration
-'use strict';
 
 const dbName = process.env.MONGO_URI
   ? new URL(process.env.MONGO_URI).pathname.replace('/', '')
   : 'health_watchers';
 
-module.exports = {
+export default {
   mongodb: {
     url: process.env.MONGO_URI || 'mongodb://localhost:27017/health_watchers',
     databaseName: dbName,

@@ -8,7 +8,7 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { detectCriticalValues } from './critical-value.service';
 import { createNotification } from '../notifications/notification.service';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
-import { AuditLogModel } from '../audit/audit-log.model';
+import { AuditLogModel } from '../audit/audit.model';
 import { sendEmail } from '@api/lib/email.service';
 import { UserModel } from '../auth/models/user.model';
 import { PatientModel } from '../patients/models/patient.model';
@@ -653,7 +653,7 @@ router.post(
     await AuditLogModel.create({
       userId: req.user!.userId,
       clinicId: req.user!.clinicId,
-      action: 'UPDATE',
+      action: 'MUTATION_UPDATE',
       resourceType: 'LabResult',
       resourceId: String(existing._id),
       ipAddress: req.ip ?? 'unknown',

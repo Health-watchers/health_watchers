@@ -25,6 +25,7 @@ import { sweepApiKeyLifecycle } from '@api/modules/api-keys/api-key-lifecycle-jo
 import { processDueDeliveries } from '@api/modules/notifications/notification-dispatch-job';
 import { runImmunizationComplianceJob } from '@api/modules/immunizations/immunization-compliance-job';
 import { relayPendingOutboxEvents } from '@api/modules/outbox/outbox.relay';
+import { anchorChainHeads, verifyAllChains } from '@api/modules/audit/audit-chain.service';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -140,6 +141,18 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     cron: '*/5 * * * * *',
     description: 'Deliver pending transactional outbox events (#1432)',
     handler: () => relayPendingOutboxEvents(),
+  },
+  {
+    name: 'audit-chain-verify',
+    cron: '0 2 * * *',
+    description: 'Verify audit log hash chains and alert on tampering (#1494)',
+    handler: () => verifyAllChains(),
+  },
+  {
+    name: 'audit-chain-anchor',
+    cron: '30 0 * * *',
+    description: 'Anchor daily audit chain heads on Stellar when enabled (#1494)',
+    handler: () => anchorChainHeads(),
   },
 ];
 

@@ -75,3 +75,78 @@ jobs:
               "text": "❌ *Nightly test suite FAILED*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
             }
         continue-on-error: true
+
+  security-headers-e2e:
+    name: Comprehensive Security Headers Tests
+    runs-on: ubuntu-latest
+    needs: full-test-suite
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: password123
+      
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      
+      - name: Start API server
+        run: |
+          cd apps/api
+          npm run build
+          npm run start &
+          sleep 10
+        env:
+          MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers?authSource=admin
+          REDIS_URL: redis://localhost:6379
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          NODE_ENV: production
+          API_PORT: 3001
+      
+      - name: Start Web server
+        run: |
+          cd apps/web
+          npm run build
+          npm run start &
+          sleep 10
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+          NODE_ENV: production
+      
+      - name: Wait for services
+        run: |
+          npx wait-on http://localhost:3000 http://localhost:3001/api/v1/health --timeout 60000
+      
+      - name: Run security headers E2E tests
+        run: |
+          cd apps/web
+          npx playwright test e2e/security-headers.spec.ts --reporter=html
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-headers-test-results
+          path: apps/web/playwright-report/
+          retention-days: 30

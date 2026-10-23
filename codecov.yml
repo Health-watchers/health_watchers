@@ -1,0 +1,28 @@
+# Per-workspace coverage. Thresholds are enforced by Jest (coverageThreshold in
+# each workspace's jest config); Codecov reports the trend per flag.
+coverage:
+  status:
+    project:
+      default: false
+      api:
+        flags: [api]
+        target: auto
+        threshold: 1%
+      web:
+        flags: [web]
+        target: auto
+        threshold: 1%
+    patch: off
+
+flags:
+  api:
+    paths:
+      - apps/api/
+    carryforward: true
+  web:
+    paths:
+      - apps/web/
+    carryforward: true
+
+comment:
+  layout: 'flags, files'

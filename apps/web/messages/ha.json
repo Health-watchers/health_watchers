@@ -536,5 +536,62 @@
     "pt": "Português",
     "ha": "Hausa",
     "yo": "Yorùbá"
+  },
+  "portal": {
+    "brand": "Health Watchers — Tashar Marasa",
+    "signOut": "Fita",
+    "nav": {
+      "dashboard": "Allon Sarrafa",
+      "timeline": "Jerin Lokaci",
+      "records": "Bayananmu",
+      "encounters": "Ziyarormu",
+      "appointments": "Appointments",
+      "payments": "Biyan Kuɗi",
+      "consent": "Yarjejeniya",
+      "healthLog": "Rajistan Lafiya"
+    },
+    "profile": {
+      "title": "Saitunan Bayanai",
+      "firstName": "Suna",
+      "lastName": "Sunan Iyali",
+      "email": "Imel",
+      "emailNote": "Ba za a iya canza imel ba",
+      "phone": "Lambar Waya",
+      "bio": "Takaitaccen Bayani",
+      "bioPlaceholder": "Faɗa mana game da kanku",
+      "preferredLanguage": "Harshen da Ake So",
+      "save": "Ajiye Canje-canje",
+      "saving": "Ana ajiye...",
+      "cancel": "Soke",
+      "success": "An sabunta bayanai cikin nasara!",
+      "error": "An sami kuskure wajen sabunta bayanai",
+      "loadError": "Kuskure wajen loda bayanai"
+    }
+  },
+  "emptyStates": {
+    "patients": {
+      "title": "Babu marasa tukuna",
+      "description": "Fara ta hanyar ƙara marasa ɗin farko zuwa tsarin. Danna maɓallin da ke ƙasa don fara."
+    },
+    "encounters": {
+      "title": "Babu ziyarori da aka rubuta",
+      "description": "Ƙirƙiri ziyara ta farko don fara rubuta ziyarori na likita."
+    },
+    "payments": {
+      "title": "Babu biyan kuɗi da aka samu",
+      "description": "Ma'amalolin biyan kuɗi za su bayyana nan da an sarrafa su akan blockchain na Stellar."
+    },
+    "appointments": {
+      "title": "Babu appointments da aka shirya",
+      "description": "Shirya appointment ta farko don sarrafa ziyarori na marasa da ayyukan asibiti."
+    },
+    "notifications": {
+      "title": "Babu sanarwa",
+      "description": "Kun gama duka! Sanarwa game da muhimman abubuwan za su bayyana nan."
+    },
+    "search": {
+      "title": "Babu sakamakon da aka samu",
+      "description": "Gwada daidaita sharuɗɗan bincike ko tace don samun abin da kuke nema."
+    }
   }
 }

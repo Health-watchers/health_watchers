@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { InsuranceClaimModel, CLAIM_STATUSES, type ClaimStatus } from './claim.model';
 import { buildCms1500, buildEdi837 } from './claim-builder';
+import { claimToBillingInput, validateClaimInput, type ClaimFieldError } from './claim-validation';
+import { transmitClaim, type TransmitResult } from './claim-lifecycle.service';
 import { EncounterModel } from '../encounters/encounter.model';
 import { auditLog } from '../audit/audit.service';
 import { WebhookModel } from '../webhooks/webhook.model';
@@ -93,6 +95,13 @@ export async function generateClaim(req: Request, res: Response) {
       diagnosisCodes,
       amounts,
     };
+    const validation = validateClaimInput(input);
+    if (!validation.valid) {
+      return res
+        .status(422)
+        .json({ success: false, message: 'Claim has invalid fields', data: validation });
+    }
+
     const cms1500Data = buildCms1500(input);
     const edi837Data = buildEdi837(input);
     const totalAmount = (amounts as number[]).reduce((s, a) => s + a, 0);
@@ -214,7 +223,17 @@ export async function submitClaims(req: Request, res: Response) {
 
   const ids = parsed.data.claimIds.map(objectId).filter((v): v is Types.ObjectId => !!v);
   const filter = { _id: { $in: ids }, clinicId: req.user!.clinicId, status: 'draft' };
-  const eligible = await InsuranceClaimModel.find(filter).select('_id').lean();
+  const drafts = await InsuranceClaimModel.find(filter)
+    .select('_id encounterId patientId clinicId cptCodes diagnosisCodes totalAmount cms1500Data edi837Data')
+    .lean();
+
+  // Hold back claims that would be rejected by the clearinghouse for missing/invalid fields
+  const invalid: { claimId: string; errors: ClaimFieldError[] }[] = [];
+  const eligible = drafts.filter((c: any) => {
+    const result = validateClaimInput(claimToBillingInput(c));
+    if (!result.valid) invalid.push({ claimId: String(c._id), errors: result.errors });
+    return result.valid;
+  });
   const eligibleIds = eligible.map((c) => c._id);
 
   await InsuranceClaimModel.updateMany(
@@ -226,7 +245,10 @@ export async function submitClaims(req: Request, res: Response) {
   );
 
   const submitted = eligibleIds.map(String);
-  const skipped = parsed.data.claimIds.filter((id) => !submitted.includes(id));
+  const invalidIds = invalid.map((i) => i.claimId);
+  const skipped = parsed.data.claimIds.filter(
+    (id) => !submitted.includes(id) && !invalidIds.includes(id)
+  );
 
   // Audit log for bulk submission
   for (const claimId of submitted) {
@@ -260,14 +282,23 @@ export async function submitClaims(req: Request, res: Response) {
     })
   );
 
-  return res.json({ success: true, data: { submitted, skipped } });
+  // Transmit to the clearinghouse; front-end rejections move the claim to "rejected"
+  const transmissions: TransmitResult[] = [];
+  for (const claim of eligible) {
+    transmissions.push(await transmitClaim(claim as any, '1', req.user?.userId));
+  }
+  const rejected = transmissions
+    .filter((t) => t.rejected)
+    .map((t) => ({ claimId: t.claimId, reason: t.reason }));
+
+  return res.json({ success: true, data: { submitted, skipped, invalid, rejected } });
 }
 
 const denySchema = z.object({ reason: z.string().trim().min(1) });
 
 /**
  * PATCH /api/v1/billing/claims/:claimId/deny
- * Records a payer denial (manual entry until a clearinghouse feed is wired up).
+ * Records a payer denial manually (ERA postings via /remittances set this automatically).
  */
 export async function denyClaim(req: Request, res: Response) {
   const parsed = denySchema.safeParse(req.body);
@@ -281,8 +312,12 @@ export async function denyClaim(req: Request, res: Response) {
       status: { $in: ['submitted', 'resubmitted', 'accepted'] },
     },
     {
-      $set: { status: 'rejected', rejectionReason: parsed.data.reason },
-      $push: { statusHistory: historyEvent(req, 'rejected', parsed.data.reason) },
+      $set: {
+        status: 'denied',
+        denialReason: parsed.data.reason,
+        rejectionReason: parsed.data.reason,
+      },
+      $push: { statusHistory: historyEvent(req, 'denied', parsed.data.reason) },
     },
     { new: true }
   );
@@ -299,7 +334,7 @@ export async function denyClaim(req: Request, res: Response) {
       userId: req.user?.userId,
       clinicId: String(claim.clinicId),
       outcome: 'SUCCESS',
-      metadata: { statusChange: `${claim.status} → rejected`, reason: parsed.data.reason },
+      metadata: { statusChange: `${claim.status} → denied`, reason: parsed.data.reason },
     },
     req
   );
@@ -340,9 +375,12 @@ export async function resubmitClaim(req: Request, res: Response) {
     clinicId: req.user!.clinicId,
   });
   if (!claim) return res.status(404).json({ success: false, message: 'Claim not found' });
-  if (claim.status !== 'rejected') {
-    return res.status(409).json({ success: false, message: 'Only denied claims can be resubmitted' });
+  if (claim.status !== 'rejected' && claim.status !== 'denied') {
+    return res
+      .status(409)
+      .json({ success: false, message: 'Only rejected or denied claims can be resubmitted' });
   }
+  const previousStatus = claim.status;
 
   const { cptCodes, diagnosisCodes, amounts, note } = parsed.data;
   if (cptCodes || diagnosisCodes || amounts) {
@@ -363,6 +401,12 @@ export async function resubmitClaim(req: Request, res: Response) {
       diagnosisCodes: nextDx,
       amounts: nextAmounts,
     };
+    const validation = validateClaimInput(input);
+    if (!validation.valid) {
+      return res
+        .status(422)
+        .json({ success: false, message: 'Corrected claim has invalid fields', data: validation });
+    }
     claim.cptCodes = nextCpt;
     claim.diagnosisCodes = nextDx;
     claim.totalAmount = nextAmounts.reduce((s, a) => s + a, 0);
@@ -372,6 +416,7 @@ export async function resubmitClaim(req: Request, res: Response) {
 
   claim.status = 'resubmitted';
   claim.rejectionReason = undefined;
+  claim.denialReason = undefined;
   claim.submittedAt = new Date();
   claim.resubmissionCount = (claim.resubmissionCount ?? 0) + 1;
   claim.statusHistory.push(historyEvent(req, 'resubmitted', note || 'Corrected and resubmitted'));
@@ -387,14 +432,17 @@ export async function resubmitClaim(req: Request, res: Response) {
       clinicId: String(claim.clinicId),
       outcome: 'SUCCESS',
       metadata: {
-        statusChange: 'rejected → resubmitted',
+        statusChange: `${previousStatus} → resubmitted`,
         resubmissionCount: claim.resubmissionCount,
       },
     },
     req
   );
 
-  return res.json({ success: true, data: claim });
+  // Send as a replacement claim (frequency code 7) referencing the payer's original claim number
+  const transmission = await transmitClaim(claim, '7', req.user?.userId);
+
+  return res.json({ success: true, data: claim, transmission });
 }
 
 const writeOffSchema = z.object({ reason: z.string().trim().min(3) });

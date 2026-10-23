@@ -97,6 +97,36 @@ const sidebars: SidebarsConfig = {
       label: 'Contributing',
       items: ['contributing/overview', 'contributing/writing-docs', 'contributing/engineering-docs'],
     },
+    {
+      type: 'category',
+      label: 'Design System',
+      link: { type: 'doc', id: 'design-system/overview' },
+      items: [
+        'design-system/overview',
+        {
+          type: 'category',
+          label: 'Tokens',
+          items: [
+            'design-system/tokens/colors',
+            'design-system/tokens/typography',
+            'design-system/tokens/spacing',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Components',
+          items: [
+            'design-system/components/button',
+            'design-system/components/input',
+            'design-system/components/modal',
+            'design-system/components/toast',
+            'design-system/components/badge',
+            'design-system/components/card',
+            'design-system/components/table',
+          ],
+        },
+      ],
+    },
   ],
   userGuideSidebar: [
     'user-guide/overview',

@@ -41,7 +41,7 @@ const baseConfig = [
       'no-console': 'warn',
       'no-eval': 'error',
       'no-implied-eval': 'error',
-      'no-unused-vars': 'off', // Handled by @typescript-eslint/no-unused-vars
+      'no-unused-vars': 'warn',
     },
   },
   // Type-aware rules (issue #1644). `projectService` picks up each package's

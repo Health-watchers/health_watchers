@@ -537,6 +537,37 @@
     "ha": "Hausa",
     "yo": "Yorùbá"
   },
+  "portal": {
+    "brand": "Health Watchers — Patient Portal",
+    "signOut": "Sign out",
+    "nav": {
+      "dashboard": "Dashboard",
+      "timeline": "Timeline",
+      "records": "My Records",
+      "encounters": "My Encounters",
+      "appointments": "Appointments",
+      "payments": "Payments",
+      "consent": "Consent",
+      "healthLog": "Health Log"
+    },
+    "profile": {
+      "title": "Profile Settings",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "emailNote": "Email cannot be changed",
+      "phone": "Phone Number",
+      "bio": "Bio",
+      "bioPlaceholder": "Tell us about yourself",
+      "preferredLanguage": "Preferred Language",
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "success": "Profile updated successfully!",
+      "error": "An error occurred while updating profile",
+      "loadError": "Failed to load profile"
+    }
+  },
   "emptyStates": {
     "patients": {
       "title": "No patients yet",

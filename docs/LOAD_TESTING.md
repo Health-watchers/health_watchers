@@ -77,12 +77,94 @@ node k6/analyze-results.js performance/summary.json performance/results-template
 
 Performance regression tests run on every PR via `.github/workflows/performance.yml`.
 
-Baselines are stored in `performance/baselines/baselines.json`.
+Baselines are stored in `performance/baselines/baselines.json`. The baseline is compared against p95 latency for each endpoint with a 20% regression threshold.
 
-To update baselines after intentional performance changes:
-1. Run load test locally.
-2. Update `performance/baselines/baselines.json` with new p95 values.
-3. Commit and push.
+### Updating Baselines
+
+Baselines should be updated when:
+- Performance improvements are intentionally made
+- Infrastructure changes affect baseline performance
+- New endpoints are added
+- Refactoring changes expected performance characteristics
+
+**Process:**
+
+1. **Run baseline capture against staging:**
+   ```bash
+   k6 run k6/regression-baseline.js \
+     --env BASE_URL=https://api-staging.healthwatchers.com \
+     --env AUTH_TOKEN=<staging-jwt> \
+     --out json=baseline-results.json
+   ```
+
+2. **Extract p95 values:**
+   ```bash
+   node -e "
+     const data = require('./baseline-results.json');
+     const baselines = {};
+     for (const [key, metric] of Object.entries(data.metrics)) {
+       if (key.startsWith('baseline_')) {
+         baselines[key] = Math.round(metric.values['p(95)']);
+       }
+     }
+     console.log(JSON.stringify(baselines, null, 2));
+   " > new-baselines.json
+   ```
+
+3. **Update `performance/baselines/baselines.json`:**
+   ```json
+   {
+     "version": "1.0.0",
+     "baselines": {
+       "baseline_health": 50,
+       "baseline_patient_list": 400,
+       "baseline_patient_search": 500,
+       "baseline_encounter_list": 500,
+       "baseline_appointment_list": 500,
+       "baseline_payment_list": 500,
+       "baseline_dashboard_stats": 900
+     },
+     "regression_threshold_percent": 20
+   }
+   ```
+
+4. **Document the change in the commit message:**
+   ```bash
+   git add performance/baselines/baselines.json
+   git commit -m "perf: update baselines after API optimization
+   
+   - patient_list: 500ms → 400ms (database index added)
+   - dashboard_stats: 1200ms → 900ms (caching layer added)
+   
+   Captured from staging environment after deploy #1234"
+   ```
+
+5. **Create a PR** — CI will validate new baselines don't regress
+
+### Smoke Test on PRs
+
+Every PR automatically runs a quick smoke test to catch major performance regressions:
+
+- Duration: 1 minute
+- Load: 5 requests/second
+- Endpoints: login, patient list, payment creation
+- Alert threshold: p95 exceeds baseline by 20%
+
+This runs automatically via `.github/workflows/performance.yml` when a PR is created or updated.
+
+### Regression Alerts
+
+When p95 latency exceeds the baseline threshold:
+
+| Severity | Condition | Action |
+|----------|-----------|--------|
+| 🟡 Warning | 10-20% over baseline | Review but may merge with justification |
+| 🔴 Failure | >20% over baseline | **CI fails** — must fix or update baseline with rationale |
+
+Performance test results are automatically posted as PR comments showing:
+- Current p95 vs baseline for each endpoint
+- Pass/fail status
+- Link to full k6 report artifact
 
 ## Running Tests Locally
 

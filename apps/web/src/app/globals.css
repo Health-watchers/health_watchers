@@ -186,6 +186,50 @@
   }
 }
 
+/* ─── Global print styles ───────────────────────────────────────────────────
+   Hide all navigation, sidebars and interactive chrome when printing.
+   Individual print pages can add their own @page + component-level overrides.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* Standard A4 page defaults */
+  @page {
+    size: A4;
+    margin: 0.75in;
+  }
+
+  /* Hide app shell */
+  nav,
+  aside,
+  header,
+  footer,
+  .no-print,
+  [data-print="hide"],
+  [role="navigation"],
+  [role="banner"],
+  [role="complementary"] {
+    display: none !important;
+  }
+
+  /* Reset colours and backgrounds for print */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Avoid page-breaks inside tables and figures */
+  table,
+  figure,
+  img {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Ensure links are readable */
+  a[href]::after {
+    content: none;
+  }
+}
+
 /* TipTap editor styles */
 .tiptap {
   outline: none;

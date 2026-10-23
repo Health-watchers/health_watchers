@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button, Input, Textarea, Toast, PageWrapper } from '@/components/ui';
+import { useTranslations } from 'next-intl';
+import { locales, type Locale } from '../../../../../i18n.config';
 
 interface ProfileData {
   firstName: string;
@@ -12,21 +14,26 @@ interface ProfileData {
   phone?: string;
   bio?: string;
   avatar?: string;
+  preferredLanguage?: Locale;
 }
 
 export default function ProfileSettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const t = useTranslations('portal.profile');
+  const tLang = useTranslations('language');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [formData, setFormData] = useState<ProfileData>({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     bio: '',
+    preferredLanguage: undefined,
   });
 
   useEffect(() => {
@@ -44,7 +51,7 @@ export default function ProfileSettingsPage() {
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
-      setError('Failed to load profile');
+      setError(t('loadError'));
     } finally {
       setLoading(false);
     }
@@ -53,6 +60,18 @@ export default function ProfileSettingsPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleLanguageChange = async (locale: Locale) => {
+    setFormData((prev) => ({ ...prev, preferredLanguage: locale }));
+    // Persist the locale immediately so the UI updates on save
+    await fetch('/api/locale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale }),
+    }).catch(() => {});
+    document.cookie = `locale=${locale};path=/;max-age=31536000;samesite=lax`;
+    startTransition(() => router.refresh());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,14 +92,14 @@ export default function ProfileSettingsPage() {
 
       if (!response.ok) {
         const data = await response.json();
-        setError(data.message || 'Failed to update profile');
+        setError(data.message || t('error'));
         return;
       }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      setError('An error occurred while updating profile');
+      setError(t('error'));
       console.error(err);
     } finally {
       setSaving(false);
@@ -90,7 +109,7 @@ export default function ProfileSettingsPage() {
   if (loading) {
     return (
       <PageWrapper>
-        <div className="p-6">Loading profile...</div>
+        <div className="p-6">{t('loadError')}</div>
       </PageWrapper>
     );
   }
@@ -98,7 +117,7 @@ export default function ProfileSettingsPage() {
   return (
     <PageWrapper>
       <div className="mx-auto max-w-2xl p-6">
-        <h1 className="mb-6 text-3xl font-bold">Profile Settings</h1>
+        <h1 className="mb-6 text-3xl font-bold">{t('title')}</h1>
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
@@ -106,48 +125,56 @@ export default function ProfileSettingsPage() {
           </div>
         )}
 
-        {success && <Toast type="success" message="Profile updated successfully!" />}
+        {success && <Toast type="success" message={t('success')} />}
 
         <form onSubmit={handleSubmit} className="rounded-lg bg-white p-6 shadow">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">First Name</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                {t('firstName')}
+              </label>
               <Input
                 type="text"
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
-                placeholder="Enter first name"
+                placeholder={t('firstName')}
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Last Name</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                {t('lastName')}
+              </label>
               <Input
                 type="text"
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
-                placeholder="Enter last name"
+                placeholder={t('lastName')}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-gray-700">Email</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                {t('email')}
+              </label>
               <Input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="Enter email"
+                placeholder={t('email')}
                 disabled
                 className="bg-gray-100"
               />
-              <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
+              <p className="mt-1 text-xs text-gray-500">{t('emailNote')}</p>
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-gray-700">Phone Number</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                {t('phone')}
+              </label>
               <Input
                 type="tel"
                 name="phone"
@@ -158,23 +185,51 @@ export default function ProfileSettingsPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-gray-700">Bio</label>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                {t('bio')}
+              </label>
               <Textarea
                 name="bio"
                 value={formData.bio || ''}
                 onChange={handleChange}
-                placeholder="Tell us about yourself"
+                placeholder={t('bioPlaceholder')}
                 rows={4}
               />
+            </div>
+
+            {/* Language preference — mirrors the header LanguageSwitcher but persists to profile */}
+            <div className="md:col-span-2">
+              <label
+                htmlFor="profile-language"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
+                {t('preferredLanguage')}
+              </label>
+              <select
+                id="profile-language"
+                value={formData.preferredLanguage ?? ''}
+                disabled={isPending}
+                onChange={(e) => handleLanguageChange(e.target.value as Locale)}
+                className="focus-visible:ring-primary-500 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus-visible:ring-2 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              >
+                <option value="" disabled>
+                  — {tLang('label')} —
+                </option>
+                {locales.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {tLang(loc)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div className="mt-6 flex gap-3">
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
+            <Button type="submit" disabled={saving || isPending}>
+              {saving ? t('saving') : t('save')}
             </Button>
             <Button variant="secondary" onClick={() => router.back()}>
-              Cancel
+              {t('cancel')}
             </Button>
           </div>
         </form>

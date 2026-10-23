@@ -304,6 +304,12 @@ Closes #(issue number)
 - Use **interfaces** for object shapes
 - Use **enums** or **union types** for fixed sets of values
 
+### ES Modules
+
+- **ES module syntax (`import`/`export`) is the standard** for all new and updated code. CommonJS `require()` / `module.exports` should not be used in new code.
+- Existing `.js` configuration files that still use `require()` have been migrated to `.ts` with `import`/`export default` (e.g., `jest.config.ts`, `migrate-mongo-config.ts`).
+- The `.cjs` extension is reserved for files that must remain CommonJS (e.g., `jest.mutation.config.cjs` for Stryker compatibility).
+
 #### TypeScript Configuration
 
 The monorepo uses a shared base config (`tsconfig.base.json`) extended by each app:
