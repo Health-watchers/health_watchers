@@ -7,7 +7,8 @@ import express from 'express';
 import { createServer } from 'http';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
-import cors, { type CorsOptions } from 'cors';
+import cors from 'cors';
+import { buildCorsOptions } from './config/cors';
 import {
   createCompressionMiddleware,
   compressionMetricsEndpoint,
@@ -113,19 +114,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
   .map((o) => o.trim())
   .filter(Boolean);
 
-const corsOptions: CorsOptions = {
-  origin: (origin, callback) => {
-    // Allow server-to-server requests (no origin) and listed origins.
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS: origin '${origin}' not allowed`));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Request-ID'],
-  exposedHeaders: ['X-Request-ID', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
-  maxAge: 600,
-  optionsSuccessStatus: 204,
-};
+const corsOptions = buildCorsOptions(allowedOrigins);
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
