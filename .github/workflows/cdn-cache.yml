@@ -1,13 +1,17 @@
 name: CDN Cache
 
+# NOTE: CDN infrastructure is not provisioned yet (see issue #1756).
+# The schedule and workflow_run triggers are disabled until it exists; only
+# manual runs are allowed. The `guard` job skips cleanly when the required
+# secrets are absent so this workflow never fails at "Set up job".
 on:
-  workflow_run:
-    workflows: ['CI/CD Pipeline']
-    types: [completed]
-    branches: [main]
-  schedule:
-    # Weekly CDN performance report — Monday 07:30 UTC
-    - cron: '30 7 * * 1'
+  # workflow_run:
+  #   workflows: ['CI/CD Pipeline']
+  #   types: [completed]
+  #   branches: [main]
+  # schedule:
+  #   # Weekly CDN performance report — Monday 07:30 UTC
+  #   - cron: '30 7 * * 1'
   workflow_dispatch:
     inputs:
       action:
@@ -23,20 +27,55 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  id-token: write
 
 jobs:
+  guard:
+    name: Check required secrets
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check CDN secrets
+        id: check
+        env:
+          AWS_CDN_ROLE_ARN: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          missing=""
+          [ -z "$AWS_CDN_ROLE_ARN" ] && missing="$missing AWS_CDN_ROLE_ARN"
+          if [ -z "$CLOUDFRONT_DISTRIBUTION_ID" ]; then
+            [ -z "$CLOUDFLARE_ZONE_ID" ] && missing="$missing CLOUDFLARE_ZONE_ID"
+            [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          fi
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### CDN Cache skipped"
+              echo ""
+              echo "CDN infrastructure is not provisioned yet. Missing secrets:$missing"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Skipping CDN Cache — missing secrets:$missing"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
   invalidate-and-warm:
     name: Invalidate mutable paths & warm cache
+    needs: guard
     runs-on: ubuntu-latest
     if: >
-      github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'invalidate-and-warm'
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      needs.guard.outputs.ready == 'true'
+      && (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'invalidate-and-warm'
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}
@@ -65,24 +104,29 @@ jobs:
 
   verify-headers:
     name: Verify cache headers only
+    needs: guard
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify-headers'
+    if: >
+      needs.guard.outputs.ready == 'true'
+      && github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'verify-headers'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: bash scripts/cdn/verify-cache-headers.sh --base "${{ secrets.APP_BASE_URL || 'https://app.health-watchers.io' }}"
 
   performance-report:
     name: Weekly CDN performance report
+    needs: guard
     runs-on: ubuntu-latest
     if: >
-      github.event_name == 'schedule'
-      || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'performance-report')
+      needs.guard.outputs.ready == 'true'
+      && (github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'performance-report'))
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}

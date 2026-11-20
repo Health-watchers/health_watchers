@@ -17,10 +17,30 @@ permissions:
   pull-requests: write
 
 jobs:
+  guard:
+    name: Check required secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has_slack: ${{ steps.check.outputs.has_slack }}
+    steps:
+      - name: Check required secrets
+        id: check
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            echo "has_slack=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_slack=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Code Quality skipped::SLACK_WEBHOOK_URL is not configured; Slack notifications will be skipped. Core quality checks will still run."
+          fi
+
   quality:
     name: Code Quality Analysis & Gate
+    needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 25
+=======
 
     services:
       mongodb:
@@ -123,7 +143,7 @@ jobs:
           exit 1
 
       - name: Notify Slack on failure
-        if: failure()
+        if: failure() && needs.guard.outputs.has_slack == 'true'
         uses: slackapi/slack-github-action@v1.24.0
         continue-on-error: true
         with:
