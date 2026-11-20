@@ -290,7 +290,7 @@ The confirm button uses the destructive colour token and is disabled for 1.5 sec
 
 The Figma prototype must link: **Queue → Claim Detail → Resubmit flow** end-to-end.
 
-All frames should be placed under **UI Designs / Billing / Insurance Claims Workbench** in the shared Figma file.
+All frames should be placed under **Figma: Billing / Insurance Claims Workbench** in the shared Figma file.
 
 ---
 

@@ -217,7 +217,7 @@ Displayed when some data is missing within a range (e.g. gaps in a continuous mo
 
 ## Figma Deliverables
 
-All frames are placed under **UI Designs / Design System / Data Visualisation** in the shared Figma file.
+All frames are placed under **Figma: Design System / Data Visualisation** in the shared Figma file.
 
 - [ ] Categorical palette swatches — light and dark mode
 - [ ] Sequential palette swatches — light and dark mode

@@ -10,7 +10,7 @@
 
 The API already exposes staff management endpoints via `modules/users/user-management.controller.ts`, but there are no designs for inviting, editing, deactivating, or re-assigning roles to clinic staff. This document specifies the design requirements for the Staff & User Management screens that the frontend implementation will be built from.
 
-Roles are defined in `apps/api/src/middlewares/rbac.middleware.ts`. Existing designs live in `UI Designs/Health Watchers Design System - Screens`.
+Roles are defined in `apps/api/src/middlewares/rbac.middleware.ts`. Existing designs live in `design/screens/design-system/`.
 
 ---
 
@@ -191,7 +191,7 @@ All touch targets are a minimum of 44 × 44 px (WCAG 2.5.5).
 - [ ] Confirmation dialogs — all three variants, desktop and mobile
 - [ ] Accessibility annotation layer on all frames
 
-All frames should be placed under **UI Designs / Admin / Staff & User Management** in the shared Figma file and exported as PNG to `UI Designs/`.
+All frames should be placed under **Figma: Admin / Staff & User Management** in the shared Figma file and exported as PNG to `design/screens/`.
 
 ---
 
@@ -199,5 +199,5 @@ All frames should be placed under **UI Designs / Admin / Staff & User Management
 
 - `modules/users/user-management.controller.ts` — backing API endpoints
 - `apps/api/src/middlewares/rbac.middleware.ts` — role definitions
-- `UI Designs/Health Watchers Design System - Screens` — existing design library
+- `design/screens/design-system/` — existing design library
 - `docs/design/DATA_VISUALIZATION_GUIDELINES.md` — shared colour and token guidelines

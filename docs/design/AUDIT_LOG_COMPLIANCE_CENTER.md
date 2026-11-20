@@ -294,7 +294,7 @@ Mobile layouts (< 768 px) are out of scope for this issue. If required, a follow
 
 Handoff notes must list the API endpoint that backs each widget/component (e.g. which `modules/audit`, `modules/breach-incidents`, or `modules/compliance` endpoint drives each data element).
 
-All frames should be placed under **UI Designs / Compliance / Audit Log & Compliance Center** in the shared Figma file.
+All frames should be placed under **Figma: Compliance / Audit Log & Compliance Center** in the shared Figma file.
 
 ---
 

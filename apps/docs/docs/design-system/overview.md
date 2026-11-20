@@ -36,10 +36,10 @@ consistency across the platform. It covers:
 
 ## Figma designs
 
-The UI Designs folder at the repo root contains exported Figma screens:
+The `design/` folder at the repo root links to the Figma files (see `design/README.md`):
 
-- **Health Watchers Design System — Screens** — full design-system component screens
-- **Design Figma screens — Settings & Profile page** — settings page reference
+- **Health Watchers Design System — Screens** (`design/screens/design-system/`) — full design-system component screens
+- **Settings & Profile page** (`design/screens/settings-profile/`) — settings page reference
 
 These are the authoritative design references. When implementing a new
 component, cross-check against the Figma source before committing.

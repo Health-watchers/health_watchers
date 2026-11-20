@@ -185,7 +185,7 @@ A **floating action button (FAB)** in the thread list allows quick composition o
 - [ ] SLA indicator states (green / amber / red)
 - [ ] Accessibility annotation layer
 
-All frames should be placed under **UI Designs / Clinician / Care Team Inbox** in the shared Figma file.
+All frames should be placed under **Figma: Clinician / Care Team Inbox** in the shared Figma file.
 
 ---
 

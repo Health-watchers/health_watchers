@@ -24,6 +24,7 @@ Repository-level documents:
 | [RESPONSIVE_DESIGN_SYSTEM.md](./RESPONSIVE_DESIGN_SYSTEM.md) | Breakpoints and responsive UI rules |
 | [adr/](./adr/README.md) | Architecture Decision Records |
 | [design/](./design/) | Product/UX design specifications |
+| [../design/README.md](../design/README.md) | Figma links and exported design assets |
 | [diagrams/](./diagrams/README.md) | Mermaid diagram sources |
 
 ## API

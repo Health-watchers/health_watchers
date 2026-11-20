@@ -278,7 +278,7 @@ Accept a 6-digit one-time password after password authentication, or when step-u
 
 ## Figma Deliverables
 
-All frames should be exported to **UI Designs / Mobile /** in the shared Figma file.
+All frames should be exported to **Figma: Mobile /** in the shared Figma file.
 
 - [ ] `Login` — default, loading, error, biometric states (iOS + Android variants)
 - [ ] `MFA OTP` — default, loading, error, expired states
