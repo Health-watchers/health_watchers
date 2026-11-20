@@ -35,8 +35,16 @@ import {
 import { populationHealthRoutes } from './population-health.controller';
 import multer from 'multer';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
+import { generateText, isLLMUnavailableError } from '../../lib/llm';
 
 const router = Router();
+
+function sendAIUnavailable(res: Response) {
+  return res.status(503).json({
+    error: 'AI_UNAVAILABLE',
+    message: 'AI service is temporarily unavailable. Please try again later.',
+  });
+}
 
 // Mount population health routes
 router.use('/', populationHealthRoutes);
@@ -487,11 +495,6 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
       });
     }
 
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const { config } = await import('@health-watchers/config');
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `You are a medical AI assistant. Analyze the following anonymized vital sign history and provide a concise health trend summary in 2-3 sentences. Focus on notable patterns, improvements, or concerns.
 
 Vital Signs History (chronological):
@@ -499,12 +502,14 @@ ${JSON.stringify(anonymizedVitals, null, 2)}
 
 Provide a professional health trend summary:`;
 
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text();
+    const summary = await generateText(prompt, { feature: 'health-trends' });
 
     return res.json({ success: true, summary, readings: anonymizedVitals.length });
   } catch (error: any) {
     logger.error({ err: error }, 'AI health-trends error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -540,11 +545,6 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
       .filter((r) => r.flag === 'HH' || r.flag === 'LL')
       .map((r) => `${r.parameter} (${r.value} ${r.unit}, flag: ${r.flag})`);
 
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const { config } = await import('@health-watchers/config');
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `You are a medical AI assistant. Interpret the following lab results in plain language for a clinician.
 Highlight any abnormal values and flag critical values (HH/LL) for immediate attention. Keep the response to 3-4 sentences.
 
@@ -554,12 +554,14 @@ ${labResult.results.map((r) => `- ${r.parameter}: ${r.value} ${r.unit} (ref: ${r
 
 Provide a plain-language clinical interpretation:`;
 
-    const result = await model.generateContent(prompt);
-    const interpretation = result.response.text();
+    const interpretation = await generateText(prompt, { feature: 'interpret-labs' });
 
     return res.json({ success: true, interpretation, criticalValues });
   } catch (error: any) {
     logger.error({ err: error }, 'AI interpret-labs error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -603,11 +605,6 @@ router.post(
         return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
       }
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
       const prompt = `You are a clinical decision support AI. Generate a structured chronic disease care plan for a patient with the following profile.
 
 Condition: ${condition}${icdCode ? ` (ICD-10: ${icdCode})` : ''}
@@ -631,8 +628,7 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
   "reviewDate": "<ISO date 3 months from today>"
 }`;
 
-      const result = await aiModel.generateContent(prompt);
-      const text = result.response.text().trim();
+      const text = (await generateText(prompt, { feature: 'generate-care-plan' })).trim();
 
       let suggestion: unknown;
       try {
@@ -649,6 +645,9 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
       return res.json({ success: true, suggestion, aiGenerated: true });
     } catch (error: any) {
       logger.error({ err: error }, 'AI generate-care-plan error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({ error: 'InternalServerError', message: error.message });
     }
   }
@@ -813,6 +812,9 @@ router.post(
       return res.json({ success: true, ...triageResult, queueId: queueEntry._id });
     } catch (error: unknown) {
       logger.error({ err: error }, 'Triage assessment error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({
         error: 'TriageError',
         message: error instanceof Error ? error.message : 'Failed to assess triage',
@@ -890,11 +892,8 @@ router.post(
       });
     } catch (error: unknown) {
       logger.error({ err: error }, 'Transcription error');
-      if (error instanceof Error && error.message.includes('GEMINI')) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is temporarily unavailable',
-        });
+      if (isLLMUnavailableError(error) || (error instanceof Error && error.message.includes('GEMINI'))) {
+        return sendAIUnavailable(res);
       }
       return res.status(500).json({ error: 'InternalServerError' });
     }
@@ -982,8 +981,8 @@ router.post(
           .json({ error: 'FileTooLarge', message: 'Recording is too long — keep it under 10 MB.' });
       }
       logger.error({ err: error }, 'Audio transcription error');
-      return res.status(502).json({
-        error: 'AIUnavailable',
+      return res.status(503).json({
+        error: 'AI_UNAVAILABLE',
         message: 'Transcription service is temporarily unavailable',
       });
     }

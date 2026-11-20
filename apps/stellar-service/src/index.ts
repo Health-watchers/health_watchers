@@ -138,17 +138,91 @@ if (!SHARED_SECRET) {
   process.exit(1);
 }
 
+// #1788: Constant-time comparison of the shared secret.
+// Both values are hashed with SHA-256 first so that inputs of differing length
+// produce equal-length digests and `timingSafeEqual` never throws.
+const secretDigest = crypto.createHash('sha256').update(SHARED_SECRET as string).digest();
+
+const isSecretValid = (token: string): boolean => {
+  const tokenDigest = crypto.createHash('sha256').update(token).digest();
+  return crypto.timingSafeEqual(tokenDigest, secretDigest);
+};
+
+// #1788: Per-source-IP rate limiting for failed authentication attempts.
+const AUTH_FAILURE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const AUTH_FAILURE_MAX_ATTEMPTS = 10;
+
+interface AuthFailureRecord {
+  timestamps: number[];
+}
+
+const authFailures = new Map<string, AuthFailureRecord>();
+
+const pruneAuthFailures = (record: AuthFailureRecord, now: number): void => {
+  record.timestamps = record.timestamps.filter((ts) => now - ts < AUTH_FAILURE_WINDOW_MS);
+};
+
+const isAuthRateLimited = (ip: string): boolean => {
+  const now = Date.now();
+  const record = authFailures.get(ip);
+  if (!record) return false;
+  pruneAuthFailures(record, now);
+  if (record.timestamps.length === 0) {
+    authFailures.delete(ip);
+    return false;
+  }
+  return record.timestamps.length >= AUTH_FAILURE_MAX_ATTEMPTS;
+};
+
+const recordAuthFailure = (ip: string): void => {
+  const now = Date.now();
+  const record = authFailures.get(ip) ?? { timestamps: [] };
+  pruneAuthFailures(record, now);
+  record.timestamps.push(now);
+  authFailures.set(ip, record);
+};
+
+// Periodically evict stale entries so the map cannot grow unbounded.
+const authFailureSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of authFailures.entries()) {
+    pruneAuthFailures(record, now);
+    if (record.timestamps.length === 0) authFailures.delete(ip);
+  }
+}, AUTH_FAILURE_WINDOW_MS);
+authFailureSweeper.unref?.();
+
 // Middleware: Validate Shared Secret (ONLY for mutating endpoints)
 const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const sourceIp = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+
+  if (isAuthRateLimited(sourceIp)) {
+    logger.warn(
+      { ip: sourceIp, path: req.path, timestamp: new Date().toISOString() },
+      'Authentication rate limit exceeded'
+    );
+    return res.status(429).json({ error: 'Too many failed authentication attempts' });
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    recordAuthFailure(sourceIp);
+    logger.warn(
+      { ip: sourceIp, path: req.path, timestamp: new Date().toISOString() },
+      'Authentication failed: missing Authorization header'
+    );
     return res.status(401).json({ error: 'Missing Authorization header' });
   }
 
   const token = authHeader.substring(7); // Remove "Bearer "
 
-  if (token !== SHARED_SECRET) {
+  if (!isSecretValid(token)) {
+    recordAuthFailure(sourceIp);
+    logger.warn(
+      { ip: sourceIp, path: req.path, timestamp: new Date().toISOString() },
+      'Authentication failed: invalid secret'
+    );
     return res.status(401).json({ error: 'Invalid secret' });
   }
 

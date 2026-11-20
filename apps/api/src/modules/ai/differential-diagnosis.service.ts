@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { config } from '@health-watchers/config';
+import { generateJson, AIUnavailableError } from '../../lib/llm';
 import { stripPII } from './ai.service';
 
 export const DIFFERENTIAL_DISCLAIMER =
@@ -37,11 +36,6 @@ export interface DifferentialDiagnosisResult {
 export async function generateDifferentialDiagnosis(
   input: DifferentialDiagnosisInput
 ): Promise<DifferentialDiagnosisResult> {
-  if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
-
-  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
   // Build anonymised clinical context — no patient names or identifiers
   const clinicalContext = stripPII(
     [
@@ -82,17 +76,12 @@ Rules:
 - Do NOT include any patient-identifying information in the response.
 - Do NOT include markdown code fences or any text outside the JSON object.`;
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
-
-  // Strip possible markdown fences
-  const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-
   let parsed: Omit<DifferentialDiagnosisResult, 'disclaimer'>;
   try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error(`AI returned an unparseable response: ${raw.slice(0, 200)}`);
+    parsed = await generateJson<Omit<DifferentialDiagnosisResult, 'disclaimer'>>(prompt);
+  } catch (err) {
+    if (err instanceof AIUnavailableError) throw err;
+    throw new AIUnavailableError('AI returned an unparseable response', err);
   }
 
   // Validate shape
