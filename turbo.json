@@ -1,17 +1,67 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["tsconfig.base.json", ".env.example"],
+  "globalEnv": [
+    "NEXT_PUBLIC_*",
+    "NODE_ENV",
+    "CI",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "TURBO_TOKEN",
+    "TURBO_TEAM"
+  ],
   "remoteCache": {
-    "enabled": true
+    "enabled": false
   },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "package.json", "tsconfig.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "tailwind.config.ts",
+        "tailwind.config.js",
+        "postcss.config.*",
+        "babel.config.*",
+        "messages/**",
+        "public/**",
+        "i18n.ts",
+        "middleware.ts",
+        "../../tsconfig.base.json"
+      ],
+      "env": [
+        "NEXT_PUBLIC_*",
+        "NODE_ENV",
+        "VERCEL_ENV",
+        "VERCEL_URL"
+      ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "build:analyze": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "package.json", "tsconfig.json", "next.config.js"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "tailwind.config.ts",
+        "tailwind.config.js",
+        "postcss.config.*",
+        "babel.config.*",
+        "messages/**",
+        "public/**",
+        "i18n.ts",
+        "middleware.ts",
+        "../../tsconfig.base.json"
+      ],
+      "env": [
+        "NEXT_PUBLIC_*",
+        "NODE_ENV",
+        "VERCEL_ENV",
+        "VERCEL_URL"
+      ],
       "outputs": [".next/**", "!.next/cache/**"]
     },
     "dev": {
@@ -20,16 +70,30 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tests/**", "__tests__/**", "jest.config.*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tests/**",
+        "__tests__/**",
+        "jest.config.*",
+        "vitest.config.*"
+      ],
       "outputs": ["coverage/**"]
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig.json"],
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "../../tsconfig.base.json"],
       "outputs": []
     },
     "lint": {
-      "inputs": ["src/**", ".eslintrc.*", "eslint.config.*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "**/*.ts",
+        "**/*.tsx",
+        "middleware.ts",
+        "e2e/**",
+        ".eslintrc.*",
+        "eslint.config.*"
+      ],
       "outputs": []
     },
     "start": {

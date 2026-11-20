@@ -5,6 +5,10 @@ This guide explains how Health Watchers APIs handle versioning, how to negotiate
 **Last updated**: 2026-10-17  
 **Current API Version**: v1 (stable), v2 (beta)
 
+> **Scope of this document**: This guide is the canonical reference for API versions and the
+> endpoint list. `CHANGELOG.md` no longer documents endpoints — it contains dated release notes
+> generated from changesets (see [Release Notes vs. API Reference](#release-notes-vs-api-reference)).
+
 ---
 
 ## Table of Contents
@@ -12,9 +16,11 @@ This guide explains how Health Watchers APIs handle versioning, how to negotiate
 - [Versioning Scheme](#versioning-scheme)
 - [Version Negotiation](#version-negotiation)
 - [Deprecation & Sunset Dates](#deprecation--sunset-dates)
+- [API Endpoint Reference (v1)](#api-endpoint-reference-v1)
 - [Migration Guides](#migration-guides)
 - [Common Breaking Changes](#common-breaking-changes)
 - [Examples](#examples)
+- [Release Notes vs. API Reference](#release-notes-vs-api-reference)
 
 ---
 
@@ -91,7 +97,7 @@ X-API-Sunset-Date: 2027-12-31
 ### Deprecation Timeline
 
 1. **Announcement** (Month 1): Breaking change announced via:
-   - Changelog (`CHANGELOG.md`)
+   - Release notes (`CHANGELOG.md`, generated from changesets) and this guide
    - API status page
    - Email to registered developers
    
@@ -114,6 +120,150 @@ X-API-Sunset-Date: 2027-12-31
 #### v1 Endpoints (Stable)
 
 No endpoints currently deprecated. v1 is in active maintenance.
+
+### Deprecation Header Example
+
+When an endpoint is deprecated, every response from it carries the deprecation and sunset
+headers:
+
+```
+HTTP/1.1 200 OK
+X-API-Version: v1
+X-API-Deprecation-Date: 2027-06-30
+X-API-Sunset-Date: 2027-12-31
+X-API-Deprecation-Warning: Endpoint /api/v1/patients will be removed 2027-12-31; use /api/v2/patients
+```
+
+After the sunset date the endpoint returns `410 Gone` with the error body shown above.
+
+---
+
+## API Endpoint Reference (v1)
+
+This section is the canonical endpoint list for the stable v1 API. It was previously kept in
+`CHANGELOG.md`; the machine-readable source of truth is the OpenAPI spec
+(`docs/openapi.yaml`). All paths are prefixed with `/api/v1` unless noted.
+
+### Authentication (`/auth`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/auth/register` | Register a new user account |
+| POST | `/auth/login` | Authenticate and obtain access/refresh tokens |
+| POST | `/auth/refresh` | Exchange a refresh token for a new access token |
+| POST | `/auth/logout` | Revoke the current refresh token |
+| GET | `/auth/me` | Return the authenticated user's profile |
+
+### Patients (`/patients`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/patients` | List patients (offset pagination: `page`, `limit`) |
+| POST | `/patients` | Create a patient record |
+| GET | `/patients/:id` | Get a patient by ID |
+| PATCH | `/patients/:id` | Update a patient record |
+| DELETE | `/patients/:id` | Soft-delete a patient record |
+| GET | `/patients/:id/history` | Get a patient's medical history |
+
+### Encounters (`/encounters`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/encounters` | List encounters |
+| POST | `/encounters` | Create an encounter |
+| GET | `/encounters/:id` | Get an encounter by ID |
+| PATCH | `/encounters/:id` | Update an encounter |
+| POST | `/encounters/:id/close` | Close an encounter |
+
+### Lab Results (`/lab-results`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/lab-results` | List lab results |
+| POST | `/lab-results` | Record a lab result |
+| GET | `/lab-results/:id` | Get a lab result by ID |
+| PATCH | `/lab-results/:id` | Update a lab result |
+
+### Payments (`/payments`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/payments/intent` | Create a payment intent (Stellar) |
+| POST | `/payments/confirm` | Confirm a payment intent |
+| GET | `/payments` | List payments |
+| GET | `/payments/:id` | Get a payment by ID |
+
+### AI (`/ai`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/ai/risk-stratification` | Run AI risk stratification for a patient |
+| POST | `/ai/triage` | Get AI-assisted triage suggestions |
+| GET | `/ai/models` | List available AI models and versions |
+
+### Clinics (`/clinics`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/clinics` | List clinics |
+| POST | `/clinics` | Create a clinic |
+| GET | `/clinics/:id` | Get a clinic by ID |
+| PATCH | `/clinics/:id` | Update a clinic |
+
+### Users (`/users`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/users` | List users |
+| POST | `/users` | Create a user |
+| GET | `/users/:id` | Get a user by ID |
+| PATCH | `/users/:id` | Update a user |
+| DELETE | `/users/:id` | Deactivate a user |
+
+### Appointments (`/appointments`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/appointments` | List appointments |
+| POST | `/appointments` | Create an appointment |
+| GET | `/appointments/:id` | Get an appointment by ID |
+| PATCH | `/appointments/:id` | Update an appointment |
+| DELETE | `/appointments/:id` | Cancel an appointment |
+
+### Dashboard (`/dashboard`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/dashboard/summary` | Get dashboard summary metrics |
+| GET | `/dashboard/activity` | Get recent activity feed |
+
+### Audit Logs (`/audit-logs`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/audit-logs` | List audit log entries (HIPAA change management) |
+| GET | `/audit-logs/:id` | Get an audit log entry by ID |
+
+### ICD-10 (`/icd10`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/icd10/search` | Search ICD-10 codes |
+| GET | `/icd10/:code` | Get an ICD-10 code by code |
+
+### Settings (`/settings`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/settings` | Get system settings |
+| PATCH | `/settings` | Update system settings |
+
+### Version Discovery (`/version`)
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/version` | Return the current API version and supported versions |
+| GET | `/health` | Liveness/readiness probe (unversioned) |
 
 ---
 
@@ -437,10 +587,20 @@ pm.request.url.path = `/${pm.globals.get("api_version")}/patients`;
 
 ---
 
+## Release Notes vs. API Reference
+
+- **Release notes**: `CHANGELOG.md` contains dated release entries generated from changesets
+  (via the Changesets release workflow). Use it to see what changed between deployments,
+  including breaking changes and deprecations.
+- **API reference**: This guide (and the OpenAPI spec) is the canonical list of endpoints and
+  versioning policy. Endpoint lists are no longer maintained in `CHANGELOG.md`.
+
+---
+
 ## Support & Resources
 
-- **Changelog**: See `CHANGELOG.md` for version history and breaking changes
-- **API Documentation**: Full endpoint reference at `docs/API_DOCUMENTATION.md`
+- **Release notes**: See `CHANGELOG.md` for dated releases generated from changesets
+- **API Documentation**: Full endpoint reference at `docs/API_DOCUMENTATION.md` and `docs/openapi.yaml`
 - **Security Policy**: `docs/SECURITY_POLICY.md` for version security updates
 - **Status Page**: https://status.example.com for API incident notifications
 - **Deprecation Timeline**: Check response headers for `X-API-Deprecation-Date` and `X-API-Sunset-Date`

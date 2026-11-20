@@ -1177,6 +1177,83 @@ jobs:
             }
         continue-on-error: true
 
+  # Stage 8: Aggregated CI gate (Issue #1764)
+  # This is the ONLY required status check in branch protection. It depends on
+  # every gating job and fails if any of them failed or was cancelled. Because
+  # it runs with `if: always()`, it is reported even when upstream jobs are
+  # skipped, so a skipped required check can never be mistaken for a pass.
+  # Renaming or adding individual jobs only requires updating this `needs` list,
+  # not branch-protection settings.
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs:
+      - actionlint
+      - helm-lint-dry-run
+      - migration-check
+      - validate-k8s
+      - quality-checks
+      - mobile-checks
+      - security-scan
+      - test
+      - build
+      - docker
+      - e2e
+      - visual-regression-gate
+      - e2e-tests
+      - postman-sync
+      - deploy-staging
+      - deploy-production
+    if: always()
+
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          echo "Aggregated CI gate — inspecting results of all needed jobs."
+          echo ""
+          echo "needs context:"
+          echo '${{ toJSON(needs) }}'
+          echo ""
+
+          # Jobs that are intentionally conditional (event/ref gated) and may
+          # legitimately be `skipped` without indicating a problem.
+          CONDITIONAL_JOBS="helm-lint-dry-run docker e2e-tests deploy-staging deploy-production"
+
+          FAILED=0
+          for job in $(echo '${{ toJSON(needs) }}' | jq -r 'keys[]'); do
+            result=$(echo '${{ toJSON(needs) }}' | jq -r --arg j "$job" '.[$j].result')
+            case "$result" in
+              success)
+                echo "✅ ${job}: success"
+                ;;
+              skipped)
+                if echo " ${CONDITIONAL_JOBS} " | grep -q " ${job} "; then
+                  echo "⏭️  ${job}: skipped (intentionally conditional — allowed)"
+                else
+                  echo "❌ ${job}: skipped (not an intentionally conditional job)"
+                  FAILED=1
+                fi
+                ;;
+              failure|cancelled)
+                echo "❌ ${job}: ${result}"
+                FAILED=1
+                ;;
+              *)
+                echo "❌ ${job}: unexpected result '${result}'"
+                FAILED=1
+                ;;
+            esac
+          done
+
+          echo ""
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::One or more required CI jobs failed, were cancelled, or were unexpectedly skipped."
+            exit 1
+          fi
+
+          echo "✅ All required CI jobs passed."
+=======
+
   # Stage 6b: End-to-End Tests (Issue #1581)
   e2e-tests:
     name: Playwright E2E Tests
