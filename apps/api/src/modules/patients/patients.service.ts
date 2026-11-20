@@ -77,6 +77,18 @@ export async function getPatientsList(clinicId: string, query: any) {
   };
 }
 
+/** Minimum length of a patient search term */
+const MIN_SEARCH_LENGTH = 2;
+
+/**
+ * Escape regex metacharacters in user input so it is treated literally
+ * @param input - Raw user input
+ * @returns Escaped string safe for use in a RegExp
+ */
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Search patients by name or system ID
  * @param clinicId - The clinic ID
@@ -84,7 +96,14 @@ export async function getPatientsList(clinicId: string, query: any) {
  * @returns Matching patients
  */
 export async function searchPatients(clinicId: string, searchTerm: string) {
-  const regex = new RegExp(searchTerm, 'i');
+  const term = (searchTerm || '').trim();
+  if (term.length < MIN_SEARCH_LENGTH) {
+    return [];
+  }
+
+  // Anchor with '^' so a prefix index applies and escape metacharacters
+  // to prevent ReDoS and regex injection.
+  const regex = new RegExp(`^${escapeRegex(term)}`, 'i');
   const patients = await PatientModel.find({
     clinicId,
     $or: [

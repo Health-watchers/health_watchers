@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
 import { authorize } from '@/middlewares/rbac.middleware';
+import { asyncHandler } from '@/middlewares/error.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,
@@ -15,8 +16,11 @@ const router = Router();
  * GET /api/v1/replication/status
  * Get comprehensive replication health status
  */
-router.get('/status', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/status',
+  authenticate,
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const healthStatus = await getReplicationHealthStatus();
 
     res.json({
@@ -24,21 +28,18 @@ router.get('/status', authenticate, authorize(['admin']), async (req: Request, r
       data: healthStatus,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication status',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
  * GET /api/v1/replication/lag
  * Get replication lag metrics
  */
-router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/lag',
+  authenticate,
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const lagMetrics = await getReplicationLagMetrics();
 
     if (!lagMetrics) {
@@ -53,14 +54,8 @@ router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res:
       data: lagMetrics,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication lag',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
  * GET /api/v1/replication/consistency
@@ -70,30 +65,22 @@ router.get(
   '/consistency',
   authenticate,
   authorize(['admin']),
-  async (req: Request, res: Response) => {
-    try {
-      const consistency = await monitorConsistency();
+  asyncHandler(async (req: Request, res: Response) => {
+    const consistency = await monitorConsistency();
 
-      if (!consistency) {
-        return res.status(503).json({
-          error: 'Consistency metrics unavailable',
-          message: 'Could not retrieve replica set status',
-        });
-      }
-
-      res.json({
-        success: true,
-        data: consistency,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to get consistency metrics',
-        message: errorMessage,
+    if (!consistency) {
+      return res.status(503).json({
+        error: 'Consistency metrics unavailable',
+        message: 'Could not retrieve replica set status',
       });
     }
-  }
+
+    res.json({
+      success: true,
+      data: consistency,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -104,23 +91,15 @@ router.post(
   '/test-failover',
   authenticate,
   authorize(['admin']),
-  async (req: Request, res: Response) => {
-    try {
-      const testResult = await testFailover();
+  asyncHandler(async (req: Request, res: Response) => {
+    const testResult = await testFailover();
 
-      res.json({
-        success: testResult.success,
-        data: testResult,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failover test failed',
-        message: errorMessage,
-      });
-    }
-  }
+    res.json({
+      success: testResult.success,
+      data: testResult,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -154,8 +133,11 @@ router.get(
  * GET /api/v1/replication/metrics
  * Get detailed replication metrics
  */
-router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/metrics',
+  authenticate,
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const [lagMetrics, consistency] = await Promise.all([
       getReplicationLagMetrics(),
       monitorConsistency(),
@@ -171,13 +153,7 @@ router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, 
       success: true,
       data: metrics,
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get metrics',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 export default router;
