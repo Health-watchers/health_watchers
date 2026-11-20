@@ -134,7 +134,10 @@ spec:
           protocol: TCP
 
 ---
-# Stellar service: ingress from API only; egress to external Stellar network.
+# Stellar service: ingress from API and Prometheus only; egress to external Stellar network.
+# Operational endpoints (/metrics, /network*, /monitor/*) are additionally protected
+# by requireSecret in the service, but network isolation ensures they are unreachable
+# from outside the cluster or from other workloads.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -153,6 +156,17 @@ spec:
         - podSelector:
             matchLabels:
               app: api
+      ports:
+        - port: 3002
+          protocol: TCP
+    # Accept Prometheus scraping (metrics endpoints) from the monitoring namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
       ports:
         - port: 3002
           protocol: TCP

@@ -155,6 +155,60 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
   return next();
 };
 
+// Middleware: Validate metrics credentials (METRICS_PASSWORD) via basic or bearer auth.
+// Prometheus can scrape with either `basic_auth` (user: any, password: METRICS_PASSWORD)
+// or a bearer token equal to METRICS_PASSWORD.
+const METRICS_PASSWORD = process.env.METRICS_PASSWORD;
+
+const requireMetricsAuth = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
+  if (!METRICS_PASSWORD) {
+    logger.error('METRICS_PASSWORD not configured; refusing to serve metrics');
+    return res.status(503).json({ error: 'Metrics endpoint not configured' });
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="metrics"');
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+
+  // Bearer token form
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const tokenBuf = Buffer.from(token);
+    const expectedBuf = Buffer.from(METRICS_PASSWORD);
+    if (tokenBuf.length === expectedBuf.length && crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
+      return next();
+    }
+    return res.status(401).json({ error: 'Invalid metrics credentials' });
+  }
+
+  // Basic auth form
+  if (authHeader.startsWith('Basic ')) {
+    const decoded = Buffer.from(authHeader.substring(6), 'base64').toString('utf8');
+    const separatorIndex = decoded.indexOf(':');
+    const password = separatorIndex >= 0 ? decoded.substring(separatorIndex + 1) : '';
+    const passwordBuf = Buffer.from(password);
+    const expectedBuf = Buffer.from(METRICS_PASSWORD);
+    if (
+      passwordBuf.length === expectedBuf.length &&
+      crypto.timingSafeEqual(passwordBuf, expectedBuf)
+    ) {
+      return next();
+    }
+    res.setHeader('WWW-Authenticate', 'Basic realm="metrics"');
+    return res.status(401).json({ error: 'Invalid metrics credentials' });
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="metrics"');
+  return res.status(401).json({ error: 'Unsupported Authorization scheme' });
+};
+
 // Middleware: Check circuit breaker
 const checkCircuitBreakerMiddleware = (
   _req: express.Request,
@@ -193,13 +247,12 @@ app.use(
 );
 app.use(metricsMiddleware);
 
-// ✅ PUBLIC: GET /metrics — Prometheus metrics
-// Registered before auth/circuit-breaker middleware so Prometheus can always scrape
-// transaction success/failure counters, confirmation histograms and account gauges.
-app.get('/metrics', metricsHandler);
+// ✅ PROTECTED: GET /metrics — Prometheus metrics (requires METRICS_PASSWORD)
+// Prometheus must scrape with basic auth or a bearer token matching METRICS_PASSWORD.
+app.get('/metrics', requireMetricsAuth, metricsHandler);
 
-// ✅ PUBLIC: GET /metrics/transactions — Snapshot of transaction-level metrics
-app.get('/metrics/transactions', (_req, res) => {
+// ✅ PROTECTED: GET /metrics/transactions — Snapshot of transaction-level metrics
+app.get('/metrics/transactions', requireMetricsAuth, (_req, res) => {
   return res.json({
     success: true,
     network: stellarConfig.network,
@@ -208,8 +261,8 @@ app.get('/metrics/transactions', (_req, res) => {
   });
 });
 
-// ✅ PUBLIC: GET /network - Network status endpoint
-app.get('/network', (_req, res) => {
+// ✅ PROTECTED: GET /network - Network status endpoint
+app.get('/network', requireSecret, (_req, res) => {
   return res.json({
     network: stellarConfig.network,
     platformPublicKey: stellarConfig.platformPublicKey,
@@ -218,8 +271,8 @@ app.get('/network', (_req, res) => {
   });
 });
 
-// ✅ PUBLIC: GET /network-status - Detailed network status with failover info
-app.get('/network-status', async (_req, res) => {
+// ✅ PROTECTED: GET /network-status - Detailed network status with failover info
+app.get('/network-status', requireSecret, async (_req, res) => {
   try {
     const status = await getNetworkStatus();
     return res.json({ success: true, ...status });
@@ -245,8 +298,8 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// ✅ PUBLIC: GET /monitor/status - Comprehensive network status with monitoring
-app.get('/monitor/status', checkCircuitBreakerMiddleware, async (_req, res) => {
+// ✅ PROTECTED: GET /monitor/status - Comprehensive network status with monitoring
+app.get('/monitor/status', requireSecret, checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const status = await getMonitoredNetworkStatus();
     recordSuccess();
@@ -258,8 +311,8 @@ app.get('/monitor/status', checkCircuitBreakerMiddleware, async (_req, res) => {
   }
 });
 
-// ✅ PUBLIC: GET /monitor/ledger - Get ledger status only
-app.get('/monitor/ledger', checkCircuitBreakerMiddleware, async (_req, res) => {
+// ✅ PROTECTED: GET /monitor/ledger - Get ledger status only
+app.get('/monitor/ledger', requireSecret, checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const ledger = await getLedgerStatus();
     recordSuccess();
@@ -270,8 +323,8 @@ app.get('/monitor/ledger', checkCircuitBreakerMiddleware, async (_req, res) => {
   }
 });
 
-// ✅ PUBLIC: GET /monitor/backlog - Get transaction backlog info
-app.get('/monitor/backlog', checkCircuitBreakerMiddleware, async (_req, res) => {
+// ✅ PROTECTED: GET /monitor/backlog - Get transaction backlog info
+app.get('/monitor/backlog', requireSecret, checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const backlog = await getTransactionBacklog();
     recordSuccess();
@@ -282,8 +335,8 @@ app.get('/monitor/backlog', checkCircuitBreakerMiddleware, async (_req, res) => 
   }
 });
 
-// ✅ PUBLIC: GET /monitor/alerts - Get current network alerts
-app.get('/monitor/alerts', checkCircuitBreakerMiddleware, async (_req, res) => {
+// ✅ PROTECTED: GET /monitor/alerts - Get current network alerts
+app.get('/monitor/alerts', requireSecret, checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const alerts = await checkNetworkAlerts();
     recordSuccess();
@@ -294,8 +347,8 @@ app.get('/monitor/alerts', checkCircuitBreakerMiddleware, async (_req, res) => {
   }
 });
 
-// ✅ PUBLIC: GET /monitor/alerts/history - Get alert history
-app.get('/monitor/alerts/history', (req, res) => {
+// ✅ PROTECTED: GET /monitor/alerts/history - Get alert history
+app.get('/monitor/alerts/history', requireSecret, (req, res) => {
   try {
     const limit = parseInt((req.query.limit as string) || '50', 10);
     const history = getAlertHistory(Math.min(limit, 100));
@@ -319,8 +372,8 @@ app.delete('/monitor/alerts/history', requireSecret, (req, res) => {
   }
 });
 
-// ✅ PUBLIC: GET /monitor/ledger-growth - Get ledger growth rate
-app.get('/monitor/ledger-growth', checkCircuitBreakerMiddleware, async (_req, res) => {
+// ✅ PROTECTED: GET /monitor/ledger-growth - Get ledger growth rate
+app.get('/monitor/ledger-growth', requireSecret, checkCircuitBreakerMiddleware, async (_req, res) => {
   try {
     const growth = await trackLedgerGrowth();
     recordSuccess();
@@ -2191,6 +2244,7 @@ const server: Server = app.listen(PORT, () => {
       mainnetMode: stellarConfig.network === 'mainnet',
       secret: SHARED_SECRET ? 'SET' : 'MISSING',
       metricsPath: '/metrics',
+      metricsAuth: METRICS_PASSWORD ? 'SET' : 'MISSING',
     },
     'Stellar Service running'
   );

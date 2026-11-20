@@ -15,3 +15,7 @@ spec:
       port: 3002
       targetPort: 3002
       protocol: TCP
+    - name: metrics
+      port: 3003
+      targetPort: 3003
+      protocol: TCP
