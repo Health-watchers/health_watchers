@@ -723,6 +723,35 @@ The main CI pipeline (`.github/workflows/ci.yml`) additionally runs `npm audit -
 
 The **Weekly Dependency Audit Report** workflow (`.github/workflows/dependency-report.yml`) runs every Monday and publishes a consolidated report (vulnerabilities, outdated packages, license breakdown) as a tracking issue labelled `dependencies, automated`. Review it weekly and remediate any **critical** findings before they block PRs.
 
+### Triaging the weekly audit report
+
+Work through the report in a consistent order so nothing critical lingers:
+
+1. **Criticals first.** Any 🔴 critical vulnerability blocks PR merges. Fix these immediately (usually a targeted `npm install <pkg>@<patched-version>` or an `overrides` entry in the root `package.json`), and confirm with `npm audit --audit-level=critical`.
+2. **Highs next.** Address 🟠 high findings in the same pass where possible; they are gated by `npm audit --audit-level=high` in CI.
+3. **Batch patch/minor upgrades.** Group the remaining outdated packages into small batches of patch/minor bumps (mirroring the Dependabot grouping) rather than upgrading everything at once.
+4. **Run the full test suite per batch.** After each batch run `npm test`, `npm run lint` and `npm run typecheck` before moving on, so a regression is attributable to a single batch.
+
+### Regenerating the lockfile
+
+The repo pins its package manager via `packageManager` in the root `package.json` (`npm@10.8.2`). **Any** change to a `package.json` dependency must be accompanied by a regenerated `package-lock.json` produced with that exact npm version:
+
+```bash
+npx npm@10.8.2 install
+```
+
+Commit `package.json` and `package-lock.json` together. A lockfile that is out of sync with `package.json` makes every `npm ci` fail, which takes the whole CI pipeline red.
+
+### Verifying the lockfile-drift guard locally
+
+CI runs a fast drift check on every pull request that fails if `package-lock.json` does not match `package.json`. Reproduce it locally before pushing:
+
+```bash
+npx npm@10.8.2 install --package-lock-only && git diff --exit-code package-lock.json
+```
+
+If the command exits non-zero, the lockfile is stale — run `npx npm@10.8.2 install`, commit the updated `package-lock.json`, and re-run the check until it passes.
+
 ## Architecture Decisions
 
 ### Adding New Modules

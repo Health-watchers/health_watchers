@@ -8,6 +8,7 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Deployment](#docker-deployment)
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
+- [CDN Configuration](#cdn-configuration)
 - [Blue-Green Deployment](BLUE_GREEN_DEPLOYMENT.md)
 - [Health Checks](#health-checks)
 - [Troubleshooting](#troubleshooting)
@@ -370,6 +371,126 @@ kubectl scale deployment api -n production --replicas=3
 # Autoscaling
 kubectl apply -f k8s/api/hpa.yaml -n production
 ```
+
+## CDN Configuration
+
+The Next.js web app serves its static assets (`/_next/static/`) through a CDN (CloudFront by default) so that immutable, content-hashed bundles are cached at the edge and HTML is always revalidated.
+
+### Architecture Overview
+
+| Path | Origin | Cache Behavior | `Cache-Control` |
+|------|--------|----------------|-----------------|
+| `/_next/static/*` | Web app (S3 or ALB origin) | Immutable, long TTL | `public, max-age=31536000, immutable` |
+| `/static/*`, `/images/*` | Web app | Long TTL | `public, max-age=31536000, immutable` |
+| `/*` (HTML, API routes) | Web app | Default, short TTL | `public, max-age=0, must-revalidate` |
+
+### CloudFront Distribution
+
+Create a CloudFront distribution with the web app as origin and two cache behaviors:
+
+1. **`/_next/static/*` behavior**
+   - Path pattern: `/_next/static/*`
+   - Cache policy: `CachingOptimized` (or a custom policy with `DefaultTTL=31536000`, `MaxTTL=31536000`)
+   - Compress objects automatically: enabled
+   - Viewer protocol policy: `redirect-to-https`
+   - Origin request policy: `CORS-S3Origin` (or none if same-origin)
+
+2. **Default (`*`) behavior**
+   - Path pattern: `Default (*)`
+   - Cache policy: `CachingDisabled` or a custom policy with `DefaultTTL=0`, `MaxTTL=60`
+   - Forward headers: `Host`, `Accept`, `Accept-Language`
+   - Viewer protocol policy: `redirect-to-https`
+
+Example AWS CLI snippet to create the distribution (abbreviated):
+
+```bash
+aws cloudfront create-distribution \
+  --origin-domain-name "$WEB_ORIGIN_DOMAIN" \
+  --default-root-object "" \
+  --comment "Health Watchers web CDN" \
+  --enabled
+```
+
+> The distribution ID is captured in `CLOUDFRONT_DISTRIBUTION_ID` and used by the deploy pipeline for invalidation.
+
+### Cache Busting via Content Hashes
+
+Next.js emits content-hashed filenames for every build artifact under `/_next/static/` (e.g. `/_next/static/chunks/main-3f9a1c2b.js`). Because the hash changes whenever the file content changes, the immutable long TTL is safe: a new deploy produces new URLs, and old URLs remain valid until they fall out of the cache. **No manual cache busting is required for `/_next/static/`.**
+
+HTML documents are *not* content-hashed, so they must use a short TTL (`max-age=0, must-revalidate`) and be invalidated on each deploy.
+
+### Environment Variables
+
+Copy `.env.cdn.example` and fill in the values:
+
+```bash
+cp .env.cdn.example .env.cdn
+```
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_CDN_URL` | Public CDN base URL used by the Next.js app for asset prefixes | `https://cdn.healthwatchers.com` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution ID used for invalidation | `E2ABCDEFGHIJKL` |
+| `AWS_REGION` | AWS region of the distribution / S3 origin | `us-east-1` |
+| `CDN_CACHE_MAX_AGE` | TTL (seconds) for immutable static assets | `31536000` |
+| `CDN_HTML_CACHE_MAX_AGE` | TTL (seconds) for HTML documents | `0` |
+| `CDN_INVALIDATION_PATHS` | Comma-separated paths to invalidate after deploy | `/*` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credentials with `cloudfront:CreateInvalidation` permission | — |
+
+Set `NEXT_PUBLIC_CDN_URL` in the web app's build environment so `next.config.js` can set `assetPrefix`:
+
+```js
+// apps/web/next.config.js
+module.exports = {
+  assetPrefix: process.env.NEXT_PUBLIC_CDN_URL || undefined,
+};
+```
+
+### Cache Invalidation in the Deployment Pipeline
+
+`scripts/deploy.sh` runs a post-deploy invalidation step after the new web image is live. It invalidates the HTML paths (and any other non-hashed paths listed in `CDN_INVALIDATION_PATHS`) so users immediately receive the new document referencing the new hashed bundles:
+
+```bash
+# Executed automatically by scripts/deploy.sh after the web rollout
+aws cloudfront create-invalidation \
+  --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+  --paths "${CDN_INVALIDATION_PATHS:-/*}"
+```
+
+Invalidating `/_next/static/*` is unnecessary and wasteful — those paths are content-hashed and immutable. If a deploy fails before the web rollout completes, the invalidation step is skipped.
+
+### Validating the CDN
+
+After a deploy, verify that the edge is serving the expected cache headers:
+
+```bash
+# Checks Cache-Control on /_next/static/ and HTML paths
+./scripts/cdn/verify-cache-headers.sh
+
+# Optionally target a specific host
+CDN_HOST=cdn.healthwatchers.com ./scripts/cdn/verify-cache-headers.sh
+```
+
+The script asserts:
+- `/_next/static/*` responses include `Cache-Control: public, max-age=31536000, immutable`
+- HTML responses include `Cache-Control: public, max-age=0, must-revalidate`
+- Responses are served over HTTPS and include `x-cache` (Hit/Miss) headers
+
+### Monitoring CDN Performance
+
+Generate a cache hit-ratio and latency report from CloudFront access logs / CloudWatch metrics:
+
+```bash
+./scripts/cdn/cdn-performance-report.sh
+```
+
+The report summarizes:
+- Cache hit ratio per path prefix (`/_next/static/` vs HTML)
+- p50/p95 origin latency
+- Bytes served from edge vs origin
+- Top invalidated paths in the last 24 hours
+
+Run it after each production deploy and review it during the weekly ops check.
 
 ## Health Checks
 
