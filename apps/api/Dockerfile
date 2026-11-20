@@ -1,5 +1,5 @@
 # Development Dockerfile for API
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Create a non-root user to run the application
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

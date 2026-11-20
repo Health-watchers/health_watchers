@@ -8,7 +8,10 @@
 
 # syntax=docker/dockerfile:1.7
 
-FROM node:20-alpine AS base
+# Node 20 LTS (Alpine), pinned by digest for reproducible builds.
+# Digest corresponds to node:20-alpine; update both the tag and digest
+# together when bumping the base image.
+FROM node:20-alpine@sha256:1a526b97cace6b4006256570efa1a29cd32e60225f0656eeb3f6ea6db5caa9c5 AS base
 
 RUN apk add --no-cache libc6-compat python3 make g++ \
   && corepack enable \
