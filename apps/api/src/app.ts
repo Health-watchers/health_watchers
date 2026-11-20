@@ -50,7 +50,6 @@ import logger from './utils/logger';
 import { registerGracefulShutdown } from './utils/graceful-shutdown';
 import { v2Router } from './routes/v2';
 import { v1Router } from './routes/v1';
-import { SocketService } from './services/socket.service';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import { mutationAuditMiddleware } from './middlewares/mutation-audit.middleware';
 import cookieParser from 'cookie-parser';
@@ -280,18 +279,15 @@ async function startServer() {
   // Seed built-in CDS rules
   await seedBuiltInRules();
 
-  // Initialize Socket.IO service
-  const socketService = SocketService.getInstance(server);
-  logger.info('Socket.IO service initialized');
+  // Initialise Socket.IO on the HTTP server — realtime/socket.ts is the single
+  // Socket.IO entry point (#1775); do not attach a second server to this path.
+  initSocket(server);
+  logger.info('Socket.IO initialised');
 
   server.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
     logger.info('📡 Socket.IO server ready for real-time connections');
   });
-
-  // Initialise Socket.IO on the same HTTP server
-  initSocket(server);
-  logger.info('Socket.IO initialised');
 
   // #1433 — every background job runs through the distributed BullMQ scheduler:
   // each schedule executes once per tick across all replicas.

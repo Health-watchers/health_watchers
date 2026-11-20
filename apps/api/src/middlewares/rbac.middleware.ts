@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppRole } from '@api/types/express';
+import { PERMISSIONS, Permission } from '@health-watchers/types';
 
 export const Roles = {
   PATIENT: 'PATIENT' as AppRole,
@@ -18,6 +19,22 @@ export const authorize = (allowedRoles: AppRole[]) => {
     }
 
     if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return next();
+  };
+};
+
+export const requirePermission = (permission: Permission) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const allowedRoles = PERMISSIONS[permission] as AppRole[];
+
+    if (!allowedRoles || !allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 

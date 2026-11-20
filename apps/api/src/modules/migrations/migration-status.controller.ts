@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { migrationManager } from '../../services/migration-manager.service';
 import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
-import { requireRole } from '../../middlewares/role.middleware';
+import { requirePermission } from '../../middlewares/rbac.middleware';
 import logger from '../../utils/logger';
 
 const router = Router();
@@ -9,7 +9,7 @@ const router = Router();
 router.get(
   '/migrations/status',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('migrations:read'),
   async (_req: Request, res: Response) => {
     try {
       const history = await migrationManager.getMigrationHistory(10);
@@ -40,7 +40,7 @@ router.get(
 router.get(
   '/migrations/latest',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('migrations:read'),
   async (_req: Request, res: Response) => {
     try {
       const latest = await migrationManager.getLatestMigration();

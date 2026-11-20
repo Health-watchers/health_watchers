@@ -12,7 +12,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '@api/middlewares/auth.middleware';
-import { authorize } from '@api/middlewares/rbac.middleware';
+import { requirePermission } from '@api/middlewares/rbac.middleware';
 import { ShardingService } from '../services/sharding.service';
 
 const router = Router();
@@ -21,7 +21,7 @@ const router = Router();
  * GET /api/v1/sharding/health
  * Returns an in-memory summary of shard statuses.
  */
-router.get('/health', authenticate, authorize(['admin']), (_req: Request, res: Response) => {
+router.get('/health', authenticate, requirePermission('sharding:read'), (_req: Request, res: Response) => {
   try {
     const service = ShardingService.getInstance();
     const health = service.getShardHealth();
@@ -46,7 +46,7 @@ router.get('/health', authenticate, authorize(['admin']), (_req: Request, res: R
 router.post(
   '/health-check',
   authenticate,
-  authorize(['admin']),
+  requirePermission('sharding:write'),
   async (_req: Request, res: Response) => {
     try {
       const service = ShardingService.getInstance();
@@ -69,7 +69,7 @@ router.post(
  * GET /api/v1/sharding/strategy
  * Returns all configured sharding strategies.
  */
-router.get('/strategy', authenticate, authorize(['admin']), (_req: Request, res: Response) => {
+router.get('/strategy', authenticate, requirePermission('sharding:read'), (_req: Request, res: Response) => {
   try {
     const service = ShardingService.getInstance();
     const strategy = service.getShardingStrategy();
@@ -95,7 +95,7 @@ router.get('/strategy', authenticate, authorize(['admin']), (_req: Request, res:
 router.get(
   '/balance/:collection',
   authenticate,
-  authorize(['admin']),
+  requirePermission('sharding:read'),
   (req: Request, res: Response) => {
     try {
       const { collection } = req.params;
@@ -118,7 +118,7 @@ router.get(
  * GET /api/v1/sharding/route?collection=&key=
  * Determine which shard a given key would be routed to (read-only, no side effects).
  */
-router.get('/route', authenticate, authorize(['admin']), (req: Request, res: Response) => {
+router.get('/route', authenticate, requirePermission('sharding:read'), (req: Request, res: Response) => {
   const { collection, key } = req.query as { collection?: string; key?: string };
 
   if (!collection || !key) {

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
-import { authorize } from '@/middlewares/rbac.middleware';
+import { requirePermission } from '@/middlewares/rbac.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,
@@ -15,7 +15,11 @@ const router = Router();
  * GET /api/v1/replication/status
  * Get comprehensive replication health status
  */
-router.get('/status', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.get(
+  '/status',
+  authenticate,
+  requirePermission('replication:read'),
+  async (req: Request, res: Response) => {
   try {
     const healthStatus = await getReplicationHealthStatus();
 
@@ -26,18 +30,23 @@ router.get('/status', authenticate, authorize(['admin']), async (req: Request, r
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication status',
-      message: errorMessage,
-    });
+      res.status(500).json({
+        error: 'Failed to get replication status',
+        message: errorMessage,
+      });
+    }
   }
-});
+);
 
 /**
  * GET /api/v1/replication/lag
  * Get replication lag metrics
  */
-router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.get(
+  '/lag',
+  authenticate,
+  requirePermission('replication:read'),
+  async (req: Request, res: Response) => {
   try {
     const lagMetrics = await getReplicationLagMetrics();
 
@@ -55,12 +64,13 @@ router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res:
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication lag',
-      message: errorMessage,
-    });
+      res.status(500).json({
+        error: 'Failed to get replication lag',
+        message: errorMessage,
+      });
+    }
   }
-});
+);
 
 /**
  * GET /api/v1/replication/consistency
@@ -69,7 +79,7 @@ router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res:
 router.get(
   '/consistency',
   authenticate,
-  authorize(['admin']),
+  requirePermission('replication:read'),
   async (req: Request, res: Response) => {
     try {
       const consistency = await monitorConsistency();
@@ -99,11 +109,14 @@ router.get(
 /**
  * POST /api/v1/replication/test-failover
  * Test failover procedures
+ *
+ * NOTE: This is a candidate to move to an internal admin service or CLI.
+ * Exposing failover testing on the public API is a safety concern (#1773).
  */
 router.post(
   '/test-failover',
   authenticate,
-  authorize(['admin']),
+  requirePermission('replication:write'),
   async (req: Request, res: Response) => {
     try {
       const testResult = await testFailover();
@@ -130,7 +143,7 @@ router.post(
 router.get(
   '/read-preferences',
   authenticate,
-  authorize(['admin']),
+  requirePermission('replication:read'),
   (req: Request, res: Response) => {
     res.json({
       success: true,
@@ -154,7 +167,11 @@ router.get(
  * GET /api/v1/replication/metrics
  * Get detailed replication metrics
  */
-router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.get(
+  '/metrics',
+  authenticate,
+  requirePermission('replication:read'),
+  async (req: Request, res: Response) => {
   try {
     const [lagMetrics, consistency] = await Promise.all([
       getReplicationLagMetrics(),
@@ -173,11 +190,12 @@ router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, 
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get metrics',
-      message: errorMessage,
-    });
+      res.status(500).json({
+        error: 'Failed to get metrics',
+        message: errorMessage,
+      });
+    }
   }
-});
+);
 
 export default router;

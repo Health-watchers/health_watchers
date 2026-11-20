@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
-import { authorize } from '@/middlewares/rbac.middleware';
+import { requirePermission } from '@/middlewares/rbac.middleware';
 import { validateRequest } from '@/middlewares/validate.middleware';
 import { z } from 'zod';
 
@@ -25,7 +25,7 @@ type CacheInvalidationRequest = z.infer<typeof cacheInvalidationSchema>;
 router.post(
   '/cache-invalidation',
   authenticate,
-  authorize(['admin']),
+  requirePermission('cdn:write'),
   validateRequest(cacheInvalidationSchema),
   async (req: Request, res: Response) => {
     try {
@@ -70,7 +70,7 @@ router.post(
 router.post(
   '/cache-invalidation/bulk',
   authenticate,
-  authorize(['admin']),
+  requirePermission('cdn:write'),
   async (req: Request, res: Response) => {
     try {
       const { invalidations } = req.body as {
@@ -131,7 +131,7 @@ router.get('/cache-status/:path', authenticate, async (req: Request, res: Respon
  * GET /api/v1/cdn/metrics
  * Get CDN performance metrics
  */
-router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.get('/metrics', authenticate, requirePermission('cdn:read'), async (req: Request, res: Response) => {
   try {
     const metrics = await getCDNMetrics();
 
