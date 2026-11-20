@@ -16,6 +16,24 @@ groups:
             {{ $value | humanizeDuration }} ago. Check the mongodb-full-backup CronJob.
           runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
 
+      - alert: FullBackupStale
+        expr: time() - backup_run_last_timestamp{kind="full"} > 93600
+        for: 30m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Last successful full backup is stale (> 26h old)'
+          description: >
+            The timestamp of the last successful full backup
+            (backup_run_last_timestamp{kind="full"}) is
+            {{ $value | humanizeDuration }} old, exceeding the 26h RPO target.
+            Backups may have stopped running entirely — check the
+            mongodb-full-backup CronJob in k8s/backup/backup-cronjobs.yaml and
+            the backup-scheduler.sh logs.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
+
       - alert: IncrementalBackupStalled
         expr: time() - backup_incremental_last_success_timestamp > 5400
         for: 15m
@@ -28,6 +46,25 @@ groups:
           description: >
             The hourly incremental is overdue, so the recovery point is drifting.
             Current RPO age: {{ with query "dr_rpo_age_seconds{source=\"oplog\",region=\"primary\"}" }}{{ . | first | value | humanizeDuration }}{{ end }}.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
+
+      - alert: OplogBackupStale
+        expr: time() - backup_run_last_timestamp{kind="oplog"} > 5400
+        for: 15m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Last successful oplog (PITR) backup is stale (> 90m old)'
+          description: >
+            The timestamp of the last successful oplog archive
+            (backup_run_last_timestamp{kind="oplog"}) is
+            {{ $value | humanizeDuration }} old. Point-in-time recovery is no
+            longer possible within the 1h RPO target. Check the
+            mongodb-oplog-archive CronJob and its mongodump/mongodump --oplog
+            step.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
 
       - alert: BackupRunFailing
         expr: backup_run_status == 0

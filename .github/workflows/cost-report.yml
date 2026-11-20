@@ -1,9 +1,12 @@
 name: Cost Report
 
 on:
-  schedule:
-    # Weekly, Monday 07:00 UTC
-    - cron: '0 7 * * 1'
+  # NOTE: The weekly schedule is intentionally disabled until cost-reporting
+  # infrastructure (AWS Cost Explorer role, Slack webhook, etc.) exists.
+  # Re-enable the cron below once the required secrets are configured.
+  # schedule:
+  #   # Weekly, Monday 07:00 UTC
+  #   - cron: '0 7 * * 1'
   workflow_dispatch:
     inputs:
       set_baseline:
@@ -20,8 +23,36 @@ permissions:
   issues: write
 
 jobs:
+  guard:
+    name: Check required secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Verify cost-reporting secrets are configured
+        id: check
+        env:
+          AWS_COST_EXPLORER_ROLE_ARN: ${{ secrets.AWS_COST_EXPLORER_ROLE_ARN }}
+        run: |
+          if [ -z "$AWS_COST_EXPLORER_ROLE_ARN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## ⏭️ Cost Report skipped"
+              echo
+              echo "Required secret \`AWS_COST_EXPLORER_ROLE_ARN\` is not configured."
+              echo "Cost-reporting infrastructure does not exist yet; this workflow is disabled."
+              echo "See \`docs/CI_CD_PIPELINE.md\` for the required secrets."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Cost Report skipped: AWS_COST_EXPLORER_ROLE_ARN is not configured."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
   report:
     name: Generate cloud cost report
+    needs: guard
+    if: ${{ needs.guard.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -34,7 +65,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y jq bc
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_COST_EXPLORER_ROLE_ARN }}
@@ -97,7 +128,7 @@ jobs:
           retention-days: 90
 
       - name: Post to Slack
-        if: always()
+        if: always() && secrets.COST_SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2fd069d974d # v1.27.0
         with:
           webhook-url: ${{ secrets.COST_SLACK_WEBHOOK_URL }}

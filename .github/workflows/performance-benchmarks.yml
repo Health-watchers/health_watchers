@@ -24,10 +24,43 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Guard: verify required secrets exist before running anything that needs them.
+  # Secrets cannot be referenced directly in `if:` expressions, so they are
+  # surfaced through job-level env and checked there.
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_credentials: ${{ steps.check.outputs.has_credentials }}
+      has_slack: ${{ steps.check.outputs.has_slack }}
+    steps:
+      - name: Check required secrets
+        id: check
+        env:
+          E2E_DOCTOR_EMAIL: ${{ secrets.E2E_DOCTOR_EMAIL }}
+          E2E_DOCTOR_PASSWORD: ${{ secrets.E2E_DOCTOR_PASSWORD }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "${E2E_DOCTOR_EMAIL}" ] && [ -n "${E2E_DOCTOR_PASSWORD}" ]; then
+            echo "has_credentials=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_credentials=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Performance Benchmarks skipped::E2E_DOCTOR_EMAIL / E2E_DOCTOR_PASSWORD are not configured. Skipping benchmark run."
+          fi
+          if [ -n "${SLACK_WEBHOOK_URL}" ]; then
+            echo "has_slack=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_slack=false" >> "$GITHUB_OUTPUT"
+          fi
+
   benchmark:
     name: API Performance Benchmark
+    needs: preflight
+    if: needs.preflight.outputs.has_credentials == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+=======
 
     services:
       mongodb:
@@ -177,8 +210,8 @@ jobs:
           exit 1
 
       - name: Notify Slack on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1.24.0
+        if: failure() && needs.preflight.outputs.has_slack == 'true'
+        uses: slackapi/slack-github-action@1.27.0
         continue-on-error: true
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}

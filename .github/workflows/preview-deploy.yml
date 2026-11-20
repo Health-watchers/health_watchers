@@ -150,9 +150,9 @@ jobs:
             -l app.kubernetes.io/name=health-watchers-api \
             -o jsonpath='{.items[0].metadata.name}')
           
-          # Run seed script
+          # Run seed script (fails the job if seeding fails)
           kubectl exec -n ${NAMESPACE} ${API_POD} -- \
-            npm run seed || echo "⚠️  Seed script failed or not available"
+            npm run seed
 
       - name: Get preview URLs
         id: urls
@@ -182,19 +182,24 @@ jobs:
             
             ### 🔐 Test Credentials
             
-            All test accounts use password: \`Seed@1234!\`
+            These credentials are for **local development and E2E testing only** (see \`apps/api/scripts/seed.ts\`).
+            All seeded accounts use password: \`Seed@1234!\`
             
             | Role | Email |
             |------|-------|
             | Super Admin | superadmin@seed.dev |
             | Clinic Admin | clinicadmin@seed.dev |
             | Doctor | doctor@seed.dev |
+            | Nurse | nurse@seed.dev |
+            | Assistant | assistant@seed.dev |
+            | Read Only | readonly@seed.dev |
+            | Portal Patient | patient@seed.dev |
             
             ### 📊 Test Data
-            - 10 sample patients
-            - 5 sample encounters
-            - 3 sample payment records
-            - 5 encounter templates
+            - Demo clinic
+            - Sample patients (including a portal patient)
+            - Sample encounters and appointments
+            - A testnet payment record
             
             ⚠️ **Note:** This environment uses **synthetic data only** (no PHI) and **testnet Stellar keys**.
             

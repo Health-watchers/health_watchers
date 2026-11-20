@@ -156,6 +156,82 @@ Add these secrets in GitHub repository settings:
 - `E2E_ADMIN_EMAIL`: Test admin account email
 - `E2E_ADMIN_PASSWORD`: Test admin account password
 
+**AWS (OIDC)**:
+- `AWS_ROLE_ARN`: ARN of the IAM role assumed via GitHub OIDC (no long-lived keys)
+- `AWS_REGION`: AWS region (repository variable, defaults to `us-east-1`)
+
+### Scheduled Workflows: Required Secrets & Variables
+
+Scheduled workflows must never fail at `Set up job`. Each one starts with a
+guard job that checks its required secrets (via an `env` indirection, since
+`secrets` cannot be referenced directly in `if:`) and skips with an explanatory
+summary when they are missing.
+
+| Workflow | File | Required secrets | Required variables | Notes |
+|----------|------|------------------|--------------------|-------|
+| Code Quality | `code-quality.yml` | none | none | Runs on `ubuntu-latest`; no external credentials |
+| Performance Benchmarks | `performance-benchmarks.yml` | none | none | Skips benchmark comparison when no baseline artifact exists |
+| CDN Cache Report | `cdn-cache.yml` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID` | none | **Disabled** until CDN infrastructure exists |
+| Cost Report | `cost-report.yml` | `AWS_ROLE_ARN` | `AWS_REGION` | **Disabled** until cost/billing infrastructure exists |
+| Secrets Scanning (Gitleaks) | `secrets-scanning.yml` | none | none | Uses the pinned Gitleaks action; no token required |
+| Backup Verification | `backup-verify.yml` | `STAGING_MONGODB_URI` | none | Skips when no recent backup is found |
+| Secrets Rotation Check | `secrets-rotation-check.yml` | `AWS_ROLE_ARN` | `AWS_REGION` | Uses OIDC; checks staging and production roles |
+| MongoDB Backup | `backup.yml` | `SLACK_WEBHOOK_URL` (failure notification) | none | Backups run from `k8s/backup/` CronJobs; Actions verifies only |
+
+### AWS Authentication via OIDC
+
+AWS-authenticated workflows (Cost Report, Secrets Rotation Check, and any
+deployment job that needs AWS) use GitHub's OIDC provider instead of
+long-lived access keys:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+      aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+```
+
+The IAM role's trust policy must allow
+`token.actions.githubusercontent.com` with the repository and branch
+(`repo:health-watchers/health-watchers:ref:refs/heads/main`) as the subject.
+No `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets should exist.
+
+### Disabled Workflows
+
+The following workflows are disabled (via `if: false` on their jobs or by
+removing the `schedule` trigger) until the infrastructure they depend on
+exists. Re-enable them once the corresponding secrets and infrastructure are
+provisioned:
+
+- **CDN Cache weekly report** — no CDN in front of the app yet
+- **Cost Report** — no AWS billing export / cost allocation tags yet
+
+### Seed Data (Local & E2E Only)
+
+`npm run seed` (alias for `npm run seed --workspace=api`) populates a fresh
+database with synthetic data using Faker with a fixed seed. It is idempotent
+and refuses to run when `NODE_ENV=production`.
+
+Seeded credentials — **local development and E2E only, never production**:
+
+| Role | Email | Password |
+|------|-------|----------|
+| SUPER_ADMIN | `superadmin@example.test` | `SeedPassword123!` |
+| CLINIC_ADMIN | `clinicadmin@example.test` | `SeedPassword123!` |
+| DOCTOR | `doctor@example.test` | `SeedPassword123!` |
+| NURSE | `nurse@example.test` | `SeedPassword123!` |
+| ASSISTANT | `assistant@example.test` | `SeedPassword123!` |
+| READ_ONLY | `readonly@example.test` | `SeedPassword123!` |
+
+The E2E and preview workflows call `npm run seed` without a fallback, so a
+broken seed fails the job instead of silently running against an empty
+database.
+
 ### Environment Variables
 
 Set in workflow files or repository settings:
