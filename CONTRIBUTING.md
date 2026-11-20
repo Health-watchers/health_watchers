@@ -840,6 +840,10 @@ npm run lint                     # Run linters
 npm run format                   # Auto-format code
 npm run typecheck                # TypeScript check
 
+# GitHub Actions workflow linting (see "Linting GitHub Actions workflows")
+actionlint                       # Lint all workflows in .github/workflows
+actionlint .github/workflows/ci.yml  # Lint a single workflow
+
 # Database
 npm run migrate:up --workspace=api      # Run pending migrations
 npm run migrate:down --workspace=api    # Roll back last migration
@@ -848,6 +852,42 @@ npm run migrate:status --workspace=api  # Show migration status
 # Build
 npm run build                    # Build all workspaces
 ```
+
+## Linting GitHub Actions workflows
+
+Workflow files under `.github/workflows/` are linted with [actionlint](https://github.com/rhysd/actionlint), which also runs `shellcheck` on inline `run:` scripts. The `Lint GitHub Actions workflows` job in `ci.yml` runs it on every pull request, so it is worth running locally before pushing.
+
+### Installing actionlint
+
+Pick whichever method fits your setup:
+
+```bash
+# macOS
+brew install actionlint
+
+# Any platform with Go installed
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+
+# Prebuilt binary (Linux/macOS) — see releases for the latest version
+bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+```
+
+`shellcheck` must be on your `PATH` for the shell-script checks to run (`brew install shellcheck`, `apt-get install shellcheck`, etc.). If it is missing, actionlint still runs but skips the shellcheck findings.
+
+### Running actionlint
+
+```bash
+# Lint every workflow in the repository
+actionlint
+
+# Lint a single workflow
+actionlint .github/workflows/ci.yml
+
+# Show the shellcheck command actionlint would run for each script
+actionlint -verbose
+```
+
+The shellcheck severity threshold is configured in `.github/actionlint.yaml`. Findings at `warning` and above fail the job; `info`/`style` findings are reported but do not fail it. Fix the reported issues (quote variables, avoid useless `cat`, group repeated redirects into `{ ...; } >> "$GITHUB_STEP_SUMMARY"` blocks, remove unused variables) rather than suppressing them.
 
 ## Troubleshooting
 
