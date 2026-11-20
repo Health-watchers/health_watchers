@@ -1,7 +1,8 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import jwt from 'jsonwebtoken';
 import { UserModel } from '../modules/auth/models/user.model';
+import { verifyAccessTokenAsync } from '../modules/auth/token.service';
+import { appConfig } from '../config/env';
 import logger from '../utils/logger';
 
 export class SocketService {
@@ -11,7 +12,7 @@ export class SocketService {
   private constructor(server: HTTPServer) {
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+        origin: appConfig.api.allowedOrigins,
         credentials: true,
       },
     });
@@ -39,9 +40,7 @@ export class SocketService {
           return next(new Error('Authentication token required'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
-          algorithms: ['HS256'],
-        }) as any;
+        const decoded = await verifyAccessTokenAsync(token);
         const user = await UserModel.findById(decoded.userId).select('-password');
 
         if (!user) {
