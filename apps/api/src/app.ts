@@ -65,7 +65,7 @@ import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.contr
 import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config.controller';
 import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
 import { errorAnalytics } from './services/error-analytics.service';
-import { migrationManager } from './services/migration-manager.service';
+import { checkPendingMigrations } from './services/migration-status.service';
 
 const app = express();
 const server = createServer(app);
@@ -265,16 +265,23 @@ export default app;
 async function startServer() {
   await connectDB();
 
-  // Initialize migration manager
+  // #1797 — migrate-mongo is the single migration system. Migrations are applied
+  // by a dedicated deployment step (Kubernetes Job / Helm pre-upgrade hook), never
+  // by the API. On startup we only verify that nothing is pending; if migrations
+  // are outstanding the readiness probe keeps failing so the pod never receives
+  // traffic with a stale schema.
   try {
-    migrationManager.setDatabase(mongoose.connection.db as any);
-    await migrationManager.initialize();
-    logger.info('[migration-manager] Initialized successfully');
+    const { pending, applied, total } = await checkPendingMigrations();
+    if (pending.length > 0) {
+      logger.error(
+        { pending, applied, total },
+        '[migrations] pending migrations detected — pod will not become ready until they are applied'
+      );
+    } else {
+      logger.info({ applied, total }, '[migrations] schema is up to date');
+    }
   } catch (err) {
-    logger.warn(
-      { err },
-      '[migration-manager] Initialization failed, continuing without migration tracking'
-    );
+    logger.error({ err }, '[migrations] failed to determine migration status — pod will not become ready');
   }
 
   // Seed built-in CDS rules

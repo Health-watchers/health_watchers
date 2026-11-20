@@ -36,18 +36,13 @@ import { populationHealthRoutes } from './population-health.controller';
 import multer from 'multer';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
 
-const router = Router();
-
-// Mount population health routes
-router.use('/', populationHealthRoutes);
-
-// GET /api/v1/ai/health
-router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
+// ── Summary routes (summarize, patient-summary, insights) ────────────────────
+export const summaryRoutes = Router();
 
 // POST /api/v1/ai/summarize
 // Request body: { encounterId?: string, text?: string }
 // Returns: { success: boolean, summary: string, disclaimer: string }
-router.post('/summarize', authenticate, async (req: Request, res: Response) => {
+summaryRoutes.post('/summarize', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     if (!isAIServiceAvailable()) {
@@ -172,7 +167,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
 
 // POST /api/v1/ai/patient-summary/:patientId
 // Returns: { success: boolean, summary: { overview, activeConditions, currentMedications, recentLabResults, upcomingAppointments, riskFactors } }
-router.post(
+summaryRoutes.post(
   '/patient-summary/:patientId',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
@@ -328,7 +323,7 @@ router.post(
 // POST /api/v1/ai/insights
 // Request body: { patientId: string }
 // Returns: { success: boolean, insights: string, disclaimer: string }
-router.post('/insights', authenticate, async (req: Request, res: Response) => {
+summaryRoutes.post('/insights', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     if (!isAIServiceAvailable()) {
@@ -405,10 +400,13 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// ── Interactions routes (drug-interactions) ──────────────────────────────────
+export const interactionsRoutes = Router();
+
 // POST /api/v1/ai/drug-interactions
 // Request body: { medications: string[] }
 // Returns: DrugInteractionResult (always — safe fallback on failure)
-router.post(
+interactionsRoutes.post(
   '/drug-interactions',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
@@ -444,10 +442,13 @@ router.post(
   }
 );
 
+// ── Diagnosis routes (health-trends, interpret-labs, generate-care-plan, differential-diagnosis) ──
+export const diagnosisRoutes = Router();
+
 // POST /api/v1/ai/health-trends
 // Request body: { patientId: string }
 // Returns: { success: boolean, summary: string }
-router.post('/health-trends', authenticate, async (req: Request, res: Response) => {
+diagnosisRoutes.post('/health-trends', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({ error: 'AIUnavailable' });
@@ -512,7 +513,7 @@ Provide a professional health trend summary:`;
 // POST /api/v1/ai/interpret-labs
 // Request body: { labResultId: string }
 // Returns: { success: boolean, interpretation: string, criticalValues: string[] }
-router.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
+diagnosisRoutes.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({ error: 'AIUnavailable' });
@@ -567,7 +568,7 @@ Provide a plain-language clinical interpretation:`;
 // POST /api/v1/ai/generate-care-plan
 // Input: { patientId, condition, icdCode? }
 // Returns: AI-suggested care plan (not saved — doctor must approve via POST /care-plans)
-router.post(
+diagnosisRoutes.post(
   '/generate-care-plan',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
@@ -657,7 +658,7 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 // POST /api/v1/ai/differential-diagnosis
 // Request: { chiefComplaint: string, symptoms: string[], vitalSigns?: {...}, patientAge?: number, patientSex?: string, relevantHistory?: string }
 // Returns: { differentials: [...], urgency: string, disclaimer: string }
-router.post(
+diagnosisRoutes.post(
   '/differential-diagnosis',
   authenticate,
   validateRequest({ body: differentialDiagnosisRequestSchema }),
@@ -710,10 +711,13 @@ router.post(
   }
 );
 
+// ── Dosage routes (dosage-calculator) ────────────────────────────────────────
+export const dosageRoutes = Router();
+
 // POST /api/v1/ai/dosage-calculator
 // Request: { drugName, patientWeight, patientAge, patientSex, indication, renalFunction?, hepaticFunction? }
 // Returns: { recommendedDose, frequency, route, maxDailyDose, pediatricAdjustment, renalAdjustment, warnings, contraindications, disclaimer }
-router.post(
+dosageRoutes.post(
   '/dosage-calculator',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
@@ -788,8 +792,11 @@ router.post(
   }
 );
 
+// ── Triage routes (triage, triage/queue, triage/:id/status) ──────────────────
+export const triageRoutes = Router();
+
 // POST /api/v1/ai/triage
-router.post(
+triageRoutes.post(
   '/triage',
   authenticate,
   validateRequest({ body: triageAssessmentSchema }),
@@ -822,7 +829,7 @@ router.post(
 );
 
 // GET /api/v1/ai/triage/queue
-router.get(
+triageRoutes.get(
   '/triage/queue',
   authenticate,
   requireRoles('CLINIC_ADMIN', 'NURSE'),
@@ -838,7 +845,7 @@ router.get(
 );
 
 // PUT /api/v1/ai/triage/:id/status
-router.put(
+triageRoutes.put(
   '/triage/:id/status',
   authenticate,
   requireRoles('CLINIC_ADMIN', 'NURSE'),
@@ -858,8 +865,11 @@ router.put(
   }
 );
 
+// ── Transcription routes (transcribe, transcribe-audio) ──────────────────────
+export const transcriptionRoutes = Router();
+
 // POST /api/v1/ai/transcribe
-router.post(
+transcriptionRoutes.post(
   '/transcribe',
   authenticate,
   requireRoles('DOCTOR', 'NURSE'),
@@ -913,20 +923,6 @@ async function getClinicAiSettings(clinicId: string) {
   };
 }
 
-// GET /api/v1/ai/settings — lets clinical UIs know which AI features the clinic has enabled
-router.get('/settings', authenticate, async (req: Request, res: Response) => {
-  try {
-    const settings = await getClinicAiSettings(req.user!.clinicId);
-    return res.json({
-      status: 'success',
-      data: { ...settings, serviceAvailable: isAIServiceAvailable() },
-    });
-  } catch (error: unknown) {
-    logger.error({ err: error }, 'Failed to load AI settings');
-    return res.status(500).json({ error: 'InternalServerError' });
-  }
-});
-
 const DICTATION_MAX_BYTES = 10 * 1024 * 1024; // ~10 min of opus audio
 const dictationUpload = multer({
   storage: multer.memoryStorage(),
@@ -935,7 +931,7 @@ const dictationUpload = multer({
 
 // POST /api/v1/ai/transcribe-audio — multipart field `audio`
 // Audio is forwarded to the external AI provider, so the clinic must have opted in.
-router.post(
+transcriptionRoutes.post(
   '/transcribe-audio',
   authenticate,
   requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
@@ -956,38 +952,4 @@ router.post(
       }
 
       await new Promise<void>((resolve, reject) =>
-        dictationUpload.single('audio')(req, res, (err) => (err ? reject(err) : resolve()))
-      );
-
-      const file = (req as Request & { file?: Express.Multer.File }).file;
-      if (!file || file.size === 0) {
-        return res
-          .status(400)
-          .json({ error: 'ValidationError', message: 'An `audio` file is required' });
-      }
-
-      const { isTranscribableAudioType, transcribeAudio } = await import('./ai.service');
-      if (!isTranscribableAudioType(file.mimetype)) {
-        return res
-          .status(415)
-          .json({ error: 'UnsupportedMediaType', message: 'Unsupported audio format' });
-      }
-
-      const text = await transcribeAudio(file.buffer, file.mimetype);
-      return res.json({ status: 'success', data: { text } });
-    } catch (error: unknown) {
-      if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
-        return res
-          .status(413)
-          .json({ error: 'FileTooLarge', message: 'Recording is too long — keep it under 10 MB.' });
-      }
-      logger.error({ err: error }, 'Audio transcription error');
-      return res.status(502).json({
-        error: 'AIUnavailable',
-        message: 'Transcription service is temporarily unavailable',
-      });
-    }
-  }
-);
-
-export default router;
+        dictationUpload.single('audio')(req, res, (err) => (err ? reject(err

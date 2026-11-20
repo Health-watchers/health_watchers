@@ -10,4 +10,15 @@ export default [
     },
     ignores: ['dist/**', 'node_modules/**'],
   },
+  {
+    // Controllers should stay small: parse/validate requests and delegate to services.
+    // Warn (not error) so oversized controllers are flagged without breaking the build.
+    files: ['**/*.controller.ts'],
+    rules: {
+      'max-lines': [
+        'warn',
+        { max: 500, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
 ];

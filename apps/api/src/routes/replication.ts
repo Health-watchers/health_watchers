@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
 import { authorize } from '@/middlewares/rbac.middleware';
+import { requireMfaVerified } from '@/middlewares/mfa.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,
@@ -9,67 +10,85 @@ import {
   READ_PREFERENCES,
 } from '@/config/db-replication';
 
+/**
+ * Internal admin router for replication operations.
+ *
+ * Mounted under `/internal/replication` on the internal admin surface only —
+ * never on the public `/api/v1` prefix. All routes require an authenticated
+ * SUPER_ADMIN; mutating routes additionally require an MFA-verified session.
+ */
 const router = Router();
 
 /**
- * GET /api/v1/replication/status
+ * GET /internal/replication/status
  * Get comprehensive replication health status
  */
-router.get('/status', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.get(
+  '/status',
+  authenticate,
+  authorize(['super_admin']),
+  async (req: Request, res: Response) => {
   try {
     const healthStatus = await getReplicationHealthStatus();
 
-    res.json({
-      success: true,
-      data: healthStatus,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication status',
-      message: errorMessage,
-    });
-  }
-});
-
-/**
- * GET /api/v1/replication/lag
- * Get replication lag metrics
- */
-router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
-    const lagMetrics = await getReplicationLagMetrics();
-
-    if (!lagMetrics) {
-      return res.status(503).json({
-        error: 'Replication lag metrics unavailable',
-        message: 'Replica set status could not be retrieved',
+      res.json({
+        success: true,
+        data: healthStatus,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        error: 'Failed to get replication status',
+        message: errorMessage,
       });
     }
-
-    res.json({
-      success: true,
-      data: lagMetrics,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication lag',
-      message: errorMessage,
-    });
   }
-});
+);
 
 /**
- * GET /api/v1/replication/consistency
+ * GET /internal/replication/lag
+ * Get replication lag metrics
+ */
+router.get(
+  '/lag',
+  authenticate,
+  authorize(['super_admin']),
+  async (req: Request, res: Response) => {
+  try {
+    try {
+      const lagMetrics = await getReplicationLagMetrics();
+
+      if (!lagMetrics) {
+        return res.status(503).json({
+          error: 'Replication lag metrics unavailable',
+          message: 'Replica set status could not be retrieved',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: lagMetrics,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        error: 'Failed to get replication lag',
+        message: errorMessage,
+      });
+    }
+  }
+);
+
+/**
+ * GET /internal/replication/consistency
  * Get replication consistency metrics
  */
 router.get(
   '/consistency',
   authenticate,
-  authorize(['admin']),
+  authorize(['super_admin']),
   async (req: Request, res: Response) => {
     try {
       const consistency = await monitorConsistency();
@@ -97,13 +116,14 @@ router.get(
 );
 
 /**
- * POST /api/v1/replication/test-failover
- * Test failover procedures
+ * POST /internal/replication/test-failover
+ * Test failover procedures (mutating — requires SUPER_ADMIN + MFA)
  */
 router.post(
   '/test-failover',
   authenticate,
-  authorize(['admin']),
+  authorize(['super_admin']),
+  requireMfaVerified,
   async (req: Request, res: Response) => {
     try {
       const testResult = await testFailover();
@@ -124,13 +144,13 @@ router.post(
 );
 
 /**
- * GET /api/v1/replication/read-preferences
+ * GET /internal/replication/read-preferences
  * Get available read preference configurations
  */
 router.get(
   '/read-preferences',
   authenticate,
-  authorize(['admin']),
+  authorize(['super_admin']),
   (req: Request, res: Response) => {
     res.json({
       success: true,
@@ -151,33 +171,38 @@ router.get(
 );
 
 /**
- * GET /api/v1/replication/metrics
+ * GET /internal/replication/metrics
  * Get detailed replication metrics
  */
-router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
-    const [lagMetrics, consistency] = await Promise.all([
-      getReplicationLagMetrics(),
-      monitorConsistency(),
-    ]);
+router.get(
+  '/metrics',
+  authenticate,
+  authorize(['super_admin']),
+  async (req: Request, res: Response) => {
+    try {
+      const [lagMetrics, consistency] = await Promise.all([
+        getReplicationLagMetrics(),
+        monitorConsistency(),
+      ]);
 
-    const metrics = {
-      lag: lagMetrics,
-      consistency,
-      timestamp: new Date().toISOString(),
-    };
+      const metrics = {
+        lag: lagMetrics,
+        consistency,
+        timestamp: new Date().toISOString(),
+      };
 
-    res.json({
-      success: true,
-      data: metrics,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get metrics',
-      message: errorMessage,
-    });
+      res.json({
+        success: true,
+        data: metrics,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        error: 'Failed to get metrics',
+        message: errorMessage,
+      });
+    }
   }
-});
+);
 
 export default router;
