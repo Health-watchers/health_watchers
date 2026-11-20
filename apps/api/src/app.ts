@@ -30,6 +30,8 @@ import {
   getSupportedVersions,
   acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
+import { v1EnvelopeNormalizer } from './middlewares/v1-envelope.middleware';
+import { v1DeprecationForRoute } from './middlewares/v1-deprecation.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { startJobScheduler, stopJobScheduler } from './jobs';
 import { jobsAdminRouter } from './jobs/jobs-admin.controller';
@@ -222,12 +224,17 @@ app.get('/api/versions', (_req, res) => {
 app.use('/api', acceptVersionMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
-app.use('/api/v1', v1DeprecationWarning);
+// #1795 — deprecation headers are only emitted for v1 routes that actually have
+// a v2 replacement (per-route map), instead of blanket-deprecating every route.
+app.use('/api/v1', v1DeprecationForRoute);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
 app.use('/api/v1', rateLimitMonitor);
 app.use('/api/v1', generalLimiter);
 app.use('/api/v1', responseFilterMiddleware);
+// #1794 — v1 keeps its legacy response shapes; normalise them in one place so
+// clients see a single contract while modules migrate to res.ok()/res.fail().
+app.use('/api/v1', v1EnvelopeNormalizer);
 app.use('/api/v1', v1Router);
 
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
@@ -256,7 +263,16 @@ app.use('/api/v2', jobsAdminRouter);
 setupSwagger(app);
 
 // ── 404 & global error handler ────────────────────────────────────────────────
-app.use('*', (_req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+// #1794 — standard error envelope: { error: { code, message, details?, requestId } }
+app.use('*', (req, res) =>
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Route not found',
+      requestId: (req as any).requestId ?? (req.headers['x-request-id'] as string) ?? null,
+    },
+  })
+);
 app.use(errorHandler);
 
 export default app;

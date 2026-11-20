@@ -7,6 +7,7 @@ import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 import { ApiErrorCode } from '@health-watchers/types';
 import { sendApiError } from '../utils/api-response';
+import { errorAnalytics, ErrorCategory } from '../utils/error-analytics';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -253,3 +254,18 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
 // Alias for backward compatibility
 export const errorMiddleware = errorHandler;
+
+/**
+ * 404 fallback — emits the standard error envelope
+ * `{ error: { code, message, details?, requestId } }`.
+ */
+export function notFoundHandler(req: Request, res: Response): void {
+  sendApiError(
+    res,
+    404,
+    'not_found',
+    ApiErrorCode.NOT_FOUND,
+    `Route ${req.method} ${req.path} not found.`,
+    { requestId: req.requestId }
+  );
+}
