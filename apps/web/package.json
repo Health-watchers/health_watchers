@@ -63,7 +63,7 @@
     "@babel/core": "^7.29.0",
     "@playwright/test": "^1.62.1",
     "@babel/preset-env": "^7.29.2",
-    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.28.5",
     "@pact-foundation/pact": "^14.0.0",
     "@testing-library/dom": "^10.4.2",
