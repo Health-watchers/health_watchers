@@ -12,10 +12,19 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 });
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Only use the CDN when NEXT_PUBLIC_CDN_URL is explicitly set; otherwise assets are
+// served from the app origin. Next.js content-hashes every file under `/_next/static/`
+// (e.g. `/_next/static/chunks/main-<hash>.js`), so those URLs are safe to cache forever.
 const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
 const isProduction = process.env.NODE_ENV === 'production';
 
 const cdnImageSources = cdnUrl ? `${cdnUrl} ` : '';
+// CDN origin (if any) must be allowed for scripts, styles and fonts when assets are
+// served from it via `assetPrefix`.
+const cdnSources = cdnUrl ? `${cdnUrl} ` : '';
+const staticAssetCacheControl = isProduction
+  ? 'public, max-age=31536000, immutable' // 1 year; filenames are content-hashed
+  : 'public, max-age=0, must-revalidate';
 // Reuse the API's CSP violation report collector so browser-reported violations from pages
 // served by this app (which the API's own `report-uri` never sees, since Next.js serves its
 // own HTML/JS on a different origin/CSP) land in the same place as the API's.
@@ -23,7 +32,7 @@ const cspReportUri = `${apiUrl}/api/v1/csp-report`;
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
-    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnUrl}; style-src 'self' 'unsafe-inline' ${cdnUrl}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnUrl}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none'; report-uri ${cspReportUri};`,
+    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnSources}; style-src 'self' 'unsafe-inline' ${cdnSources}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnSources}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none'; report-uri ${cspReportUri};`,
   },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -52,6 +61,7 @@ const nextConfig = {
   },
   // CDN Configuration
   basePath: '',
+  // Serve `/_next/static/` (and other build assets) from the CDN when configured.
   assetPrefix: cdnUrl || undefined,
   // Image optimization for CDN
   images: {
@@ -74,7 +84,16 @@ const nextConfig = {
   // Powering down optimizations in production
   swcMinify: true,
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      // Security headers apply to every route.
+      { source: '/:path*', headers: securityHeaders },
+      // Content-hashed build assets can be cached immutably for a year. This entry is
+      // listed after the catch-all so it overrides the generic Cache-Control value.
+      {
+        source: '/_next/static/:path*',
+        headers: [{ key: 'Cache-Control', value: staticAssetCacheControl }],
+      },
+    ];
   },
   async redirects() {
     return [
