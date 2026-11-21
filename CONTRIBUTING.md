@@ -780,15 +780,70 @@ When adding a new feature module to the API:
    ```
    modules/
      your-module/
-       your-module.model.ts      # Mongoose schema
-       your-module.controller.ts # Express route handlers
-       your-module.service.ts    # Business logic
-       your-module.validation.ts # Zod validation schemas
-       your-module.test.ts       # Tests
-       index.ts                  # Exports
+       your-module.model.ts       # Mongoose schema
+       your-module.repository.ts  # Data access (all Mongoose queries)
+       your-module.controller.ts  # Express route handlers (HTTP only)
+       your-module.service.ts     # Business logic
+       your-module.validation.ts  # Zod validation schemas
+       your-module.test.ts        # Tests
+       index.ts                   # Exports
    ```
 3. Register routes in `apps/api/src/app.ts`
 4. Add appropriate middleware (auth, validation, rate limiting)
+
+### Service-Repository Pattern
+
+API modules are layered as **controller → service → repository**. Each layer has a single responsibility and may only call the layer directly beneath it (issue #1675):
+
+| Layer | Responsibility | Must not |
+| --- | --- | --- |
+| **Controller** (`*.controller.ts`) | Parse the HTTP request, call the service, shape the HTTP response | Contain business logic or Mongoose queries |
+| **Service** (`*.service.ts`) | Apply business rules, orchestrate repositories, throw domain errors | Import Mongoose models or build queries |
+| **Repository** (`*.repository.ts`) | All database access — every Mongoose query lives here | Contain business logic or know about HTTP |
+
+The repository exposes typed methods for each query the service needs. For example, `apps/api/src/modules/encounters/encounter.repository.ts`:
+
+```typescript
+export interface EncounterRepository {
+  findById(id: string, clinicId: string): Promise<Encounter | null>;
+  findByPatient(patientId: string, clinicId: string): Promise<Encounter[]>;
+  findByClinic(clinicId: string): Promise<Encounter[]>;
+  create(data: CreateEncounterInput): Promise<Encounter>;
+  update(id: string, clinicId: string, data: UpdateEncounterInput): Promise<Encounter | null>;
+  softDelete(id: string, clinicId: string): Promise<Encounter | null>;
+}
+```
+
+Rules:
+
+- **No Mongoose in controllers or services.** If you need a new query, add a method to the repository.
+- **Soft deletes only.** Repositories expose `softDelete` (setting `deletedAt`) rather than hard deletes.
+- **Tests mock the repository, not the database.** Unit tests for services and controllers inject a mocked repository (e.g. `jest.mock('./encounter.repository')`); only repository tests touch MongoDB Memory Server.
+
+### Clinic Scoping
+
+Every clinic-scoped request must be limited to the clinic in the caller's JWT. This is centralised in the `clinicScope` middleware (`apps/api/src/middlewares/clinicScope.ts`) — do not re-implement it (issue #1676).
+
+- The middleware runs **after** JWT verification and attaches `req.clinicId` to the request.
+- If the token has no valid clinic scope, the middleware responds with **403 Forbidden** and the request never reaches the controller.
+- Controllers must read `req.clinicId` and pass it to the service; they must **not** extract `clinicId` from the token, headers or query parameters manually.
+
+```typescript
+// ✅ Good — scope comes from the middleware
+router.get('/encounters/:id', requireAuth, clinicScope, async (req, res, next) => {
+  try {
+    const encounter = await encounterService.getById(req.params.id, req.clinicId);
+    res.json({ data: encounter });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ❌ Bad — manual extraction duplicates the middleware
+const clinicId = (req.user as JwtPayload).clinicId;
+```
+
+When adding a new clinic-scoped route, mount `clinicScope` after `requireAuth` and add a test asserting that a request without a valid clinic scope returns 403.
 
 ### Adding New Stellar Operations
 
