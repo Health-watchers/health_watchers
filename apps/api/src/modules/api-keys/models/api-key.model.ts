@@ -1,5 +1,6 @@
 import { Schema, model, models, Types } from 'mongoose';
 import crypto from 'crypto';
+import { getAllScopes, type ApiKeyScope } from '../constants/scopes';
 
 export function generateApiKey(): string {
   return `hw_${crypto.randomBytes(32).toString('hex')}`;
@@ -18,37 +19,11 @@ export function getKeyPrefix(key: string): string {
   return key.slice(0, 12);
 }
 
-export type ApiKeyScope =
-  | 'patients:read'
-  | 'patients:write'
-  | 'encounters:read'
-  | 'encounters:write'
-  | 'payments:read'
-  | 'payments:write'
-  | 'lab-results:write'
-  // #1435 — SMART-on-FHIR style read scopes for the /fhir/r4 API
-  | 'patient/*.read'
-  | 'patient/Patient.read'
-  | 'patient/Encounter.read'
-  | 'patient/Observation.read';
+export type { ApiKeyScope } from '../constants/scopes';
+export { FHIR_SCOPES } from '../constants/scopes';
 
-export const FHIR_SCOPES = [
-  'patient/*.read',
-  'patient/Patient.read',
-  'patient/Encounter.read',
-  'patient/Observation.read',
-] as const satisfies readonly ApiKeyScope[];
-
-export const ALL_SCOPES: ApiKeyScope[] = [
-  'patients:read',
-  'patients:write',
-  'encounters:read',
-  'encounters:write',
-  'payments:read',
-  'payments:write',
-  'lab-results:write',
-  ...FHIR_SCOPES,
-];
+/** Canonical scope list — derived from constants/scopes.ts (single source of truth). */
+export const ALL_SCOPES: ApiKeyScope[] = getAllScopes();
 
 export type ApiKeyEnvironment = 'live' | 'test';
 
@@ -79,6 +54,10 @@ export interface IApiKey {
   previousKeyExpiresAt?: Date;
   lastRotatedAt?: Date;
   rotationCount: number;
+  /** #1667 — set once the legacy (no scopes) warning has been sent to the owner. */
+  legacyScopesWarnedAt?: Date;
+  /** #1667 — set when scopes were backfilled/updated on a legacy key. */
+  scopesMigratedAt?: Date;
   /** #1252 — revocation is explicit and irreversible. */
   revokedAt?: Date;
   revokedReason?: string;
@@ -108,6 +87,8 @@ const apiKeySchema = new Schema<IApiKey>(
     previousKeyExpiresAt: { type: Date },
     lastRotatedAt: { type: Date },
     rotationCount: { type: Number, default: 0 },
+    legacyScopesWarnedAt: { type: Date },
+    scopesMigratedAt: { type: Date },
     revokedAt: { type: Date },
     revokedReason: { type: String, trim: true, maxlength: 500 },
     revokedBy: { type: String },
