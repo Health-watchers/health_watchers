@@ -12,6 +12,9 @@
 // Auth & RBAC
 export { authenticate, requireRoles } from './auth.middleware';
 
+// Clinic scoping (issue #1676)
+export { clinicScope } from './clinic-scope.middleware';
+
 // Request validation
 export { validateRequest } from './validate.middleware';
 export { validate } from './validate.middleware';

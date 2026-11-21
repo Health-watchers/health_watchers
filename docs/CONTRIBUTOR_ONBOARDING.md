@@ -12,28 +12,50 @@ Get to a working local environment with real data in **15 minutes**.
 
 Ensure you have these installed:
 ```bash
-node --version      # v22.x or higher
+node --version      # v20.x (Node 20 LTS)
 npm --version       # v10.x or higher
 git --version       # Any recent version
 docker --version    # For local MongoDB/Redis
-docker-compose --version
+docker compose version
 ```
 
 **If not installed**, visit:
-- Node.js: https://nodejs.org (install v22 LTS)
+- Node.js: https://nodejs.org (install v20 LTS — the version pinned in `.nvmrc`)
 - Docker: https://docker.com/products/docker-desktop
+
+> The repo standardises on **Node 20 LTS** and **npm 10**. `engines` and `engine-strict` are enforced, so an older Node will fail `npm ci`.
 
 ---
 
-## Step 1: Clone & Setup (2 minutes)
+## The Five-Step Flow
+
+On a fresh clone, the whole stack (API, worker, web and stellar-service) starts with three commands:
+
+```bash
+npm ci                # 1. Install dependencies for all workspaces
+npm run dev:infra     # 2. Start MongoDB + Redis only (Docker Compose, core profile)
+npm run dev           # 3. Start API, worker, web and stellar-service via Turbo
+```
+
+Then seed data and verify:
+
+```bash
+cd apps/api && npm run seed:admin && npm run seed:patients --count=10 && cd ../..
+# 4. Open http://localhost:3000 and log in as admin@health-watchers.test / admin123456
+# 5. Confirm the dashboard lists the seeded patients
+```
+
+---
+
+## Step 1: Clone & Install (2 minutes)
 
 ```bash
 # Clone the repository
 git clone https://github.com/Health-Watchers/health_watchers.git
 cd health_watchers
 
-# Install dependencies (root + all workspaces)
-npm install
+# Install dependencies (root + all workspaces, lockfile-exact)
+npm ci
 
 # This installs packages in:
 # - root (shared dependencies)
@@ -47,19 +69,17 @@ npm install
 
 ## Step 2: Start Local Database & Cache (2 minutes)
 
-In a **new terminal window**:
-
 ```bash
-# Start MongoDB and Redis via Docker Compose
-docker-compose up -d
+# Start MongoDB and Redis via Docker Compose (core profile)
+npm run dev:infra
 
 # Verify they're running
 docker ps
 # You should see: mongo and redis containers
 
 # Optional: View logs
-docker-compose logs -f mongo
-docker-compose logs -f redis
+docker compose logs -f mongo
+docker compose logs -f redis
 ```
 
 **What's running now:**
@@ -95,9 +115,37 @@ STELLAR_DRY_RUN=true
 
 ---
 
-## Step 4: Seed Development Data (3 minutes)
+## Step 4: Start the Whole Stack (2 minutes)
 
-Populate database with realistic test data:
+From the root directory, one command starts every dev server:
+
+```bash
+npm run dev
+# Turbo runs the `dev` task in parallel across workspaces:
+# - API            http://localhost:3001
+# - Worker         (background job processor, no port)
+# - Web            http://localhost:3000
+# - Stellar        http://localhost:3002
+```
+
+**Troubleshooting**: If ports are in use, kill the process:
+```bash
+lsof -i :3001  # Find process using port 3001
+kill -9 <PID>  # Kill it
+```
+
+To run a single service instead, use the workspace scripts:
+```bash
+npm run dev:api       # API only
+npm run dev:web       # Web only
+npm run dev:stellar   # Stellar service only
+```
+
+---
+
+## Step 5: Seed Data & Verify (3 minutes)
+
+Populate the database with realistic test data:
 
 ```bash
 cd apps/api
@@ -132,35 +180,7 @@ Patient Login (created by seed):
   Password: patient123456
 ```
 
----
-
-## Step 5: Start Development Servers (2 minutes)
-
-In a **third terminal window** (from root directory):
-
-```bash
-# Terminal 1: APIs
-npm run dev:api
-# Output: API server running at http://localhost:3001
-
-# Terminal 2: Web
-npm run dev:web
-# Output: Web app running at http://localhost:3000
-
-# Terminal 3: Stellar Service (optional, for payment testing)
-npm run dev:stellar
-# Output: Stellar service running at http://localhost:3002
-```
-
-**Troubleshooting**: If ports are in use, kill the process:
-```bash
-lsof -i :3001  # Find process using port 3001
-kill -9 <PID>  # Kill it
-```
-
----
-
-## Step 6: Verify Everything Works (2 minutes)
+### Verify Everything Works
 
 ### Visit the Web App
 ```
@@ -329,7 +349,7 @@ lsof -i :3001
 docker ps | grep mongo
 
 # View API logs
-cd apps/api && npm run dev:api
+cd apps/api && npm run dev
 
 # Look for the error message
 ```
@@ -337,11 +357,11 @@ cd apps/api && npm run dev:api
 ### "Database connection timeout"
 ```bash
 # Verify MongoDB is running
-docker-compose ps
+docker compose ps
 
 # Restart it
-docker-compose down
-docker-compose up -d mongo
+docker compose down
+npm run dev:infra
 ```
 
 ### "Changes not appearing"
@@ -349,8 +369,14 @@ docker-compose up -d mongo
 # API changes: Server should auto-restart
 # Web changes: Browser should auto-reload
 
-# If not, manually restart:
-# Kill the process and run npm run dev:api / dev:web again
+# If not, manually restart the stack:
+npm run dev
+```
+
+### "Build artifacts are stale"
+```bash
+# Remove dist, .next, .turbo and coverage output
+npm run clean
 ```
 
 ### "Test data missing"
@@ -419,12 +445,17 @@ Once you're comfortable with the local setup:
 ## Quick Reference
 
 ```bash
-# Database & Cache
-docker-compose up -d          # Start
-docker-compose down           # Stop
-docker-compose logs -f        # View logs
+# Install & run the whole stack
+npm ci                       # Install all workspaces
+npm run dev:infra            # Start MongoDB + Redis (Docker Compose)
+npm run dev                  # API + worker + web + stellar (Turbo, parallel)
+npm run clean                # Remove dist, .next, .turbo, coverage
 
-# Development servers (each in separate terminal)
+# Database & Cache
+docker compose down          # Stop infra
+docker compose logs -f       # View logs
+
+# Individual dev servers
 npm run dev:api              # Express API
 npm run dev:web              # Next.js web
 npm run dev:stellar          # Stellar service
@@ -454,8 +485,9 @@ git push origin fix/issue-123-description
 
 You'll know everything is working when:
 
-✅ `npm install` completes without errors  
-✅ Docker containers show running (`docker ps`)  
+✅ `npm ci` completes without errors on Node 20 LTS  
+✅ `npm run dev:infra` starts MongoDB and Redis (`docker ps`)  
+✅ `npm run dev` starts API, worker, web and stellar-service  
 ✅ `http://localhost:3000` loads without errors  
 ✅ You can log in with test credentials  
 ✅ Dashboard shows test patients  

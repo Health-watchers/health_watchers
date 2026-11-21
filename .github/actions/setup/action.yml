@@ -1,0 +1,54 @@
+name: Setup Node Environment
+description: Shared setup for workflows - checkout, Node.js, npm cache, and dependency install
+
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: '20'
+  install-command:
+    description: Command used to install dependencies
+    required: false
+    default: 'npm ci'
+  cache-dependency-path:
+    description: Path(s) to dependency lock files used for npm caching
+    required: false
+    default: 'package-lock.json'
+  working-directory:
+    description: Directory to run install in
+    required: false
+    default: '.'
+  fetch-depth:
+    description: Number of commits to fetch (0 for full history)
+    required: false
+    default: '1'
+  skip-checkout:
+    description: Set to 'true' to skip the checkout step (e.g. when already checked out)
+    required: false
+    default: 'false'
+  skip-install:
+    description: Set to 'true' to skip dependency installation
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      if: inputs.skip-checkout != 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: ${{ inputs.fetch-depth }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Install dependencies
+      if: inputs.skip-install != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.install-command }}

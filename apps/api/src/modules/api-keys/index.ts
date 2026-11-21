@@ -50,5 +50,8 @@ export {
   SCOPE_ENDPOINT_MAP,
   getAllScopes,
   scopeGrantsAccess,
+  getRequiredScopesForEndpoint,
+  SCOPE_DESCRIPTIONS,
+  FHIR_SCOPES,
   type ApiKeyScope,
 } from './constants/scopes';

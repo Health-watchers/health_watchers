@@ -16,29 +16,32 @@ The following branches are protected:
 
 ## Required Status Checks (main branch)
 
-All pull requests to `main` must pass the following status checks before merging:
+All pull requests to `main` must pass **exactly one** required status check before merging:
 
-### Continuous Integration (CI)
-- ✅ **actionlint** - Validates GitHub Actions workflow syntax
-- ✅ **quality-checks** - TypeScript type checking, ESLint, Prettier formatting
-- ✅ **validate-k8s** - Kubernetes manifest validation
-- ✅ **helm-lint-dry-run** - Helm chart linting and dry-run validation (Issue #1585)
-- ✅ **migration-check** - Database migration validation (Issue #1583)
-- ✅ **tests** - Unit, integration, and end-to-end test suites
-- ✅ **build** - Docker image build and scan for vulnerabilities
-- ✅ **postman-sync** - API collection validation and Postman workspace publishing (Issue #1584)
+- ✅ **ci-success** - Aggregated gate that passes only when every gating CI job succeeded
 
-### Code Quality & Security
-- ✅ **sonarcloud** - Code quality and security analysis
-- ✅ **dependency-scan** - Dependency vulnerability scanning
-- ✅ **security-scanning** - Repository secret detection
-- ✅ **code-quality** - Additional linting and analysis
+### Why a single aggregated check?
 
-### Compliance & Documentation
-- ✅ **commitlint** - Validates commit messages follow conventional commits
+`ci.yml` contains many jobs, several of which are conditional. In GitHub, a **skipped** required check counts as passing, so requiring individual job names meant a failing test could be merged whenever its job was skipped (for example, when an upstream job failed). It also meant that renaming or adding a job required editing branch protection, and a stale required check name would either block every PR or silently stop enforcing anything.
 
-### Breaking Changes
-- ✅ **api-breaking-changes** - Detects breaking changes in API contracts
+The `ci-success` job solves this (Issue #1764):
+
+- It declares `needs: [<all gating jobs>]` and runs with `if: always()`, so it always reports a result.
+- It **fails** if any needed job failed or was cancelled, and also fails if a needed job was skipped unexpectedly.
+- It is the **only** status check required in branch protection.
+
+### What `ci-success` aggregates
+
+The individual jobs (for example `actionlint`, `quality-checks`, `validate-k8s`, `helm-lint-dry-run`, `migration-check`, `tests`, `build`, `postman-sync`, `sonarcloud`, `dependency-scan`, `security-scanning`, `code-quality`, `commitlint`, `api-breaking-changes`) are still defined in `.github/workflows/ci.yml`, but they are **not** required checks themselves. Their results are rolled up into `ci-success`.
+
+### Adding or renaming jobs
+
+To add a new gating job or rename an existing one:
+
+1. Add/rename the job in `.github/workflows/ci.yml`.
+2. Add its job ID to the `needs` list of the `ci-success` job.
+
+No branch protection changes are required — `ci-success` remains the single required check.
 
 ---
 
@@ -197,19 +200,13 @@ To enable branch protection rules:
 
 ### GitHub Actions Status Checks
 
-Status checks are automatically added to branch protection once they run successfully. To require a specific check:
+Status checks are automatically added to branch protection once they run successfully. To require the aggregated gate:
 
 1. Go to **Settings** → **Branches** → Edit rule
-2. Under "Require status checks to pass before merging", search for and select checks:
-   - `actionlint`
-   - `quality-checks`
-   - `validate-k8s`
-   - `helm-lint-dry-run`
-   - `migration-check`
-   - `tests`
-   - `build`
-   - `postman-sync`
-   - `sonarcloud`
+2. Under "Require status checks to pass before merging", search for and select **only**:
+   - `ci-success`
+
+Do **not** add individual job names (such as `tests` or `build`) as required checks. Requiring them reintroduces the skipped-check loophole and makes branch protection brittle when jobs are renamed. If `ci-success` has not yet run on the branch, push a commit or open a PR to trigger the workflow so the check becomes selectable.
 
 ---
 
@@ -267,5 +264,5 @@ Use this power responsibly — all bypasses are audited in GitHub and should be 
 
 ---
 
-**Last Updated**: 2026-10-17  
-**Issues**: #1586, #1585, #1584, #1583
+**Last Updated**: 2026-10-24  
+**Issues**: #1764, #1586, #1585, #1584, #1583

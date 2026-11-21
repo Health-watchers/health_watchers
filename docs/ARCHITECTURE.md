@@ -502,10 +502,113 @@ for the full runbook and `k8s/api/blue-green/` for the manifests.
 - Payment gateways for settlements
 - EHR systems via HL7 FHIR
 
+## Multi-Region Deployment
+
+Production runs in two AWS regions: a **primary** region that serves all traffic and a
+**secondary** region that stays warm and can take over during a regional outage. The
+topology below shows the request path (Route 53 → CDN → regional ingress), the
+cross-region replication for MongoDB, S3, and backups, and the failover path.
+
+```mermaid
+%% Multi-region deployment: primary/secondary AWS regions, cross-region replication, failover path
+%% Mirrors docs/ARCHITECTURE.md "Multi-Region Deployment"
+flowchart TB
+    USERS["Clients<br/>(Web · Mobile · API Consumers)"]
+
+    subgraph Edge["Global Edge"]
+        R53["Route 53<br/>health-checked failover records"]
+        CDN["CloudFront CDN<br/>static assets · WAF"]
+    end
+
+    subgraph Primary["Primary Region (e.g. us-east-1)"]
+        P_INGRESS["Ingress / ALB"]
+        P_K8S["EKS: health-watchers<br/>api · web · stellar-service"]
+        P_REDIS[("Redis")]
+        P_MONGO[("MongoDB Atlas<br/>primary shard")]
+        P_S3[("S3: PHI documents<br/>versioned · SSE-KMS")]
+        P_BACKUP[("AWS Backup Vault")]
+    end
+
+    subgraph Secondary["Secondary Region (e.g. us-west-2)"]
+        S_INGRESS["Ingress / ALB<br/>(standby)"]
+        S_K8S["EKS: health-watchers<br/>(scaled to zero / warm)"]
+        S_REDIS[("Redis")]
+        S_MONGO[("MongoDB Atlas<br/>secondary shard")]
+        S_S3[("S3 replica bucket")]
+        S_BACKUP[("AWS Backup Vault<br/>(cross-region copy)")]
+    end
+
+    USERS --> R53
+    R53 -->|"normal: primary record"| CDN
+    CDN --> P_INGRESS
+    P_INGRESS --> P_K8S
+    P_K8S --> P_REDIS
+    P_K8S --> P_MONGO
+    P_K8S --> P_S3
+    P_S3 --> P_BACKUP
+
+    P_MONGO -.->|"global cluster<br/>async replication"| S_MONGO
+    P_S3 -.->|"S3 Cross-Region Replication"| S_S3
+    P_BACKUP -.->|"AWS Backup cross-region copy"| S_BACKUP
+
+    R53 -.->|"failover: secondary record<br/>(health check fails)"| S_INGRESS
+    S_INGRESS -.-> S_K8S
+    S_K8S -.-> S_REDIS
+    S_K8S -.-> S_MONGO
+    S_K8S -.-> S_S3
+```
+
+Source: [`docs/diagrams/multi-region-architecture.mmd`](diagrams/multi-region-architecture.mmd)
+
+### Data Residency Requirements
+
+Patient data (PHI) is subject to HIPAA and, where applicable, regional privacy law. The
+following rules govern region selection:
+
+- **PHI stays in-country.** All PHI-bearing stores — MongoDB, S3 document buckets, and
+  backups — must reside in regions approved for the data's jurisdiction. Do not replicate
+  PHI into a region outside the approved set, even for DR.
+- **Primary/secondary pairing.** The secondary region must be in the same jurisdiction as
+  the primary (e.g. both `us-*` for US patients). Cross-jurisdiction replication requires a
+  documented legal review and a BAA covering the destination region.
+- **Encryption keys are regional.** KMS keys used for SSE-KMS on S3 and Atlas encryption at
+  rest are region-scoped; the secondary region uses its own keys, and key policies must
+  permit the DR role to decrypt replicas.
+- **Audit logs** are replicated alongside PHI so the audit trail remains complete and
+  co-located with the records it describes.
+- **Sub-processors** (MongoDB Atlas, AWS) must have a signed BAA covering every region in
+  use.
+
+### MongoDB: Atlas Global Clusters vs. Self-Managed Replica Sets
+
+| Option | How it replicates | Failover | Trade-offs |
+|--------|-------------------|----------|------------|
+| **Atlas Global Cluster** | Zone-sharded cluster with a primary zone and read-only secondary zones per region | Promote a secondary zone to primary (Atlas-driven, minutes) | Managed, lowest operational burden; per-zone cost; writes are single-region |
+| **Self-managed replica set across regions** | Members in each region, majority write concern | Election of a member in the secondary region | Full control; higher latency on writes (cross-region quorum); you own the runbook |
+
+The default production choice is an **Atlas Global Cluster** with the primary zone in the
+primary region and a read-only zone in the secondary region. Self-managed replica sets are
+supported for on-prem/air-gapped deployments; in that case the cross-region member must use
+`w: "majority"` and the failover runbook must account for election time.
+
+### Cross-Region Failover
+
+Failover is driven by Route 53 health checks on the primary ingress. When the primary fails
+its health check, Route 53 serves the secondary record and traffic shifts to the standby
+region. The full procedure — including pre-checks, promotion of the MongoDB secondary,
+DNS cutover, verification, and failback — lives in
+[`docs/DISASTER_RECOVERY_PLAN.md`](DISASTER_RECOVERY_PLAN.md) and is automated by
+[`scripts/dr/failover.sh`](../scripts/dr/failover.sh).
+
 ## Disaster Recovery
 
 **RPO (Recovery Point Objective)**: 5 minutes
 **RTO (Recovery Time Objective)**: 15 minutes
+
+Regional failover targets: **RPO ≤ 5 minutes** (bounded by MongoDB replication lag and S3
+CRR), **RTO ≤ 30 minutes** for a full region loss (DNS TTL + promotion + warm-up). See the
+[multi-region deployment](#multi-region-deployment) section above and
+[`docs/DISASTER_RECOVERY_PLAN.md`](DISASTER_RECOVERY_PLAN.md) for the step-by-step runbook.
 
 ```
 Backup Strategy:
@@ -514,9 +617,11 @@ Backup Strategy:
 └── Point-in-time recovery: 30 days
 
 Replication:
-├── MongoDB replica set: 3 nodes
-├── Cross-region backup: AWS Backup Vault
-└── Failover: Automatic election
+├── MongoDB replica set: 3 nodes (primary region)
+├── MongoDB Atlas global cluster → secondary region
+├── S3 Cross-Region Replication → secondary region
+├── Cross-region backup: AWS Backup Vault (both regions)
+└── Failover: Route 53 health-checked DNS + Atlas zone promotion
 ```
 
 ## Monitoring & Observability
@@ -583,5 +688,5 @@ Replication:
 1. **Event Sourcing**: Complete audit trail
 2. **CQRS**: Separate read/write models
 3. **Service Mesh**: Istio for advanced routing
-4. **Multi-region**: Active-active deployments
+4. **Multi-region**: Active-active deployments (current topology is active-passive; see [Multi-Region Deployment](#multi-region-deployment))
 5. **Graphql**: Flexible query API

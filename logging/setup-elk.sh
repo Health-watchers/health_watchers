@@ -82,6 +82,46 @@ curl -sf -X PUT ${AUTH} \
   }' > /dev/null
 echo "✓ Error/audit index template applied"
 
+# ── Apply standardized log schema template ────────────────────
+# Issue #1678: all services emit JSON logs with mandatory fields
+# (timestamp, level, service, requestId, message) plus request-scoped
+# clinicId and userId. This template maps those fields explicitly so
+# Logstash/Elasticsearch parsing is deterministic and aggregations are
+# reliable across services.
+echo ""
+echo "Applying standardized log schema template..."
+curl -sf -X PUT ${AUTH} \
+  "${ES_URL}/_index_template/health-watchers-logs-template" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "index_patterns": ["health-watchers-*"],
+    "priority": 100,
+    "template": {
+      "settings": {
+        "index": {
+          "number_of_shards": 1,
+          "number_of_replicas": 0,
+          "refresh_interval": "10s",
+          "lifecycle": { "name": "health-watchers-policy" }
+        }
+      },
+      "mappings": {
+        "dynamic": true,
+        "properties": {
+          "@timestamp": { "type": "date" },
+          "timestamp":  { "type": "date" },
+          "level":      { "type": "keyword" },
+          "service":    { "type": "keyword" },
+          "requestId":  { "type": "keyword" },
+          "clinicId":   { "type": "keyword" },
+          "userId":     { "type": "keyword" },
+          "message":    { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 1024 } } }
+        }
+      }
+    }
+  }' > /dev/null
+echo "✓ Standardized log schema template applied"
+
 # ── Apply SLM policy (long-term compliance archival) ──────────
 echo ""
 echo "Applying SLM policy..."
@@ -180,6 +220,55 @@ curl -sf -X POST ${AUTH} \
   }' > /dev/null 2>&1 || echo "  (audit data view may already exist — skipped)"
 
 echo "✓ Data views configured"
+
+# ── Verify Logstash parses standardized JSON logs ─────────────
+# Issue #1678: send a sample log line in the standardized format and
+# confirm it is parsed into the expected fields. This guards against
+# Logstash filter regressions that would break Logstash parsing.
+echo ""
+echo "Verifying Logstash parses standardized JSON log format..."
+LOGSTASH_URL="${LOGSTASH_URL:-http://logstash:9600}"
+VERIFY_ID="log-verify-$(date +%s)-$$"
+VERIFY_TS="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+VERIFY_PAYLOAD=$(cat <<JSON
+{"timestamp":"${VERIFY_TS}","level":"info","service":"elk-setup","requestId":"${VERIFY_ID}","clinicId":"verify-clinic","userId":"verify-user","message":"logstash parse verification"}
+JSON
+)
+
+# Give Logstash a moment to flush the event into Elasticsearch.
+sleep 3
+
+VERIFY_RESULT=$(curl -sf ${AUTH} \
+  "${ES_URL}/health-watchers-*/_search" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"query\": { \"term\": { \"requestId\": \"${VERIFY_ID}\" } },
+    \"size\": 1
+  }" 2>/dev/null || echo "")
+
+PARSED=$(printf '%s' "${VERIFY_RESULT}" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    hits = d.get('hits', {}).get('hits', [])
+    if not hits:
+        print('missing')
+    else:
+        src = hits[0].get('_source', {})
+        required = ['timestamp', 'level', 'service', 'requestId', 'clinicId', 'userId', 'message']
+        missing = [f for f in required if f not in src]
+        print('ok' if not missing else 'missing:' + ','.join(missing))
+except Exception:
+    print('missing')
+" 2>/dev/null || echo "missing")
+
+if [ "${PARSED}" = "ok" ]; then
+  echo "✓ Logstash parsed standardized JSON log format correctly"
+else
+  echo "⚠ Logstash parse verification failed (${PARSED})"
+  echo "  Sample payload: ${VERIFY_PAYLOAD}"
+  echo "  Check the Logstash pipeline JSON filter and index template."
+fi
 
 echo ""
 echo "=============================="

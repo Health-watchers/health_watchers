@@ -219,6 +219,135 @@ export interface AgingBucket {
   encounters: { encounterId: string; daysUnbilled: number }[];
 }
 
+/** Manual override applied to an outstanding invoice in the aging report. */
+export type AgingOverrideStatus = 'in_dispute' | 'payment_plan' | 'written_off';
+
+export const AGING_OVERRIDE_LABEL: Record<AgingOverrideStatus, string> = {
+  in_dispute: 'In dispute',
+  payment_plan: 'Payment plan',
+  written_off: 'Written off',
+};
+
+export const AGING_OVERRIDE_VARIANT: Record<
+  AgingOverrideStatus,
+  'default' | 'primary' | 'success' | 'warning' | 'danger'
+> = {
+  in_dispute: 'warning',
+  payment_plan: 'primary',
+  written_off: 'default',
+};
+
+export interface AgingOverride {
+  status: AgingOverrideStatus;
+  note?: string;
+  by?: string;
+  at: string;
+}
+
+/** A single outstanding invoice line in the aging report. */
+export interface AgingInvoice {
+  claimId: string;
+  encounterId?: string;
+  patient?: PatientRef;
+  payerName?: string;
+  dateOfService?: string;
+  submittedAt?: string;
+  amount: number;
+  paidAmount?: number;
+  balance: number;
+  daysOverdue: number;
+  bucket: string;
+  override?: AgingOverride;
+  remindersSent?: { days: number; sentAt: string }[];
+}
+
+/** Amount totals for one aging bucket (30/60/90/120+ days). */
+export interface AgingBucketSummary {
+  label: string;
+  minDays: number;
+  maxDays: number | null;
+  count: number;
+  amount: number;
+  /** Amount excluding invoices with a manual override. */
+  overriddenAmount?: number;
+}
+
+export interface AgingSummary {
+  asOf: string;
+  totalOutstanding: number;
+  totalInvoices: number;
+  buckets: AgingBucketSummary[];
+  byOverride?: Partial<Record<AgingOverrideStatus, { count: number; amount: number }>>;
+  reminders?: { days: number; count: number; lastSentAt?: string }[];
+}
+
+export interface AgingReport {
+  summary: AgingSummary;
+  invoices: AgingInvoice[];
+  meta?: { total: number; page: number; limit: number };
+}
+
+export interface AgingReportQuery {
+  asOf?: string;
+  bucket?: string;
+  override?: AgingOverrideStatus;
+  page?: number;
+  limit?: number;
+}
+
+function agingQueryString(query: AgingReportQuery = {}): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** Fetches the billing aging report (buckets, summary and outstanding invoices). */
+export async function fetchAgingReport(query?: AgingReportQuery): Promise<AgingReport> {
+  return billingFetch<AgingReport>(`/aging${agingQueryString(query)}`);
+}
+
+/** Sets or clears a manual override on an outstanding invoice. */
+export async function setAgingOverride(
+  claimId: string,
+  status: AgingOverrideStatus | null,
+  note?: string
+): Promise<AgingInvoice> {
+  const body = await billingFetch<{ data: AgingInvoice }>(
+    `/aging/${encodeURIComponent(claimId)}/override`,
+    { method: 'PUT', body: JSON.stringify({ status, note }) }
+  );
+  return body.data;
+}
+
+async function downloadAgingExport(path: string, filename: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_V1}/billing${path}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Download failed (${res.status})`);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Downloads the aging report as CSV through the authenticated API. */
+export async function downloadAgingCsv(query?: AgingReportQuery): Promise<void> {
+  await downloadAgingExport(`/aging/export.csv${agingQueryString(query)}`, 'billing-aging.csv');
+}
+
+/** Downloads the aging report as PDF through the authenticated API. */
+export async function downloadAgingPdf(query?: AgingReportQuery): Promise<void> {
+  await downloadAgingExport(`/aging/export.pdf${agingQueryString(query)}`, 'billing-aging.pdf');
+}
+
 export function queueCount(counts: ClaimCounts | undefined, queue: BillingQueue): number | null {
   if (!counts) return null;
   if (queue === 'unbilled') return counts.unbilled;

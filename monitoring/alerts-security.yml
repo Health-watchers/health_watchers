@@ -62,6 +62,25 @@ groups:
             This may indicate key rotation issues or data corruption.
           runbook_url: 'https://wiki.internal/runbooks/stellar-keypair'
 
+      # Alert when any pod falls back to the in-memory rate-limit store in production.
+      # The memory backend counts per process, so with multiple replicas the effective
+      # limit is multiplied and brute-force protection is silently weakened.
+      - alert: RateLimitMemoryBackendInUse
+        expr: rate_limit_store_backend{type="memory"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+          dashboard: hw-security
+        annotations:
+          summary: 'Rate limiting is using the in-memory store'
+          description: >
+            Pod {{ $labels.pod }} ({{ $labels.instance }}) is using the in-memory
+            rate-limit store instead of Redis. Per-process counters weaken
+            brute-force protection across replicas. Check Redis connectivity and
+            configuration immediately.
+          runbook_url: 'https://wiki.internal/runbooks/rate-limit-store'
+
       # Alert on subscription limit violations spike (potential abuse)
       - alert: SubscriptionLimitViolationSpike
         expr: >

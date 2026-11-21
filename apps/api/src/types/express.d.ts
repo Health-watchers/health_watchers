@@ -17,6 +17,8 @@ declare global {
         patientId?: string;
         isSuperAdmin?: boolean;
       };
+      /** Clinic scope attached by the clinicScope middleware (#1676) */
+      clinicId?: string;
       tokenJti?: string;
       /** Active break-the-glass grant the request is relying on (#1493) */
       emergencyAccess?: {

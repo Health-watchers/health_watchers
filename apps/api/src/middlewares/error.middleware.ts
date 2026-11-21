@@ -7,8 +7,58 @@ import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 import { ApiErrorCode } from '@health-watchers/types';
 import { sendApiError } from '../utils/api-response';
+import { errorAnalytics, ErrorCategory } from '../utils/error-analytics';
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+const GENERIC_INTERNAL_MESSAGE =
+  'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.';
+
+const REDACTED = '[REDACTED]';
+
+// Keys whose values may contain PHI, credentials or other sensitive data.
+const SENSITIVE_KEY_PATTERN =
+  /(password|passwd|secret|token|authorization|cookie|api[-_]?key|ssn|social[-_]?security|dob|date[-_]?of[-_]?birth|phone|email|address|name|diagnosis|medication|prescription|notes?|patient|phi|mrn|insurance)/i;
+
+/**
+ * Recursively redact sensitive values from an object before it is logged.
+ * Guards against circular references and caps recursion depth.
+ */
+function redact(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value === null || value === undefined) return value;
+  if (depth > 6) return '[Truncated]';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return value;
+
+  const obj = value as object;
+  if (seen.has(obj)) return '[Circular]';
+  seen.add(obj);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redact(item, depth + 1, seen));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    result[key] = SENSITIVE_KEY_PATTERN.test(key) ? REDACTED : redact(val, depth + 1, seen);
+  }
+  return result;
+}
+
+/**
+ * Build a safe, loggable representation of an unknown error.
+ */
+function serializeError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    return redact({
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      ...(Object.keys(err).length ? { props: { ...err } } : {}),
+    }) as Record<string, unknown>;
+  }
+  return redact({ value: err }) as Record<string, unknown>;
+}
 
 interface MongoServerError extends Error {
   code?: number;
@@ -235,21 +285,40 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     'high',
     req.user?.userId
   );
-  logger.error({ ...ctx, err }, 'Unhandled error');
+
+  // Log the full error server-side, with sensitive values redacted.
+  logger.error({ ...ctx, err: serializeError(err) }, 'Unhandled error');
 
   // Report unexpected errors to Sentry (skips 4xx — those are expected)
   Sentry.captureException(err);
 
+  // Never leak internal error details to clients in production.
+  // The response envelope is limited to { error, message, requestId }.
   const stack = isDev && err instanceof Error ? err.stack : undefined;
   sendApiError(
     res,
     500,
     'internal',
     ApiErrorCode.INTERNAL_SERVER_ERROR,
-    'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.',
+    GENERIC_INTERNAL_MESSAGE,
     { requestId: req.requestId, ...(stack ? { stack } : {}) }
   );
 }
 
 // Alias for backward compatibility
 export const errorMiddleware = errorHandler;
+
+/**
+ * 404 fallback — emits the standard error envelope
+ * `{ error: { code, message, details?, requestId } }`.
+ */
+export function notFoundHandler(req: Request, res: Response): void {
+  sendApiError(
+    res,
+    404,
+    'not_found',
+    ApiErrorCode.NOT_FOUND,
+    `Route ${req.method} ${req.path} not found.`,
+    { requestId: req.requestId }
+  );
+}

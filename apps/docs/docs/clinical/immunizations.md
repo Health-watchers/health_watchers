@@ -29,6 +29,16 @@ Vaccination records per patient, due/overdue schedules, printable and verifiable
 
 `/api/v1/immunizations/cvx` exposes the CVX vaccine code list used to validate `vaccineCode`.
 
+## Mobile app
+
+The mobile immunization tracking screen lives in [`apps/mobile/src/screens/ImmunizationsScreen.tsx`](https://github.com/Health-watchers/health_watchers/blob/main/apps/mobile/src/screens/ImmunizationsScreen.tsx) and provides:
+
+- **Upcoming due card** — a card at the top of the screen listing immunizations that are due or coming due, sourced from `GET /api/v1/patients/:id/immunizations/due`.
+- **Timeline** — a visual timeline of past administered doses and upcoming due immunizations, ordered by date.
+- **Due date alerts** — a push notification is sent 7 days before an immunization is due.
+- **Mark as administered** — caregivers can record an administered dose from the app, which creates the immunization via `POST /api/v1/patients/:id/immunizations`.
+- **PDF certificate export** — the immunization certificate from `GET /api/v1/patients/:id/immunizations/certificate` can be exported as a PDF from the app.
+
 ## Key endpoints
 
 | Method | Path | Roles |

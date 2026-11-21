@@ -1,0 +1,29 @@
+# actionlint configuration
+# https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# Shellcheck severity threshold: actionlint fails the build only on findings
+# at or above this level. Lower-severity findings (info/style) are still
+# reported in the actionlint output but do not fail the job.
+self-hosted-runner:
+  # Labels of self-hosted runner in array of strings.
+  labels: []
+
+# Configuration variables in array of strings defined in your repository or
+# organization. `null` means disabling configuration variables check.
+config-variables: null
+
+# Path-specific configurations.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    # Ignore some shellcheck rules that are not actionable in workflow scripts.
+    ignore:
+      # SC2086: Double quote to prevent globbing and word splitting.
+      # Reported as info; quoting is enforced where it matters, but workflow
+      # scripts frequently rely on intentional word splitting.
+      - 'shellcheck reported issue in this script: SC2086:.+'
+      # SC2002: Useless cat.
+      - 'shellcheck reported issue in this script: SC2002:.+'
+      # SC2129: Consider using { cmd1; cmd2; } >> file instead of individual redirects.
+      - 'shellcheck reported issue in this script: SC2129:.+'
+      # SC2034: appears unused.
+      - 'shellcheck reported issue in this script: SC2034:.+'

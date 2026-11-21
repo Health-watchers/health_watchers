@@ -36,6 +36,33 @@ export const horizonCircuitBreakerState = new client.Gauge({
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Normalized asset descriptor used for DEX path discovery.
+ * `assetType` follows Horizon conventions: 'native' for XLM, otherwise
+ * 'credit_alphanum4' / 'credit_alphanum12'.
+ */
+export interface DexAsset {
+  assetType: 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+  assetCode?: string;
+  assetIssuer?: string;
+}
+
+/** A single hop in a conversion path (intermediate assets only). */
+export interface DexPathAsset {
+  assetType: string;
+  assetCode?: string;
+  assetIssuer?: string;
+}
+
+/** Normalized path record returned by the DEX path discovery helpers. */
+export interface NormalizedPathRecord {
+  sourceAmount: string;
+  destinationAmount: string;
+  path: DexPathAsset[];
+  destinationAsset: DexPathAsset;
+  sourceAsset: DexPathAsset;
+}
+
 interface HorizonEndpoint {
   url: string;
   healthy: boolean;
@@ -202,6 +229,169 @@ class ResilientHorizonClient {
 
   getServer(): Horizon.Server {
     return new Horizon.Server(this.endpoints[this.currentIndex].url);
+  }
+
+  // ── DEX path discovery ──────────────────────────────────────────────────────
+
+  /**
+   * Execute an operation against the current endpoint, applying the existing
+   * failover / circuit-breaker logic and recording latency metrics.
+   *
+   * On failure the endpoint is marked unhealthy and the next usable endpoint is
+   * selected before retrying (up to one retry per remaining endpoint).
+   */
+  private async executeWithFailover<T>(
+    operation: (server: Horizon.Server) => Promise<T>,
+    operationName: string
+  ): Promise<T> {
+    const attempted = new Set<number>();
+    let lastError: Error | undefined;
+
+    while (attempted.size < this.endpoints.length) {
+      const index = this.currentIndex;
+      const ep = this.endpoints[index];
+
+      if (this.isCircuitOpen(ep)) {
+        attempted.add(index);
+        this.switchEndpoint(this.selectEndpoint());
+        continue;
+      }
+
+      attempted.add(index);
+      const start = Date.now();
+      try {
+        const result = await operation(new Horizon.Server(ep.url));
+        this.recordSuccess(ep, Date.now() - start);
+        return result;
+      } catch (error) {
+        const latency = Date.now() - start;
+        lastError = error as Error;
+        this.recordFailure(ep, latency);
+        logger.warn(
+          { url: ep.url, operation: operationName, error: lastError.message },
+          'Horizon DEX operation failed'
+        );
+        this.switchEndpoint(this.selectEndpoint());
+      }
+    }
+
+    throw lastError ?? new Error(`All Horizon endpoints failed for ${operationName}`);
+  }
+
+  private static toHorizonAsset(asset: DexAsset): any {
+    if (asset.assetType === 'native') {
+      return { isNative: () => true };
+    }
+    return {
+      isNative: () => false,
+      getCode: () => asset.assetCode,
+      getIssuer: () => asset.assetIssuer,
+    };
+  }
+
+  private static normalizePathAsset(asset: any): DexPathAsset {
+    if (!asset) return { assetType: 'native' };
+    const assetType: string = asset.asset_type ?? asset.assetType ?? 'native';
+    if (assetType === 'native') return { assetType: 'native' };
+    return {
+      assetType,
+      assetCode: asset.asset_code ?? asset.assetCode,
+      assetIssuer: asset.asset_issuer ?? asset.assetIssuer,
+    };
+  }
+
+  private static normalizePathRecord(
+    record: any,
+    sourceAsset: DexAsset,
+    destinationAsset: DexAsset
+  ): NormalizedPathRecord {
+    return {
+      sourceAmount: String(record.source_amount ?? record.sourceAmount ?? '0'),
+      destinationAmount: String(record.destination_amount ?? record.destinationAmount ?? '0'),
+      path: Array.isArray(record.path) ? record.path.map(ResilientHorizonClient.normalizePathAsset) : [],
+      sourceAsset: ResilientHorizonClient.normalizePathAsset({
+        asset_type: sourceAsset.assetType,
+        asset_code: sourceAsset.assetCode,
+        asset_issuer: sourceAsset.assetIssuer,
+      }),
+      destinationAsset: ResilientHorizonClient.normalizePathAsset({
+        asset_type: destinationAsset.assetType,
+        asset_code: destinationAsset.assetCode,
+        asset_issuer: destinationAsset.assetIssuer,
+      }),
+    };
+  }
+
+  /**
+   * Discover paths for a strict-send payment: the sender specifies the exact
+   * source amount and Horizon returns the destination amounts achievable.
+   */
+  async findStrictSendPaths(
+    sourceAsset: DexAsset,
+    sourceAmount: string,
+    destinationAssets: DexAsset[]
+  ): Promise<NormalizedPathRecord[]> {
+    if (destinationAssets.length === 0) return [];
+
+    const records = await this.executeWithFailover(
+      (server) =>
+        server
+          .strictSendPaths(
+            ResilientHorizonClient.toHorizonAsset(sourceAsset) as any,
+            sourceAmount,
+            destinationAssets.map((a) => ResilientHorizonClient.toHorizonAsset(a) as any)
+          )
+          .call(),
+      'strictSendPaths'
+    );
+
+    const rawRecords: any[] = (records as any)?.records ?? [];
+    return rawRecords.map((record) => {
+      const destAsset =
+        destinationAssets.find(
+          (a) =>
+            (a.assetType === 'native' && record.destination_asset_type === 'native') ||
+            (a.assetCode === record.destination_asset_code &&
+              a.assetIssuer === record.destination_asset_issuer)
+        ) ?? destinationAssets[0];
+      return ResilientHorizonClient.normalizePathRecord(record, sourceAsset, destAsset);
+    });
+  }
+
+  /**
+   * Discover paths for a strict-receive payment: the receiver specifies the
+   * exact destination amount and Horizon returns the source amounts required.
+   */
+  async findStrictReceivePaths(
+    sourceAssets: DexAsset[],
+    destinationAsset: DexAsset,
+    destinationAmount: string
+  ): Promise<NormalizedPathRecord[]> {
+    if (sourceAssets.length === 0) return [];
+
+    const records = await this.executeWithFailover(
+      (server) =>
+        server
+          .strictReceivePaths(
+            sourceAssets.map((a) => ResilientHorizonClient.toHorizonAsset(a) as any),
+            ResilientHorizonClient.toHorizonAsset(destinationAsset) as any,
+            destinationAmount
+          )
+          .call(),
+      'strictReceivePaths'
+    );
+
+    const rawRecords: any[] = (records as any)?.records ?? [];
+    return rawRecords.map((record) => {
+      const srcAsset =
+        sourceAssets.find(
+          (a) =>
+            (a.assetType === 'native' && record.source_asset_type === 'native') ||
+            (a.assetCode === record.source_asset_code &&
+              a.assetIssuer === record.source_asset_issuer)
+        ) ?? sourceAssets[0];
+      return ResilientHorizonClient.normalizePathRecord(record, srcAsset, destinationAsset);
+    });
   }
 
   getCurrentEndpoint(): HorizonEndpoint {

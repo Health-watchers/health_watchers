@@ -19,13 +19,23 @@ const contactNumber = z
   .regex(/^\+?[\d\s\-().]{7,20}$/, 'Invalid phone number format')
   .optional();
 
+// National identity number (PHI — encrypted at rest, searchable via blind index)
+const nationalId = z.string().min(1).max(64).optional();
+
+// Insurance member number (PHI — encrypted at rest, searchable via blind index)
+const insuranceNumber = z.string().min(1).max(64).optional();
+
 export const createPatientSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   dateOfBirth,
   sex: z.enum(['M', 'F', 'O']),
   contactNumber,
+  /** Alias for `contactNumber`; mapped in the service layer. */
+  phone: contactNumber,
   address: z.string().optional(),
+  nationalId,
+  insuranceNumber,
 });
 
 export const updatePatientSchema = createPatientSchema

@@ -1,6 +1,6 @@
 # Production Dockerfile for Stellar Service - Multi-stage build
 # Stage 1: Builder
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npm run build --workspace=stellar-service
 RUN npm prune --production
 
 # Stage 2: Final production image
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Security: Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

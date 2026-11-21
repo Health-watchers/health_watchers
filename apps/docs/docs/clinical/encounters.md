@@ -10,7 +10,17 @@ Clinical visits: chief complaint, SOAP notes, vital signs, ICD-10 diagnoses, pre
 | | |
 |---|---|
 | **Base path** | `/api/v1/encounters` |
-| **Source** | [`apps/api/src/modules/encounters/attachments.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/attachments.controller.ts)<br/>[`apps/api/src/modules/encounters/encounters.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounters.controller.ts)<br/>[`apps/api/src/modules/encounters/encounter-lazy-load.routes.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter-lazy-load.routes.ts)<br/>[`apps/api/src/modules/encounters/encounter-templates.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter-templates.controller.ts) |
+| **Source** | [`apps/api/src/modules/encounters/attachments.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/attachments.controller.ts)<br/>[`apps/api/src/modules/encounters/encounters.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounters.controller.ts)<br/>[`apps/api/src/modules/encounters/encounter.service.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter.service.ts)<br/>[`apps/api/src/modules/encounters/encounter.repository.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter.repository.ts)<br/>[`apps/api/src/modules/encounters/encounter-lazy-load.routes.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter-lazy-load.routes.ts)<br/>[`apps/api/src/modules/encounters/encounter-templates.controller.ts`](https://github.com/Health-watchers/health_watchers/blob/main/apps/api/src/modules/encounters/encounter-templates.controller.ts) |
+
+## Architecture
+
+The encounters module follows the controller / service / repository pattern:
+
+- **Controller** (`encounters.controller.ts`) — thin HTTP layer: validates the request, calls the service, and shapes the response. It performs no Mongoose queries.
+- **Service** (`encounter.service.ts`) — business logic (CDS evaluation, allergy and interaction checks, co-signature rules, billing hand-off). It calls the repository and never touches the database directly.
+- **Repository** (`encounter.repository.ts`) — the only place that talks to MongoDB, exposing typed methods: `findById`, `findByPatient`, `findByClinic`, `create`, `update`, `softDelete`.
+
+Tests mock the repository rather than the database. See `CONTRIBUTING.md` for the pattern.
 
 ## Data model
 
@@ -89,6 +99,7 @@ Clinical visits: chief complaint, SOAP notes, vital signs, ICD-10 diagnoses, pre
 Roles referenced by this module: `CLINIC_ADMIN`, `DOCTOR`, `NURSE`, `SUPER_ADMIN`.
 
 - **Authenticated** means any signed-in user. Handlers still scope data to the caller's clinic (and to the caller's own records for `PATIENT` users).
+- Clinic scoping is enforced by the shared `clinicScope` middleware, which verifies the JWT and attaches `req.clinicId`. Controllers and the service/repository layer use `req.clinicId` to scope every query; requests without a valid clinic scope are rejected with `403`.
 - **Public** means the route has no session guard. It is either intentionally public or authenticated by other means, such as a signature, token, or API key.
 
 ## Related

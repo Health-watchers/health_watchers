@@ -13,6 +13,7 @@
 import logger from './logger.js';
 import { retryWithBackoff } from './error-handler.js';
 import { recordBatchMetrics } from './metrics.js';
+import { config } from 'packages/config/index.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -135,14 +136,14 @@ export interface EnqueueResult {
 /** Hard limit imposed by Stellar: max operations per transaction */
 export const MAX_OPERATIONS_PER_TX = 100;
 
-/** Default max batch size used when auto-flushing */
-const DEFAULT_BATCH_SIZE = 50;
+/** Default max batch size used when auto-flushing (configurable via env) */
+const DEFAULT_BATCH_SIZE = config.stellar.batchSize;
 
-/** Auto-flush interval: flush the queue every 10 seconds if not full */
-const AUTO_FLUSH_INTERVAL_MS = 10_000;
+/** Auto-flush interval: flush the queue periodically if not full (configurable via env) */
+const AUTO_FLUSH_INTERVAL_MS = config.stellar.autoFlushIntervalMs;
 
-/** Default number of retry attempts for a failed bundle submission */
-const DEFAULT_MAX_RETRIES = 3;
+/** Default number of retry attempts for a failed bundle submission (configurable via env) */
+const DEFAULT_MAX_RETRIES = config.stellar.maxRetries;
 
 // ── BatchProcessor ─────────────────────────────────────────────────────────
 

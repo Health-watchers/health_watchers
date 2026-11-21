@@ -20,8 +20,30 @@ import client from 'prom-client';
 import logger from '@api/utils/logger';
 import { register } from '@api/services/metrics.service';
 import { markJobsActive, clearActiveJobs } from './job-state';
+import { runAgingReminders } from './handlers/aging-reminders';
+import { notifyNewSurveyAssignments } from './handlers/survey-assignments';
+import { notifyTrialExpiry } from './handlers/trial-expiry';
 
 export const SCHEDULED_JOBS_QUEUE = 'scheduled-jobs';
+
+export interface JobContext {
+  /** Scheduler id of the job being executed. */
+  name: string;
+  /** Deterministic id of this schedule tick, shared by every replica. */
+  jobId: string;
+  /**
+   * Idempotency key for this run. Defaults to the deterministic job id, so
+   * handlers can use it to dedupe work across replicas and retries.
+   */
+  idempotencyKey: string;
+}
+
+/**
+ * A job handler. Receives the run context and performs the work. Handlers are
+ * plain functions so they can be imported, unit-tested and registered without
+ * instantiating the registry.
+ */
+export type JobHandler = (ctx: JobContext) => Promise<unknown>;
 
 export interface JobDefinition {
   /** Unique kebab-case name, e.g. `payment-expiration`. Also the scheduler id. */
@@ -29,7 +51,27 @@ export interface JobDefinition {
   /** Default cron pattern (UTC). 6-field patterns include seconds. */
   cron: string;
   description: string;
-  handler: () => Promise<unknown>;
+  handler: JobHandler;
+  /**
+   * Optional idempotency key for a given schedule tick. Receives the
+   * deterministic job id (e.g. `payment-retry:1700000000000`) and may return a
+   * business key such as `recurring-payments:2024-06`. When omitted, the job id
+   * itself is used as the idempotency key.
+   */
+  idempotencyKey?: (jobId: string) => string;
+}
+
+/**
+ * Deterministic id for one schedule tick. BullMQ materialises each scheduler
+ * iteration with an id derived from the scheduler id and the tick timestamp;
+ * we mirror that shape so every replica derives the same key.
+ */
+export function deriveJobId(name: string, timestamp: number): string {
+  return `${name}:${timestamp}`;
+}
+
+export function deriveIdempotencyKey(def: JobDefinition, jobId: string): string {
+  return def.idempotencyKey ? def.idempotencyKey(jobId) : jobId;
 }
 
 export interface JobStatus {
@@ -181,7 +223,14 @@ export class JobRegistry {
         {
           name: def.name,
           data: {},
-          opts: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
+          opts: {
+            removeOnComplete: 100,
+            removeOnFail: 500,
+            attempts: 1,
+            // Deterministic per-tick id so replicas upserting the same schedule
+            // never enqueue duplicate jobs for the same tick.
+            jobId: deriveJobId(def.name, Date.now()),
+          },
         }
       );
       logger.info({ job: def.name, pattern }, '[job-registry] job scheduled');
@@ -235,19 +284,26 @@ export class JobRegistry {
   }
 
   /** Worker processor — runs the handler for `job.name` and records the outcome. */
-  async execute(job: Pick<Job, 'name'>): Promise<void> {
+  async execute(job: Pick<Job, 'name' | 'id'>): Promise<void> {
     const def = this.definitions.get(job.name);
     if (!def) {
       logger.warn({ job: job.name }, '[job-registry] no handler registered — skipping');
       return;
     }
 
+    const jobId = job.id ?? deriveJobId(def.name, Date.now());
+    const ctx: JobContext = {
+      name: def.name,
+      jobId,
+      idempotencyKey: deriveIdempotencyKey(def, jobId),
+    };
+
     const startedAt = new Date();
     const endTimer = scheduledJobDurationSeconds.startTimer({ job: def.name });
     await this.writeStats(def.name, { lastRunAt: startedAt.toISOString() });
 
     try {
-      await def.handler();
+      await def.handler(ctx);
       const durationMs = Date.now() - startedAt.getTime();
       endTimer({ status: 'success' });
       scheduledJobRunsTotal.inc({ job: def.name, status: 'success' });
@@ -279,6 +335,29 @@ export class JobRegistry {
         'failureCount'
       );
       logger.error({ err, job: def.name }, '[job-registry] job run failed');
+      throw err;
+    }
+  }
+
+  /**
+   * Run a job handler at most once for `idempotencyKey` across the fleet.
+   * Returns true when this call performed the work, false when another replica
+   * (or an earlier run) already claimed the key.
+   */
+  async runOnce(idempotencyKey: string, fn: () => Promise<unknown>, ttlSeconds = 7 * 24 * 3600): Promise<boolean> {
+    const { connection } = this.handles();
+    const key = `hw:jobs:idempotency:${idempotencyKey}`;
+    const claimed = await connection.set(key, '1', 'EX', ttlSeconds, 'NX');
+    if (claimed !== 'OK') {
+      logger.info({ idempotencyKey }, '[job-registry] idempotency key already claimed — skipping');
+      return false;
+    }
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      // Release the claim so a later tick can retry the work.
+      await connection.del(key).catch(() => undefined);
       throw err;
     }
   }
@@ -344,3 +423,34 @@ export class JobRegistry {
 }
 
 export const jobRegistry = new JobRegistry();
+
+// ── Built-in job definitions ──────────────────────────────────────────────────
+//
+// Registered on the shared registry so every replica schedules the same set.
+// Each handler is idempotent per tick (see JobContext.idempotencyKey) and safe
+// to run concurrently across the fleet.
+
+jobRegistry
+  .register({
+    name: 'billing-aging-reminders',
+    // Daily at 06:00 UTC — before clinic staff start their day.
+    cron: '0 0 6 * * *',
+    description: 'Compute invoice aging buckets and email 30/60/90-day overdue reminders',
+    handler: runAgingReminders,
+    idempotencyKey: (jobId) => `billing-aging-reminders:${jobId.split(':')[1]?.slice(0, 10) ?? jobId}`,
+  })
+  .register({
+    name: 'survey-assignment-notifications',
+    // Every 15 minutes.
+    cron: '0 */15 * * * *',
+    description: 'Email patients when a new survey has been assigned to them',
+    handler: notifyNewSurveyAssignments,
+  })
+  .register({
+    name: 'subscription-trial-expiry',
+    // Daily at 08:00 UTC.
+    cron: '0 0 8 * * *',
+    description: 'Notify clinic admins three days before their subscription trial ends',
+    handler: notifyTrialExpiry,
+    idempotencyKey: (jobId) => `subscription-trial-expiry:${jobId.split(':')[1]?.slice(0, 10) ?? jobId}`,
+  });

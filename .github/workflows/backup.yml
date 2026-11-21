@@ -6,18 +6,31 @@ on:
     - cron: '0 2 * * *'
     # Incremental backup every 6 hours
     - cron: '0 2,8,14,20 * * *'
+    # Oplog archive for PITR every 5 minutes
+    - cron: '*/5 * * * *'
+    # Weekly E2E verification on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
       verify:
         description: 'Run restore verification after backup'
         type: boolean
         default: false
+      backup_type:
+        description: 'Backup type to run'
+        type: choice
+        options:
+          - full
+          - oplog
+          - both
+        default: full
 
 jobs:
   backup:
     name: Backup MongoDB
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name != 'schedule' || (github.event.schedule != '*/5 * * * *' && !startsWith(github.event.schedule, '0 2 * * 0'))
 
     steps:
       - name: Checkout
@@ -62,6 +75,193 @@ jobs:
               repo: context.repo.repo,
               title: `🚨 Backup failed on ${new Date().toISOString().split('T')[0]}`,
               body: `The scheduled MongoDB backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['backup', 'incident'],
+            });
+
+  oplog-backup:
+    name: MongoDB Oplog Archive (PITR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.schedule == '*/5 * * * *' || github.event.inputs.backup_type == 'oplog' || github.event.inputs.backup_type == 'both'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install mongodump
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-database-tools
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Archive oplog segment
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          OPLOG_INTERVAL_SECONDS: 300
+        run: bash scripts/backup-mongodb-oplog.sh
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Oplog Archive failed on ${new Date().toISOString()}`,
+              body: `The scheduled MongoDB oplog archive (PITR) failed.\n\nThis affects Point-in-Time Recovery capability.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['backup', 'pitr', 'incident'],
+            });
+
+  backup-restore-e2e:
+    name: Backup → Transfer → Verify → Restore (E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Run weekly on schedule (Sundays) or manually via workflow_dispatch
+    if: (github.event_name == 'schedule' && startsWith(github.event.schedule, '0 2 * * 0')) || github.event_name == 'workflow_dispatch'
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install mongodump / mongorestore
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-database-tools
+
+      - name: Seed test data
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e
+        run: |
+          mongosh "$MONGO_URI" --quiet --eval '
+            db.widgets.drop();
+            db.widgets.insertMany([
+              { _id: 1, name: "alpha", qty: 10 },
+              { _id: 2, name: "beta",  qty: 20 },
+              { _id: 3, name: "gamma", qty: 30 }
+            ]);
+            print("Seeded " + db.widgets.countDocuments() + " documents");
+          '
+
+      - name: Prepare local S3 mock and encryption key
+        run: |
+          mkdir -p "$RUNNER_TEMP/s3-mock"
+          # Generate a throwaway AES-256 key for this test run only
+          openssl rand -base64 32 > "$RUNNER_TEMP/backup.key"
+          chmod 600 "$RUNNER_TEMP/backup.key"
+          echo "BACKUP_KEY_FILE=$RUNNER_TEMP/backup.key" >> "$GITHUB_ENV"
+          echo "BACKUP_BUCKET=file://$RUNNER_TEMP/s3-mock" >> "$GITHUB_ENV"
+
+      - name: Run backup (encrypt + checksum + transfer)
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          AWS_REGION: us-east-1
+          BACKUP_RETENTION_DAYS: 1
+        run: |
+          # Use the test key file when no CI secret is configured
+          if [[ -z "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
+            export BACKUP_ENCRYPTION_KEY="$(cat "$BACKUP_KEY_FILE")"
+          fi
+          bash scripts/backup-mongodb.sh
+
+      - name: Download backup from mock S3
+        run: |
+          mkdir -p "$RUNNER_TEMP/download"
+          cp -v "$RUNNER_TEMP"/s3-mock/* "$RUNNER_TEMP/download/"
+          ls -la "$RUNNER_TEMP/download"
+
+      - name: Verify SHA-256 checksum
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          checksums=(*.sha256)
+          if [[ ${#checksums[@]} -eq 0 ]]; then
+            echo "::error::No .sha256 checksum file found alongside backup"
+            exit 1
+          fi
+          for sum in "${checksums[@]}"; do
+            echo "Verifying $sum"
+            sha256sum -c "$sum"
+          done
+
+      - name: Decrypt backup
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          encrypted=(*.enc)
+          if [[ ${#encrypted[@]} -eq 0 ]]; then
+            echo "::error::No encrypted backup (.enc) found"
+            exit 1
+          fi
+          for f in "${encrypted[@]}"; do
+            out="${f%.enc}"
+            openssl enc -d -aes-256-cbc -pbkdf2 -in "$f" -out "$out" -pass "file:$BACKUP_KEY_FILE"
+            echo "Decrypted $f -> $out"
+          done
+
+      - name: Restore to temporary database
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e_restore
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          archives=(*.archive *.gz)
+          if [[ ${#archives[@]} -eq 0 ]]; then
+            echo "::error::No decrypted archive found to restore"
+            exit 1
+          fi
+          for a in "${archives[@]}"; do
+            mongorestore --uri "$MONGO_URI" --archive="$a" --nsFrom='backup_e2e.*' --nsTo='backup_e2e_restore.*'
+          done
+
+      - name: Assert restored data matches source
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e_restore
+        run: |
+          count=$(mongosh "$MONGO_URI" --quiet --eval 'db.widgets.countDocuments()')
+          echo "Restored document count: $count"
+          if [[ "$count" != "3" ]]; then
+            echo "::error::Restored document count mismatch (expected 3, got $count)"
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Backup E2E verification failed on ${new Date().toISOString().split('T')[0]}`,
+              body: `The backup → transfer → verify → restore E2E cycle failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               labels: ['backup', 'incident'],
             });
 
