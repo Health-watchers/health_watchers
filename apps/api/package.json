@@ -56,7 +56,7 @@
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.3.0",
-    "ioredis": "^5.10.1",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.0",
     "maxmind": "^5.0.7",
     "migrate-mongo": "^14.0.7",
