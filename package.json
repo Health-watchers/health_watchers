@@ -1,7 +1,10 @@
 {
   "name": "health-watchers-monorepo",
   "private": true,
-  "packageManager": "npm@10.8.2",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -17,6 +20,9 @@
   },
   "scripts": {
     "prepare": "husky",
+    "dev": "turbo run dev --parallel",
+    "dev:infra": "docker compose --profile core up -d",
+    "clean": "rm -rf dist .next .turbo coverage apps/*/dist apps/*/.next apps/*/.turbo apps/*/coverage packages/*/dist packages/*/.turbo packages/*/coverage",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

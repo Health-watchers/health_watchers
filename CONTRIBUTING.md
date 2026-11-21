@@ -26,8 +26,8 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** (check with `node --version`)
-- **npm** or **yarn** package manager
+- **Node.js 20+** (check with `node --version`) — the repo standardises on Node 20 LTS (see `.nvmrc`)
+- **npm** package manager (the version pinned in `packageManager`)
 - **MongoDB** (local installation or MongoDB Atlas account)
 - **Git** for version control
 - **Docker** (optional, for containerized development)
@@ -69,18 +69,35 @@ Before you begin, ensure you have the following installed:
    mongod --dbpath /path/to/data
    ```
 
-7. **Start development servers**:
+7. **Start the whole stack with one command**:
    ```bash
-   npm run dev
+   npm run dev:infra   # MongoDB + Redis via Docker Compose (core profile)
+   npm run dev         # API, worker, web and stellar-service via Turbo
    ```
    This will start:
    - API server on http://localhost:3001
    - Web frontend on http://localhost:3000
    - Stellar service on http://localhost:3002
+   - Background worker (jobs run locally, not just in production)
 
 8. **Verify setup**:
    - Open http://localhost:3000 in your browser
    - Check that the API is responding at http://localhost:3001/health
+
+### Quick Start (five steps)
+
+On a fresh clone, the full local stack is:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/health_watchers.git && cd health_watchers
+cp .env.example .env            # fill in MongoDB URI, JWT secrets, Stellar keys
+npm ci                          # install dependencies (Node 20+)
+npm run dev:infra               # start MongoDB and Redis only
+npm run dev                     # start API, worker, web and stellar-service
+```
+
+Then open http://localhost:3000 (web) and http://localhost:3001/health (API).
+Use `npm run clean` to remove `dist`, `.next`, `.turbo` and coverage output.
 
 ## Development Workflow
 
@@ -855,9 +872,11 @@ npm install package-name --workspace=apps/api
 
 ```bash
 # Development
+npm run dev                      # API, worker, web and stellar-service (Turbo, parallel)
+npm run dev:infra                # MongoDB + Redis only (docker compose --profile core)
 npm run dev --workspace=api      # API only (http://localhost:3001)
 npm run dev --workspace=web      # Web app only (http://localhost:3000)
-docker compose --profile core up -d   # Full core stack
+npm run clean                    # Remove dist, .next, .turbo and coverage output
 
 # Testing
 npm test                         # Run all tests (Turbo)
