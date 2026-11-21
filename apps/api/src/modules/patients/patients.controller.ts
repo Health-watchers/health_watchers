@@ -28,13 +28,7 @@ import {
 } from './patients.validation';
 import { DuplicateDetectionService } from './duplicate-detection.service';
 import { DuplicateController } from './duplicate.controller';
-import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
-import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
-import {
-  createEmergencyContactSchema,
-  updateEmergencyContactSchema,
-} from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
 import { findActiveGrant } from '../emergency-access/emergency-access.service';
 import { withSpan } from '@api/utils/tracer';
@@ -42,6 +36,13 @@ import { cache } from '@api/services/cache.service';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
 import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
+import { allergiesRouter } from './allergies.routes';
+import { insuranceRouter } from './insurance.routes';
+import { emergencyContactsRouter } from './emergency-contacts.routes';
+import { patientImportRouter } from './import.routes';
+import { patientHealthScoreRouter } from './health-score.routes';
+import { patientRiskRouter } from './risk.routes';
+import { patientSubResourcesRouter } from './sub-resources.routes';
 
 const router = Router();
 // ObjectId validation is provided by @api/middlewares/common.middleware (issue #929)
@@ -60,17 +61,6 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'contactNumber',
   'address',
 ]);
-
-/** Calculate trend from last N readings: 'improving' | 'stable' | 'worsening' */
-function calcTrend(values: number[]): 'improving' | 'stable' | 'worsening' {
-  if (values.length < 2) return 'stable';
-  const first = values[0];
-  const last = values[values.length - 1];
-  const delta = last - first;
-  const threshold = first * 0.03; // 3% change threshold
-  if (Math.abs(delta) < threshold) return 'stable';
-  return delta < 0 ? 'improving' : 'worsening';
-}
 
 async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
@@ -414,7 +404,7 @@ router.patch(
     if (dateOfBirth !== undefined) update.dateOfBirth = new Date(dateOfBirth);
 
     if (firstName !== undefined || lastName !== undefined) {
-      const doc = await PatientModel.findById(req.params.id);
+      const doc = await findScopedPatient(req);
       if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
       update.searchName = `${firstName ?? doc.firstName} ${lastName ?? doc.lastName}`
         .toLowerCase()
@@ -1341,11 +1331,48 @@ router.post(
   })
 );
 
+/**
+ * Load a patient scoped to the caller's clinic (#1769).
+ *
+ * Returns `null` when the patient does not exist *or* belongs to another clinic, so callers
+ * respond with 404 and never leak the existence of cross-tenant records. Denied cross-clinic
+ * attempts are recorded in the audit log.
+ */
+async function findScopedPatient(
+  req: Request,
+  projection?: string
+): Promise<InstanceType<typeof PatientModel> | null> {
+  const clinicId = req.user!.clinicId;
+  const query = PatientModel.findOne({ _id: req.params.id, clinicId });
+  if (projection) query.select(projection);
+  const patient = await query;
+
+  if (!patient) {
+    // Distinguish "does not exist" from "exists in another clinic" for auditing purposes only.
+    const existsElsewhere = await PatientModel.exists({ _id: req.params.id });
+    if (existsElsewhere) {
+      auditLog(
+        {
+          action: 'CROSS_CLINIC_ACCESS_DENIED',
+          resourceType: 'Patient',
+          resourceId: String(req.params.id),
+          userId: req.user!.userId,
+          clinicId,
+          metadata: { path: req.originalUrl, method: req.method },
+        },
+        req
+      );
+    }
+  }
+
+  return patient;
+}
+
 // GET /patients/:id/emergency-contacts
 router.get(
   '/:id/emergency-contacts',
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id).select('emergencyContacts');
+    const patient = await findScopedPatient(req, 'emergencyContacts');
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: patient.emergencyContacts || [] });
   })
@@ -1358,7 +1385,7 @@ router.post(
   validateRequest({ body: createEmergencyContactSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, relationship, phone, email, address, isPrimary } = req.body;
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     if (!patient.emergencyContacts) patient.emergencyContacts = [];
@@ -1397,7 +1424,7 @@ router.put(
   validateRequest({ body: updateEmergencyContactSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, relationship, phone, email, address, isPrimary } = req.body;
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const contact = patient.emergencyContacts?.find((c) => String(c._id) === req.params.contactId);
@@ -1427,7 +1454,7 @@ router.delete(
   '/:id/emergency-contacts/:contactId',
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const index = patient.emergencyContacts?.findIndex(
@@ -1448,7 +1475,7 @@ router.post(
   '/:id/emergency-alert',
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const primaryContact = patient.emergencyContacts?.find((c) => c.isPrimary);
@@ -1692,13 +1719,7 @@ router.get(
     let recommendations: string[];
 
     if (isAIServiceAvailable()) {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: { responseMimeType: 'application/json' },
-      });
+      const { llmClient, LLMUnavailableError } = await import('@api/lib/llm');
 
       const prompt = `You are a clinical decision support AI. A patient has a risk score of ${patient.riskScore}/100 (${patient.riskLevel} risk).
 
@@ -1713,13 +1734,23 @@ Return ONLY valid JSON (no markdown) with this exact schema:
 }`;
 
       try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const text = (
+          await llmClient.generateText(prompt, {
+            responseMimeType: 'application/json',
+            feature: 'patient.risk-explanation',
+          })
+        ).trim();
         const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
         const parsed = JSON.parse(json);
         naturalLanguageExplanation = parsed.explanation ?? '';
         recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
-      } catch {
+      } catch (err) {
+        if (err instanceof LLMUnavailableError) {
+          return res.status(503).json({
+            error: 'AI_UNAVAILABLE',
+            message: 'The AI provider is currently unavailable. Please try again later.',
+          });
+        }
         naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
         recommendations = ['Consult with the care team to review the identified risk factors.'];
       }

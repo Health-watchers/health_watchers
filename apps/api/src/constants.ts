@@ -118,6 +118,38 @@ export const AUTH = {
   BACKUP_CODE_COUNT: 10,
 } as const;
 
+// ─── Patient Portal Login Security (Issue #1666) ──────────────────────────────
+
+/**
+ * Brute-force protection policy for the patient portal login endpoint.
+ * See docs/SECURITY_POLICY.md → "Patient Portal Login Lockout".
+ */
+export const PORTAL_LOGIN_SECURITY = {
+  /** Failed attempts before the portal account is locked. */
+  MAX_FAILED_ATTEMPTS: 10,
+
+  /** Failed attempts before a CAPTCHA challenge is required. */
+  CAPTCHA_THRESHOLD: 5,
+
+  /** Portal account lockout duration in milliseconds (30 minutes). */
+  LOCKOUT_DURATION_MS: 30 * 60 * 1_000,
+
+  /**
+   * Progressive delay schedule (ms) indexed by the number of failed attempts.
+   * Values beyond the end of the array use the last entry.
+   */
+  PROGRESSIVE_DELAYS_MS: [0, 0, 1_000, 2_000, 4_000, 8_000] as readonly number[],
+
+  /** Maximum server-side sleep per failed attempt (avoids tying up handlers). */
+  MAX_SERVER_SLEEP_MS: 2_000,
+
+  /** Unlock verification token lifetime in milliseconds (15 minutes). */
+  UNLOCK_TOKEN_TTL_MS: 15 * 60 * 1_000,
+
+  /** Failed-attempt counter resets after this idle window (1 hour). */
+  ATTEMPT_WINDOW_MS: 60 * 60 * 1_000,
+} as const;
+
 // ─── Patient / Clinical ───────────────────────────────────────────────────────
 
 export const PATIENT = {
@@ -294,6 +326,12 @@ export const AUDIT_ACTION = {
   USER_MFA_DISABLED: 'user.mfa_disabled',
   USER_ACCOUNT_LOCKED: 'user.account_locked',
   USER_ACCOUNT_UNLOCKED: 'user.account_unlocked',
+
+  // Patient portal login security (Issue #1666)
+  PORTAL_LOGIN_FAILED: 'portal.login_failed',
+  PORTAL_ACCOUNT_LOCKED: 'portal.account_locked',
+  PORTAL_ACCOUNT_UNLOCKED: 'portal.account_unlocked',
+  PORTAL_CAPTCHA_REQUIRED: 'portal.captcha_required',
 
   // Patients
   PATIENT_CREATED: 'patient.created',

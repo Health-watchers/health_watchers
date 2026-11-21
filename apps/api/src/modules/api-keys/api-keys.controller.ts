@@ -9,6 +9,7 @@ import {
   MAX_ROTATION_GRACE_HOURS,
 } from './models/api-key.model';
 import { ApiKeyUsageModel } from './models/api-key-usage.model';
+import { getAllScopes, SCOPE_DESCRIPTIONS } from './constants/scopes';
 import { AuditService } from '../audit/audit.service';
 import logger from '@api/utils/logger';
 
@@ -65,7 +66,7 @@ function coerceExpiry(body: Record<string, unknown>): Date | undefined {
  *               name: { type: string, example: 'Integration Service' }
  *               scopes:
  *                 type: array
- *                 items: { type: string, enum: [patients:read, patients:write, encounters:read, encounters:write, payments:read, payments:write, lab-results:write] }
+ *                 items: { type: string, enum: [patients:read, patients:write, patients:delete, encounters:read, encounters:write, encounters:delete, payments:read, payments:write, payments:confirm, lab-results:read, lab-results:write, ai:read, ai:write, api-keys:manage, api-keys:read, 'patient/*.read', 'patient/Patient.read', 'patient/Encounter.read', 'patient/Observation.read'] }
  *               environment: { type: string, enum: [live, test], default: live }
  *               tags: { type: array, items: { type: string }, description: 'Up to 20 free-form tags' }
  *               description: { type: string }
@@ -234,6 +235,8 @@ export const listApiKeys = async (req: Request, res: Response) => {
         inRotationGrace: !!(
           k.previousKeyExpiresAt && new Date(k.previousKeyExpiresAt).getTime() > now
         ),
+        // #1667 - legacy keys created before scoping existed cannot reach any endpoint.
+        needsScopeUpdate: !k.scopes || k.scopes.length === 0,
       })),
     });
   } catch (err: any) {
@@ -263,7 +266,7 @@ export const listApiKeys = async (req: Request, res: Response) => {
  *               name: { type: string, example: 'Integration Service (renamed)' }
  *               scopes:
  *                 type: array
- *                 items: { type: string, enum: [patients:read, patients:write, encounters:read, encounters:write, payments:read, payments:write, lab-results:write] }
+ *                 items: { type: string, enum: [patients:read, patients:write, patients:delete, encounters:read, encounters:write, encounters:delete, payments:read, payments:write, payments:confirm, lab-results:read, lab-results:write, ai:read, ai:write, api-keys:manage, api-keys:read, 'patient/*.read', 'patient/Patient.read', 'patient/Encounter.read', 'patient/Observation.read'] }
  *               isActive: { type: boolean }
  *     responses:
  *       200:

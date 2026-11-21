@@ -133,3 +133,18 @@ module "monitoring" {
   docdb_cluster_identifier = module.database.cluster_identifier
   tags                     = local.common_tags
 }
+
+# 9. CDN — CloudFront in front of the Next.js app.
+#   /_next/static/*  → immutable, 1-year Cache-Control (content-hashed by Next.js)
+#   everything else  → short TTL so HTML/deployments propagate quickly
+# The distribution ID is exported for scripts/cdn/purge-cache.sh.
+module "cdn" {
+  source = "../cdn"
+
+  name_prefix        = local.name_prefix
+  origin_domain_name = var.cdn_origin_domain_name
+  aliases            = var.cdn_aliases
+  certificate_arn    = module.tls.certificate_arn
+  price_class        = var.cdn_price_class
+  tags               = local.common_tags
+}

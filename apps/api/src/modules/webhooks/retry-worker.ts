@@ -4,6 +4,7 @@ import { WebhookDeliveryModel, WebhookEventLogModel, type IWebhook } from './web
 import { generateWebhookSignature } from './webhook.service';
 import { buildSignatureHeaders } from './webhook-signature';
 import { validateWebhookUrl } from '@api/utils/url-validator';
+import { logBlockedOutboundRequest } from '@api/utils/ssrf-audit';
 
 interface RetryConfig {
   maxRetries: number;
@@ -64,7 +65,13 @@ export async function retryDelivery(deliveryId: string, webhook: IWebhook): Prom
     delivery.status = 'dead';
     delivery.error = `Blocked URL: ${reason}`;
     await delivery.save();
-    logger.error({ deliveryId, reason }, 'Delivery blocked: invalid URL');
+    await logBlockedOutboundRequest({
+      url: delivery.url,
+      reason: reason || 'Blocked URL',
+      source: 'webhook-retry',
+      webhookId: String(webhook._id),
+      deliveryId,
+    });
     return false;
   }
 

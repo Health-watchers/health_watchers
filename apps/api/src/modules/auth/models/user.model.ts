@@ -69,6 +69,14 @@ export interface User {
   portalMfaMethod?: 'totp' | 'sms'; // MFA method preference
   portalPhoneNumber?: string; // For SMS OTP
   portalMfaEnabledAt?: Date;
+  // Portal login brute-force protection (Issue #1666)
+  portalFailedLoginAttempts?: number;
+  portalLockedUntil?: Date;
+  portalLastFailedLoginAt?: Date;
+  portalCaptchaRequired?: boolean;
+  portalUnlockTokenHash?: string;
+  portalUnlockTokenExpiresAt?: Date;
+  portalUnlockChannel?: 'email' | 'sms';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -190,6 +198,38 @@ const userSchema = new Schema(
     },
     portalMfaEnabledAt: {
       type: Date,
+      required: false,
+      default: undefined,
+    },
+    // Portal login brute-force protection (Issue #1666)
+    portalFailedLoginAttempts: { type: Number, required: false, default: 0 },
+    portalLockedUntil: {
+      type: Date,
+      required: false,
+      default: undefined,
+      index: true,
+    },
+    portalLastFailedLoginAt: {
+      type: Date,
+      required: false,
+      default: undefined,
+    },
+    portalCaptchaRequired: { type: Boolean, required: false, default: false },
+    portalUnlockTokenHash: {
+      type: String,
+      required: false,
+      select: false,
+      default: undefined,
+    },
+    portalUnlockTokenExpiresAt: {
+      type: Date,
+      required: false,
+      select: false,
+      default: undefined,
+    },
+    portalUnlockChannel: {
+      type: String,
+      enum: ['email', 'sms'],
       required: false,
       default: undefined,
     },

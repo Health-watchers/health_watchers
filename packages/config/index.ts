@@ -12,6 +12,29 @@ const network = process.env.STELLAR_NETWORK || 'testnet';
 const horizonUrl =
   network === 'mainnet' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
 
+const stellarServiceUrl = process.env.STELLAR_SERVICE_URL || 'http://localhost:3002';
+
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+// Issue #1668: allowlist of permitted outbound hostnames for *fixed* outbound
+// targets (Stellar Horizon, exchange-rate APIs, stellar-service). This is NOT
+// applied to user-registered webhooks — those are protected by the SSRF
+// blocklist in apps/api/src/utils/url-validator.ts.
+const configuredAllowedHosts = (process.env.OUTBOUND_ALLOWED_HOSTS || '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+const defaultAllowedHosts = [hostnameOf(horizonUrl), hostnameOf(stellarServiceUrl)].filter(
+  (h): h is string => Boolean(h)
+);
+
 export const config = {
   // Server Configuration
   apiPort: process.env.API_PORT || '3001',
@@ -54,7 +77,17 @@ export const config = {
     .filter(Boolean),
 
   // Stellar Service (microservice for blockchain operations)
-  stellarServiceUrl: process.env.STELLAR_SERVICE_URL || 'http://localhost:3002',
+  stellarServiceUrl,
+
+  // Outbound HTTP SSRF protection (issue #1668)
+  outbound: {
+    // Hostnames permitted for fixed outbound targets. Defaults include the
+    // configured Horizon and stellar-service hosts so Stellar calls work
+    // out of the box.
+    allowedHosts: Array.from(new Set([...defaultAllowedHosts, ...configuredAllowedHosts])),
+    // When true, fixed outbound targets must match the allowlist.
+    enforceAllowlist: process.env.OUTBOUND_ENFORCE_ALLOWLIST === 'true',
+  },
 
   // AI/LLM Configuration
   geminiApiKey: process.env.GEMINI_API_KEY || '',

@@ -23,13 +23,45 @@ import { markJobsActive, clearActiveJobs } from './job-state';
 
 export const SCHEDULED_JOBS_QUEUE = 'scheduled-jobs';
 
+export interface JobContext {
+  /** Scheduler id of the job being executed. */
+  name: string;
+  /** Deterministic id of this schedule tick, shared by every replica. */
+  jobId: string;
+  /**
+   * Idempotency key for this run. Defaults to the deterministic job id, so
+   * handlers can use it to dedupe work across replicas and retries.
+   */
+  idempotencyKey: string;
+}
+
 export interface JobDefinition {
   /** Unique kebab-case name, e.g. `payment-expiration`. Also the scheduler id. */
   name: string;
   /** Default cron pattern (UTC). 6-field patterns include seconds. */
   cron: string;
   description: string;
-  handler: () => Promise<unknown>;
+  handler: (ctx: JobContext) => Promise<unknown>;
+  /**
+   * Optional idempotency key for a given schedule tick. Receives the
+   * deterministic job id (e.g. `payment-retry:1700000000000`) and may return a
+   * business key such as `recurring-payments:2024-06`. When omitted, the job id
+   * itself is used as the idempotency key.
+   */
+  idempotencyKey?: (jobId: string) => string;
+}
+
+/**
+ * Deterministic id for one schedule tick. BullMQ materialises each scheduler
+ * iteration with an id derived from the scheduler id and the tick timestamp;
+ * we mirror that shape so every replica derives the same key.
+ */
+export function deriveJobId(name: string, timestamp: number): string {
+  return `${name}:${timestamp}`;
+}
+
+export function deriveIdempotencyKey(def: JobDefinition, jobId: string): string {
+  return def.idempotencyKey ? def.idempotencyKey(jobId) : jobId;
 }
 
 export interface JobStatus {
@@ -181,7 +213,14 @@ export class JobRegistry {
         {
           name: def.name,
           data: {},
-          opts: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
+          opts: {
+            removeOnComplete: 100,
+            removeOnFail: 500,
+            attempts: 1,
+            // Deterministic per-tick id so replicas upserting the same schedule
+            // never enqueue duplicate jobs for the same tick.
+            jobId: deriveJobId(def.name, Date.now()),
+          },
         }
       );
       logger.info({ job: def.name, pattern }, '[job-registry] job scheduled');
@@ -235,19 +274,26 @@ export class JobRegistry {
   }
 
   /** Worker processor — runs the handler for `job.name` and records the outcome. */
-  async execute(job: Pick<Job, 'name'>): Promise<void> {
+  async execute(job: Pick<Job, 'name' | 'id'>): Promise<void> {
     const def = this.definitions.get(job.name);
     if (!def) {
       logger.warn({ job: job.name }, '[job-registry] no handler registered — skipping');
       return;
     }
 
+    const jobId = job.id ?? deriveJobId(def.name, Date.now());
+    const ctx: JobContext = {
+      name: def.name,
+      jobId,
+      idempotencyKey: deriveIdempotencyKey(def, jobId),
+    };
+
     const startedAt = new Date();
     const endTimer = scheduledJobDurationSeconds.startTimer({ job: def.name });
     await this.writeStats(def.name, { lastRunAt: startedAt.toISOString() });
 
     try {
-      await def.handler();
+      await def.handler(ctx);
       const durationMs = Date.now() - startedAt.getTime();
       endTimer({ status: 'success' });
       scheduledJobRunsTotal.inc({ job: def.name, status: 'success' });
@@ -279,6 +325,29 @@ export class JobRegistry {
         'failureCount'
       );
       logger.error({ err, job: def.name }, '[job-registry] job run failed');
+      throw err;
+    }
+  }
+
+  /**
+   * Run a job handler at most once for `idempotencyKey` across the fleet.
+   * Returns true when this call performed the work, false when another replica
+   * (or an earlier run) already claimed the key.
+   */
+  async runOnce(idempotencyKey: string, fn: () => Promise<unknown>, ttlSeconds = 7 * 24 * 3600): Promise<boolean> {
+    const { connection } = this.handles();
+    const key = `hw:jobs:idempotency:${idempotencyKey}`;
+    const claimed = await connection.set(key, '1', 'EX', ttlSeconds, 'NX');
+    if (claimed !== 'OK') {
+      logger.info({ idempotencyKey }, '[job-registry] idempotency key already claimed — skipping');
+      return false;
+    }
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      // Release the claim so a later tick can retry the work.
+      await connection.del(key).catch(() => undefined);
       throw err;
     }
   }

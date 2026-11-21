@@ -1,7 +1,7 @@
 {
   "name": "health-watchers-mobile",
   "version": "1.0.0",
-  "description": "Health Watchers patient portal mobile app built with React Native and Expo",
+  "description": "Health Watchers patient portal mobile app built with React Native and Expo. Installed as a root npm workspace (see root package.json workspaces); run scripts from the repo root with --workspace=health-watchers-mobile.",
   "private": true,
   "main": "index.js",
   "scripts": {

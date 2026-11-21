@@ -3,8 +3,9 @@
   "info": {
     "title": "Health Watchers API",
     "version": "1.0.0",
-    "description": "HIPAA-compliant healthcare management platform API with Stellar blockchain payment integration."
+    "description": "HIPAA-compliant healthcare management platform API with Stellar blockchain payment integration.\n\n## Versioning\n\nThe API is versioned by URL prefix (`/api/v1`, `/api/v2`). The current version is advertised on every response via the `API-Version` header. Deprecated endpoints additionally return `Deprecation` (RFC 8594 date), `Sunset` (RFC 8594 date) and `Link: <successor>; rel=\"successor-version\"` headers. See `docs/API_VERSIONING_GUIDE.md` for the full policy."
   },
+=======
   "servers": [
     {
       "url": "/api/v1",
@@ -585,8 +586,57 @@
         }
       }
     },
+    "headers": {
+      "APIVersion": {
+        "description": "The API version that served the request, e.g. `2.0`.",
+        "schema": {
+          "type": "string",
+          "example": "2.0"
+        }
+      },
+      "Deprecation": {
+        "description": "RFC 8594 timestamp at which the endpoint was marked deprecated.",
+        "schema": {
+          "type": "string",
+          "example": "Sat, 01 Jun 2024 00:00:00 GMT"
+        }
+      },
+      "Sunset": {
+        "description": "RFC 8594 timestamp after which the endpoint may be removed.",
+        "schema": {
+          "type": "string",
+          "example": "Sun, 01 Dec 2024 00:00:00 GMT"
+        }
+      },
+      "SuccessorVersionLink": {
+        "description": "Link header pointing at the successor endpoint: `</api/v2/patients>; rel=\"successor-version\"`.",
+        "schema": {
+          "type": "string",
+          "example": "</api/v2/patients>; rel=\"successor-version\""
+        }
+      }
+    },
     "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Client-generated key (UUID recommended). Retries with the same key return the original response for 24 hours.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "WebhookSignature": {
+        "name": "X-Webhook-Signature",
+        "in": "header",
+        "required": true,
+        "description": "HMAC-SHA256 signature of the raw request body, e.g. `t=<timestamp>,v1=<hex>`.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "PageParam": {
+=======
         "name": "page",
         "in": "query",
         "description": "Page number (1-based).",
@@ -626,6 +676,606 @@
       }
     }
   },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate and obtain access/refresh tokens",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access and refresh tokens",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/APIVersion"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    },
+                    "refreshToken": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user account",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "firstName", "lastName"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "firstName": {
+                    "type": "string"
+                  },
+                  "lastName": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Exchange a refresh token for a new access token",
+        "tags": ["Auth"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "New access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Revoke the current session",
+        "tags": ["Auth"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "summary": "List users (paginated)",
+        "tags": ["Users"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Get a user by id",
+        "tags": ["Users"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clinics": {
+      "get": {
+        "summary": "List clinics (paginated)",
+        "tags": ["Clinics"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/LimitParam"
+          },
+          {
+            "$ref": "#/components/parameters/SortParam"
+          },
+          {
+            "$ref": "#/components/parameters/CursorParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of clinics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clinics/{id}": {
+      "get": {
+        "summary": "Get a clinic by id",
+        "tags": ["Clinics"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clinic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Clinic not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments/{id}": {
+      "get": {
+        "summary": "Get an appointment by id",
+        "tags": ["Appointments"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Appointment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "summary": "Get the clinic dashboard summary",
+        "tags": ["Dashboard"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/risk-stratification": {
+      "post": {
+        "summary": "Run AI risk stratification for a patient",
+        "tags": ["AI"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["patientId"],
+                "properties": {
+                  "patientId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Risk stratification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/icd10/search": {
+      "get": {
+        "summary": "Search ICD-10 codes",
+        "tags": ["ICD-10"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching ICD-10 codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "summary": "Get clinic settings",
+        "tags": ["Settings"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clinic settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update clinic settings",
+        "tags": ["Settings"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/versions": {
+      "get": {
+        "summary": "List supported API versions and their lifecycle status",
+        "tags": ["Meta"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Supported versions",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/APIVersion"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["current", "deprecated", "sunset"]
+                          },
+                          "deprecation": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sunset": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+=======
 =======
   "security": [
     {
@@ -2733,6 +3383,8 @@
     "/patients": {
       "get": {
         "summary": "List patients (paginated)",
+        "description": "Deprecated in favour of `GET /api/v2/patients`. Responses carry `Deprecation`, `Sunset` and `Link: </api/v2/patients>; rel=\"successor-version\"` headers.",
+        "deprecated": true,
         "tags": ["Patients"],
         "security": [
           {
@@ -2756,6 +3408,20 @@
         "responses": {
           "200": {
             "description": "A page of patients",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/APIVersion"
+              },
+              "Deprecation": {
+                "$ref": "#/components/headers/Deprecation"
+              },
+              "Sunset": {
+                "$ref": "#/components/headers/Sunset"
+              },
+              "Link": {
+                "$ref": "#/components/headers/SuccessorVersionLink"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2764,6 +3430,7 @@
               }
             }
           },
+=======
           "400": {
             "description": "Invalid query or malformed cursor",
             "content": {
@@ -3214,6 +3881,50 @@
         }
       }
     },
+    "/lab-results/{id}": {
+      "get": {
+        "summary": "Get a lab result by id",
+        "tags": ["Lab Results"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lab result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lab result not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+=======
     "/medications": {
       "get": {
         "summary": "List medications (paginated)",
@@ -3557,7 +4268,76 @@
   },
   "tags": [
     {
+      "name": "Auth",
+      "description": "Authentication and session management."
+    },
+    {
+      "name": "Users",
+      "description": "User account management."
+    },
+    {
+      "name": "Clinics",
+      "description": "Clinic management."
+    },
+    {
+      "name": "Patients",
+      "description": "Patient records. `GET /api/v1/patients` is deprecated in favour of `GET /api/v2/patients`."
+    },
+    {
+      "name": "Encounters",
+      "description": "Clinical encounters and their attachments."
+    },
+    {
+      "name": "Appointments",
+      "description": "Appointment scheduling."
+    },
+    {
+      "name": "Lab Results",
+      "description": "Laboratory results."
+    },
+    {
+      "name": "Medications",
+      "description": "Medication records."
+    },
+    {
+      "name": "Referrals",
+      "description": "Patient referrals."
+    },
+    {
+      "name": "Invoices",
+      "description": "Billing invoices."
+    },
+    {
+      "name": "Notifications",
+      "description": "User notifications."
+    },
+    {
+      "name": "Dashboard",
+      "description": "Aggregated clinic metrics."
+    },
+    {
+      "name": "AI",
+      "description": "AI-assisted clinical features."
+    },
+    {
+      "name": "ICD-10",
+      "description": "ICD-10 code lookup."
+    },
+    {
+      "name": "Settings",
+      "description": "Clinic configuration."
+    },
+    {
+      "name": "Export",
+      "description": "HIPAA Right of Access data exports."
+    },
+    {
+      "name": "Meta",
+      "description": "API metadata such as supported versions."
+    },
+    {
       "name": "Payments",
+=======
       "description": "Stellar payment intents. Creation endpoints accept an `Idempotency-Key` header; retries with the same key return the cached response for 24 hours."
     },
     {

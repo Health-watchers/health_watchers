@@ -10,10 +10,17 @@ on:
 env:
   NODE_VERSION: 20
 
+permissions:
+  contents: read
+
 jobs:
   detect-breaking-changes:
     name: Detect API Breaking Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
 
     steps:
       - uses: actions/checkout@v4
@@ -49,9 +56,11 @@ jobs:
           fi
       
       - name: Checkout base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin ${{ github.base_ref }}
-          git checkout origin/${{ github.base_ref }}
+          git fetch origin "$BASE_REF"
+          git checkout "origin/$BASE_REF"
       
       - name: Install dependencies for base branch
         run: npm ci
@@ -98,17 +107,23 @@ jobs:
         id: check
         run: |
           if [ -f /tmp/breaking-changes.json ] && [ -s /tmp/breaking-changes.json ]; then
-            BREAKING_COUNT=$(cat /tmp/breaking-changes.json | jq 'length' || echo "0")
+            BREAKING_COUNT=$(jq 'length' /tmp/breaking-changes.json || echo "0")
             if [ "$BREAKING_COUNT" -gt 0 ]; then
-              echo "has_breaking=true" >> $GITHUB_OUTPUT
-              echo "breaking_count=$BREAKING_COUNT" >> $GITHUB_OUTPUT
+              {
+                echo "has_breaking=true"
+                echo "breaking_count=$BREAKING_COUNT"
+              } >> "$GITHUB_OUTPUT"
             else
-              echo "has_breaking=false" >> $GITHUB_OUTPUT
-              echo "breaking_count=0" >> $GITHUB_OUTPUT
+              {
+                echo "has_breaking=false"
+                echo "breaking_count=0"
+              } >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
-            echo "breaking_count=0" >> $GITHUB_OUTPUT
+            {
+              echo "has_breaking=false"
+              echo "breaking_count=0"
+            } >> "$GITHUB_OUTPUT"
           fi
       
       - name: Upload diff reports
@@ -123,6 +138,9 @@ jobs:
       - name: Comment PR with API changes
         if: always()
         uses: actions/github-script@v7
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
         with:
           script: |
             const fs = require('fs');
@@ -154,8 +172,8 @@ jobs:
             
             let body = `## ${emoji} API Change Report\n\n`;
             body += `**Status:** ${status}\n`;
-            body += `**Base Branch:** \`${{ github.base_ref }}\`\n`;
-            body += `**PR Branch:** \`${{ github.head_ref }}\`\n\n`;
+            body += `**Base Branch:** \`${process.env.BASE_REF}\`\n`;
+            body += `**PR Branch:** \`${process.env.HEAD_REF}\`\n\n`;
             
             if (hasBreaking) {
               body += `### ⚠️ Breaking Changes Found (${breakingChanges.length})\n\n`;
@@ -203,11 +221,11 @@ jobs:
         if: steps.check.outputs.has_breaking == 'true'
         id: changeset
         run: |
-          if [ -n "$(ls -A .changeset/*.md 2>/dev/null | grep -v README)" ]; then
-            echo "has_changeset=true" >> $GITHUB_OUTPUT
+          if [ -n "$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit 2>/dev/null)" ]; then
+            echo "has_changeset=true" >> "$GITHUB_OUTPUT"
             echo "✅ Changeset found"
           else
-            echo "has_changeset=false" >> $GITHUB_OUTPUT
+            echo "has_changeset=false" >> "$GITHUB_OUTPUT"
             echo "❌ No changeset found"
           fi
       
@@ -221,22 +239,30 @@ jobs:
       
       - name: Generate summary
         if: always()
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HAS_BREAKING: ${{ steps.check.outputs.has_breaking }}
+          BREAKING_COUNT: ${{ steps.check.outputs.breaking_count }}
+          HAS_CHANGESET: ${{ steps.changeset.outputs.has_changeset }}
         run: |
-          echo "## 🔄 API Breaking Change Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Base:** ${{ github.base_ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Head:** ${{ github.head_ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.check.outputs.has_breaking }}" == "true" ]; then
-            echo "🔴 **Breaking Changes:** ${{ steps.check.outputs.breaking_count }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            if [ "${{ steps.changeset.outputs.has_changeset }}" == "true" ]; then
-              echo "✅ Changeset present" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🔄 API Breaking Change Analysis"
+            echo ""
+            echo "**Base:** $BASE_REF"
+            echo "**Head:** $HEAD_REF"
+            echo ""
+
+            if [ "$HAS_BREAKING" == "true" ]; then
+              echo "🔴 **Breaking Changes:** $BREAKING_COUNT"
+              echo ""
+
+              if [ "$HAS_CHANGESET" == "true" ]; then
+                echo "✅ Changeset present"
+              else
+                echo "❌ Changeset missing"
+              fi
             else
-              echo "❌ Changeset missing" >> $GITHUB_STEP_SUMMARY
+              echo "✅ **No breaking changes detected**"
             fi
-          else
-            echo "✅ **No breaking changes detected**" >> $GITHUB_STEP_SUMMARY
-          fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { createClient, type RedisClientType } from 'redis';
+import { Gauge } from 'prom-client';
 import logger from '../utils/logger';
 import { rateLimitHitsTotal } from '../services/metrics.service';
 
@@ -26,13 +27,57 @@ interface RateLimitResult {
   oldest: number;
 }
 
+// ── Store backend gauge ───────────────────────────────────────────────────────
+// rate_limit_store_backend{type="memory|redis"} — 1 for the active backend.
+// Alertmanager fires when type="memory" is observed in production.
+export const rateLimitStoreBackendGauge = new Gauge({
+  name: 'rate_limit_store_backend',
+  help: 'Active rate-limit store backend (1 = active)',
+  labelNames: ['type'] as const,
+});
+
+function setStoreBackend(backend: 'memory' | 'redis'): void {
+  rateLimitStoreBackendGauge.set({ type: 'memory' }, backend === 'memory' ? 1 : 0);
+  rateLimitStoreBackendGauge.set({ type: 'redis' }, backend === 'redis' ? 1 : 0);
+}
+
+// ── Production fail-closed state ─────────────────────────────────────────────
+const isProduction = (): boolean => process.env.NODE_ENV === 'production';
+
+// When true, the instance must be considered unready (Redis store unavailable
+// in production). Readiness probes should consult isRateLimitStoreReady().
+let storeUnavailable = false;
+
+/** Returns false when the rate-limit store is unusable in production. */
+export function isRateLimitStoreReady(): boolean {
+  return !storeUnavailable;
+}
+
+function markStoreUnavailable(reason: string): void {
+  storeUnavailable = true;
+  setStoreBackend('memory');
+  logger.error(`[rate-limit] Rate-limit store unavailable: ${reason}`);
+  if (isProduction()) {
+    logger.error(
+      '[rate-limit] FAIL CLOSED: Redis store is required in production. Instance will be marked unready.'
+    );
+  }
+}
+
 // ── Redis client (lazy, shared) ───────────────────────────────────────────────
 let redisClient: RedisClientType | null = null;
 let redisReady = false;
 
 function getRedisClient(): RedisClientType | null {
   const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return null;
+  if (!redisUrl) {
+    if (isProduction()) {
+      markStoreUnavailable('REDIS_URL is not configured');
+    } else {
+      setStoreBackend('memory');
+    }
+    return null;
+  }
 
   if (!redisClient) {
     try {
@@ -40,27 +85,46 @@ function getRedisClient(): RedisClientType | null {
       client.on('error', (err: Error) => {
         redisReady = false;
         logger.error(`[rate-limit] Redis connection error: ${err.message}`);
-        logger.warn('[rate-limit] Falling back to in-memory store for rate limiting');
+        if (isProduction()) {
+          markStoreUnavailable(`Redis connection error: ${err.message}`);
+        } else {
+          logger.warn('[rate-limit] Falling back to in-memory store for rate limiting');
+          setStoreBackend('memory');
+        }
       });
       client.on('ready', () => {
         redisReady = true;
+        storeUnavailable = false;
+        setStoreBackend('redis');
         logger.info('[rate-limit] Redis sliding-window store ready');
       });
       client.on('end', () => {
         redisReady = false;
+        if (isProduction()) {
+          markStoreUnavailable('Redis connection ended');
+        }
       });
       client.connect().catch((err: Error) => {
         redisReady = false;
         logger.error(`[rate-limit] Failed to connect Redis store: ${err.message}`);
+        if (isProduction()) {
+          markStoreUnavailable(`Failed to connect Redis store: ${err.message}`);
+        } else {
+          setStoreBackend('memory');
+        }
       });
       redisClient = client as RedisClientType;
     } catch (err) {
-      logger.error(
-        `[rate-limit] Failed to configure Redis store: ${err instanceof Error ? err.message : String(err)}`
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[rate-limit] Failed to configure Redis store: ${message}`);
+      if (isProduction()) {
+        markStoreUnavailable(`Failed to configure Redis store: ${message}`);
+        throw new Error(`[rate-limit] Fatal: Redis store required in production: ${message}`);
+      }
       logger.warn(
         '[rate-limit] Falling back to in-memory store. Multi-instance deployments are NOT protected.'
       );
+      setStoreBackend('memory');
       return null;
     }
   }
@@ -118,7 +182,15 @@ async function checkRedis(
 }
 
 // ── In-memory fallback (sliding window via sorted array of timestamps) ────────
+// Bounded: capped key count with LRU eviction + per-key TTL pruning. Intended
+// for development/test only; production fails closed instead of using this.
+const MEMORY_MAX_KEYS = 10_000;
+const MEMORY_KEY_TTL_MS = 60 * 60 * 1000;
 const memoryStore = new Map<string, number[]>();
+
+function evictMemoryKey(key: string): void {
+  memoryStore.delete(key);
+}
 
 function checkMemory(key: string, windowMs: number, max: number): RateLimitResult {
   const now = Date.now();
@@ -127,7 +199,15 @@ function checkMemory(key: string, windowMs: number, max: number): RateLimitResul
 
   if (hits.length < max) {
     hits.push(now);
+    // Refresh LRU ordering: delete then re-insert moves key to the end.
+    memoryStore.delete(key);
     memoryStore.set(key, hits);
+    // Enforce max key count by evicting the least-recently-used keys.
+    while (memoryStore.size > MEMORY_MAX_KEYS) {
+      const oldestKey = memoryStore.keys().next().value;
+      if (oldestKey === undefined) break;
+      evictMemoryKey(oldestKey);
+    }
     const oldest = hits[0];
     return {
       allowed: true,
@@ -152,7 +232,7 @@ const MEMORY_SWEEP_MS = 60 * 1000;
 const memorySweeper = setInterval(() => {
   const now = Date.now();
   for (const [key, hits] of memoryStore.entries()) {
-    const fresh = hits.filter((t) => t > now - 60 * 60 * 1000);
+    const fresh = hits.filter((t) => t > now - MEMORY_KEY_TTL_MS);
     if (fresh.length === 0) memoryStore.delete(key);
     else memoryStore.set(key, fresh);
   }
@@ -170,11 +250,20 @@ async function checkLimit(
     try {
       return await checkRedis(client, key, config.windowMs, config.max);
     } catch (err) {
-      logger.error(
-        `[rate-limit] Redis check failed for ${config.name}: ${err instanceof Error ? err.message : String(err)}`
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`[rate-limit] Redis check failed for ${config.name}: ${message}`);
+      if (isProduction()) {
+        // Fail closed: do not silently fall back to per-process memory.
+        markStoreUnavailable(`Redis check failed for ${config.name}: ${message}`);
+        throw new Error(`[rate-limit] Redis check failed for ${config.name}: ${message}`);
+      }
       logger.warn('[rate-limit] Falling back to in-memory store for this request');
+      setStoreBackend('memory');
     }
+  } else if (isProduction()) {
+    // No usable Redis client in production: fail closed.
+    markStoreUnavailable('No Redis client available');
+    throw new Error('[rate-limit] Redis store unavailable in production');
   }
   return checkMemory(key, config.windowMs, config.max);
 }
@@ -193,10 +282,20 @@ export function createRateLimiter(config: RateLimitConfig) {
     try {
       result = await checkLimit(config, bucketKey);
     } catch (err) {
-      // Fail open: never block traffic because the limiter itself errored.
       logger.error(
         `[rate-limit] Unexpected error in ${config.name}: ${err instanceof Error ? err.message : String(err)}`
       );
+      if (isProduction()) {
+        // Fail closed in production: refuse the request rather than bypassing
+        // the security control when the shared store is unavailable.
+        res.set('Retry-After', '30');
+        res.status(503).json({
+          error: 'ServiceUnavailable',
+          message: 'Rate limiting temporarily unavailable. Try again shortly.',
+        });
+        return;
+      }
+      // Fail open in non-production: never block local traffic on limiter errors.
       next();
       return;
     }
@@ -261,6 +360,31 @@ export const mfaLimiter = createRateLimiter({
   keyGenerator: ipKey,
 });
 
+// Portal login: 20 req / 15 min per IP+email (coarse guard, complements account lockout)
+export const portalLoginLimiter = createRateLimiter({
+  name: 'portal-login',
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: {
+    error: 'TooManyRequests',
+    message: 'Too many portal login attempts. Try again later.',
+  },
+  keyGenerator: (req: Request) =>
+    `${req.ip ?? 'unknown'}:${String((req.body as any)?.email ?? '').toLowerCase()}`,
+});
+
+// Portal unlock: 5 req / 15 min per IP
+export const portalUnlockLimiter = createRateLimiter({
+  name: 'portal-unlock',
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    error: 'TooManyRequests',
+    message: 'Too many unlock attempts. Try again in 15 minutes.',
+  },
+  keyGenerator: ipKey,
+});
+
 // AI endpoints: 20 req / 1 min per clinic
 export const aiLimiter = createRateLimiter({
   name: 'ai',
@@ -319,4 +443,9 @@ export const reportGenerationLimiter = createRateLimiter({
 /** Clears the in-memory fallback store. Intended for tests only. */
 export function __resetMemoryStore(): void {
   memoryStore.clear();
+}
+
+/** Resets the production fail-closed flag. Intended for tests only. */
+export function __resetStoreState(): void {
+  storeUnavailable = false;
 }
