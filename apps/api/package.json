@@ -38,7 +38,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
     "@opentelemetry/sdk-node": "^0.215.0",
     "@sentry/node": "^11.8.0",
-    "@sentry/profiling-node": "^11.8.0",
+    "@sentry/profiling-node": "^11.14.0",
     "@simplewebauthn/server": "^13.3.3",
     "@stellar/stellar-sdk": "^15.1.0",
     "@types/multer": "^2.3.0",
