@@ -23,7 +23,7 @@
     "@react-navigation/native": "^6.1.0",
     "@react-navigation/native-stack": "^6.9.0",
     "expo": "^50.0.0",
-    "expo-local-authentication": "^14.0.0",
+    "expo-local-authentication": "^14.0.1",
     "expo-notifications": "^0.27.0",
     "expo-secure-store": "^13.0.0",
     "jail-monkey": "^2.8.5",
