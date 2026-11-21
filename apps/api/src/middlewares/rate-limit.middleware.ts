@@ -360,6 +360,31 @@ export const mfaLimiter = createRateLimiter({
   keyGenerator: ipKey,
 });
 
+// Portal login: 20 req / 15 min per IP+email (coarse guard, complements account lockout)
+export const portalLoginLimiter = createRateLimiter({
+  name: 'portal-login',
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: {
+    error: 'TooManyRequests',
+    message: 'Too many portal login attempts. Try again later.',
+  },
+  keyGenerator: (req: Request) =>
+    `${req.ip ?? 'unknown'}:${String((req.body as any)?.email ?? '').toLowerCase()}`,
+});
+
+// Portal unlock: 5 req / 15 min per IP
+export const portalUnlockLimiter = createRateLimiter({
+  name: 'portal-unlock',
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    error: 'TooManyRequests',
+    message: 'Too many unlock attempts. Try again in 15 minutes.',
+  },
+  keyGenerator: ipKey,
+});
+
 // AI endpoints: 20 req / 1 min per clinic
 export const aiLimiter = createRateLimiter({
   name: 'ai',
