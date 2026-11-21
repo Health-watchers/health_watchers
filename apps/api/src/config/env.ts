@@ -65,6 +65,23 @@ const envSchema = z.object({
 
   FIELD_ENCRYPTION_KEY_VERSION: z.string().optional(),
 
+  // Deterministic HMAC-SHA256 pepper for searchable blind indexes over
+  // encrypted PHI (nationalId, contactNumber, insuranceNumber).
+  FIELD_ENCRYPTION_BLIND_INDEX_KEY: z
+    .string()
+    .length(
+      64,
+      'FIELD_ENCRYPTION_BLIND_INDEX_KEY must be a 64-char hex string (32 bytes)'
+    )
+    .optional(),
+
+  // ── AWS Secrets Manager (key hydration at bootstrap) ──────────────────────
+  // When FIELD_ENCRYPTION_KEY is not injected by the environment (k8s
+  // ExternalSecrets / Helm / Terraform), the API fetches it from Secrets
+  // Manager at startup. See `lib/secrets-manager.ts`.
+  AWS_SECRETS_MANAGER_SECRET_ID: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+
   // ── HIPAA — Audit log encryption at rest (§ 164.312(b)) ───────────────────
   // 64-char hex = 32-byte AES-256 key.
   AUDIT_ENCRYPTION_KEY: z
@@ -164,14 +181,30 @@ if (isProd && !env.REDIS_URL) {
   );
 }
 
-// HIPAA § 164.312(a)(2)(iv) — PHI encryption key required in production
-if (isProd && !env.FIELD_ENCRYPTION_KEY) {
-  console.error(
-    '🚨 HIPAA VIOLATION: FIELD_ENCRYPTION_KEY is not set in production. ' +
-      'PHI will be stored in plaintext. Set a 64-char hex AES-256 key immediately.'
-  );
-  process.exit(1);
+/**
+ * HIPAA § 164.312(a)(2)(iv) — PHI encryption key required in production.
+ *
+ * Exported so the entrypoint can run it *after* `loadFieldEncryptionSecrets()`
+ * has had a chance to hydrate the key from AWS Secrets Manager. It is also
+ * invoked at import time to preserve the original fail-fast behaviour.
+ */
+export function assertHipaaSecrets(): void {
+  if (isProd && !process.env.FIELD_ENCRYPTION_KEY) {
+    console.error(
+      '🚨 HIPAA VIOLATION: FIELD_ENCRYPTION_KEY is not set in production. ' +
+        'PHI will be stored in plaintext. Set a 64-char hex AES-256 key immediately.'
+    );
+    process.exit(1);
+  }
+  if (isProd && !process.env.FIELD_ENCRYPTION_BLIND_INDEX_KEY) {
+    console.warn(
+      '⚠️  HIPAA WARNING: FIELD_ENCRYPTION_BLIND_INDEX_KEY is not set in production. ' +
+        'Searchable blind indexes over encrypted PHI will fail.'
+    );
+  }
 }
+
+assertHipaaSecrets();
 
 // HIPAA § 164.312(b) — Audit log encryption required in production
 if (isProd && !env.AUDIT_ENCRYPTION_KEY) {
