@@ -113,6 +113,6 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "@typescript-eslint/eslint-plugin": "^8.71.2",
-    "@typescript-eslint/parser": "^8.71.2"
+    "@typescript-eslint/parser": "^8.73.0"
   }
 }
