@@ -67,7 +67,8 @@ export type AuditAction =
   | 'EMERGENCY_ACCESS_REVIEWED'
   | 'NEW_DEVICE_LOGIN'
   | 'UNRECOGNIZED_LOGIN_REPORTED'
-  | 'CLAIM_FORM_EXPORT';
+  | 'CLAIM_FORM_EXPORT'
+  | 'SECURITY_SSRF_BLOCKED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
