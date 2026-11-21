@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",
-    "@aws-sdk/s3-request-presigner": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1171.0",
     "@google/generative-ai": "^0.24.1",
     "@health-watchers/anonymize": "*",
     "@health-watchers/config": "*",
