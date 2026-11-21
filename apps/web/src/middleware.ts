@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// NOTE: Content Security Policy (including the per-request nonce) is handled
+// exclusively by the root middleware (apps/web/middleware.ts). This secondary
+// middleware only performs auth/role routing and intentionally does NOT set
+// CSP headers, to avoid emitting conflicting policies. Keep CSP logic in the
+// root middleware so the nonce stays consistent across all rendered pages.
+
 const STAFF_LOGIN = '/login';
 const PORTAL_LOGIN = '/portal/login';
 const ONBOARDING_PATH = '/onboarding';

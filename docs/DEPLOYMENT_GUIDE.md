@@ -8,6 +8,7 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Deployment](#docker-deployment)
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
+- [Container Image Signing](#container-image-signing)
 - [Terraform Infrastructure Bootstrap](#terraform-infrastructure-bootstrap)
 - [Cost Management](#cost-management)
 - [Multi-Region Deployment](#multi-region-deployment)
@@ -373,6 +374,120 @@ kubectl scale deployment api -n production --replicas=3
 # Autoscaling
 kubectl apply -f k8s/api/hpa.yaml -n production
 ```
+
+## Container Image Signing
+
+All container images published by CI are signed with [Sigstore cosign](https://docs.sigstore.dev/cosign/overview/)
+using **keyless** signing backed by GitHub Actions OIDC. In a HIPAA environment this
+provides verifiable image provenance: the Kyverno admission controller rejects any
+image that does not carry a valid signature from our build workflow.
+
+### How Images Are Signed in CI
+
+The Docker build workflow (`.github/workflows/docker-build.yml`) signs every image
+it pushes to the registry:
+
+1. The workflow authenticates to the registry and builds/pushes the image.
+2. It installs `sigstore/cosign` via `sigstore/cosign-installer`.
+3. It signs the immutable image digest (not the mutable tag) with:
+
+   ```bash
+   cosign sign --yes \
+     ghcr.io/health-watchers/api@sha256:<digest>
+   ```
+
+4. The signature, certificate, and transparency-log entry are stored in the
+   registry alongside the image (as an OCI artifact). No long-lived private key
+   exists — the ephemeral key is bound to the GitHub OIDC identity of the workflow
+   run (`https://token.actions.githubusercontent.com`).
+
+Because signing is keyless, the identity that matters during verification is the
+**workflow identity** (repository + workflow path + ref), not a static key.
+
+### Verifying Signatures Manually
+
+Install cosign locally ([releases](https://github.com/sigstore/cosign/releases)),
+then verify an image against the expected workflow identity:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/health-watchers/health-watchers/.github/workflows/docker-build.yml@refs/heads/main$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/health-watchers/api@sha256:<digest>
+```
+
+A successful verification prints the signature payload and exits `0`. Any other
+result (missing signature, wrong identity, wrong issuer) exits non-zero.
+
+You can also verify with the committed public key in `k8s/cosign.pub`:
+
+```bash
+cosign verify --key k8s/cosign.pub ghcr.io/health-watchers/api@sha256:<digest>
+```
+
+> `k8s/cosign.pub` holds the public key used for verification. Treat it as
+> read-only configuration; rotate it only through a reviewed PR and update the
+> Kyverno policy in the same change.
+
+### Admission Control (Kyverno)
+
+The cluster enforces signatures with a Kyverno `ClusterPolicy`
+(`k8s/kyverno-verify-image-signature.yaml`). It matches all pods in the
+`production` and `staging` namespaces and verifies each image against the
+attestors configured in the policy (keyless identity **and** `k8s/cosign.pub`).
+Unsigned or unverifiable images are rejected at admission time with an error such
+as:
+
+```
+failed to verify image ghcr.io/health-watchers/api:latest:
+  .attestors[0].entries[0].keys: no matching signatures
+```
+
+Apply the policy after installing Kyverno:
+
+```bash
+# Install Kyverno (if not already present)
+helm repo add kyverno https://kyverno.github.io/kyverno
+helm repo update
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace
+
+# Apply the image verification policy
+kubectl apply -f k8s/kyverno-verify-image-signature.yaml
+
+# Confirm the policy is ready
+kubectl get clusterpolicy verify-image-signatures
+```
+
+The policy runs in `Enforce` mode in production. In staging it may run in `Audit`
+mode first so violations are reported (via `kubectl get policyreport -A`) without
+blocking deploys.
+
+### Troubleshooting Image Signing
+
+**`cosign verify` fails with `no matching signatures`:**
+- Confirm you are verifying the **digest**, not a tag that was re-pushed.
+- Confirm the image was built by the CI workflow (locally built images are unsigned).
+- Check the identity/issuer flags match the workflow path and branch exactly.
+
+**`cosign verify` fails with `certificate identity mismatch`:**
+- The image was signed from a different branch or fork. Re-run the workflow on
+  `main` and redeploy the resulting digest.
+
+**Pod rejected with `failed to verify image ... no matching signatures`:**
+- The image is unsigned or was pushed outside CI. Rebuild via the workflow.
+- If the policy itself is misconfigured, inspect it with
+  `kubectl get clusterpolicy verify-image-signatures -o yaml` and check the
+  Kyverno logs: `kubectl logs -n kyverno -l app.kubernetes.io/name=kyverno`.
+
+**Kyverno cannot reach the registry / transparency log:**
+- Ensure cluster egress allows the registry and `*.sigstore.dev` /
+  `rekor.sigstore.dev`. Air-gapped clusters must mirror the signature artifacts
+  and use a local Rekor instance.
+
+**Signature verification passes locally but fails in-cluster:**
+- Verify the policy references the same `k8s/cosign.pub` content that is deployed
+  (`kubectl get configmap -n kyverno` / the policy's inline key). A stale key after
+  rotation is the most common cause.
 
 ## Terraform Infrastructure Bootstrap
 

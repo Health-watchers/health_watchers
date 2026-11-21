@@ -32,7 +32,52 @@ test.describe('Comprehensive Security Headers', () => {
     expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
   });
 
-  test('CSP blocks inline scripts in production builds', async ({ page, context }) => {
+  test('CSP is strict: no unsafe-inline/unsafe-eval, nonce + strict-dynamic + report-uri', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response).not.toBeNull();
+
+    const csp = response!.headers()['content-security-policy'];
+    expect(csp).toBeDefined();
+
+    // Strict policy must not weaken script execution
+    expect(csp).not.toContain("'unsafe-inline'");
+    expect(csp).not.toContain("'unsafe-eval'");
+
+    // script-src must use a nonce and strict-dynamic
+    const scriptSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('script-src'));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toMatch(/'nonce-[A-Za-z0-9+/=_-]+'/);
+    expect(scriptSrc).toContain("'strict-dynamic'");
+
+    // Violations must be reported
+    expect(csp).toContain('report-uri');
+  });
+
+  test('CSP nonce is present and changes per request', async ({ page }) => {
+    const extractNonce = (csp: string | undefined): string | undefined => {
+      if (!csp) return undefined;
+      const match = csp.match(/'nonce-([A-Za-z0-9+/=_-]+)'/);
+      return match ? match[1] : undefined;
+    };
+
+    const firstResponse = await page.goto('/');
+    expect(firstResponse).not.toBeNull();
+    const firstNonce = extractNonce(firstResponse!.headers()['content-security-policy']);
+    expect(firstNonce).toBeDefined();
+
+    const secondResponse = await page.goto('/');
+    expect(secondResponse).not.toBeNull();
+    const secondNonce = extractNonce(secondResponse!.headers()['content-security-policy']);
+    expect(secondNonce).toBeDefined();
+
+    // Nonce must be unique per request to prevent reuse
+    expect(secondNonce).not.toBe(firstNonce);
+  });
+
+  test('CSP blocks inline scripts without the nonce', async ({ page }) => {
     // Track CSP violations
     const cspViolations: string[] = [];
 
@@ -46,27 +91,29 @@ test.describe('Comprehensive Security Headers', () => {
     // Navigate to app
     await page.goto('/');
 
-    // Attempt to inject inline script (should be blocked by CSP)
+    // Attempt to inject inline script without a nonce (should be blocked by CSP)
     await page.evaluate(() => {
       try {
         const script = document.createElement('script');
-        script.textContent = 'console.log("XSS Attack")';
+        script.textContent = 'window.__dangerousScriptExecuted = true;';
         document.body.appendChild(script);
       } catch (e) {
         console.error('CSP blocked inline script:', e);
       }
     });
 
-    // In production, CSP should have blocked inline scripts
-    // Check for CSP report or violation log
+    // Give the browser time to process the (blocked) script and emit a report
     await page.waitForTimeout(1000);
 
-    // Verify no inline scripts executed successfully
+    // Verify the inline script did not execute
     const dangerousScriptRan = await page.evaluate(() => {
       return (window as any).__dangerousScriptExecuted === true;
     });
 
     expect(dangerousScriptRan).toBeFalsy();
+
+    // A CSP violation should have been reported for the blocked inline script
+    expect(cspViolations.length).toBeGreaterThan(0);
   });
 
   test('security headers are present on error pages', async ({ page }) => {
