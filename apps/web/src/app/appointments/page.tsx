@@ -18,6 +18,9 @@ export default function AppointmentsPage() {
         prevWeek: t('prevWeek'),
         nextWeek: t('nextWeek'),
         today: t('today'),
+        startVideoCall: t('startVideoCall'),
+        startingVideoCall: t('startingVideoCall'),
+        videoCallError: t('videoCallError'),
       }}
     />
   );

@@ -29,6 +29,9 @@ import { anchorChainHeads, verifyAllChains } from '@api/modules/audit/audit-chai
 import { processRecurringPayments } from '@api/modules/payments/recurring-payment-scheduler';
 import { processDuePaymentRetries } from '@api/modules/payments/services/payment-retry.service';
 import { processDueExports } from '@api/modules/export/export-scheduler.service';
+import { runAgingReminders } from '@api/modules/billing/billing-aging';
+import { sendSurveyAssignmentNotifications } from '@api/modules/surveys/survey-assignment-notification-job';
+import { sendTrialExpiryNotifications } from '@api/modules/subscriptions/subscription-trial-expiry-job';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -177,6 +180,27 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     description: 'Run scheduled data exports that are due (#1793)',
     handler: () => processDueExports(),
     idempotencyKey: (scheduledFor: Date) => `export-scheduler:${scheduledFor.toISOString().slice(0, 16)}`,
+  },
+  {
+    name: 'billing-aging-reminders',
+    cron: '0 9 * * *',
+    description: 'Send 30/60/90-day overdue invoice reminders, skipping overridden entries (#1684)',
+    handler: () => runAgingReminders(),
+    idempotencyKey: (scheduledFor: Date) => `billing-aging-reminders:${scheduledFor.toISOString().slice(0, 10)}`,
+  },
+  {
+    name: 'survey-assignment-notifications',
+    cron: '0 * * * *',
+    description: 'Notify patients of newly assigned surveys (#1683)',
+    handler: () => sendSurveyAssignmentNotifications(),
+    idempotencyKey: (scheduledFor: Date) => `survey-assignment-notifications:${scheduledFor.toISOString().slice(0, 13)}`,
+  },
+  {
+    name: 'subscription-trial-expiry',
+    cron: '0 8 * * *',
+    description: 'Send subscription trial-expiry notifications (#1682)',
+    handler: () => sendTrialExpiryNotifications(),
+    idempotencyKey: (scheduledFor: Date) => `subscription-trial-expiry:${scheduledFor.toISOString().slice(0, 10)}`,
   },
 ];
 

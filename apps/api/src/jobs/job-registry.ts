@@ -20,6 +20,9 @@ import client from 'prom-client';
 import logger from '@api/utils/logger';
 import { register } from '@api/services/metrics.service';
 import { markJobsActive, clearActiveJobs } from './job-state';
+import { runAgingReminders } from './handlers/aging-reminders';
+import { notifyNewSurveyAssignments } from './handlers/survey-assignments';
+import { notifyTrialExpiry } from './handlers/trial-expiry';
 
 export const SCHEDULED_JOBS_QUEUE = 'scheduled-jobs';
 
@@ -35,13 +38,20 @@ export interface JobContext {
   idempotencyKey: string;
 }
 
+/**
+ * A job handler. Receives the run context and performs the work. Handlers are
+ * plain functions so they can be imported, unit-tested and registered without
+ * instantiating the registry.
+ */
+export type JobHandler = (ctx: JobContext) => Promise<unknown>;
+
 export interface JobDefinition {
   /** Unique kebab-case name, e.g. `payment-expiration`. Also the scheduler id. */
   name: string;
   /** Default cron pattern (UTC). 6-field patterns include seconds. */
   cron: string;
   description: string;
-  handler: (ctx: JobContext) => Promise<unknown>;
+  handler: JobHandler;
   /**
    * Optional idempotency key for a given schedule tick. Receives the
    * deterministic job id (e.g. `payment-retry:1700000000000`) and may return a
@@ -413,3 +423,34 @@ export class JobRegistry {
 }
 
 export const jobRegistry = new JobRegistry();
+
+// ── Built-in job definitions ──────────────────────────────────────────────────
+//
+// Registered on the shared registry so every replica schedules the same set.
+// Each handler is idempotent per tick (see JobContext.idempotencyKey) and safe
+// to run concurrently across the fleet.
+
+jobRegistry
+  .register({
+    name: 'billing-aging-reminders',
+    // Daily at 06:00 UTC — before clinic staff start their day.
+    cron: '0 0 6 * * *',
+    description: 'Compute invoice aging buckets and email 30/60/90-day overdue reminders',
+    handler: runAgingReminders,
+    idempotencyKey: (jobId) => `billing-aging-reminders:${jobId.split(':')[1]?.slice(0, 10) ?? jobId}`,
+  })
+  .register({
+    name: 'survey-assignment-notifications',
+    // Every 15 minutes.
+    cron: '0 */15 * * * *',
+    description: 'Email patients when a new survey has been assigned to them',
+    handler: notifyNewSurveyAssignments,
+  })
+  .register({
+    name: 'subscription-trial-expiry',
+    // Daily at 08:00 UTC.
+    cron: '0 0 8 * * *',
+    description: 'Notify clinic admins three days before their subscription trial ends',
+    handler: notifyTrialExpiry,
+    idempotencyKey: (jobId) => `subscription-trial-expiry:${jobId.split(':')[1]?.slice(0, 10) ?? jobId}`,
+  });
