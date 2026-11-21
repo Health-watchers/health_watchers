@@ -78,7 +78,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "fast-check": "^4.7.0",
-    "jest": "^30.3.0",
+    "jest": "^30.5.2",
     "jest-axe": "^10.0.0",
     "jest-environment-jsdom": "^30.3.0",
     "typescript": "^5.0.0",
