@@ -366,6 +366,60 @@ export function anonymizeBatch(
   return dataSet.map((data) => anonymize(data, options));
 }
 
+// ---------------------------------------------------------------------------
+// Export-oriented anonymization
+// ---------------------------------------------------------------------------
+
+export interface AnonymizeForExportOptions {
+  /** Anonymization level to apply. Defaults to de-identification. */
+  level?: AnonymizationLevel;
+  /** Session id used for consistent pseudonyms. */
+  sessionId?: string;
+  /** Purpose recorded in the audit log (defaults to 'export'). */
+  purpose?: string;
+  /** Who requested the export (recorded in the audit log). */
+  requestedBy?: string;
+}
+
+export interface AnonymizeForExportResult {
+  /** Anonymized records (or a single aggregate object for aggregation level). */
+  records: AnonymizedPatientData[] | AggregatedData;
+  /** Audit log entry describing the export anonymization. */
+  auditLog: AnonymizationAuditLog;
+}
+
+/**
+ * Anonymize a dataset for research/export use.
+ *
+ * Applies de-identification (or pseudonymization) record-by-record, or
+ * aggregation when requested, and returns the anonymized records together
+ * with an audit log entry. Reused by the population-health CSV export and
+ * the HIPAA patient data export.
+ */
+export function anonymizeForExport(
+  records: PatientData[],
+  options: AnonymizeForExportOptions = {}
+): AnonymizeForExportResult {
+  const level: AnonymizationLevel = options.level ?? 'de-identification';
+  const anonymizationOptions: AnonymizationOptions = {
+    level,
+    sessionId: options.sessionId,
+    purpose: 'export',
+  };
+
+  const anonymized = anonymizeBatch(records, anonymizationOptions);
+
+  const auditLog = createAuditLog(
+    ['firstName', 'lastName', 'contactNumber', 'email', 'address', 'dateOfBirth', 'systemId'],
+    options.purpose ?? 'export',
+    options.requestedBy ?? 'system',
+    level,
+    records.length
+  );
+
+  return { records: anonymized, auditLog };
+}
+
 // Audit log entry
 export interface AnonymizationAuditLog {
   timestamp: Date;

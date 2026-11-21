@@ -8,6 +8,7 @@ import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
 import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
+import DifferentialDiagnosisPanel from '@/components/encounters/DifferentialDiagnosisPanel';
 import { OfflineSync, useOnlineStatus } from '@/lib/offline-sync';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { UnsavedChangesModal } from '@/components/UnsavedChangesModal';
@@ -125,6 +126,12 @@ export default function NewEncounterPage() {
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [notes, setNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
+
+  // SOAP notes
+  const [subjective, setSubjective] = useState('');
+  const [objective, setObjective] = useState('');
+  const [assessment, setAssessment] = useState('');
+  const [plan, setPlan] = useState('');
 
   // Vitals
   const [vitalsOpen, setVitalsOpen] = useState(false);
@@ -262,6 +269,44 @@ export default function NewEncounterPage() {
   const removeDiagnosis = (code: string) =>
     setDiagnoses((prev) => prev.filter((d) => d.code !== code));
 
+  // ── Differential diagnosis panel handlers ──────────────────────────────────
+
+  const handleAddSuggestedDiagnosis = useCallback((code: string, description: string) => {
+    setDiagnoses((prev) => {
+      if (prev.length >= 10) return prev;
+      if (prev.some((d) => d.code === code)) return prev;
+      return [...prev, { code, description, isPrimary: prev.length === 0 }];
+    });
+    setIsDirty(true);
+  }, []);
+
+  const handleRejectSuggestedDiagnosis = useCallback((code: string) => {
+    // Remove the suggestion from the encounter's diagnosis list if it was added.
+    setDiagnoses((prev) => prev.filter((d) => d.code !== code));
+  }, []);
+
+  // Symptoms derived from the SOAP notes / chief complaint, recomputed as the
+  // clinician types so the differential panel can refresh in real time.
+  const differentialSymptoms = useCallback(() => {
+    const source = [chiefComplaint, subjective, objective, assessment, plan, notes].join(', ');
+    return source
+      .split(/[,\n;]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 2);
+  }, [chiefComplaint, subjective, objective, assessment, plan, notes]);
+
+  const differentialVitalSigns = useCallback(() => {
+    const vitals: Record<string, number | string> = {};
+    if (bp) vitals.bloodPressure = bp;
+    if (hr) vitals.heartRate = parseFloat(hr);
+    if (temp) vitals.temperature = parseFloat(toC(temp).toFixed(1));
+    if (weight) vitals.weight = parseFloat(toKg(weight).toFixed(2));
+    if (height) vitals.height = parseFloat(toCm(height).toFixed(1));
+    if (spo2) vitals.oxygenSaturation = parseFloat(spo2);
+    return Object.keys(vitals).length > 0 ? vitals : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bp, hr, temp, tempUnit, weight, weightUnit, height, heightUnit, spo2]);
+
   // ── Vitals conversion ───────────────────────────────────────────────────────
 
   function toC(val: string) {
@@ -381,6 +426,14 @@ export default function NewEncounterPage() {
       chiefComplaint: chiefComplaint.trim(),
       status,
       ...(notes.trim() && { notes: notes.trim() }),
+      ...((subjective.trim() || objective.trim() || assessment.trim() || plan.trim()) && {
+        soapNotes: {
+          ...(subjective.trim() && { subjective: subjective.trim() }),
+          ...(objective.trim() && { objective: objective.trim() }),
+          ...(assessment.trim() && { assessment: assessment.trim() }),
+          ...(plan.trim() && { plan: plan.trim() }),
+        },
+      }),
       ...(diagnoses.length > 0 && { diagnosis: diagnoses }),
       ...(Object.keys(vitalSigns).length > 0 && { vitalSigns }),
       ...(followUpDate && { followUpDate: new Date(followUpDate).toISOString() }),
@@ -859,17 +912,65 @@ export default function NewEncounterPage() {
           )}
         </section>
 
-        {/* ── Clinical Notes ── */}
+        {/* ── SOAP Notes ── */}
         <section aria-labelledby="section-notes">
           <h2
             id="section-notes"
             className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase dark:text-neutral-400"
           >
-            Clinical Notes
+            SOAP Notes
           </h2>
-          <div className="relative">
+
+          <div className="space-y-4">
             <Textarea
-              label="Notes"
+              label="Subjective"
+              value={subjective}
+              onChange={(e) => {
+                setSubjective(e.target.value);
+                setIsDirty(true);
+              }}
+              rows={3}
+              maxLength={5000}
+              placeholder="Patient-reported symptoms, history, complaints…"
+            />
+            <Textarea
+              label="Objective"
+              value={objective}
+              onChange={(e) => {
+                setObjective(e.target.value);
+                setIsDirty(true);
+              }}
+              rows={3}
+              maxLength={5000}
+              placeholder="Examination findings, vitals, test results…"
+            />
+            <Textarea
+              label="Assessment"
+              value={assessment}
+              onChange={(e) => {
+                setAssessment(e.target.value);
+                setIsDirty(true);
+              }}
+              rows={3}
+              maxLength={5000}
+              placeholder="Clinical impression and differential…"
+            />
+            <Textarea
+              label="Plan"
+              value={plan}
+              onChange={(e) => {
+                setPlan(e.target.value);
+                setIsDirty(true);
+              }}
+              rows={3}
+              maxLength={5000}
+              placeholder="Treatment plan, investigations, follow-up…"
+            />
+          </div>
+
+          <div className="relative mt-4">
+            <Textarea
+              label="Additional Notes"
               value={notes}
               onChange={(e) => {
                 setNotes(e.target.value);
@@ -886,6 +987,23 @@ export default function NewEncounterPage() {
             >
               {notes.length}/10,000
             </span>
+          </div>
+
+          {/* ── AI Differential Diagnosis Panel ── */}
+          <div className="mt-6">
+            <DifferentialDiagnosisPanel
+              chiefComplaint={chiefComplaint}
+              symptoms={differentialSymptoms()}
+              vitalSigns={differentialVitalSigns()}
+              patientAge={
+                fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined
+              }
+              patientSex={fullPatient?.sex}
+              soapNotes={{ subjective, objective, assessment, plan }}
+              existingDiagnosisCodes={diagnoses.map((d) => d.code)}
+              onAddDiagnosis={handleAddSuggestedDiagnosis}
+              onReject={handleRejectSuggestedDiagnosis}
+            />
           </div>
         </section>
 

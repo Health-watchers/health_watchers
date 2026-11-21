@@ -7,6 +7,7 @@ import { imageUpload } from '@api/middlewares/upload.middleware';
 import { PatientModel } from './models/patient.model';
 import { uploadFile, getDownloadUrl, deleteFile } from '../documents/storage.service';
 import { auditLog } from '../audit/audit.service';
+import { findScoped } from '@api/utils/scoped-query';
 
 const router = Router();
 router.use(authenticate);
@@ -51,8 +52,19 @@ router.post(
         return res.status(400).json({ error: 'BadRequest', message: 'No photo file provided.' });
       }
 
-      const patient = await PatientModel.findById(req.params.id);
+      const patient = await findScoped(PatientModel, req.params.id, req.user!);
       if (!patient) {
+        await auditLog(
+          {
+            action: 'PATIENT_PHOTO_UPLOAD',
+            resourceType: 'Patient',
+            resourceId: req.params.id,
+            userId: req.user!.userId,
+            clinicId: req.user!.clinicId,
+            outcome: 'DENIED',
+          },
+          req
+        );
         return res.status(404).json({ error: 'NotFound', message: 'Patient not found.' });
       }
 
@@ -93,10 +105,13 @@ router.post(
         }),
       ]);
 
-      await PatientModel.findByIdAndUpdate(patientId, {
-        photoUrl: photoKey,
-        thumbnailUrl: thumbKey,
-      });
+      await PatientModel.findOneAndUpdate(
+        { _id: patientId, clinicId: patient.clinicId },
+        {
+          photoUrl: photoKey,
+          thumbnailUrl: thumbKey,
+        }
+      );
 
       await auditLog(
         {
@@ -121,8 +136,21 @@ router.post(
 
 router.get('/:id/photo', async (req: Request, res: Response) => {
   try {
-    const patient = await PatientModel.findById(req.params.id).select('photoUrl clinicId');
+    const patient = await findScoped(PatientModel, req.params.id, req.user!, {
+      select: 'photoUrl clinicId',
+    });
     if (!patient) {
+      await auditLog(
+        {
+          action: 'PATIENT_PHOTO_ACCESS',
+          resourceType: 'Patient',
+          resourceId: req.params.id,
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+          outcome: 'DENIED',
+        },
+        req
+      );
       return res.status(404).json({ error: 'NotFound', message: 'Patient not found.' });
     }
     if (!patient.photoUrl) {
@@ -153,10 +181,21 @@ router.get('/:id/photo', async (req: Request, res: Response) => {
 
 router.delete('/:id/photo', WRITE_ROLES, async (req: Request, res: Response) => {
   try {
-    const patient = await PatientModel.findById(req.params.id).select(
-      'photoUrl thumbnailUrl clinicId'
-    );
+    const patient = await findScoped(PatientModel, req.params.id, req.user!, {
+      select: 'photoUrl thumbnailUrl clinicId',
+    });
     if (!patient) {
+      await auditLog(
+        {
+          action: 'PATIENT_PHOTO_DELETE',
+          resourceType: 'Patient',
+          resourceId: req.params.id,
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+          outcome: 'DENIED',
+        },
+        req
+      );
       return res.status(404).json({ error: 'NotFound', message: 'Patient not found.' });
     }
     if (!patient.photoUrl) {
@@ -168,9 +207,12 @@ router.delete('/:id/photo', WRITE_ROLES, async (req: Request, res: Response) => 
       patient.thumbnailUrl ? deleteFile(patient.thumbnailUrl).catch(() => {}) : Promise.resolve(),
     ]);
 
-    await PatientModel.findByIdAndUpdate(req.params.id, {
-      $unset: { photoUrl: '', thumbnailUrl: '' },
-    });
+    await PatientModel.findOneAndUpdate(
+      { _id: patient._id, clinicId: patient.clinicId },
+      {
+        $unset: { photoUrl: '', thumbnailUrl: '' },
+      }
+    );
 
     await auditLog(
       {

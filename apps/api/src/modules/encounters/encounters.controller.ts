@@ -324,7 +324,10 @@ router.post(
           req.body.notes = template.notes;
         }
         // Increment usage count (non-blocking)
-        EncounterTemplateModel.findByIdAndUpdate(templateId, { $inc: { usageCount: 1 } }).exec();
+        EncounterTemplateModel.findOneAndUpdate(
+          { _id: templateId, clinicId: req.user!.clinicId },
+          { $inc: { usageCount: 1 } }
+        ).exec();
       }
     }
 
@@ -345,7 +348,12 @@ router.post(
 
     // Allergy check for prescriptions
     if (req.body.prescriptions?.length && req.body.patientId) {
-      const patient = await PatientModel.findById(req.body.patientId).select('allergies').lean();
+      const patient = await PatientModel.findOne({
+        _id: req.body.patientId,
+        clinicId: req.user!.clinicId,
+      })
+        .select('allergies')
+        .lean();
       const activeAllergies = (patient?.allergies ?? []).filter(
         (a: any) => a.isActive && a.allergenType === 'drug'
       );
@@ -392,7 +400,10 @@ router.post(
     // Age-based clinical alerts (Issue #396)
     const ageAlerts: string[] = [];
     if (req.body.patientId) {
-      const agePatient = await PatientModel.findById(req.body.patientId)
+      const agePatient = await PatientModel.findOne({
+        _id: req.body.patientId,
+        clinicId: req.user!.clinicId,
+      })
         .select('dateOfBirth')
         .lean();
       if (agePatient?.dateOfBirth) {
@@ -632,11 +643,15 @@ router.patch(
     // The update and its `encounter:updated` socket event + `encounter.updated`
     // webhook commit together (#1432).
     const doc = await withOutboxTransaction(async (session, emit) => {
-      const updated = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
-        new: true,
-        runValidators: true,
-        session,
-      });
+      const updated = await EncounterModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId: req.user!.clinicId, isActive: true },
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+          session,
+        }
+      );
       const payload = {
         encounterId: req.params.id,
         patientId: updated ? String(updated.patientId) : undefined,
@@ -688,8 +703,8 @@ router.delete(
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
-    const doc = await EncounterModel.findByIdAndUpdate(
-      req.params.id,
+    const doc = await EncounterModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId, isActive: true },
       { status: 'cancelled', isActive: false },
       { new: true }
     );
@@ -743,7 +758,12 @@ router.post(
 
     // ── Allergy cross-reference check ─────────────────────────────────────────
     const allergyWarnings: Array<{ allergen: string; severity: string; reaction: string }> = [];
-    const patient = await PatientModel.findById(encounter.patientId).select('allergies').lean();
+    const patient = await PatientModel.findOne({
+      _id: encounter.patientId,
+      clinicId: req.user!.clinicId,
+    })
+      .select('allergies')
+      .lean();
     const activeAllergies = (patient?.allergies ?? []).filter(
       (a: any) => a.isActive && a.allergenType === 'drug'
     );
@@ -854,6 +874,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const encounter = await EncounterModel.findOne({
       _id: req.params.id,
+      clinicId: req.user!.clinicId,
       isActive: true,
     }).populate('prescriptions.prescribedBy', 'firstName lastName');
 

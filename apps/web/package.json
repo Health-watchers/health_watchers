@@ -30,7 +30,7 @@
     "analyze:bundle": "node scripts/analyze-bundle.js"
   },
   "dependencies": {
-    "@health-watchers/types": "file:../../packages/types",
+    "@health-watchers/types": "*",
     "@hookform/resolvers": "^3.9.0",
     "@sentry/nextjs": "^10.70.0",
     "@simplewebauthn/browser": "^13.3.0",

@@ -6,6 +6,7 @@ import { Toast, TableSkeleton, ErrorMessage, Button } from '@/components/ui';
 import { useEncounter } from '@/lib/queries/useEncounter';
 import EncounterDetail from '@/components/encounters/EncounterDetail';
 import { PeerReviewRequestCard } from '@/components/peer-reviews/PeerReviewRequestCard';
+import DifferentialDiagnosisPanel from '@/components/encounters/DifferentialDiagnosisPanel';
 
 interface EncounterPageProps {
   params: {
@@ -61,6 +62,23 @@ export default function EncounterDetailPage({ params }: EncounterPageProps) {
         </div>
       </div>
       <EncounterDetail encounter={data} onBack={() => router.push('/encounters')} />
+      <div className="mt-6">
+        <DifferentialDiagnosisPanel
+          encounterId={params.id}
+          chiefComplaint={data.chiefComplaint}
+          symptoms={data.symptoms}
+          vitals={data.vitals}
+          soapNotes={data.soapNotes}
+          onAccepted={(diagnoses) =>
+            setToast({
+              message: `Accepted ${diagnoses.length} suggested ${
+                diagnoses.length === 1 ? 'diagnosis' : 'diagnoses'
+              }.`,
+              type: 'success',
+            })
+          }
+        />
+      </div>
       <PeerReviewRequestCard encounterId={params.id} />
     </main>
   );

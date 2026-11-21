@@ -48,6 +48,12 @@ export default function PatientDetailPage({ params }: { params: { id: string } }
         interactionWarning: t('interactionWarning'),
         goalProgress: t('goalProgress'),
         taskCompletion: t('taskCompletion'),
+        referralTimeline: t('referralTimeline'),
+        noReferrals: t('noReferrals'),
+        referralStatus: t('referralStatus'),
+        referralProvider: t('referralProvider'),
+        referralUpdatedAt: t('referralUpdatedAt'),
+        viewReferral: t('viewReferral'),
       }}
     />
   );

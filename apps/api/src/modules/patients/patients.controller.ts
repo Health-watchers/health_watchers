@@ -414,7 +414,7 @@ router.patch(
     if (dateOfBirth !== undefined) update.dateOfBirth = new Date(dateOfBirth);
 
     if (firstName !== undefined || lastName !== undefined) {
-      const doc = await PatientModel.findById(req.params.id);
+      const doc = await findScopedPatient(req);
       if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
       update.searchName = `${firstName ?? doc.firstName} ${lastName ?? doc.lastName}`
         .toLowerCase()
@@ -1341,11 +1341,48 @@ router.post(
   })
 );
 
+/**
+ * Load a patient scoped to the caller's clinic (#1769).
+ *
+ * Returns `null` when the patient does not exist *or* belongs to another clinic, so callers
+ * respond with 404 and never leak the existence of cross-tenant records. Denied cross-clinic
+ * attempts are recorded in the audit log.
+ */
+async function findScopedPatient(
+  req: Request,
+  projection?: string
+): Promise<InstanceType<typeof PatientModel> | null> {
+  const clinicId = req.user!.clinicId;
+  const query = PatientModel.findOne({ _id: req.params.id, clinicId });
+  if (projection) query.select(projection);
+  const patient = await query;
+
+  if (!patient) {
+    // Distinguish "does not exist" from "exists in another clinic" for auditing purposes only.
+    const existsElsewhere = await PatientModel.exists({ _id: req.params.id });
+    if (existsElsewhere) {
+      auditLog(
+        {
+          action: 'CROSS_CLINIC_ACCESS_DENIED',
+          resourceType: 'Patient',
+          resourceId: String(req.params.id),
+          userId: req.user!.userId,
+          clinicId,
+          metadata: { path: req.originalUrl, method: req.method },
+        },
+        req
+      );
+    }
+  }
+
+  return patient;
+}
+
 // GET /patients/:id/emergency-contacts
 router.get(
   '/:id/emergency-contacts',
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id).select('emergencyContacts');
+    const patient = await findScopedPatient(req, 'emergencyContacts');
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: patient.emergencyContacts || [] });
   })
@@ -1358,7 +1395,7 @@ router.post(
   validateRequest({ body: createEmergencyContactSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, relationship, phone, email, address, isPrimary } = req.body;
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     if (!patient.emergencyContacts) patient.emergencyContacts = [];
@@ -1397,7 +1434,7 @@ router.put(
   validateRequest({ body: updateEmergencyContactSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { name, relationship, phone, email, address, isPrimary } = req.body;
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const contact = patient.emergencyContacts?.find((c) => String(c._id) === req.params.contactId);
@@ -1427,7 +1464,7 @@ router.delete(
   '/:id/emergency-contacts/:contactId',
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const index = patient.emergencyContacts?.findIndex(
@@ -1448,7 +1485,7 @@ router.post(
   '/:id/emergency-alert',
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findById(req.params.id);
+    const patient = await findScopedPatient(req);
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const primaryContact = patient.emergencyContacts?.find((c) => c.isPrimary);

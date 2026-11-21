@@ -66,10 +66,14 @@ import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config
 import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
 import { errorAnalytics } from './services/error-analytics.service';
 import { migrationManager } from './services/migration-manager.service';
+import { config as appConfig } from './config/config.service';
 
 const app = express();
 const server = createServer(app);
-const PORT = process.env.PORT || 4000;
+// Port comes from the validated API_PORT (default 3001) via config.service.
+// PORT is honoured only as a documented override for PaaS hosts (Heroku, Render, etc.)
+// that inject their own port and expect the process to bind to it.
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : appConfig.api.port;
 
 // Trust the first proxy hop (NGINX/load-balancer) so req.ip reflects the real client IP.
 // Without this, every request appears to come from the proxy IP and rate limiting breaks.
@@ -176,15 +180,17 @@ app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
-// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports
-const MULTIPART_BYPASS = [
-  '/api/v1/patients/import',
-  '/api/v1/patients/',
-  '/api/v1/ai/transcribe-audio',
+// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports.
+// Patterns are anchored exact matches so only real upload endpoints skip the check —
+// a prefix like '/api/v1/patients/' would disable 415 enforcement for every patient route.
+const MULTIPART_BYPASS: RegExp[] = [
+  /^\/api\/v1\/patients\/import$/,
+  /^\/api\/v1\/patients\/[^/]+\/photo$/,
+  /^\/api\/v1\/ai\/transcribe-audio$/,
 ];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
-    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
+    if (MULTIPART_BYPASS.some((pattern) => pattern.test(req.path))) return next();
     if (req.path.startsWith('/api/v1/csp-report')) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
