@@ -62,7 +62,7 @@
     "@next/bundle-analyzer": "^14.2.35",
     "@babel/core": "^7.29.0",
     "@playwright/test": "^1.62.1",
-    "@babel/preset-env": "^7.29.2",
+    "@babel/preset-env": "^7.29.14",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
     "@pact-foundation/pact": "^14.0.0",
