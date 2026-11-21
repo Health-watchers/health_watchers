@@ -7,6 +7,7 @@ import { useEncounter } from '@/lib/queries/useEncounter';
 import EncounterDetail from '@/components/encounters/EncounterDetail';
 import { PeerReviewRequestCard } from '@/components/peer-reviews/PeerReviewRequestCard';
 import DifferentialDiagnosisPanel from '@/components/encounters/DifferentialDiagnosisPanel';
+import SurveyResultsPanel from '@/components/surveys/SurveyResultsPanel';
 
 interface EncounterPageProps {
   params: {
@@ -62,6 +63,9 @@ export default function EncounterDetailPage({ params }: EncounterPageProps) {
         </div>
       </div>
       <EncounterDetail encounter={data} onBack={() => router.push('/encounters')} />
+      <div className="mt-6">
+        <SurveyResultsPanel encounterId={params.id} />
+      </div>
       <div className="mt-6">
         <DifferentialDiagnosisPanel
           encounterId={params.id}

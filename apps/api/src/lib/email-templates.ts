@@ -331,6 +331,58 @@ export function buildDataExportReadyEmail(downloadUrl: string, expiresAt: Date, 
   };
 }
 
+export function buildAgingReminderEmail(
+  patientName: string,
+  amount: string,
+  daysOverdue: number,
+  invoiceUrl: string,
+  language?: string
+): EmailContent {
+  const locale = resolveLanguage(language);
+  const bucket = daysOverdue >= 90 ? 90 : daysOverdue >= 60 ? 60 : 30;
+
+  if (locale === 'fr') {
+    return {
+      subject: `Rappel de facture impayée — ${daysOverdue} jours de retard`,
+      text: `Bonjour ${patientName},\n\nVotre facture d'un montant de ${amount} est en retard de ${daysOverdue} jours.\n\nVeuillez régler votre solde dès que possible : ${invoiceUrl}`,
+      html: `<h3>Rappel de facture impayée</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>Votre facture d'un montant de <strong>${amount}</strong> est en retard de <strong>${daysOverdue} jours</strong> (palier ${bucket} jours).</p><p>Veuillez régler votre solde dès que possible afin d'éviter des frais supplémentaires.</p><p><a href="${invoiceUrl}">Voir et payer la facture</a></p>`,
+    };
+  }
+
+  return {
+    subject: `Overdue Invoice Reminder — ${daysOverdue} Days Past Due`,
+    text: `Dear ${patientName},\n\nYour invoice of ${amount} is ${daysOverdue} days overdue.\n\nPlease settle your balance as soon as possible: ${invoiceUrl}`,
+    html: `<h3>Overdue Invoice Reminder</h3><p>Dear <strong>${patientName}</strong>,</p><p>Your invoice of <strong>${amount}</strong> is <strong>${daysOverdue} days</strong> past due (${bucket}-day bucket).</p><p>Please settle your balance as soon as possible to avoid additional charges.</p><p><a href="${invoiceUrl}">View and Pay Invoice</a></p>`,
+  };
+}
+
+export function buildAgingReportEmail(
+  reportUrl: string,
+  generatedAt: Date,
+  totalOutstanding: string,
+  language?: string
+): EmailContent {
+  const locale = resolveLanguage(language);
+  const generatedStr = generatedAt.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+  });
+
+  if (locale === 'fr') {
+    return {
+      subject: 'Rapport de vieillissement des créances',
+      text: `Le rapport de vieillissement des créances a été généré le ${generatedStr}.\n\nTotal impayé : ${totalOutstanding}\n\nTélécharger : ${reportUrl}`,
+      html: `<h3>Rapport de vieillissement des créances</h3><p>Le rapport de vieillissement des créances a été généré le <strong>${generatedStr}</strong>.</p><p><strong>Total impayé :</strong> ${totalOutstanding}</p><p><a href="${reportUrl}">Télécharger le rapport</a></p>`,
+    };
+  }
+
+  return {
+    subject: 'Accounts Receivable Aging Report',
+    text: `The accounts receivable aging report was generated on ${generatedStr}.\n\nTotal outstanding: ${totalOutstanding}\n\nDownload: ${reportUrl}`,
+    html: `<h3>Accounts Receivable Aging Report</h3><p>The accounts receivable aging report was generated on <strong>${generatedStr}</strong>.</p><p><strong>Total outstanding:</strong> ${totalOutstanding}</p><p><a href="${reportUrl}">Download Report</a></p>`,
+  };
+}
+
 export function buildConsentNotificationEmail(
   consentType: string,
   action: 'accepted' | 'rejected' | 'updated',
