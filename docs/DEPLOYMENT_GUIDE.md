@@ -9,6 +9,8 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
 - [Terraform Infrastructure Bootstrap](#terraform-infrastructure-bootstrap)
+- [Cost Management](#cost-management)
+- [Multi-Region Deployment](#multi-region-deployment)
 - [Blue-Green Deployment](BLUE_GREEN_DEPLOYMENT.md)
 - [Health Checks](#health-checks)
 - [Troubleshooting](#troubleshooting)
@@ -533,6 +535,577 @@ terraform force-unlock <LOCK_ID>
 
 **Drift detected:** run `terraform plan` to inspect differences; do not edit
 resources manually in the AWS console.
+
+## Cost Management
+
+The production stack runs on EKS, S3, SES, and AWS Secrets Manager. This section
+covers how to track spend, alert on budget overruns, estimate cost changes before
+merging infrastructure changes, and periodically review for optimization.
+
+### AWS Cost and Usage Report (CUR)
+
+The Cost and Usage Report is the most granular billing data source AWS provides
+(hourly line items, resource IDs, and cost allocation tags). It is the basis for
+both the budget alarm and the cost reports in `scripts/cost/`.
+
+#### Step 1: Create the CUR bucket and report
+
+```bash
+# 1. Create a dedicated, private bucket for CUR data
+aws s3api create-bucket \
+  --bucket health-watchers-cur \
+  --region us-east-1
+
+aws s3api put-public-access-block \
+  --bucket health-watchers-cur \
+  --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+# 2. Apply the bucket policy that lets the Billing service write to it
+#    (replace ACCOUNT_ID with your 12-digit account number)
+cat > /tmp/cur-bucket-policy.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowBillingServiceWrite",
+      "Effect": "Allow",
+      "Principal": { "Service": "billingreports.amazonaws.com" },
+      "Action": ["s3:GetBucketAcl", "s3:GetBucketPolicy"],
+      "Resource": "arn:aws:s3:::health-watchers-cur"
+    },
+    {
+      "Sid": "AllowBillingServicePutObject",
+      "Effect": "Allow",
+      "Principal": { "Service": "billingreports.amazonaws.com" },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::health-watchers-cur/*"
+    }
+  ]
+}
+EOF
+
+aws s3api put-bucket-policy \
+  --bucket health-watchers-cur \
+  --policy file:///tmp/cur-bucket-policy.json
+
+# 3. Create the report (Parquet, hourly, with resource IDs)
+aws cur put-report-definition \
+  --report-definition '{
+    "ReportName": "health-watchers-cur",
+    "TimeUnit": "HOURLY",
+    "Format": "Parquet",
+    "Compression": "Parquet",
+    "AdditionalSchemaElements": ["RESOURCES"],
+    "S3Bucket": "health-watchers-cur",
+    "S3Prefix": "reports",
+    "S3Region": "us-east-1",
+    "RefreshClosedReports": true,
+    "ReportVersioning": "OVERWRITE_REPORT"
+  }'
+```
+
+> The first report can take up to 24 hours to appear. Subsequent reports are
+> delivered several times per day.
+
+#### Step 2: Query the report with Athena
+
+```bash
+# Create a database for billing data
+aws athena start-query-execution \
+  --query-string "CREATE DATABASE IF NOT EXISTS health_watchers_billing" \
+  --result-configuration OutputLocation=s3://health-watchers-cur/athena-results/
+
+# Create the CUR table (adjust columns to match your report schema;
+# the full schema is in the CUR data dictionary)
+aws athena start-query-execution \
+  --query-string "
+    CREATE EXTERNAL TABLE IF NOT EXISTS health_watchers_billing.cur (
+      line_item_usage_account_id string,
+      line_item_usage_start_date timestamp,
+      line_item_usage_end_date timestamp,
+      line_item_product_code string,
+      line_item_resource_id string,
+      line_item_usage_type string,
+      line_item_unblended_cost double,
+      product_region string,
+      resource_tags_user_environment string
+    )
+    PARTITIONED BY (year string, month string)
+    STORED AS PARQUET
+    LOCATION 's3://health-watchers-cur/reports/health-watchers-cur/'
+  " \
+  --result-configuration OutputLocation=s3://health-watchers-cur/athena-results/
+```
+
+Example query — monthly spend by service:
+
+```sql
+SELECT line_item_product_code AS service,
+       ROUND(SUM(line_item_unblended_cost), 2) AS cost_usd
+FROM health_watchers_billing.cur
+WHERE year = '2026' AND month = '07'
+GROUP BY line_item_product_code
+ORDER BY cost_usd DESC;
+```
+
+#### Step 3: IAM permissions
+
+Create a read-only role for cost tooling (used by `scripts/cost/*` and CI):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast",
+        "ce:GetDimensionValues",
+        "ce:GetReservationUtilization",
+        "ce:GetSavingsPlansUtilization",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DescribeAlarms",
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "glue:GetTable",
+        "glue:GetDatabase",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Attach this policy to the CI deploy role and to the on-call engineer's role.
+Never grant `ce:*` or `billing:*` write access to application workloads.
+
+### CloudWatch Billing Alarm
+
+Set the expected monthly budget in a variable and create an alarm that fires at
+80% of budget (warning) and 100% (critical). The alarm publishes to the SNS
+topic used by Alertmanager.
+
+```bash
+# Expected monthly budget in USD
+MONTHLY_BUDGET_USD=1500
+ALARM_THRESHOLD=$(awk "BEGIN { printf \"%d\", $MONTHLY_BUDGET_USD * 0.8 }")
+
+# 1. Create the SNS topic (skip if you already have one)
+aws sns create-topic --name health-watchers-billing-alerts
+BILLING_TOPIC_ARN=$(aws sns list-topics \
+  --query "Topics[?ends_with(TopicArn, 'health-watchers-billing-alerts')].TopicArn" \
+  --output text)
+
+# 2. Subscribe the on-call email
+aws sns subscribe \
+  --topic-arn "$BILLING_TOPIC_ARN" \
+  --protocol email \
+  --notification-endpoint devops@healthwatchers.com
+
+# 3. Create the alarm on EstimatedCharges (us-east-1 only)
+aws cloudwatch put-metric-alarm \
+  --alarm-name "health-watchers-monthly-budget-80pct" \
+  --alarm-description "Estimated AWS charges exceeded 80% of the monthly budget" \
+  --namespace AWS/Billing \
+  --metric-name EstimatedCharges \
+  --dimensions Name=Currency,Value=USD \
+  --statistic Maximum \
+  --period 21600 \
+  --evaluation-periods 1 \
+  --threshold "$ALARM_THRESHOLD" \
+  --comparison-operator GreaterThanThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$BILLING_TOPIC_ARN" \
+  --region us-east-1
+```
+
+Equivalent Terraform (add to `terraform/environments/production/`):
+
+```hcl
+variable "monthly_budget_usd" {
+  type    = number
+  default = 1500
+}
+
+resource "aws_sns_topic" "billing_alerts" {
+  name = "health-watchers-billing-alerts"
+}
+
+resource "aws_cloudwatch_metric_alarm" "monthly_budget" {
+  alarm_name          = "health-watchers-monthly-budget-80pct"
+  alarm_description   = "Estimated AWS charges exceeded 80% of the monthly budget"
+  namespace           = "AWS/Billing"
+  metric_name         = "EstimatedCharges"
+  dimensions          = { Currency = "USD" }
+  statistic           = "Maximum"
+  period              = 21600
+  evaluation_periods  = 1
+  threshold           = var.monthly_budget_usd * 0.8
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.billing_alerts.arn]
+  region              = "us-east-1"
+}
+```
+
+> `AWS/Billing` metrics are only published in `us-east-1`. The alarm must be
+> created there regardless of where the workload runs.
+
+### Cost Estimation with infracost
+
+[infracost](https://www.infracost.io/) produces a cost diff for Terraform
+changes, so reviewers can see the monthly cost impact of a PR before merging.
+
+```bash
+# Install (macOS/Linux)
+brew install infracost          # macOS
+# or
+curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+
+# Authenticate (free API key from https://dashboard.infracost.io)
+infracost auth login
+
+# Generate a baseline for the current main branch
+cd terraform/environments/production
+infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
+
+# After making changes, produce a diff against the baseline
+infracost diff --path . --compare-to /tmp/infracost-base.json
+```
+
+Add a CI step to `.github/workflows/terraform-plan.yml` after the plan step:
+
+```yaml
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost diff
+        run: |
+          infracost diff \
+            --path terraform/environments/production \
+            --format json \
+            --out-file /tmp/infracost.json
+
+      - name: Post Infracost comment
+        run: |
+          infracost comment github \
+            --path /tmp/infracost.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --pull-request "${{ github.event.pull_request.number }}" \
+            --github-token "${{ secrets.GITHUB_TOKEN }}" \
+            --behavior update
+```
+
+Store `INFRACOST_API_KEY` as a repository secret. The comment is updated on
+each push, so reviewers always see the current estimate.
+
+### Approximate Monthly Costs
+
+The figures below are order-of-magnitude estimates for `us-east-1` at
+on-demand pricing (as of 2026). Actual costs vary with usage, data transfer,
+and Savings Plans. Re-run `scripts/cost/cost-report.sh` for live numbers.
+
+#### EKS — 3-node cluster
+
+| Item | Spec | Est. monthly |
+|------|------|--------------|
+| EKS control plane | 1 cluster | ~$73 |
+| Worker nodes | 3 × `m6i.xlarge` (4 vCPU, 16 GB) | ~$420 |
+| EBS volumes | 3 × 100 GB gp3 | ~$24 |
+| NAT gateways | 2 AZs | ~$65 |
+| Load balancer | 1 ALB | ~$20 |
+| **Total** | | **~$600** |
+
+> Using Spot or Graviton (`m7g.xlarge`) nodes can cut node cost by 30–60%.
+> A managed node group with a mixed-instance policy is recommended for prod.
+
+#### S3 storage
+
+| Item | Volume | Est. monthly |
+|------|--------|--------------|
+| Standard storage | 500 GB | ~$12 |
+| Standard-IA (backups > 30 days) | 2 TB | ~$25 |
+| Glacier Instant Retrieval | 5 TB | ~$20 |
+| PUT/GET requests | ~10M | ~$5 |
+| **Total** | | **~$62** |
+
+> Enable lifecycle rules (already in the `s3` module) to transition backups to
+> IA after 30 days and Glacier after 90 days.
+
+#### SES email volume
+
+| Item | Volume | Est. monthly |
+|------|--------|--------------|
+| Outbound email | 100,000 messages | ~$10 |
+| Attachments / data transfer | 5 GB | ~$1 |
+| Dedicated IP (optional) | 1 IP | ~$25 |
+| **Total** | | **~$11–36** |
+
+> SES charges $0.10 per 1,000 emails. The first 62,000 emails/month sent from
+> an EC2-hosted app are free; from EKS the standard rate applies.
+
+#### AWS Secrets Manager
+
+| Item | Volume | Est. monthly |
+|------|--------|--------------|
+| Secrets stored | 20 secrets | ~$8 |
+| API calls | 1M | ~$5 |
+| **Total** | | **~$13** |
+
+> Secrets Manager charges $0.40 per secret/month and $0.05 per 10,000 API
+> calls. Cache secrets in the app (already done via the config loader) to keep
+> call volume low.
+
+#### Summary
+
+| Service | Est. monthly |
+|---------|--------------|
+| EKS (3 nodes) | ~$600 |
+| S3 | ~$62 |
+| SES | ~$11–36 |
+| Secrets Manager | ~$13 |
+| **Total** | **~$686–711** |
+
+Set `MONTHLY_BUDGET_USD` to roughly 1.3× this figure to leave headroom for
+data transfer, CloudWatch, and one-off spikes.
+
+### Cost Optimization Review Checklist
+
+Run this review monthly (and before any major release). The scripts in
+`scripts/cost/` automate most of the data gathering.
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/cost/cost-report.sh` | Pulls CUR/CE data and prints spend by service and tag |
+| `scripts/cost/analyze-utilization.sh` | Reports CPU/memory utilization for EKS nodes and pods |
+| `scripts/cost/rightsizing-recommendations.sh` | Suggests instance/pod size changes from utilization data |
+| `scripts/cost/cleanup-unused-resources.sh` | Finds idle load balancers, unattached EBS, old snapshots, unused EIPs |
+
+**Monthly review checklist:**
+
+- [ ] Run `./scripts/cost/cost-report.sh` and compare month-over-month spend by service.
+- [ ] Run `./scripts/cost/analyze-utilization.sh`; flag nodes with < 30% average CPU.
+- [ ] Run `./scripts/cost/rightsizing-recommendations.sh`; file tickets for over-provisioned nodes/pods.
+- [ ] Run `./scripts/cost/cleanup-unused-resources.sh`; delete confirmed-unused resources.
+- [ ] Review S3 lifecycle rules — confirm backups are transitioning to IA/Glacier.
+- [ ] Review Savings Plans / Reserved Instance coverage for steady-state EKS nodes.
+- [ ] Confirm the CloudWatch billing alarm threshold still matches the current budget.
+- [ ] Check NAT gateway data processing charges (often the largest hidden cost).
+- [ ] Review Secrets Manager API call volume; confirm caching is effective.
+- [ ] Verify no untagged resources exist (all resources must carry `Environment` and `Service` tags).
+- [ ] Update the budget in `terraform/environments/production/production.tfvars` if the baseline changed.
+
+## Multi-Region Deployment
+
+For HIPAA compliance and availability, production may need to run across two
+AWS regions. This section documents the data residency constraints, the target
+architecture, the database strategy, and the failover procedure.
+
+### HIPAA Data Residency Requirements
+
+- **PHI must remain in approved regions.** The BAA with AWS covers all US
+  regions, but patient data must not leave the United States. Use `us-east-1`
+  (primary) and `us-west-2` (secondary) — both are HIPAA-eligible and within
+  the US.
+- **No PHI in non-US regions.** Do not replicate S3 buckets, MongoDB data, or
+  backups to `eu-*`, `ap-*`, or any region outside the US without a documented
+  legal review and updated BAA.
+- **Encryption keys are regional.** KMS keys cannot be used cross-region
+  directly; use multi-region KMS keys (MRKs) so the secondary region can
+  decrypt replicated data.
+- **Audit logs must be retained in both regions** for 6 years (HIPAA §164.316).
+  S3 Object Lock in compliance mode is recommended for the audit bucket.
+- **Data residency must be documented** in the risk assessment and reviewed
+  annually by the compliance officer.
+
+**Region selection constraints:**
+
+| Constraint | Requirement |
+|------------|-------------|
+| Jurisdiction | US only (`us-east-1`, `us-west-2`) |
+| HIPAA eligibility | Region must be HIPAA-eligible (all US regions are) |
+| Service availability | EKS, S3, SES, Secrets Manager, KMS MRK must all be available |
+| Latency | Cross-region replication RTT < 100 ms (us-east-1 ↔ us-west-2 ≈ 60 ms) |
+| Cost | Secondary region runs warm-standby (scaled down) to control spend |
+
+### Architecture
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │              Route 53 (failover)            │
+                    │   health-check on primary ALB /health       │
+                    └───────────────┬──────────────┬──────────────┘
+                                    │              │
+                    ┌───────────────▼───┐      ┌───▼───────────────┐
+                    │  PRIMARY          │      │  SECONDARY        │
+                    │  us-east-1        │      │  us-west-2        │
+                    │                   │      │                   │
+                    │  ┌─────────────┐  │      │  ┌─────────────┐  │
+                    │  │ EKS (3 node)│  │      │  │ EKS (1 node)│  │
+                    │  │ API/Web/    │  │      │  │ API/Web/    │  │
+                    │  │ Stellar     │  │      │  │ Stellar     │  │
+                    │  └──────┬──────┘  │      │  └──────┬──────┘  │
+                    │         │         │      │         │         │
+                    │  ┌──────▼──────┐  │      │  ┌──────▼──────┐  │
+                    │  │ MongoDB     │──┼──────┼─▶│ MongoDB     │  │
+                    │  │ primary     │  │async │  │ secondary   │  │
+                    │  └─────────────┘  │repl. │  └─────────────┘  │
+                    │                   │      │                   │
+                    │  ┌─────────────┐  │      │  ┌─────────────┐  │
+                    │  │ S3 (CRR)    │──┼──────┼─▶│ S3 replica  │  │
+                    │  └─────────────┘  │      │  └─────────────┘  │
+                    │                   │      │                   │
+                    │  ┌─────────────┐  │      │  ┌─────────────┐  │
+                    │  │ KMS MRK     │  │      │  │ KMS MRK     │  │
+                    │  └─────────────┘  │      │  └─────────────┘  │
+                    └───────────────────┘      └───────────────────┘
+```
+
+Mermaid equivalent:
+
+```mermaid
+flowchart LR
+  R53[Route 53 failover] --> P[Primary: us-east-1]
+  R53 --> S[Secondary: us-west-2]
+  P --> PEKS[EKS 3 nodes]
+  S --> SEKS[EKS 1 node warm standby]
+  PEKS --> PMDB[(MongoDB primary)]
+  SEKS --> SMDB[(MongoDB secondary)]
+  PMDB -. async replication .-> SMDB
+  P --> PS3[(S3 primary)]
+  S --> SS3[(S3 replica)]
+  PS3 -. Cross-Region Replication .-> SS3
+  P --> PKMS[KMS multi-region key]
+  S --> SKMS[KMS multi-region key]
+```
+
+**Replication paths:**
+
+| Data | Mechanism | RPO |
+|------|-----------|-----|
+| MongoDB | Replica set member in secondary region (or Atlas global cluster) | seconds |
+| S3 uploads/backups | S3 Cross-Region Replication (CRR) | minutes |
+| Secrets | Secrets Manager multi-region replication | seconds |
+| KMS keys | Multi-region KMS keys (MRK) | n/a (same key material) |
+| Container images | ECR replication rule | minutes |
+
+### MongoDB: Atlas Global Clusters vs Self-Managed Replica Sets
+
+| Aspect | MongoDB Atlas Global Clusters | Self-Managed Cross-Region Replica Set |
+|--------|-------------------------------|---------------------------------------|
+| Setup effort | Low — enable in Atlas UI, choose zones | High — run mongod in both regions, configure TLS, auth, monitoring |
+| Failover | Automatic, zone-aware routing | Manual or driver-driven (primary election) |
+| Latency | Zone-local reads/writes | Cross-region writes go to primary (higher latency) |
+| HIPAA | Atlas offers BAA on dedicated tiers | You own the BAA and controls |
+| Cost | Higher (managed premium) | Lower (you pay EC2 + EBS + data transfer) |
+| Ops burden | Low | High (patching, backups, monitoring) |
+| Data residency | Zones pinned to regions | You control region placement |
+| Recommended for | Teams without dedicated DBAs | Teams with existing MongoDB expertise |
+
+**Atlas global cluster configuration guidance:**
+
+1. Create a dedicated cluster (M10+) in `us-east-1`.
+2. Enable Global Writes; add a zone for `us-west-2`.
+3. Pin the `health_watchers` database to the `us-east-1` zone (primary writes).
+4. Configure read preference `nearest` for read-heavy endpoints.
+5. Enable continuous cloud backup with cross-region snapshot copies.
+6. Verify the Atlas BAA covers both regions.
+
+**Self-managed replica set configuration guidance:**
+
+1. Deploy 3 members in `us-east-1` and 2 members in `us-west-2` (odd total).
+2. Set `priority` higher for `us-east-1` members so primary stays in the primary region.
+3. Use `writeConcern: majority` and `readConcern: majority` for PHI writes.
+4. Enable TLS with certificates from ACM (or Atlas-managed).
+5. Monitor replication lag with `rs.status()` and the `MONGODB_REPLICATION_LAG` alert.
+6. Ensure the secondary region can be promoted within the RTO (see DR plan).
+
+### Cross-Region Failover Runbook
+
+The DR scripts live in `scripts/dr/`. The full DR plan is in
+[`docs/DISASTER_RECOVERY_PLAN.md`](DISASTER_RECOVERY_PLAN.md).
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/dr/failover.sh` | Promotes the secondary region and repoints Route 53 |
+| `scripts/dr/dr-drill.sh` | Runs a non-destructive failover drill in staging |
+| `scripts/dr/rpo-monitor.sh` | Reports current replication lag (RPO) |
+| `scripts/dr/rto-test.sh` | Measures time-to-failover against the RTO target |
+| `scripts/dr/verify-data-integrity.sh` | Compares checksums between primary and secondary |
+
+**Pre-failover checks:**
+
+```bash
+# 1. Confirm replication lag is within RPO (target: < 60s)
+./scripts/dr/rpo-monitor.sh
+
+# 2. Verify data integrity between regions
+./scripts/dr/verify-data-integrity.sh --source us-east-1 --target us-west-2
+
+# 3. Confirm the secondary region is healthy
+kubectl --context hw-us-west-2 get pods -n production
+curl -sf https://api-us-west-2.healthwatchers.com/health
+```
+
+**Failover steps:**
+
+```bash
+# 1. Declare the incident and notify on-call (see On-Call Escalation Runbook)
+# 2. Freeze writes to the primary if it is still reachable
+kubectl --context hw-us-east-1 scale deployment/api -n production --replicas=0
+
+# 3. Promote the secondary region
+./scripts/dr/failover.sh --from us-east-1 --to us-west-2 --confirm
+
+# 4. Verify Route 53 has switched to the secondary ALB
+aws route53 get-health-check-status --health-check-id <PRIMARY_HEALTH_CHECK_ID>
+
+# 5. Scale up the secondary EKS node group to full capacity
+aws eks update-nodegroup-config \
+  --cluster-name hw-us-west-2 \
+  --nodegroup-name workers \
+  --scaling-config minSize=3,maxSize=6,desiredSize=3
+
+# 6. Run smoke tests against the secondary
+curl -sf https://api.healthwatchers.com/health
+./scripts/smoke-test.sh --base-url https://api.healthwatchers.com
+
+# 7. Measure RTO
+./scripts/dr/rto-test.sh --started-at "$INCIDENT_START"
+```
+
+**Post-failover validation:**
+
+```bash
+# Confirm data integrity after promotion
+./scripts/dr/verify-data-integrity.sh --source us-west-2 --target us-east-1
+
+# Confirm replication lag is healthy in the new direction
+./scripts/dr/rpo-monitor.sh --primary us-west-2
+
+# Confirm audit events are flowing
+kubectl --context hw-us-west-2 logs -n production deployment/api --tail=100 | grep audit
+```
+
+**Failback:**
+
+1. Repair the original primary region.
+2. Re-establish replication from the new primary (`us-west-2`) back to `us-east-1`.
+3. Wait for replication lag to reach zero (`./scripts/dr/rpo-monitor.sh`).
+4. Run `./scripts/dr/failover.sh --from us-west-2 --to us-east-1 --confirm`.
+5. Verify with `./scripts/dr/verify-data-integrity.sh`.
+6. File a post-mortem within 48 hours.
+
+**Drills:** run `./scripts/dr/dr-drill.sh` quarterly in staging to validate
+the runbook. Record the measured RTO/RPO in the DR plan.
 
 ## Health Checks
 
