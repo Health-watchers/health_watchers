@@ -25,6 +25,8 @@ import {
   getSupportedVersions,
   acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
+import { v1EnvelopeNormalizer } from './middlewares/v1-envelope.middleware';
+import { v1DeprecationForRoute } from './middlewares/v1-deprecation.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { jobsAdminRouter } from './jobs/jobs-admin.controller';
 import { fhirRouter } from './modules/fhir/fhir.router';
@@ -45,8 +47,16 @@ import { migrationStatusRouter } from './modules/migrations/migration-status.con
 import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.controller';
 import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config.controller';
 import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
+import { errorAnalytics } from './services/error-analytics.service';
+import { migrationManager } from './services/migration-manager.service';
+import { config as appConfig } from './config/config.service';
 
 const app = express();
+const server = createServer(app);
+// Port comes from the validated API_PORT (default 3001) via config.service.
+// PORT is honoured only as a documented override for PaaS hosts (Heroku, Render, etc.)
+// that inject their own port and expect the process to bind to it.
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : appConfig.api.port;
 
 // Trust the first proxy hop (NGINX/load-balancer) so req.ip reflects the real client IP.
 // Without this, every request appears to come from the proxy IP and rate limiting breaks.
@@ -153,15 +163,17 @@ app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
-// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports
-const MULTIPART_BYPASS = [
-  '/api/v1/patients/import',
-  '/api/v1/patients/',
-  '/api/v1/ai/transcribe-audio',
+// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports.
+// Patterns are anchored exact matches so only real upload endpoints skip the check —
+// a prefix like '/api/v1/patients/' would disable 415 enforcement for every patient route.
+const MULTIPART_BYPASS: RegExp[] = [
+  /^\/api\/v1\/patients\/import$/,
+  /^\/api\/v1\/patients\/[^/]+\/photo$/,
+  /^\/api\/v1\/ai\/transcribe-audio$/,
 ];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
-    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
+    if (MULTIPART_BYPASS.some((pattern) => pattern.test(req.path))) return next();
     if (req.path.startsWith('/api/v1/csp-report')) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
@@ -199,12 +211,17 @@ app.get('/api/versions', (_req, res) => {
 app.use('/api', acceptVersionMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
-app.use('/api/v1', v1DeprecationWarning);
+// #1795 — deprecation headers are only emitted for v1 routes that actually have
+// a v2 replacement (per-route map), instead of blanket-deprecating every route.
+app.use('/api/v1', v1DeprecationForRoute);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
 app.use('/api/v1', rateLimitMonitor);
 app.use('/api/v1', generalLimiter);
 app.use('/api/v1', responseFilterMiddleware);
+// #1794 — v1 keeps its legacy response shapes; normalise them in one place so
+// clients see a single contract while modules migrate to res.ok()/res.fail().
+app.use('/api/v1', v1EnvelopeNormalizer);
 app.use('/api/v1', v1Router);
 
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
@@ -233,7 +250,125 @@ app.use('/api/v2', jobsAdminRouter);
 setupSwagger(app);
 
 // ── 404 & global error handler ────────────────────────────────────────────────
-app.use('*', (_req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+// #1794 — standard error envelope: { error: { code, message, details?, requestId } }
+app.use('*', (req, res) =>
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Route not found',
+      requestId: (req as any).requestId ?? (req.headers['x-request-id'] as string) ?? null,
+    },
+  })
+);
 app.use(errorHandler);
 
 export default app;
+
+// ── Start server ──────────────────────────────────────────────────────────────
+async function startServer() {
+  await connectDB();
+
+  // #1797 — migrate-mongo is the single migration system. Migrations are applied
+  // by a dedicated deployment step (Kubernetes Job / Helm pre-upgrade hook), never
+  // by the API. On startup we only verify that nothing is pending; if migrations
+  // are outstanding the readiness probe keeps failing so the pod never receives
+  // traffic with a stale schema.
+  try {
+    const { pending, applied, total } = await checkPendingMigrations();
+    if (pending.length > 0) {
+      logger.error(
+        { pending, applied, total },
+        '[migrations] pending migrations detected — pod will not become ready until they are applied'
+      );
+    } else {
+      logger.info({ applied, total }, '[migrations] schema is up to date');
+    }
+  } catch (err) {
+    logger.error({ err }, '[migrations] failed to determine migration status — pod will not become ready');
+  }
+
+  // Seed built-in CDS rules
+  await seedBuiltInRules();
+
+  // Initialize Socket.IO service
+  const socketService = SocketService.getInstance(server);
+  logger.info('Socket.IO service initialized');
+
+  server.listen(PORT, () => {
+    logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    logger.info('📡 Socket.IO server ready for real-time connections');
+  });
+
+  // Initialise Socket.IO on the same HTTP server
+  initSocket(server);
+  logger.info('Socket.IO initialised');
+
+  // #1433 — every background job runs through the distributed BullMQ scheduler:
+  // each schedule executes once per tick across all replicas.
+  startJobScheduler().catch((err) => logger.error({ err }, '[job-registry] failed to start'));
+  initializeBackupMetrics().catch((err) =>
+    logger.warn({ err }, 'Failed to load initial backup metrics')
+  );
+
+  // #1071 — Register per-clinic patient-list cache warmup entries now that the
+  // DB pool is ready, then warm all registered keys that are currently cold.
+  try {
+    const { PatientModel } = await import('./modules/patients/models/patient.model');
+    const { ClinicModel } = await import('./modules/clinics/clinic.model');
+    const activeClinics = await ClinicModel.find({ isActive: true }).select('_id').lean();
+    for (const clinic of activeClinics) {
+      const clinicId = String(clinic._id);
+      registerWarmup({
+        key: `patients:list:${clinicId}:page=1:limit=20`,
+        ttlSeconds: 60,
+        loader: async () => {
+          const { paginate } = await import('./utils/paginate');
+          const { toPatientResponse } = await import('./modules/patients/patients.transformer');
+          const result = await paginate(
+            PatientModel,
+            { clinicId, isActive: true },
+            1,
+            20,
+            { createdAt: -1 },
+            {
+              projection: {
+                systemId: 1,
+                firstName: 1,
+                lastName: 1,
+                searchName: 1,
+                dateOfBirth: 1,
+                sex: 1,
+                contactNumber: 1,
+                clinicId: 1,
+                isActive: 1,
+                riskLevel: 1,
+                riskScore: 1,
+                createdAt: 1,
+              },
+              hint: 'clinicId_1_isActive_1',
+            }
+          );
+          return { data: result.data.map(toPatientResponse), pagination: result.meta };
+        },
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, '[cache] failed to register patient-list warmup entries');
+  }
+
+  // Warm the cache — fills only cold (missing) keys, safe to run every startup
+  warmCache().catch((err) => logger.warn({ err }, '[cache] startup warmup failed'));
+
+  // Track MongoDB connection pool metrics for Prometheus
+  setInterval(() => {
+    const { totalConnections, waitQueueSize } = getPoolMetrics();
+    mongodbConnectionPoolSize.set(totalConnections);
+    mongodbPoolWaitQueueSize.set(waitQueueSize);
+  }, 15_000);
+
+  registerGracefulShutdown(server, {
+    stopJobs: [stopJobScheduler],
+  });
+}
+
+startServer();

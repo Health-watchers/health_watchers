@@ -40,6 +40,64 @@ severity/category conventions, and reaches the user as an actionable message
 — without hunting through service code to find out which convention a given
 module happens to use.
 
+## Standard response envelope (#1794)
+
+Historically the API used two success envelopes (`status: 'success'` in ~518
+handlers vs. `success: true` in ~86) and three error shapes
+(`{ error, message }`, `{ success: false, message }`,
+`{ error: 'Forbidden' }`). The standard is now a single envelope:
+
+**Success**
+
+```jsonc
+{
+  "data": { /* payload */ },
+  "meta": { /* optional: pagination, requestId, timings, ... */ }
+}
+```
+
+**Error**
+
+```jsonc
+{
+  "error": {
+    "code": "PATIENT_NOT_FOUND",   // ApiErrorCode
+    "message": "Patient not found", // user-facing, no internals
+    "details": { /* optional, structured context */ },
+    "requestId": "req_abc123"       // always present
+  }
+}
+```
+
+### Helpers
+
+- `res.ok(data, meta?)` — sends `200` with `{ data, meta? }`.
+- `res.fail(code, message?, details?)` — sends the taxonomy HTTP status for
+  `code` with `{ error: { code, message, details?, requestId } }`.
+- Both are attached by a response middleware and are thin wrappers over
+  `sendApiSuccess` / `sendApiError` in `apps/api/src/utils/api-response.ts`,
+  so the wire format can only be produced in one place.
+
+### v2 vs. v1
+
+- **v2** (`apps/api/src/routes/v2/**`, envelope defined in
+  `apps/api/src/routes/v2/envelope.ts`) enforces the envelope directly: every
+  v2 handler returns `res.ok(...)` / `res.fail(...)`, and the v2 404 fallback
+  and `authorize` middleware emit the error envelope.
+- **v1** keeps its existing response bodies for backwards compatibility.
+  A response-normalisation middleware rewrites v1 success/error bodies into
+  the standard envelope on the way out, so existing clients keep working
+  while new clients (SDKs, web) only ever see one shape.
+- The decision to normalise v1 in middleware rather than rewrite every v1
+  handler is recorded in the ADR (`docs/adr/` — "Standard API response
+  envelope").
+
+### Contract tests
+
+Pact contract tests lock the envelope in place for both success and error
+responses (see `apps/api/src/__tests__/contracts/response-envelope.pact.test.ts`),
+so any drift in `data`/`meta` or `error.code`/`message`/`requestId` fails CI.
+
 ## Task breakdown
 
 1. **Create error hierarchy** — audit whether every module in
@@ -89,6 +147,10 @@ module happens to use.
   `sendApiError`/`AppError`, and every UI error path renders through a
   boundary or the shared error message component
   (`apps/web/src/components/ui/ErrorMessage.tsx`).
+- All v2 endpoints return the standard envelope (`{ data, meta? }` /
+  `{ error: { code, message, details?, requestId } }`), v1 responses are
+  normalised to it by middleware, and pact contract tests cover both the
+  success and error envelopes.
 - User error messages are helpful — actionable, specific, no leaked internals
   in production, consistent with the tone already set in `errors.ts`.
 - Developer error info is sufficient — request context, severity, and

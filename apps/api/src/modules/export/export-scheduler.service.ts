@@ -15,6 +15,7 @@ import { buildHl7Bundle } from './hl7-v2-mapper';
 import { buildFhirBundle } from './fhir-mapper';
 import { encryptExportData, signExportData } from './export-encryption.service';
 import { ExportErrorRecoveryService } from './export-error-recovery.service';
+import { getJobQueue, removeRepeatableJob, upsertRepeatableJob } from '@api/jobs/job-registry';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,59 +47,15 @@ export interface ScheduleResult {
   signature?: string;
 }
 
-// ─── Minimal cron runner ─────────────────────────────────────────────────────
-
-class SimpleCron {
-  private task: NodeJS.Timeout | null = null;
-
-  constructor(
-    private readonly expression: string,
-    private readonly fn: () => Promise<void>
-  ) {}
-
-  start(): void {
-    if (this.task) return;
-    this.task = setInterval(async () => {
-      try {
-        if (SimpleCron.matches(this.expression, new Date())) {
-          await this.fn();
-        }
-      } catch (err) {
-        logger.error({ err }, 'SimpleCron task error');
-      }
-    }, 60_000);
-  }
-
-  stop(): void {
-    if (this.task) {
-      clearInterval(this.task);
-      this.task = null;
-    }
-  }
-
-  /**
-   * Minimal 5-field cron matcher supporting `*` wildcards and exact values.
-   * Fields: minute hour dom month dow
-   */
-  static matches(expr: string, date: Date): boolean {
-    const [minE, hourE, domE, monE, dowE] = expr.trim().split(/\s+/);
-    const check = (field: string | undefined, value: number) =>
-      !field || field === '*' || Number(field) === value;
-    return (
-      check(minE, date.getMinutes()) &&
-      check(hourE, date.getHours()) &&
-      check(domE, date.getDate()) &&
-      check(monE, date.getMonth() + 1) &&
-      check(dowE, date.getDay())
-    );
-  }
-}
-
 // ─── Scheduler service ────────────────────────────────────────────────────────
 
+/**
+ * Export scheduling is delegated to the distributed BullMQ job registry so
+ * that each schedule runs exactly once per cron tick across all replicas
+ * (Issue #1793). No in-process timers are used for business scheduling.
+ */
 export class ExportSchedulerService {
   private static instance: ExportSchedulerService;
-  private tasks = new Map<string, SimpleCron>();
   private readonly recovery = new ExportErrorRecoveryService();
 
   static getInstance(): ExportSchedulerService {
@@ -117,7 +74,7 @@ export class ExportSchedulerService {
       const schedules = await ExportScheduleModel.find({ isEnabled: true }).lean();
       for (const s of schedules) {
         const id = String(s._id);
-        this.registerTask(id, s.cronExpression, () => this.runSchedule(id));
+        await this.registerRepeatableJob(id, s.cronExpression);
       }
       logger.info({ count: schedules.length }, 'Export schedules loaded');
     } catch (err) {
@@ -142,7 +99,7 @@ export class ExportSchedulerService {
     });
 
     const id = String(schedule._id);
-    this.registerTask(id, opts.cronExpression, () => this.runSchedule(id));
+    await this.registerRepeatableJob(id, opts.cronExpression);
     logger.info({ scheduleId: id, name: opts.name }, 'Export schedule created');
     return schedule;
   }
@@ -162,12 +119,9 @@ export class ExportSchedulerService {
     if (!schedule) return null;
 
     if (updates.cronExpression) {
-      this.tasks.get(scheduleId)?.stop();
-      this.tasks.delete(scheduleId);
+      await removeRepeatableJob(this.repeatableJobId(scheduleId));
       if (schedule.isEnabled) {
-        this.registerTask(scheduleId, schedule.cronExpression, () =>
-          this.runSchedule(scheduleId)
-        );
+        await this.registerRepeatableJob(scheduleId, schedule.cronExpression);
       }
     }
     return schedule;
@@ -177,8 +131,7 @@ export class ExportSchedulerService {
   async deleteSchedule(scheduleId: string): Promise<boolean> {
     const schedule = await ExportScheduleModel.findByIdAndDelete(scheduleId);
     if (!schedule) return false;
-    this.tasks.get(scheduleId)?.stop();
-    this.tasks.delete(scheduleId);
+    await removeRepeatableJob(this.repeatableJobId(scheduleId));
     logger.info({ scheduleId }, 'Export schedule deleted');
     return true;
   }
@@ -193,12 +146,9 @@ export class ExportSchedulerService {
     if (!schedule) return null;
 
     if (enabled) {
-      this.registerTask(scheduleId, schedule.cronExpression, () =>
-        this.runSchedule(scheduleId)
-      );
+      await this.registerRepeatableJob(scheduleId, schedule.cronExpression);
     } else {
-      this.tasks.get(scheduleId)?.stop();
-      this.tasks.delete(scheduleId);
+      await removeRepeatableJob(this.repeatableJobId(scheduleId));
     }
     return schedule;
   }
@@ -213,19 +163,32 @@ export class ExportSchedulerService {
     return ExportScheduleModel.find({ clinicId }).sort({ createdAt: -1 }).lean();
   }
 
-  /** Stop all active cron tasks — call on graceful shutdown. */
-  stopAll(): void {
-    for (const task of this.tasks.values()) task.stop();
-    this.tasks.clear();
+  /**
+   * Stop all active schedules — call on graceful shutdown.
+   * Repeatable jobs live in BullMQ (shared across replicas), so shutdown only
+   * needs to close the local queue connection; jobs are not removed.
+   */
+  async stopAll(): Promise<void> {
+    try {
+      await getJobQueue().close();
+    } catch (err) {
+      logger.error({ err }, 'Failed to close export scheduler job queue');
+    }
   }
 
   // ─── Private ─────────────────────────────────────────────────────────────
 
-  private registerTask(id: string, expr: string, fn: () => Promise<void>): void {
-    this.tasks.get(id)?.stop();
-    const cron = new SimpleCron(expr, fn);
-    cron.start();
-    this.tasks.set(id, cron);
+  private repeatableJobId(scheduleId: string): string {
+    return `export-schedule:${scheduleId}`;
+  }
+
+  private async registerRepeatableJob(scheduleId: string, expr: string): Promise<void> {
+    await upsertRepeatableJob({
+      jobId: this.repeatableJobId(scheduleId),
+      name: 'export-schedule',
+      cron: expr,
+      data: { scheduleId },
+    });
   }
 
   private validateCron(expr: string): void {
@@ -242,6 +205,21 @@ export class ExportSchedulerService {
     const schedule = await ExportScheduleModel.findById(scheduleId).lean();
     if (!schedule) {
       return { scheduleId, runAt, status: 'failed', format: 'json', error: 'Schedule not found' };
+    }
+
+    // Idempotency guard: skip if this schedule already ran in the current minute
+    // (protects against duplicate deliveries from the distributed queue).
+    if (schedule.lastRunAt) {
+      const last = new Date(schedule.lastRunAt).getTime();
+      if (runAt.getTime() - last < 60_000) {
+        logger.debug({ scheduleId }, 'Skipping duplicate export schedule run');
+        return {
+          scheduleId,
+          runAt,
+          status: 'success',
+          format: schedule.format as ScheduledExportFormat,
+        };
+      }
     }
 
     let result: ScheduleResult;

@@ -109,6 +109,12 @@ export default function PortalDashboardPage() {
           >
             Manage Consent
           </Link>
+          <Link
+            href="/portal/records?export=1"
+            className="rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+          >
+            Download My Data
+          </Link>
         </div>
       </section>
     </div>

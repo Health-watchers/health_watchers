@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # Root workspace (shared tooling, lint, test, build dependencies)
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
@@ -11,15 +12,16 @@ updates:
     labels:
       - 'dependencies'
       - 'automated'
+      - 'workspace:root'
     # Group minor & patch updates into a single PR per dependency-type so the
     # security-scan job runs once per batch instead of per-package.
     groups:
-      production-minor-patch:
+      root-production-minor-patch:
         dependency-type: 'production'
         update-types:
           - 'minor'
           - 'patch'
-      development-minor-patch:
+      root-development-minor-patch:
         dependency-type: 'development'
         update-types:
           - 'minor'
@@ -29,6 +31,119 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
+  # API workspace
+  - package-ecosystem: 'npm'
+    directory: '/apps/api'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - 'dependencies'
+      - 'automated'
+      - 'workspace:api'
+    groups:
+      api-production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+      api-development-minor-patch:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Web workspace
+  - package-ecosystem: 'npm'
+    directory: '/apps/web'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - 'dependencies'
+      - 'automated'
+      - 'workspace:web'
+    groups:
+      web-production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+      web-development-minor-patch:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Mobile workspace
+  - package-ecosystem: 'npm'
+    directory: '/apps/mobile'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - 'dependencies'
+      - 'automated'
+      - 'workspace:mobile'
+    groups:
+      mobile-production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+      mobile-development-minor-patch:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # Stellar service workspace
+  - package-ecosystem: 'npm'
+    directory: '/stellar-service'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - 'dependencies'
+      - 'automated'
+      - 'workspace:stellar-service'
+    groups:
+      stellar-service-production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+      stellar-service-development-minor-patch:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # GitHub Actions workflows
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
@@ -45,3 +160,7 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Major action bumps are opened individually for manual review.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']

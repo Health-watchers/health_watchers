@@ -30,4 +30,17 @@ module "stack" {
 
   log_retention_days = 400
   alarm_email        = var.alarm_email
+
+  cdn_enabled     = var.cdn_enabled
+  cdn_domain_name = var.cdn_domain_name
+}
+
+output "cdn_distribution_id" {
+  description = "CloudFront distribution ID for the static assets CDN (used by the deploy pipeline for cache invalidation)."
+  value       = module.stack.cdn_distribution_id
+}
+
+output "cdn_domain_name" {
+  description = "CloudFront distribution domain name for the static assets CDN."
+  value       = module.stack.cdn_domain_name
 }

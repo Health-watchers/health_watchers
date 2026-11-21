@@ -7,6 +7,7 @@
  * All encryption keys, JWT secrets, and SMTP credentials are validated here.
  * Missing critical HIPAA vars cause a hard exit in production.
  */
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { redactConnectionString } from '../utils/redact';
@@ -32,173 +33,138 @@ function isValidAes256Key(value: string): boolean {
   return HEX_32_BYTES.test(value) || isBase64_32Bytes(value);
 }
 
-function keyFormatMessage(name: string): string {
-  return (
-    `${name} must be a 64-char hex string (32 bytes / AES-256) ` +
-    `or a base64-encoded 32-byte key`
-  );
-}
+const envSchema = z.object({
+  MONGO_URI: z
+    .string({ required_error: 'Missing required env var: MONGO_URI' })
+    .min(1, 'Missing required env var: MONGO_URI'),
 
-const envSchema = z
-  .object({
-    MONGO_URI: z
-      .string({ required_error: 'Missing required env var: MONGO_URI' })
-      .min(1, 'Missing required env var: MONGO_URI'),
+  REDIS_URL: z.string().optional(),
 
-    REDIS_URL: z.string().optional(),
+  JWT_ACCESS_TOKEN_SECRET: z
+    .string({ required_error: 'Missing required env var: JWT_ACCESS_TOKEN_SECRET' })
+    .min(32, 'JWT_ACCESS_TOKEN_SECRET must be at least 32 characters (too weak)'),
 
-    JWT_ACCESS_TOKEN_SECRET: z
-      .string({ required_error: 'Missing required env var: JWT_ACCESS_TOKEN_SECRET' })
-      .min(32, 'JWT_ACCESS_TOKEN_SECRET must be at least 32 characters (too weak)'),
+  JWT_REFRESH_TOKEN_SECRET: z
+    .string({ required_error: 'Missing required env var: JWT_REFRESH_TOKEN_SECRET' })
+    .min(32, 'JWT_REFRESH_TOKEN_SECRET must be at least 32 characters (too weak)'),
 
-    JWT_REFRESH_TOKEN_SECRET: z
-      .string({ required_error: 'Missing required env var: JWT_REFRESH_TOKEN_SECRET' })
-      .min(32, 'JWT_REFRESH_TOKEN_SECRET must be at least 32 characters (too weak)'),
+  API_PORT: z.string().default('3001'),
 
-    API_PORT: z.string().default('3001'),
+  // Documented override for PaaS hosts (Heroku, Render, etc.) that inject PORT.
+  // When unset, the API listens on API_PORT.
+  PORT: z
+    .string()
+    .regex(/^\d+$/, 'PORT must be a positive integer')
+    .optional(),
 
-    STELLAR_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
+  STELLAR_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
 
-    GEMINI_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 
-    // ── AI voice transcription (encounter audio → SOAP notes) ─────────────────
-    // Provider selection. Optional so the API boots in development without it;
-    // the transcription service falls back to a safe default when unset.
-    TRANSCRIPTION_PROVIDER: z.enum(['google', 'whisper']).optional(),
+  // ── AI voice transcription (encounter audio → SOAP notes) ─────────────────
+  // Provider selection. Optional so the API boots in development without it;
+  // the transcription service falls back to a safe default when unset.
+  TRANSCRIPTION_PROVIDER: z.enum(['google', 'whisper']).optional(),
 
-    // Google Speech-to-Text API key (required when TRANSCRIPTION_PROVIDER=google).
-    GOOGLE_SPEECH_API_KEY: z.string().optional(),
+  // Google Speech-to-Text API key (required when TRANSCRIPTION_PROVIDER=google).
+  GOOGLE_SPEECH_API_KEY: z.string().optional(),
 
-    // OpenAI API key for Whisper (required when TRANSCRIPTION_PROVIDER=whisper).
-    OPENAI_API_KEY: z.string().optional(),
+  // OpenAI API key for Whisper (required when TRANSCRIPTION_PROVIDER=whisper).
+  OPENAI_API_KEY: z.string().optional(),
 
-    // Maximum accepted audio upload size in bytes. Default: 25 MiB.
-    TRANSCRIPTION_MAX_AUDIO_BYTES: z
-      .string()
-      .regex(/^\d+$/, 'TRANSCRIPTION_MAX_AUDIO_BYTES must be a positive integer')
-      .optional(),
+  // Maximum accepted audio upload size in bytes. Default: 25 MiB.
+  TRANSCRIPTION_MAX_AUDIO_BYTES: z
+    .string()
+    .regex(/^\d+$/, 'TRANSCRIPTION_MAX_AUDIO_BYTES must be a positive integer')
+    .optional(),
 
-    LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
-    WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
+  WEB_URL: z.string().min(1, 'WEB_URL must not be empty').default('http://localhost:3000'),
 
-    SENTRY_DSN: z.string().url().optional(),
+  SENTRY_DSN: z.string().url().optional(),
 
-    // ── HIPAA — PHI field-level encryption (§ 164.312(a)(2)(iv)) ──────────────
-    // 64-char hex = 32-byte AES-256 key.  Generate:
-    //   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-    // Rotate annually; keep old key in FIELD_ENCRYPTION_KEY_V<n> during migration.
-    FIELD_ENCRYPTION_KEY: z
-      .string()
-      .refine(isValidAes256Key, keyFormatMessage('FIELD_ENCRYPTION_KEY'))
-      .optional(),
+  // ── HIPAA — PHI field-level encryption (§ 164.312(a)(2)(iv)) ──────────────
+  // 64-char hex = 32-byte AES-256 key.  Generate:
+  //   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  // Rotate annually; keep old key in FIELD_ENCRYPTION_KEY_V<n> during migration.
+  FIELD_ENCRYPTION_KEY: z
+    .string()
+    .length(64, 'FIELD_ENCRYPTION_KEY must be a 64-char hex string (32 bytes / AES-256)')
+    .optional(),
 
-    FIELD_ENCRYPTION_KEY_VERSION: z.string().optional(),
+  FIELD_ENCRYPTION_KEY_VERSION: z.string().optional(),
 
-    // ── HIPAA — Audit log encryption at rest (§ 164.312(b)) ───────────────────
-    // 64-char hex = 32-byte AES-256 key.
-    AUDIT_ENCRYPTION_KEY: z
-      .string()
-      .refine(isValidAes256Key, keyFormatMessage('AUDIT_ENCRYPTION_KEY'))
-      .optional(),
+  // ── HIPAA — Audit log encryption at rest (§ 164.312(b)) ───────────────────
+  // 64-char hex = 32-byte AES-256 key.
+  AUDIT_ENCRYPTION_KEY: z
+    .string()
+    .length(64, 'AUDIT_ENCRYPTION_KEY must be a 64-char hex string (32 bytes / AES-256)')
+    .optional(),
 
-    // ── HIPAA — Backup encryption (§ 164.312(c)(1)) ───────────────────────────
-    BACKUP_ENCRYPTION_KEY: z
-      .string()
-      .refine(isValidAes256Key, keyFormatMessage('BACKUP_ENCRYPTION_KEY'))
-      .optional(),
+  // ── HIPAA — Backup encryption (§ 164.312(c)(1)) ───────────────────────────
+  BACKUP_ENCRYPTION_KEY: z
+    .string()
+    .min(32, 'BACKUP_ENCRYPTION_KEY must be at least 32 characters')
+    .optional(),
 
-    // ── HIPAA — SMTP for breach notification emails (§ 164.410) ───────────────
-    SMTP_HOST: z.string().optional(),
-    SMTP_PORT: z.string().optional(),
-    SMTP_SECURE: z.string().optional(),
-    SMTP_USER: z.string().optional(),
-    SMTP_PASS: z.string().optional(),
-    SMTP_FROM: z.string().optional(),
-    APP_BASE_URL: z.string().optional(),
+  // ── HIPAA — SMTP for breach notification emails (§ 164.410) ───────────────
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_SECURE: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  APP_BASE_URL: z.string().optional(),
 
-    // ── HIPAA — Data retention & destruction ──────────────────────────────────
-    // Clinical record retention in years (HIPAA minimum: 6 years). Default: 7.
-    CLINICAL_RETENTION_YEARS: z.string().optional(),
-    // Audit log retention in years (HIPAA minimum: 6 years). Default: 6.
-    AUDIT_LOG_RETENTION_YEARS: z.string().optional(),
+  // ── HIPAA — Data retention & destruction ──────────────────────────────────
+  // Clinical record retention in years (HIPAA minimum: 6 years). Default: 7.
+  CLINICAL_RETENTION_YEARS: z.string().optional(),
+  // Audit log retention in years (HIPAA minimum: 6 years). Default: 6.
+  AUDIT_LOG_RETENTION_YEARS: z.string().optional(),
 
-    // ── Security training enforcement (§ 164.308(a)(5)) ──────────────────────
-    // Annual training expiry window in days. Default: 365.
-    SECURITY_TRAINING_EXPIRY_DAYS: z.string().optional(),
+  // ── Security training enforcement (§ 164.308(a)(5)) ──────────────────────
+  // Annual training expiry window in days. Default: 365.
+  SECURITY_TRAINING_EXPIRY_DAYS: z.string().optional(),
 
-    // ── TLS enforcement ───────────────────────────────────────────────────────
-    TRUST_PROXY: z.string().optional(),
-    NODE_ENV: z.string().optional(),
+  // ── TLS enforcement ───────────────────────────────────────────────────────
+  TRUST_PROXY: z.string().optional(),
+  NODE_ENV: z.string().optional(),
 
-    // ── Webhook signature verification (HMAC-SHA256) ──────────────────────────
-    // Current signing secret used to verify X-Webhook-Signature on incoming webhooks.
-    WEBHOOK_SIGNING_SECRET: z
-      .string()
-      .min(32, 'WEBHOOK_SIGNING_SECRET must be at least 32 characters (too weak)')
-      .optional(),
-    // Previous signing secret, accepted during key rotation.
-    WEBHOOK_SIGNING_SECRET_PREVIOUS: z
-      .string()
-      .min(32, 'WEBHOOK_SIGNING_SECRET_PREVIOUS must be at least 32 characters (too weak)')
-      .optional(),
+  // ── Webhook signature verification (HMAC-SHA256) ──────────────────────────
+  // Current signing secret used to verify X-Webhook-Signature on incoming webhooks.
+  WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET must be at least 32 characters (too weak)')
+    .optional(),
+  // Previous signing secret, accepted during key rotation.
+  WEBHOOK_SIGNING_SECRET_PREVIOUS: z
+    .string()
+    .min(32, 'WEBHOOK_SIGNING_SECRET_PREVIOUS must be at least 32 characters (too weak)')
+    .optional(),
 
-    // ── Idempotency keys for payment endpoints ────────────────────────────────
-    // TTL (in seconds) for idempotency key → response mappings. Default: 24 hours.
-    IDEMPOTENCY_TTL_SECONDS: z
-      .string()
-      .regex(/^\d+$/, 'IDEMPOTENCY_TTL_SECONDS must be a positive integer')
-      .refine((v) => Number(v) > 0, 'IDEMPOTENCY_TTL_SECONDS must be greater than 0')
-      .default('86400'),
-  })
-  .superRefine((data, ctx) => {
-    // HIPAA § 164.312 — In production all PHI encryption keys are mandatory.
-    // Running a regulated system with encryption quietly disabled is a
-    // compliance failure, so we hard-fail here rather than warn.
-    if (data.NODE_ENV !== 'production') return;
+  // ── HMAC secrets for QR check-in and telehealth meeting links ─────────────
+  // Must be independent of the JWT secrets so a leaked key cannot compromise
+  // both systems. Required in production (see checks below); in development a
+  // random per-process secret is generated when unset.
+  QR_CHECKIN_SECRET: z
+    .string()
+    .min(32, 'QR_CHECKIN_SECRET must be at least 32 characters (too weak)')
+    .optional(),
 
-    const requiredKeys: Array<{
-      name: 'FIELD_ENCRYPTION_KEY' | 'AUDIT_ENCRYPTION_KEY' | 'BACKUP_ENCRYPTION_KEY';
-      value: string | undefined;
-      section: string;
-    }> = [
-      {
-        name: 'FIELD_ENCRYPTION_KEY',
-        value: data.FIELD_ENCRYPTION_KEY,
-        section: '§ 164.312(a)(2)(iv)',
-      },
-      {
-        name: 'AUDIT_ENCRYPTION_KEY',
-        value: data.AUDIT_ENCRYPTION_KEY,
-        section: '§ 164.312(b)',
-      },
-      {
-        name: 'BACKUP_ENCRYPTION_KEY',
-        value: data.BACKUP_ENCRYPTION_KEY,
-        section: '§ 164.312(c)(1)',
-      },
-    ];
+  TELEHEALTH_LINK_SECRET: z
+    .string()
+    .min(32, 'TELEHEALTH_LINK_SECRET must be at least 32 characters (too weak)')
+    .optional(),
 
-    for (const { name, value, section } of requiredKeys) {
-      if (!value) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [name],
-          message:
-            `HIPAA VIOLATION (${section}): ${name} is required in production. ` +
-            `Set a 64-char hex AES-256 key or base64-encoded 32-byte key.`,
-        });
-        continue;
-      }
-      if (!isValidAes256Key(value)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [name],
-          message: `HIPAA VIOLATION: ${keyFormatMessage(name)}`,
-        });
-      }
-    }
-  });
+  // ── Idempotency keys for payment endpoints ────────────────────────────────
+  // TTL (in seconds) for idempotency key → response mappings. Default: 24 hours.
+  IDEMPOTENCY_TTL_SECONDS: z
+    .string()
+    .regex(/^\d+$/, 'IDEMPOTENCY_TTL_SECONDS must be a positive integer')
+    .refine((v) => Number(v) > 0, 'IDEMPOTENCY_TTL_SECONDS must be greater than 0')
+    .default('86400'),
+});
 
 const result = envSchema.safeParse(process.env);
 
@@ -220,6 +186,38 @@ export const env = result.data;
 
 // ── HIPAA production checks ───────────────────────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';
+
+// ── HMAC secrets — mandatory in production, random per-process in dev ────────
+// A hardcoded fallback would let anyone who reads the source forge QR check-in
+// codes or telehealth join links, so production refuses to start without them.
+if (isProd) {
+  const missingHmacSecrets: string[] = [];
+  if (!env.QR_CHECKIN_SECRET) missingHmacSecrets.push('QR_CHECKIN_SECRET');
+  if (!env.TELEHEALTH_LINK_SECRET) missingHmacSecrets.push('TELEHEALTH_LINK_SECRET');
+
+  if (missingHmacSecrets.length > 0) {
+    console.error(
+      `🚨 SECURITY VIOLATION: ${missingHmacSecrets.join(', ')} must be set in production ` +
+        '(at least 32 characters). Refusing to start with forgeable HMAC secrets.'
+    );
+    process.exit(1);
+  }
+} else {
+  if (!env.QR_CHECKIN_SECRET) {
+    env.QR_CHECKIN_SECRET = randomBytes(32).toString('hex');
+    console.warn(
+      '⚠️  WARNING: QR_CHECKIN_SECRET is not set. Using a random per-process secret; ' +
+        'QR check-in codes will not survive a restart or work across replicas.'
+    );
+  }
+  if (!env.TELEHEALTH_LINK_SECRET) {
+    env.TELEHEALTH_LINK_SECRET = randomBytes(32).toString('hex');
+    console.warn(
+      '⚠️  WARNING: TELEHEALTH_LINK_SECRET is not set. Using a random per-process secret; ' +
+        'telehealth join links will not survive a restart or work across replicas.'
+    );
+  }
+}
 
 // Warn when REDIS_URL is absent in production — in-memory rate limiting is
 // per-pod and allows brute-force bypass in multi-replica deployments.
@@ -254,94 +252,18 @@ if (env.TRANSCRIPTION_PROVIDER === 'whisper' && !env.OPENAI_API_KEY) {
   );
 }
 
-// ── Encryption key readiness / canary ─────────────────────────────────────────
-// A key can be present and well-formed yet still unusable (e.g. wrong encoding
-// assumptions). Encrypting and decrypting a known canary value proves the key
-// actually works before we accept traffic.
-
-const CANARY_PLAINTEXT = 'hipaa-encryption-canary-v1';
-
-function decodeKey(raw: string): Buffer {
-  if (HEX_32_BYTES.test(raw)) {
-    return Buffer.from(raw, 'hex');
-  }
-  return Buffer.from(raw, 'base64');
-}
-
-/**
- * Verify that the given AES-256 key can encrypt and decrypt a known canary
- * value. Returns true when the round-trip succeeds, false otherwise.
- */
-export function verifyEncryptionKeyCanary(rawKey: string | undefined): boolean {
-  if (!rawKey || !isValidAes256Key(rawKey)) return false;
-  try {
-    const key = decodeKey(rawKey);
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([
-      cipher.update(CANARY_PLAINTEXT, 'utf8'),
-      cipher.final(),
-    ]);
-    const authTag = cipher.getAuthTag();
-
-    const decipher = createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([
-      decipher.update(encrypted),
-      decipher.final(),
-    ]).toString('utf8');
-
-    return decrypted === CANARY_PLAINTEXT;
-  } catch {
-    return false;
-  }
-}
-
-export interface EncryptionReadiness {
-  fieldEncryption: boolean;
-  auditEncryption: boolean;
-  backupEncryption: boolean;
-  ready: boolean;
-}
-
-/**
- * Readiness check for PHI encryption keys. Verifies each configured key can
- * decrypt a known canary value. In production all three must be ready.
- */
-export function checkEncryptionReadiness(): EncryptionReadiness {
-  const fieldEncryption = verifyEncryptionKeyCanary(env.FIELD_ENCRYPTION_KEY);
-  const auditEncryption = verifyEncryptionKeyCanary(env.AUDIT_ENCRYPTION_KEY);
-  const backupEncryption = verifyEncryptionKeyCanary(env.BACKUP_ENCRYPTION_KEY);
-
-  const ready = isProd
-    ? fieldEncryption && auditEncryption && backupEncryption
-    : true;
-
-  return { fieldEncryption, auditEncryption, backupEncryption, ready };
-}
-
-// ── Startup config summary ────────────────────────────────────────────────────
-/**
- * Log a redacted summary of the validated configuration. Must be called from
- * startServer() (not at import time) so the structured logger is initialised.
- * Secret values are never logged — only whether they are set.
- */
-export function logConfigSummary(): void {
-  logger.info(
-    {
-      API_PORT: env.API_PORT,
-      MONGO_URI: redactConnectionString(env.MONGO_URI),
-      STELLAR_NETWORK: env.STELLAR_NETWORK,
-      LOG_LEVEL: env.LOG_LEVEL,
-      HIPAA_FIELD_ENCRYPTION_KEY: env.FIELD_ENCRYPTION_KEY ? 'set' : 'NOT SET',
-      HIPAA_AUDIT_ENCRYPTION_KEY: env.AUDIT_ENCRYPTION_KEY ? 'set' : 'NOT SET',
-      HIPAA_BACKUP_ENCRYPTION_KEY: env.BACKUP_ENCRYPTION_KEY ? 'set' : 'NOT SET',
-      HIPAA_SMTP_HOST: env.SMTP_HOST ? 'set' : 'NOT SET',
-      TRANSCRIPTION_PROVIDER: env.TRANSCRIPTION_PROVIDER ?? 'NOT SET',
-      TRANSCRIPTION_MAX_AUDIO_BYTES: env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)',
-    },
-    '✅ Config validated'
-  );
-}
-</｜｜DSML｜｜ parameter>
-</invoke>
+// Log non-secret config values at startup
+console.log('✅ Config validated:');
+console.log(`   API_PORT:        ${env.API_PORT}`);
+console.log(`   PORT override:   ${env.PORT ?? 'not set (using API_PORT)'}`);
+console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
+console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
+console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);
+console.log(`   HIPAA FIELD_ENCRYPTION_KEY: ${env.FIELD_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA AUDIT_ENCRYPTION_KEY: ${env.AUDIT_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA BACKUP_ENCRYPTION_KEY: ${env.BACKUP_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   HIPAA SMTP_HOST:             ${env.SMTP_HOST ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_PROVIDER:      ${env.TRANSCRIPTION_PROVIDER ?? '⚠️  NOT SET'}`);
+console.log(`   TRANSCRIPTION_MAX_AUDIO_BYTES: ${env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)'}`);
+console.log(`   QR_CHECKIN_SECRET:           ${env.QR_CHECKIN_SECRET ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   TELEHEALTH_LINK_SECRET:      ${env.TELEHEALTH_LINK_SECRET ? '✅ set' : '⚠️  NOT SET'}`);

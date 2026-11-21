@@ -136,12 +136,20 @@ export default function ReportsPage() {
         title="Reports & Analytics"
         subtitle="Clinic performance overview"
         actions={
-          <Link
-            href="/reports/surveys"
-            className="text-primary-600 hover:bg-primary-50 dark:text-primary-400 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-600"
-          >
-            Patient surveys →
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/reports/population-health"
+              className="text-primary-600 hover:bg-primary-50 dark:text-primary-400 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-600"
+            >
+              Population health →
+            </Link>
+            <Link
+              href="/reports/surveys"
+              className="text-primary-600 hover:bg-primary-50 dark:text-primary-400 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-600"
+            >
+              Patient surveys →
+            </Link>
+          </div>
         }
       />
 

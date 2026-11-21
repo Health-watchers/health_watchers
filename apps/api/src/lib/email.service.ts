@@ -461,20 +461,46 @@ export function sendDisputeEvidenceSubmittedEmail(
   enqueue(to, 'Dispute Evidence Submitted — Health Watchers', text, html);
 }
 
+function buildDataExportReadyEmail(
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): EmailContent {
+  const expiryStr = expiresAt.toUTCString();
+  if (resolveLanguage(language) === 'fr') {
+    return {
+      subject: 'Votre export de données de santé est prêt — Health Watchers',
+      text: `Votre export de données de santé est prêt.\n\nTéléchargez-le en toute sécurité ici (le lien expire le ${expiryStr}) :\n${downloadUrl}\n\nPour votre sécurité, ce lien est à usage unique et limité dans le temps. Ne le partagez pas.`,
+      html: `<h3>Votre export de données de santé est prêt</h3><p>Vous avez demandé une copie de votre dossier de santé. Elle est maintenant prête à être téléchargée.</p><p><a href="${downloadUrl}">Télécharger vos données en toute sécurité</a></p><p>Ce lien expire le <strong>${expiryStr}</strong> (30 jours). Pour votre sécurité, ne le partagez pas.</p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Health Record Export Is Ready — Health Watchers',
+    text: `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`,
+    html: `<h3>Your Health Record Export Is Ready</h3><p>You requested a copy of your health record. It is now ready to download.</p><p><a href="${downloadUrl}">Download your records securely</a></p><p>This link expires <strong>${expiryStr}</strong> (30 days). For your security, do not share it.</p>`,
+  };
+}
+
 /**
  * Data export ready — sends a SECURE DOWNLOAD LINK (never the data as an
  * attachment) for a patient's HIPAA Right of Access export.
  */
-export function sendDataExportReadyEmail(to: string, downloadUrl: string, expiresAt: Date): void {
-  const expiryStr = expiresAt.toUTCString();
-  const text = `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`;
-  const html = `
-    <h3>Your Health Record Export Is Ready</h3>
-    <p>You requested a copy of your health record. It is now ready to download.</p>
-    <p><a href="${downloadUrl}">Download your records securely</a></p>
-    <p>This link expires <strong>${expiryStr}</strong>. For your security, do not share it.</p>
-  `;
-  enqueue(to, 'Your Health Record Export Is Ready — Health Watchers', text, html);
+export function sendDataExportReadyEmail(
+  to: string,
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'dataExportReady',
+    language,
+    buildDataExportReadyEmail,
+    downloadUrl,
+    expiresAt,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
 /** Low balance warning sent when XLM balance drops below the warning threshold */

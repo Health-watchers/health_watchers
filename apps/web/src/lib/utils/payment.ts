@@ -99,3 +99,64 @@ export function isValidStellarPublicKey(address: string): boolean {
   const checksum = bytes[33] | (bytes[34] << 8); // little-endian
   return crc16Xmodem(payload) === checksum;
 }
+
+// ── DEX ───────────────────────────────────────────────────────────────────────
+
+/**
+ * A DEX conversion quote obtained from Stellar Horizon's `/paths` API.
+ * Amounts are decimal strings as returned by Horizon (e.g. "12.5000000").
+ */
+export interface DexQuote {
+  /** Asset the patient pays with (e.g. local currency token). */
+  sourceAsset: string;
+  /** Asset the payment settles in (e.g. XLM). */
+  destinationAsset: string;
+  /** Amount of `sourceAsset` to be spent. */
+  sourceAmount: string;
+  /** Amount of `destinationAsset` expected to be received. */
+  destinationAmount: string;
+  /** Exchange rate: destination units per one source unit. */
+  rate: number;
+  /** DEX conversion fee, denominated in the destination asset. */
+  dexFee: string;
+  /** ISO timestamp after which the quote should no longer be used. */
+  expiresAt: string;
+}
+
+/**
+ * Returns true when the current rate is within `tolerancePercent` of the
+ * quoted rate. Used as slippage protection before submitting a path payment.
+ *
+ * @param quotedRate       - rate at the time the quote was fetched
+ * @param currentRate      - rate observed at submission time
+ * @param tolerancePercent - maximum allowed deviation, in percent (e.g. 1.5)
+ */
+export function isWithinSlippageTolerance(
+  quotedRate: number,
+  currentRate: number,
+  tolerancePercent: number
+): boolean {
+  if (!Number.isFinite(quotedRate) || !Number.isFinite(currentRate)) return false;
+  if (quotedRate <= 0 || currentRate <= 0) return false;
+  if (!Number.isFinite(tolerancePercent) || tolerancePercent < 0) return false;
+
+  const deviationPercent = Math.abs((currentRate - quotedRate) / quotedRate) * 100;
+  return deviationPercent <= tolerancePercent;
+}
+
+/**
+ * Formats the DEX conversion fee for display in the payment breakdown.
+ *
+ * @param dexFee          - fee amount as a decimal string
+ * @param destinationAsset - asset the fee is denominated in
+ */
+export function formatDexFee(dexFee: string, destinationAsset: string): string {
+  const amount = Number(dexFee);
+  if (!Number.isFinite(amount)) return `— ${destinationAsset}`;
+
+  const formatted = amount.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 7,
+  });
+  return `${formatted} ${destinationAsset}`;
+}
