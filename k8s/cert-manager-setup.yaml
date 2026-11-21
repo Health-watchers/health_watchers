@@ -88,6 +88,52 @@ spec:
           class: nginx
 ---
 apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+  namespace: health-watchers
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@healthwatchers.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@healthwatchers.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-cluster
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@healthwatchers.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-cluster
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: health-watchers-cert
@@ -104,6 +150,23 @@ spec:
     kind: Issuer
   renewBefore: 720h
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: health-watchers-cert-staging
+  namespace: health-watchers
+spec:
+  secretName: health-watchers-tls-staging
+  commonName: staging.api.healthwatchers.com
+  dnsNames:
+  - staging.api.healthwatchers.com
+  issuerRef:
+    name: letsencrypt-staging
+    kind: Issuer
+  # Short validity window used to exercise automated renewal in staging.
+  duration: 2160h
+  renewBefore: 168h
+---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -115,13 +178,21 @@ spec:
     interval: 30s
     rules:
     - alert: CertificateExpirySoon
-      expr: certmanager_certificate_expiration_timestamp_seconds - time() < 7*24*3600
+      expr: certmanager_certificate_expiration_timestamp_seconds - time() < 30*24*3600
       for: 1h
       labels:
         severity: warning
       annotations:
         summary: "Certificate expiring soon"
-        description: "Certificate {{ $labels.name }} expires in less than 7 days"
+        description: "Certificate {{ $labels.name }} expires in less than 30 days"
+    - alert: CertManagerCertificateNotReady
+      expr: certmanager_certificate_ready_status{condition="False"} == 1
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Certificate not ready"
+        description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} is not ready (renewal may have failed)"
     - alert: CertificateExpiryImmediate
       expr: certmanager_certificate_expiration_timestamp_seconds - time() < 24*3600
       for: 5m

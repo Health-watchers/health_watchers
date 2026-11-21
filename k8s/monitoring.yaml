@@ -62,3 +62,35 @@ spec:
       interval: 30s
       path: /metrics
       scrapeTimeout: 10s
+
+---
+# PrometheusRule for cert-manager certificate expiry and readiness alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager-alerts
+  namespace: health-watchers
+  labels:
+    app.kubernetes.io/name: health-watchers
+    app.kubernetes.io/component: cert-manager
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: cert-manager.rules
+      rules:
+        - alert: CertManagerCertificateExpiringSoon
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 30 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires within 30 days"
+            description: "The certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 30 days. Verify that cert-manager automatic renewal is functioning and check the certificate renewal runbook."
+        - alert: CertManagerCertificateNotReady
+          expr: certmanager_certificate_ready_status{condition="False"} == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} is not ready"
+            description: "The certificate {{ $labels.name }} in namespace {{ $labels.namespace }} has a ready status of False for more than 15 minutes. Check cert-manager logs, the CertificateRequest/Order resources, and follow the certificate renewal failure runbook."
