@@ -315,8 +315,9 @@ async function startServer() {
   // Seed built-in CDS rules
   await seedBuiltInRules();
 
-  // Initialize Socket.IO service
-  const socketService = SocketService.getInstance(server);
+  // Initialise Socket.IO on the HTTP server — realtime/socket.ts is the single
+  // Socket.IO entry point (#1775); do not attach a second server to this path.
+  initSocket(server);
   logger.info({ service: 'api' }, 'Socket.IO service initialized');
 
   server.listen(PORT, () => {
@@ -327,7 +328,6 @@ async function startServer() {
   // Initialise Socket.IO on the same HTTP server
   initSocket(server);
   logger.info({ service: 'api' }, 'Socket.IO initialised');
-
   // #1433 — every background job runs through the distributed BullMQ scheduler:
   // each schedule executes once per tick across all replicas.
   startJobScheduler().catch((err) => logger.error({ err }, '[job-registry] failed to start'));

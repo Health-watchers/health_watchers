@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { MongoClient, Db } from 'mongodb';
 import { config } from '../../config';
 import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
+import { requirePermission } from '../../middlewares/rbac.middleware';
 import { requireRole } from '../../middlewares/role.middleware';
 import { requireMfa } from '../../middlewares/mfa.middleware';
 import logger from '../../utils/logger';
@@ -63,6 +64,7 @@ async function getMigrateMongoStatus(): Promise<{
 router.get(
   '/migrations/status',
   requireAuth,
+  requirePermission('migrations:read'),
   requireRole('SUPER_ADMIN'),
   requireMfa,
   async (_req: Request, res: Response) => {
@@ -91,6 +93,7 @@ router.get(
 router.get(
   '/migrations/latest',
   requireAuth,
+  requirePermission('migrations:read'),
   requireRole('SUPER_ADMIN'),
   requireMfa,
   async (_req: Request, res: Response) => {
