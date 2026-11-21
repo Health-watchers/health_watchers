@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
+import crypto from 'crypto';
 import { ReferralModel } from './referral.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { EncounterModel } from '../encounters/encounter.model';
@@ -21,7 +22,122 @@ import { z } from 'zod';
 
 const declineBodySchema = z.object({ declinedReason: z.string().max(2000).optional() });
 
+const EXTERNAL_STATUSES = [
+  'received',
+  'scheduled',
+  'attended',
+  'no-show',
+  'cancelled',
+  'completed',
+] as const;
+
+const webhookBodySchema = z.object({
+  referralId: z.string().min(1),
+  status: z.enum(EXTERNAL_STATUSES),
+  appointmentDate: z.coerce.date().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
 const router = Router();
+
+// POST /referrals/webhook/:providerId — public endpoint for external providers
+// (mounted before authenticate; authenticated via HMAC signature)
+router.post(
+  '/webhook/:providerId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { providerId } = req.params;
+    const signature = req.header('x-referral-signature');
+    const secret = process.env.EXTERNAL_REFERRAL_WEBHOOK_SECRET;
+
+    if (!secret) {
+      return res
+        .status(503)
+        .json({ error: 'ServiceUnavailable', message: 'Webhook not configured' });
+    }
+    if (!signature) {
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Missing signature header' });
+    }
+
+    const rawBody = (req as any).rawBody ?? JSON.stringify(req.body ?? {});
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const provided = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expected);
+    if (
+      provided.length !== expectedBuf.length ||
+      !crypto.timingSafeEqual(provided, expectedBuf)
+    ) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid signature' });
+    }
+
+    const parsed = webhookBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Invalid webhook payload',
+        details: parsed.error.issues,
+      });
+    }
+    const { referralId, status, appointmentDate, notes } = parsed.data;
+
+    const referral = await ReferralModel.findOne({
+      _id: referralId,
+      providerType: 'external',
+      externalProviderId: providerId,
+    });
+    if (!referral) {
+      return res.status(404).json({ error: 'NotFound', message: 'Referral not found' });
+    }
+
+    // Validate status transition
+    const currentStatus = (referral as any).status;
+    const allowed: Record<string, string[]> = {
+      pending: ['received', 'cancelled'],
+      received: ['scheduled', 'cancelled'],
+      scheduled: ['attended', 'no-show', 'cancelled'],
+      attended: ['completed'],
+      'no-show': ['scheduled', 'cancelled'],
+      cancelled: [],
+      completed: [],
+    };
+    if (!(allowed[currentStatus] ?? []).includes(status)) {
+      return res.status(409).json({
+        error: 'InvalidTransition',
+        message: `Cannot transition referral from '${currentStatus}' to '${status}'`,
+      });
+    }
+
+    const now = new Date();
+    referral.status = status as any;
+    if (appointmentDate) {
+      (referral as any).firstAppointmentAt = appointmentDate;
+    }
+    if (status === 'completed') {
+      referral.completedAt = now;
+    }
+    (referral as any).lastStatusUpdateAt = now;
+    (referral as any).statusHistory = [
+      ...((referral as any).statusHistory ?? []),
+      { status, at: now, source: 'external', providerId, notes },
+    ];
+    await referral.save();
+
+    await AuditLogModel.create({
+      userId: undefined,
+      clinicId: new Types.ObjectId(referral.fromClinicId),
+      action: 'REFERRAL_EXTERNAL_STATUS_UPDATE',
+      resourceType: 'Referral',
+      resourceId: String(referral._id),
+      metadata: { status, providerId, appointmentDate, notes },
+      outcome: 'SUCCESS',
+      timestamp: now,
+    });
+
+    return res.json({ status: 'success', data: { referralId: String(referral._id), status } });
+  })
+);
+
 router.use(authenticate);
 
 const DOCTOR_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
@@ -32,7 +148,26 @@ router.post(
   DOCTOR_ROLES,
   validateRequest({ body: createReferralSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { toClinicId, patientId, reason, urgency, encounterId, sharedData, notes } = req.body;
+    const {
+      toClinicId,
+      patientId,
+      reason,
+      urgency,
+      encounterId,
+      sharedData,
+      notes,
+      providerType,
+      externalProviderId,
+      specialty,
+    } = req.body;
+
+    const resolvedProviderType = providerType ?? 'internal';
+    if (resolvedProviderType === 'external' && !externalProviderId) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'externalProviderId is required for external referrals',
+      });
+    }
 
     // Verify patient belongs to the referring clinic and has data_sharing consent
     const patient = await PatientModel.findOne({
@@ -48,13 +183,17 @@ router.post(
         .json({ error: 'ConsentRequired', message: 'Patient has not given data sharing consent' });
     }
 
-    const toClinic = await ClinicModel.findById(toClinicId);
-    if (!toClinic)
-      return res.status(404).json({ error: 'NotFound', message: 'Target clinic not found' });
+    let toClinic: any = null;
+    if (resolvedProviderType === 'internal') {
+      toClinic = await ClinicModel.findById(toClinicId);
+      if (!toClinic)
+        return res.status(404).json({ error: 'NotFound', message: 'Target clinic not found' });
+    }
 
+    const now = new Date();
     const referral = await ReferralModel.create({
       fromClinicId: req.user!.clinicId,
-      toClinicId,
+      toClinicId: resolvedProviderType === 'internal' ? toClinicId : undefined,
       patientId,
       referredBy: req.user!.userId,
       reason,
@@ -67,10 +206,18 @@ router.post(
         prescriptions: false,
       },
       notes,
+      providerType: resolvedProviderType,
+      externalProviderId: resolvedProviderType === 'external' ? externalProviderId : undefined,
+      specialty,
+      lastStatusUpdateAt: now,
+      statusHistory: [{ status: 'pending', at: now, source: 'internal' }],
     });
 
     // Notify receiving clinic — find CLINIC_ADMIN of target clinic
-    const admin = await UserModel.findOne({ clinicId: toClinicId, role: 'CLINIC_ADMIN' }).lean();
+    const admin =
+      resolvedProviderType === 'internal'
+        ? await UserModel.findOne({ clinicId: toClinicId, role: 'CLINIC_ADMIN' }).lean()
+        : null;
     if (admin?.email) {
       sendReferralNotificationEmail(admin.email, admin.fullName, {
         patientName: `${(patient as any).firstName} ${(patient as any).lastName}`,
@@ -334,6 +481,29 @@ router.patch(
   })
 );
 
+// GET /referrals/:id/timeline — status history for a referral
+router.get(
+  '/:id/timeline',
+  validateRequest({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const referral = await ReferralModel.findOne({
+      _id: req.params.id,
+      $or: [{ fromClinicId: req.user!.clinicId }, { toClinicId: req.user!.clinicId }],
+    }).lean();
+    if (!referral)
+      return res.status(404).json({ error: 'NotFound', message: 'Referral not found' });
+
+    return res.json({
+      status: 'success',
+      data: {
+        referralId: String((referral as any)._id),
+        currentStatus: (referral as any).status,
+        timeline: (referral as any).statusHistory ?? [],
+      },
+    });
+  })
+);
+
 // GET /referrals/analytics — referral analytics and metrics
 router.get(
   '/analytics',
@@ -358,6 +528,29 @@ router.get(
           }, 0) / completedWithDates.length
         : 0;
 
+    // Referral volume by specialty
+    const bySpecialtyMap = new Map<string, number>();
+    for (const r of referrals as any[]) {
+      const key = r.specialty || 'unspecified';
+      bySpecialtyMap.set(key, (bySpecialtyMap.get(key) ?? 0) + 1);
+    }
+    const volumeBySpecialty = Array.from(bySpecialtyMap.entries())
+      .map(([specialty, count]) => ({ specialty, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Average time to first appointment (days from referral creation)
+    const withFirstAppointment = (referrals as any[]).filter(
+      (r) => r.createdAt && r.firstAppointmentAt
+    );
+    const avgTimeToFirstAppointment =
+      withFirstAppointment.length > 0
+        ? withFirstAppointment.reduce((sum: number, r: any) => {
+            const days = (new Date(r.firstAppointmentAt).getTime() - new Date(r.createdAt).getTime()) /
+              (1000 * 60 * 60 * 24);
+            return sum + days;
+          }, 0) / withFirstAppointment.length
+        : 0;
+
     // Top referral destinations
     const destinations = await ReferralModel.aggregate([
       { $match: { toClinicId: new Types.ObjectId(clinicId) } },
@@ -375,6 +568,8 @@ router.get(
         completionRate: Math.round(completionRate * 100) / 100,
         attendanceRate: Math.round(attendanceRate * 100) / 100,
         avgTimeToCompletionDays: Math.round(avgTimeToCompletion * 100) / 100,
+        avgTimeToFirstAppointmentDays: Math.round(avgTimeToFirstAppointment * 100) / 100,
+        volumeBySpecialty,
         topReferralSources: destinations.map((d: any) => ({
           clinicId: d._id,
           clinicName: d.clinic[0]?.name || 'Unknown',
@@ -384,5 +579,36 @@ router.get(
     });
   })
 );
+
+// Scheduled follow-up: email referring clinic when no status update within 30 days
+const FOLLOW_UP_THRESHOLD_DAYS = 30;
+
+export async function runReferralFollowUpJob(): Promise<number> {
+  const cutoff = new Date(Date.now() - FOLLOW_UP_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
+  const stale = await ReferralModel.find({
+    status: { $nin: ['completed', 'cancelled', 'declined'] },
+    $or: [
+      { lastStatusUpdateAt: { $lt: cutoff } },
+      { lastStatusUpdateAt: { $exists: false }, createdAt: { $lt: cutoff } },
+    ],
+    followUpSentAt: { $exists: false },
+  });
+
+  let sent = 0;
+  for (const referral of stale) {
+    const referrer = await UserModel.findById(referral.referredBy).lean();
+    if (referrer?.email) {
+      const { sendReferralFollowUpEmail } = await import('@api/lib/email.service');
+      sendReferralFollowUpEmail(referrer.email, referrer.fullName, {
+        referralId: String(referral._id),
+        daysSinceUpdate: FOLLOW_UP_THRESHOLD_DAYS,
+      });
+      sent += 1;
+    }
+    (referral as any).followUpSentAt = new Date();
+    await referral.save();
+  }
+  return sent;
+}
 
 export const referralRoutes = router;

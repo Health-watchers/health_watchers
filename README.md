@@ -4,8 +4,8 @@
 [![Docs](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/docs.yml)
 [![Lighthouse CI](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/Health-watchers/health_watchers/actions/workflows/lighthouse.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![npm Version](https://img.shields.io/badge/npm-10.9.2-blue.svg)](https://www.npmjs.com/)
+[![Node Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
+[![npm Version](https://img.shields.io/badge/npm-10.8.2-blue.svg)](https://www.npmjs.com/)
 
 A HIPAA-compliant healthcare management platform built with Next.js, Express, and Stellar blockchain integration for secure patient data management and payment processing.
 
@@ -55,8 +55,8 @@ reloads and new sessions. If no preference is stored, the app follows your OS se
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
-- npm 10.9.2
+- Node.js >= 20.0.0
+- npm 10.8.2
 - Docker and Docker Compose
 
 ### Quick Start with Docker Compose Profiles

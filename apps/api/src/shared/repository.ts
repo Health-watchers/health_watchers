@@ -4,6 +4,145 @@ export interface Repository<T, Id = string> {
   delete(id: Id): Promise<void>;
 }
 
+/**
+ * Minimal shape of the authenticated caller needed for tenant scoping.
+ * Compatible with the API's `req.user` payload.
+ */
+export interface ScopedUser {
+  clinicId?: string | null;
+  patientId?: string | null;
+  role?: string | null;
+  id?: string | null;
+  userId?: string | null;
+}
+
+export interface FindScopedOptions {
+  /**
+   * Force a `patientId` filter even when the caller is not a patient-portal
+   * user. Used by patient-portal-facing routes.
+   */
+  patientScoped?: boolean;
+  /** Extra filter fields merged into the tenant-scoped query. */
+  filter?: Record<string, unknown>;
+  /** Projection passed through to the model. */
+  projection?: Record<string, unknown>;
+  /** Override the tenant field name (defaults to `clinicId`). */
+  tenantField?: string;
+  /** Override the patient field name (defaults to `patientId`). */
+  patientField?: string;
+  /** Resource label used in audit log entries. */
+  resource?: string;
+}
+
+/**
+ * Minimal model interface required by `findScoped`.
+ * Compatible with Mongoose models.
+ */
+export interface ScopedModel<T> {
+  findOne(
+    filter: Record<string, unknown>,
+    projection?: Record<string, unknown>,
+  ): { lean?(): Promise<T | null> } | Promise<T | null>;
+}
+
+export interface AuditLogger {
+  warn(message: string, meta?: Record<string, unknown>): void;
+  info?(message: string, meta?: Record<string, unknown>): void;
+}
+
+let auditLogger: AuditLogger | null = null;
+
+/**
+ * Registers the logger used to record denied cross-tenant access attempts.
+ * Call once during application bootstrap (e.g. with the shared winston/pino
+ * logger). Falls back to `console` when unset.
+ */
+export function setScopedAuditLogger(logger: AuditLogger | null): void {
+  auditLogger = logger;
+}
+
+function getAuditLogger(): AuditLogger {
+  return auditLogger ?? console;
+}
+
+function isPatientPortalUser(user: ScopedUser): boolean {
+  return user.role === 'patient' || user.role === 'PATIENT';
+}
+
+/**
+ * Loads a record by ID while enforcing tenant scoping.
+ *
+ * The query always includes `_id: id` and the caller's `clinicId`. When the
+ * caller is a patient-portal user (or `options.patientScoped` is set) the
+ * query also includes the caller's `patientId`.
+ *
+ * Returns `null` when the record does not exist *or* belongs to another
+ * tenant, so callers can respond with `404` without leaking existence.
+ * Denied cross-clinic attempts are written to the audit log.
+ */
+export async function findScoped<T>(
+  model: ScopedModel<T>,
+  id: string,
+  user: ScopedUser | undefined | null,
+  options: FindScopedOptions = {},
+): Promise<T | null> {
+  const tenantField = options.tenantField ?? 'clinicId';
+  const patientField = options.patientField ?? 'patientId';
+  const resource = options.resource ?? 'record';
+
+  const clinicId = user?.clinicId ?? null;
+  const patientId = user?.patientId ?? null;
+  const requirePatient = options.patientScoped === true || isPatientPortalUser(user ?? {});
+
+  const filter: Record<string, unknown> = {
+    ...(options.filter ?? {}),
+    _id: id,
+  };
+
+  if (clinicId) {
+    filter[tenantField] = clinicId;
+  }
+
+  if (requirePatient) {
+    if (!patientId) {
+      getAuditLogger().warn('Denied tenant-scoped lookup: missing patient context', {
+        resource,
+        recordId: id,
+        clinicId,
+        userId: user?.id ?? user?.userId ?? null,
+        reason: 'missing_patient_context',
+      });
+      return null;
+    }
+    filter[patientField] = patientId;
+  }
+
+  const query = model.findOne(filter, options.projection);
+  const result = await (query && typeof (query as { lean?: unknown }).lean === 'function'
+    ? (query as { lean(): Promise<T | null> }).lean()
+    : (query as Promise<T | null>));
+
+  if (result === null || result === undefined) {
+    // Distinguish "does not exist" from "exists in another tenant" for audit
+    // purposes without leaking the distinction to the caller.
+    if (clinicId) {
+      const existsElsewhere = await (model.findOne({ _id: id }) as Promise<T | null>);
+      if (existsElsewhere) {
+        getAuditLogger().warn('Denied cross-clinic access attempt', {
+          resource,
+          recordId: id,
+          clinicId,
+          userId: user?.id ?? user?.userId ?? null,
+          reason: 'cross_tenant',
+        });
+      }
+    }
+    return null;
+  }
+
+  return result;
+}
+
 export interface PaginationMeta {
   page: number;
   limit: number;

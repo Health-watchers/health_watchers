@@ -1,4 +1,4 @@
-name: Performance Regression Tests
+name: Performance Suite
 
 on:
   pull_request:
@@ -7,9 +7,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  smoke-test-pr:
-    name: Quick Smoke Test (PR)
+  load:
+    name: Load Test (PR Smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -128,7 +136,8 @@ jobs:
           path: smoke-summary.json
           retention-days: 14
 
-  performance:
+  stress:
+    name: Stress Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -224,4 +233,55 @@ jobs:
 
       - name: Fail if regression detected
         if: steps.regression.outcome == 'failure'
+        run: exit 1
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup k6
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Start API
+        run: docker compose up -d mongodb redis api
+        env:
+          NODE_ENV: test
+
+      - name: Wait for API
+        run: |
+          for _i in {1..30}; do
+            curl -sf http://localhost:3001/health && exit 0
+            sleep 2
+          done
+          docker compose logs api
+          exit 1
+
+      - name: Run benchmark suite
+        id: benchmark
+        run: |
+          k6 run performance/scripts/k6-baseline.js \
+            --env BASE_URL=http://localhost:3001 \
+            --env AUTH_TOKEN=${{ secrets.PERF_TEST_TOKEN }} \
+            --summary-export=performance/benchmark-summary.json
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: performance/benchmark-summary.json
+          retention-days: 30
+
+      - name: Fail if benchmark failed
+        if: steps.benchmark.outcome == 'failure'
         run: exit 1

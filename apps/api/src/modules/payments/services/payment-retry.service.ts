@@ -4,9 +4,6 @@ import { stellarClient } from './stellar-client';
 import { confirmPayment } from './payment-confirmation.service';
 
 const MAX_RETRY_AGE_HOURS = 24;
-const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-
-let retryJobInterval: NodeJS.Timeout | null = null;
 
 /**
  * Retry confirming payments that have a txHash recorded but failed during
@@ -73,24 +70,17 @@ export async function retryFailedPaymentConfirmations(): Promise<void> {
   }
 }
 
-export function startPaymentRetryJob(): void {
-  if (retryJobInterval) return;
-
-  retryJobInterval = setInterval(async () => {
-    try {
-      await retryFailedPaymentConfirmations();
-    } catch (err) {
-      logger.error({ err }, 'payment-retry: unhandled error');
-    }
-  }, CHECK_INTERVAL_MS);
-
-  retryJobInterval.unref();
-  logger.info('payment-retry: job started (interval: 10 min)');
-}
-
-export function stopPaymentRetryJob(): void {
-  if (retryJobInterval) {
-    clearInterval(retryJobInterval);
-    retryJobInterval = null;
+/**
+ * BullMQ job handler for the payment-retry job.
+ *
+ * Scheduled work is registered in the distributed job registry
+ * (`apps/api/src/jobs/`) with a cron expression, so it runs exactly once per
+ * tick across all replicas instead of once per replica via `setInterval`.
+ */
+export async function paymentRetryJobHandler(): Promise<void> {
+  try {
+    await retryFailedPaymentConfirmations();
+  } catch (err) {
+    logger.error({ err }, 'payment-retry: unhandled error');
   }
 }

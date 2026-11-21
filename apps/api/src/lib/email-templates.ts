@@ -309,6 +309,28 @@ export function buildDataExportReadyEmail(downloadUrl: string, expiresAt: Date, 
   };
 }
 
+export function buildDataExportReadyEmail(downloadUrl: string, expiresAt: Date, language?: string): EmailContent {
+  const locale = resolveLanguage(language);
+  const expiresStr = expiresAt.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+  });
+
+  if (locale === 'fr') {
+    return {
+      subject: 'Votre export de données est prêt',
+      text: `Votre export de données de santé est prêt à être téléchargé.\n\nTéléchargez-le ici : ${downloadUrl}\n\nCe lien expirera le ${expiresStr} (30 jours). Passé ce délai, vous devrez demander un nouvel export.`,
+      html: `<h3>Votre export de données est prêt</h3><p>Votre export de données de santé est prêt à être téléchargé.</p><p><a href="${downloadUrl}">Télécharger mes données</a></p><p><strong>Ce lien expirera le ${expiresStr} (30 jours).</strong> Passé ce délai, vous devrez demander un nouvel export.</p><p>Si vous n'êtes pas à l'origine de cette demande, veuillez contacter immédiatement notre équipe de support.</p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Data Export Is Ready',
+    text: `Your health data export is ready to download.\n\nDownload it here: ${downloadUrl}\n\nThis link will expire on ${expiresStr} (30 days). After that, you will need to request a new export.`,
+    html: `<h3>Your Data Export Is Ready</h3><p>Your health data export is ready to download.</p><p><a href="${downloadUrl}">Download My Data</a></p><p><strong>This link will expire on ${expiresStr} (30 days).</strong> After that, you will need to request a new export.</p><p>If you did not request this export, please contact our support team immediately.</p>`,
+  };
+}
+
 export function buildConsentNotificationEmail(
   consentType: string,
   action: 'accepted' | 'rejected' | 'updated',

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { env } from '../../config/env';
 
 /**
  * Secure, self-verifying meeting links (#1249).
@@ -20,16 +21,11 @@ export interface MeetingLinkPayload {
 
 const DEFAULT_TTL_SECONDS = 60 * 60; // 1 hour
 
-function secret(): string {
-  return (
-    process.env.TELEHEALTH_LINK_SECRET ||
-    process.env.JWT_ACCESS_TOKEN_SECRET ||
-    'telehealth-dev-secret-change-me'
-  );
-}
-
 function sign(encodedPayload: string): string {
-  return crypto.createHmac('sha256', secret()).update(encodedPayload).digest('base64url');
+  return crypto
+    .createHmac('sha256', env.TELEHEALTH_LINK_SECRET)
+    .update(encodedPayload)
+    .digest('base64url');
 }
 
 export interface CreateMeetingLinkOptions {
