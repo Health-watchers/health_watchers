@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import mongoose, { Schema, Document } from 'mongoose';
 import { config } from '@health-watchers/config';
-import { stripPII } from './ai.service';
+import { generateAnonymisedContent } from './llm-client';
 
 export const DIFFERENTIAL_DISCLAIMER =
   'AI-generated suggestions for clinical assistance only. Not a substitute for professional medical judgment. Always verify with clinical examination and appropriate investigations.';
@@ -143,26 +143,23 @@ export async function flagIncorrectSuggestion(
 }
 
 export async function generateDifferentialDiagnosis(
-  input: DifferentialDiagnosisInput
+  input: DifferentialDiagnosisInput,
+  context: DifferentialDiagnosisContext
 ): Promise<DifferentialDiagnosisResult> {
   if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
 
-  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-  // Build anonymised clinical context — no patient names or identifiers
-  const clinicalContext = stripPII(
-    [
-      `Chief Complaint: ${input.chiefComplaint}`,
-      `Symptoms: ${input.symptoms.join(', ')}`,
-      input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
-      input.patientAge ? `Patient Age: ${input.patientAge} years` : '',
-      input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
-      input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-  );
+  // Clinical context is anonymised centrally by the shared LLM client
+  // (@health-watchers/anonymize) before it leaves the process.
+  const clinicalContext = [
+    `Chief Complaint: ${input.chiefComplaint}`,
+    `Symptoms: ${input.symptoms.join(', ')}`,
+    input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
+    input.patientAge ? `Patient Age: ${input.patientAge} years` : '',
+    input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
+    input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const prompt = `You are a clinical decision support AI assisting a physician. Based on the anonymised patient presentation below, generate a differential diagnosis list.
 
@@ -190,8 +187,14 @@ Rules:
 - Do NOT include any patient-identifying information in the response.
 - Do NOT include markdown code fences or any text outside the JSON object.`;
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
+  const raw = (
+    await generateAnonymisedContent(prompt, {
+      clinicId: context.clinicId,
+      userId: context.userId,
+      patientId: context.patientId,
+      feature: 'differential-diagnosis',
+    })
+  ).trim();
 
   // Strip possible markdown fences
   const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');

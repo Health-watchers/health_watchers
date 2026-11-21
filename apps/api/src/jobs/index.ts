@@ -26,6 +26,9 @@ import { processDueDeliveries } from '@api/modules/notifications/notification-di
 import { runImmunizationComplianceJob } from '@api/modules/immunizations/immunization-compliance-job';
 import { relayPendingOutboxEvents } from '@api/modules/outbox/outbox.relay';
 import { anchorChainHeads, verifyAllChains } from '@api/modules/audit/audit-chain.service';
+import { processRecurringPayments } from '@api/modules/payments/recurring-payment-scheduler';
+import { processDuePaymentRetries } from '@api/modules/payments/services/payment-retry.service';
+import { processDueExports } from '@api/modules/export/export-scheduler.service';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -153,6 +156,27 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     cron: '30 0 * * *',
     description: 'Anchor daily audit chain heads on Stellar when enabled (#1494)',
     handler: () => anchorChainHeads(),
+  },
+  {
+    name: 'recurring-payments',
+    cron: '0 1 * * *',
+    description: 'Charge due recurring payment subscriptions exactly once per billing period (#1793)',
+    handler: () => processRecurringPayments(),
+    idempotencyKey: (scheduledFor: Date) => `recurring-payments:${scheduledFor.toISOString().slice(0, 10)}`,
+  },
+  {
+    name: 'payment-retry',
+    cron: '*/5 * * * *',
+    description: 'Retry failed payments whose backoff window has elapsed (#1793)',
+    handler: () => processDuePaymentRetries(),
+    idempotencyKey: (scheduledFor: Date) => `payment-retry:${scheduledFor.toISOString().slice(0, 16)}`,
+  },
+  {
+    name: 'export-scheduler',
+    cron: '* * * * *',
+    description: 'Run scheduled data exports that are due (#1793)',
+    handler: () => processDueExports(),
+    idempotencyKey: (scheduledFor: Date) => `export-scheduler:${scheduledFor.toISOString().slice(0, 16)}`,
   },
 ];
 
