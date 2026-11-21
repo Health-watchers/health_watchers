@@ -26,6 +26,7 @@ rule_files:
   - 'alerts-cost.yml'
   - 'alerts-cdn.yml'
   - 'alerts-stellar.yml'
+  - 'alerts-certificates.yml'
 
 scrape_configs:
   # Health Watchers API

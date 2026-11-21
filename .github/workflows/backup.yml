@@ -4,10 +4,18 @@ on:
   schedule:
     # Full backup daily at 2 AM UTC
     - cron: '0 2 * * *'
-    # Oplog archive every 5 minutes for PITR
+    # Incremental backup every 6 hours
+    - cron: '0 2,8,14,20 * * *'
+    # Oplog archive for PITR every 5 minutes
     - cron: '*/5 * * * *'
+    # Weekly E2E verification on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
+      verify:
+        description: 'Run restore verification after backup'
+        type: boolean
+        default: false
       backup_type:
         description: 'Backup type to run'
         type: choice
@@ -15,18 +23,14 @@ on:
           - full
           - oplog
           - both
-        default: both
-      verify:
-        description: 'Run restore verification after backup'
-        type: boolean
-        default: false
+        default: full
 
 jobs:
-  full-backup:
-    name: Full MongoDB Backup
+  backup:
+    name: Backup MongoDB
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event.schedule == '0 2 * * *' || github.event.inputs.backup_type == 'full' || github.event.inputs.backup_type == 'both'
+    if: github.event_name != 'schedule' || (github.event.schedule != '*/5 * * * *' && !startsWith(github.event.schedule, '0 2 * * 0'))
 
     steps:
       - name: Checkout
@@ -69,8 +73,8 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚨 Full Backup failed on ${new Date().toISOString().split('T')[0]}`,
-              body: `The scheduled MongoDB full backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              title: `🚨 Backup failed on ${new Date().toISOString().split('T')[0]}`,
+              body: `The scheduled MongoDB backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               labels: ['backup', 'incident'],
             });
 

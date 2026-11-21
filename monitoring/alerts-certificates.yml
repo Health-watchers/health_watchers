@@ -1,0 +1,48 @@
+groups:
+  - name: certificates
+    rules:
+      - alert: CertificateExpiry30Days
+        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 30 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Certificate expiring within 30 days"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in less than 30 days."
+          runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
+
+      - alert: CertificateExpiry7Days
+        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 7 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Certificate expiring within 7 days"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in less than 7 days. Automatic renewal may have failed."
+          runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
+
+      - alert: CertificateExpiryImmediate
+        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 24 * 3600
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          page: "true"
+        annotations:
+          summary: "Certificate expiring within 24 hours"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in less than 24 hours. Immediate action required."
+          runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
+
+      - alert: CertificateRenewalFailed
+        expr: increase(certmanager_certificate_renewal_failures_total[1h]) > 0 or certmanager_certificate_ready_status{condition="Ready"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          team: platform
+          page: "true"
+        annotations:
+          summary: "Certificate renewal failing"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} has failed to renew or is not Ready."
+          runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"

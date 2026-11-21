@@ -192,6 +192,9 @@
    kubectl describe certificate <cert-name> -n health-watchers
    ```
 3. If not auto-renewing, manually renew via your CA
+4. For cert-manager renewal failures, follow
+   [`monitoring/runbooks/CERTIFICATE_RENEWAL.md`](../../monitoring/runbooks/CERTIFICATE_RENEWAL.md)
+   (covers the `CertificateExpiry30Days` / 7-day / 24-hour alerts)
 
 **Time estimate to resolve:** 15–60 minutes
 

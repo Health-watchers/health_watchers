@@ -18,7 +18,7 @@ assert_equals() {
   local expected="$1"
   local actual="$2"
   local message="$3"
-  
+
   if [[ "$expected" == "$actual" ]]; then
     echo "✓ $message"
     ((PASSED++))
@@ -32,7 +32,7 @@ assert_contains() {
   local haystack="$1"
   local needle="$2"
   local message="$3"
-  
+
   if [[ "$haystack" == *"$needle"* ]]; then
     echo "✓ $message"
     ((PASSED++))
