@@ -49,20 +49,19 @@ ENC="$WORKDIR/$LATEST"
 aws s3 cp "s3://$BACKUP_BUCKET/$S3_PREFIX/$LATEST" "$ENC" --region "$AWS_REGION" --quiet \
   || fail "download failed"
 
-# ── Compare against the sha256 stored next to the object (if present) ───────
+# ── Compare against the sha256 manifest stored next to the object ──────────
+# The manifest is mandatory: a backup without one cannot be integrity-verified
+# and must never be considered restorable.
 LOCAL_SHA=$(sha256sum "$ENC" | awk '{print $1}')
-if aws s3 cp "s3://$BACKUP_BUCKET/$S3_PREFIX/$LATEST.sha256" "$WORKDIR/expected.sha256" \
-    --region "$AWS_REGION" --quiet 2>/dev/null; then
-  EXPECTED_SHA=$(awk '{print $1}' "$WORKDIR/expected.sha256")
-  [[ "$LOCAL_SHA" == "$EXPECTED_SHA" ]] || fail "sha256 mismatch (got $LOCAL_SHA, want $EXPECTED_SHA)"
-  log "sha256 matches stored manifest"
-else
-  # No stored manifest yet — write one so future runs can compare.
-  echo "$LOCAL_SHA  $LATEST" > "$WORKDIR/new.sha256"
-  aws s3 cp "$WORKDIR/new.sha256" "s3://$BACKUP_BUCKET/$S3_PREFIX/$LATEST.sha256" \
-    --region "$AWS_REGION" --quiet
-  log "no prior manifest — stored sha256 for future verification"
-fi
+aws s3 cp "s3://$BACKUP_BUCKET/$S3_PREFIX/$LATEST.sha256" "$WORKDIR/expected.sha256" \
+  --region "$AWS_REGION" --quiet 2>/dev/null \
+  || fail "missing sha256 manifest for $LATEST — cannot verify integrity"
+
+EXPECTED_SHA=$(awk 'NR==1 {print $1}' "$WORKDIR/expected.sha256")
+[[ -n "$EXPECTED_SHA" ]] || fail "sha256 manifest for $LATEST is empty or malformed"
+[[ "$LOCAL_SHA" == "$EXPECTED_SHA" ]] \
+  || fail "sha256 mismatch (got $LOCAL_SHA, want $EXPECTED_SHA)"
+log "sha256 matches stored manifest"
 
 # ── Decrypt + structural check ─────────────────────────────────────────────
 ARCHIVE="$WORKDIR/backup.tar.gz"

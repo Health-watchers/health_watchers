@@ -40,15 +40,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release
+      - name: Create GitHub Releases
         if: steps.changesets.outputs.published == 'true'
-        uses: actions/create-release@4cb87b57bc9e09ed098f62b1b45c7c4f2c3f1f1f # v1.1.4
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
         with:
-          tag_name: v${{ fromJSON(steps.changesets.outputs.publishedPackages)[0].version }}
-          release_name: Release v${{ fromJSON(steps.changesets.outputs.publishedPackages)[0].version }}
-          body: |
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-          draft: false
-          prerelease: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const packages = JSON.parse(process.env.PUBLISHED_PACKAGES || '[]');
+
+            for (const pkg of packages) {
+              const tag = `${pkg.name}@${pkg.version}`;
+
+              // Use the package's generated changelog as the release body when available.
+              let body = `Release ${pkg.name}@${pkg.version}`;
+              const changelogPath = path.join('packages', pkg.name.split('/').pop(), 'CHANGELOG.md');
+              if (fs.existsSync(changelogPath)) {
+                body = fs.readFileSync(changelogPath, 'utf8');
+              } else if (fs.existsSync('CHANGELOG.md')) {
+                body = fs.readFileSync('CHANGELOG.md', 'utf8');
+              }
+
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                name: tag,
+                body,
+                draft: false,
+                prerelease: false,
+              });
+            }

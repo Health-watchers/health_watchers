@@ -40,6 +40,46 @@ groups:
           summary: 'Last {{ $labels.kind }} backup run reported failure'
           description: 'backup-scheduler.sh exited non-zero for the {{ $labels.kind }} run.'
 
+      # ── Daily backup job failure (Pushgateway) ──────────────────────────
+      - alert: MongoDBBackupJobFailed
+        expr: >
+          backup_job_success{job="mongodb-backup"} == 0
+          or
+          (time() - backup_last_success_timestamp{job="mongodb-backup"} > 86400)
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'Daily MongoDB backup job failed or is overdue'
+          description: >
+            The daily mongodb-backup job (scripts/backup-mongodb.sh) either
+            reported failure (backup_job_success == 0) or has not recorded a
+            successful run in over 24h
+            (last success {{ $value | humanizeDuration }} ago). Check the
+            mongodb-backup CronJob and Pushgateway metrics.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
+
+      - alert: MongoDBBackupVerificationFailed
+        expr: >
+          backup_verification_status{job="mongodb-backup"} == 0
+          or
+          (time() - backup_last_verified_timestamp{job="mongodb-backup"} > 86400)
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+          dashboard: hw-backup-dr
+        annotations:
+          summary: 'MongoDB backup integrity verification failed or is stale'
+          description: >
+            The post-backup SHA-256 verification (ops/backup-verification.sh)
+            failed (backup_verification_status == 0) or no successful
+            verification has been recorded in over 24h. Treat the latest
+            encrypted backup as unverified.
+          runbook_url: 'https://github.com/Health-watchers/health_watchers/blob/main/docs/runbooks/05-backup.md'
+
       # ── Verification — "verification passes 100%" ───────────────────────
       - alert: BackupChecksumVerificationFailed
         expr: backup_checksum_status == 0

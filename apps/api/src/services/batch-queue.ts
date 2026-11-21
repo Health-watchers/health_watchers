@@ -1,6 +1,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import logger from '@api/utils/logger';
+import config from '@packages/config';
 
 const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
@@ -98,12 +99,12 @@ export function cleanupJobCheckpoints(jobId: string): void {
 const exportQueue = new Queue('export-jobs', {
   connection,
   defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 3,
+    removeOnComplete: config.batchQueue.removeOnComplete,
+    removeOnFail: config.batchQueue.removeOnFail,
+    attempts: config.batchQueue.attempts,
     backoff: {
       type: 'exponential',
-      delay: 5000,
+      delay: config.batchQueue.backoffDelayMs,
     },
   },
 });
@@ -184,10 +185,10 @@ export const exportWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5,
+    concurrency: config.batchQueue.concurrency,
     limiter: {
-      max: 10,
-      duration: 60000,
+      max: config.batchQueue.limiterMax,
+      duration: config.batchQueue.limiterDurationMs,
     },
   }
 );

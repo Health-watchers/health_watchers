@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import { AppRole } from '../types/express';
 import { ApiErrorCode } from '@health-watchers/types';
 import { sendApiError } from '../utils/api-response';
+import { prisma } from '../lib/prisma';
+import { isMfaRequiredRole, isMfaGracePeriodExpired } from '../modules/auth/mfa-policy';
 
 /**
  * authenticate — Express middleware that enforces full JWT claim validation.
@@ -79,9 +81,49 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return;
   }
 
+  const role = payload.role as AppRole;
+
+  // MFA enforcement (#1669) — admin, doctor and nurse accounts must complete a
+  // TOTP / backup-code challenge before the access token is accepted.
+  if (isMfaRequiredRole(role)) {
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId as string },
+      select: { mfaEnabled: true, mfaEnrolledAt: true },
+    });
+
+    if (!user) {
+      sendApiError(res, 401, 'Unauthorized', ApiErrorCode.INVALID_TOKEN, 'User no longer exists');
+      return;
+    }
+
+    if (!user.mfaEnabled) {
+      // Newly enrolled users get a grace period to set up MFA.
+      if (isMfaGracePeriodExpired(user.mfaEnrolledAt)) {
+        sendApiError(
+          res,
+          403,
+          'Forbidden',
+          ApiErrorCode.MFA_REQUIRED,
+          'Multi-factor authentication enrollment is required for this account'
+        );
+        return;
+      }
+    } else if (payload.mfaVerified !== true) {
+      // MFA is enabled but this token was not issued after a completed challenge.
+      sendApiError(
+        res,
+        403,
+        'Forbidden',
+        ApiErrorCode.MFA_REQUIRED,
+        'Multi-factor authentication verification required'
+      );
+      return;
+    }
+  }
+
   req.user = {
     userId: payload.userId as string,
-    role: payload.role as AppRole,
+    role,
     clinicId: payload.clinicId as string,
     patientId: payload.patientId as string | undefined,
     isSuperAdmin: (payload.isSuperAdmin as boolean | undefined) ?? payload.role === 'SUPER_ADMIN',

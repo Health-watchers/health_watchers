@@ -26,6 +26,12 @@ import { processDueDeliveries } from '@api/modules/notifications/notification-di
 import { runImmunizationComplianceJob } from '@api/modules/immunizations/immunization-compliance-job';
 import { relayPendingOutboxEvents } from '@api/modules/outbox/outbox.relay';
 import { anchorChainHeads, verifyAllChains } from '@api/modules/audit/audit-chain.service';
+import { processRecurringPayments } from '@api/modules/payments/recurring-payment-scheduler';
+import { processDuePaymentRetries } from '@api/modules/payments/services/payment-retry.service';
+import { processDueExports } from '@api/modules/export/export-scheduler.service';
+import { runAgingReminders } from '@api/modules/billing/billing-aging';
+import { sendSurveyAssignmentNotifications } from '@api/modules/surveys/survey-assignment-notification-job';
+import { sendTrialExpiryNotifications } from '@api/modules/subscriptions/subscription-trial-expiry-job';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -153,6 +159,48 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     cron: '30 0 * * *',
     description: 'Anchor daily audit chain heads on Stellar when enabled (#1494)',
     handler: () => anchorChainHeads(),
+  },
+  {
+    name: 'recurring-payments',
+    cron: '0 1 * * *',
+    description: 'Charge due recurring payment subscriptions exactly once per billing period (#1793)',
+    handler: () => processRecurringPayments(),
+    idempotencyKey: (scheduledFor: Date) => `recurring-payments:${scheduledFor.toISOString().slice(0, 10)}`,
+  },
+  {
+    name: 'payment-retry',
+    cron: '*/5 * * * *',
+    description: 'Retry failed payments whose backoff window has elapsed (#1793)',
+    handler: () => processDuePaymentRetries(),
+    idempotencyKey: (scheduledFor: Date) => `payment-retry:${scheduledFor.toISOString().slice(0, 16)}`,
+  },
+  {
+    name: 'export-scheduler',
+    cron: '* * * * *',
+    description: 'Run scheduled data exports that are due (#1793)',
+    handler: () => processDueExports(),
+    idempotencyKey: (scheduledFor: Date) => `export-scheduler:${scheduledFor.toISOString().slice(0, 16)}`,
+  },
+  {
+    name: 'billing-aging-reminders',
+    cron: '0 9 * * *',
+    description: 'Send 30/60/90-day overdue invoice reminders, skipping overridden entries (#1684)',
+    handler: () => runAgingReminders(),
+    idempotencyKey: (scheduledFor: Date) => `billing-aging-reminders:${scheduledFor.toISOString().slice(0, 10)}`,
+  },
+  {
+    name: 'survey-assignment-notifications',
+    cron: '0 * * * *',
+    description: 'Notify patients of newly assigned surveys (#1683)',
+    handler: () => sendSurveyAssignmentNotifications(),
+    idempotencyKey: (scheduledFor: Date) => `survey-assignment-notifications:${scheduledFor.toISOString().slice(0, 13)}`,
+  },
+  {
+    name: 'subscription-trial-expiry',
+    cron: '0 8 * * *',
+    description: 'Send subscription trial-expiry notifications (#1682)',
+    handler: () => sendTrialExpiryNotifications(),
+    idempotencyKey: (scheduledFor: Date) => `subscription-trial-expiry:${scheduledFor.toISOString().slice(0, 10)}`,
   },
 ];
 

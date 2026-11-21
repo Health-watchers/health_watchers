@@ -70,6 +70,41 @@ fi
 
 log "Downloaded: $(du -sh "$ENCRYPTED_FILE" | cut -f1)"
 
+# ── Step 2b: Verify SHA-256 checksum ──────────────────────────────────────────
+log "Downloading checksum file from S3..."
+CHECKSUM_FILE="$VERIFY_DIR/$BACKUP_TIMESTAMP.sha256"
+CHECKSUM_S3_KEY="${LATEST_BACKUP}.sha256"
+
+if ! aws s3 cp "s3://$BACKUP_BUCKET/$CHECKSUM_S3_KEY" "$CHECKSUM_FILE" \
+  --region "$AWS_REGION" \
+  --quiet 2>/dev/null; then
+  error "Checksum file not found in S3: s3://$BACKUP_BUCKET/$CHECKSUM_S3_KEY"
+  exit 1
+fi
+
+if [[ ! -s "$CHECKSUM_FILE" ]]; then
+  error "Checksum file is empty or missing: $CHECKSUM_FILE"
+  exit 1
+fi
+
+log "Verifying SHA-256 checksum..."
+EXPECTED_CHECKSUM=$(awk '{print $1}' "$CHECKSUM_FILE" | head -1)
+if [[ -z "$EXPECTED_CHECKSUM" ]]; then
+  error "Could not parse expected checksum from $CHECKSUM_FILE"
+  exit 1
+fi
+
+ACTUAL_CHECKSUM=$(sha256sum "$ENCRYPTED_FILE" | awk '{print $1}')
+
+if [[ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]]; then
+  error "Checksum mismatch for $ENCRYPTED_FILE"
+  error "  Expected: $EXPECTED_CHECKSUM"
+  error "  Actual:   $ACTUAL_CHECKSUM"
+  exit 1
+fi
+
+success "Checksum verified: $ACTUAL_CHECKSUM"
+
 # ── Step 3: Decrypt backup ────────────────────────────────────────────────────
 log "Decrypting backup..."
 ARCHIVE_FILE="$VERIFY_DIR/$BACKUP_TIMESTAMP.tar.gz"

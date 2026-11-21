@@ -1,4 +1,4 @@
-import { Express } from 'express';
+import { Express, RequestHandler } from 'express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import path from 'path';
@@ -299,9 +299,33 @@ const options: swaggerJsdoc.Options = {
 
 export const swaggerSpec = swaggerJsdoc(options);
 
-export function setupSwagger(app: Express): void {
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get('/api/docs.json', (_req, res) => {
+/**
+ * Swagger UI is only exposed outside production. In production it is either
+ * disabled entirely (default) or, when `SWAGGER_ENABLED=true`, mounted behind
+ * the supplied authentication middleware so it is never publicly reachable.
+ */
+export function setupSwagger(
+  app: Express,
+  authMiddleware?: RequestHandler,
+): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const explicitlyEnabled = process.env.SWAGGER_ENABLED === 'true';
+
+  if (isProduction && !explicitlyEnabled) {
+    return;
+  }
+
+  const guards: RequestHandler[] = [];
+  if (isProduction) {
+    if (!authMiddleware) {
+      // Refuse to expose docs in production without an auth guard.
+      return;
+    }
+    guards.push(authMiddleware);
+  }
+
+  app.use('/api/docs', ...guards, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get('/api/docs.json', ...guards, (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });

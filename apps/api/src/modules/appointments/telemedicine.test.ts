@@ -46,6 +46,24 @@ jest.mock('@api/realtime/socket', () => ({
   emitToClinic: jest.fn(),
 }));
 
+// ── Daily.co HTTP client mock ─────────────────────────────────────────────────
+const mockDailyPost = jest.fn();
+const mockDailyGet = jest.fn();
+jest.mock('axios', () => {
+  const actual = jest.requireActual('axios');
+  return {
+    __esModule: true,
+    ...actual,
+    default: {
+      ...actual.default,
+      create: jest.fn(() => ({
+        post: mockDailyPost,
+        get: mockDailyGet,
+      })),
+    },
+  };
+});
+
 // ── Model mocks ───────────────────────────────────────────────────────────────
 const mockFindOne = jest.fn();
 const mockFindByIdAndUpdate = jest.fn();
@@ -81,6 +99,9 @@ import {
   createVideoRoom,
   generateVideoToken,
   calculateVideoDuration,
+  startVideoSession,
+  endVideoSession,
+  getWaitingRoomStatus,
 } from './telemedicine.service';
 import { appointmentRoutes } from './appointments.controller';
 
@@ -112,16 +133,49 @@ app.use('/api/v1/appointments', appointmentRoutes);
 
 beforeEach(() => {
   jest.clearAllMocks();
+  process.env.DAILY_API_KEY = 'test-daily-api-key';
+  mockDailyPost.mockReset();
+  mockDailyGet.mockReset();
 });
 
 // ── telemedicine.service unit tests ───────────────────────────────────────────
 
 describe('createVideoRoom', () => {
   it('returns a daily.co room config', async () => {
+    mockDailyPost.mockResolvedValue({
+      data: {
+        id: 'room-abc123',
+        url: 'https://health-watchers.daily.co/room-abc123',
+        name: 'room-abc123',
+      },
+    });
+
     const room = await createVideoRoom('daily.co');
     expect(room.provider).toBe('daily.co');
     expect(room.roomId).toMatch(/^room-/);
     expect(room.roomUrl).toContain(room.roomId);
+  });
+
+  it('calls the Daily.co rooms endpoint with the API key', async () => {
+    mockDailyPost.mockResolvedValue({
+      data: {
+        id: 'room-abc123',
+        url: 'https://health-watchers.daily.co/room-abc123',
+        name: 'room-abc123',
+      },
+    });
+
+    await createVideoRoom('daily.co');
+
+    expect(mockDailyPost).toHaveBeenCalledWith(
+      '/rooms',
+      expect.objectContaining({ name: expect.any(String) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringContaining('test-daily-api-key'),
+        }),
+      })
+    );
   });
 
   it('returns a jitsi room config', async () => {
@@ -144,10 +198,29 @@ describe('createVideoRoom', () => {
 
 describe('generateVideoToken', () => {
   it('generates a token for daily.co', async () => {
+    mockDailyPost.mockResolvedValue({ data: { token: 'daily-meeting-token' } });
+
     const token = await generateVideoToken('room-1', 'Doctor', 'daily.co');
     expect(token.roomId).toBe('room-1');
     expect(token.provider).toBe('daily.co');
     expect(token.token).toBeTruthy();
+  });
+
+  it('returns a Daily.co meeting token from the meeting-tokens endpoint', async () => {
+    mockDailyPost.mockResolvedValue({ data: { token: 'daily-meeting-token' } });
+
+    const token = await generateVideoToken('room-1', 'Doctor', 'daily.co');
+
+    expect(token.token).toBe('daily-meeting-token');
+    expect(mockDailyPost).toHaveBeenCalledWith(
+      '/meeting-tokens',
+      expect.objectContaining({ properties: expect.objectContaining({ room_name: 'room-1' }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: expect.stringContaining('test-daily-api-key'),
+        }),
+      })
+    );
   });
 
   it('generates a token for jitsi', async () => {
@@ -177,6 +250,96 @@ describe('calculateVideoDuration', () => {
   it('returns 0 for same start and end', () => {
     const t = new Date();
     expect(calculateVideoDuration(t, t)).toBe(0);
+  });
+});
+
+// ── startVideoSession / endVideoSession session metadata ──────────────────────
+
+describe('startVideoSession', () => {
+  it('persists start time and participants on the appointment', async () => {
+    const startedAt = new Date('2026-06-01T10:00:00Z');
+    mockFindByIdAndUpdate.mockResolvedValue({
+      ...baseAppointment,
+      videoStartedAt: startedAt,
+      videoParticipants: [DOCTOR_ID, PATIENT_ID],
+    });
+
+    const result = await startVideoSession(APPT_ID, {
+      startedAt,
+      participants: [DOCTOR_ID, PATIENT_ID],
+      recordingConsent: true,
+    });
+
+    expect(mockFindByIdAndUpdate).toHaveBeenCalledWith(
+      APPT_ID,
+      expect.objectContaining({
+        videoStartedAt: startedAt,
+        videoParticipants: [DOCTOR_ID, PATIENT_ID],
+        videoRecordingConsent: true,
+      }),
+      expect.any(Object)
+    );
+    expect(result).toBeTruthy();
+  });
+});
+
+describe('endVideoSession', () => {
+  it('persists end time, duration, and participants on the appointment', async () => {
+    const startedAt = new Date('2026-06-01T10:00:00Z');
+    const endedAt = new Date('2026-06-01T10:30:00Z');
+    mockFindByIdAndUpdate.mockResolvedValue({
+      ...baseAppointment,
+      videoStartedAt: startedAt,
+      videoEndedAt: endedAt,
+      videoDuration: 30,
+      videoParticipants: [DOCTOR_ID, PATIENT_ID],
+    });
+
+    const result = await endVideoSession(APPT_ID, {
+      startedAt,
+      endedAt,
+      participants: [DOCTOR_ID, PATIENT_ID],
+    });
+
+    expect(mockFindByIdAndUpdate).toHaveBeenCalledWith(
+      APPT_ID,
+      expect.objectContaining({
+        videoEndedAt: endedAt,
+        videoDuration: 30,
+        videoParticipants: [DOCTOR_ID, PATIENT_ID],
+      }),
+      expect.any(Object)
+    );
+    expect(result).toBeTruthy();
+  });
+});
+
+// ── Waiting room ──────────────────────────────────────────────────────────────
+
+describe('getWaitingRoomStatus', () => {
+  it('blocks patients until the doctor starts the session', () => {
+    const status = getWaitingRoomStatus(
+      { ...baseAppointment, videoStartedAt: undefined },
+      'PATIENT'
+    );
+    expect(status.admitted).toBe(false);
+    expect(status.reason).toBeTruthy();
+  });
+
+  it('admits patients once the doctor has started the session', () => {
+    const status = getWaitingRoomStatus(
+      { ...baseAppointment, videoStartedAt: new Date('2026-06-01T10:00:00Z') },
+      'PATIENT'
+    );
+    expect(status.admitted).toBe(true);
+  });
+
+  it('always admits the doctor', () => {
+    const status = getWaitingRoomStatus(
+      { ...baseAppointment, videoStartedAt: undefined },
+      'DOCTOR'
+    );
+    expect(status.admitted).toBe(true);
   });
 });
 

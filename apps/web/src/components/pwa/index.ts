@@ -1,2 +1,2 @@
-export { OfflineIndicator } from './OfflineIndicator';
-export { PWAInstallPrompt } from './PWAInstallPrompt';
+export { default as OfflineIndicator } from './OfflineIndicator';
+export { default as PWAInstallPrompt } from './PWAInstallPrompt';

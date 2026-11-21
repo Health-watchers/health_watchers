@@ -306,6 +306,69 @@ app.use(helmet.hsts({
 }));
 ```
 
+### Content Security Policy (CSP)
+
+The Next.js app (`apps/web`) ships a strict, nonce-based CSP. The policy is defined in `apps/web/next.config.js` and applied to every response via the `Content-Security-Policy` header.
+
+#### Directives
+
+| Directive | Value | Notes |
+|-----------|-------|-------|
+| `default-src` | `'self'` | Fallback for all fetch directives |
+| `script-src` | `'self' 'nonce-<nonce>' 'strict-dynamic'` | No `unsafe-inline`, no `unsafe-eval` |
+| `style-src` | `'self' 'nonce-<nonce>'` | No `unsafe-inline` |
+| `img-src` | `'self' data: https:` | Allows data URIs and HTTPS images |
+| `font-src` | `'self'` | Self-hosted fonts only |
+| `connect-src` | `'self'` + configured API origin | API calls only to known origins |
+| `object-src` | `'none'` | Blocks plugins (Flash, Java, etc.) |
+| `base-uri` | `'self'` | Prevents `<base>` tag hijacking |
+| `frame-ancestors` | `'none'` | Blocks clickjacking / framing |
+| `form-action` | `'self'` | Forms may only submit to same origin |
+| `report-uri` | `/api/csp-report` | Collects violations via `csp-report.controller.ts` |
+
+#### Nonces
+
+A fresh, cryptographically random nonce is generated per request (in `middleware.ts`) and injected into both the `Content-Security-Policy` header and the `x-nonce` request header. Next.js reads the nonce from the header and attaches it to the framework's own inline scripts automatically.
+
+- **Never** add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`/`style-src`. If a third-party library requires `eval`, replace it or isolate it in a sandboxed iframe.
+- `'strict-dynamic'` allows scripts loaded by an already-trusted (nonce-bearing) script to execute without their own nonce. This is what lets Next.js load its chunked bundles.
+
+#### Adding inline scripts with a nonce
+
+Any inline `<script>` or `<style>` you add must carry the per-request nonce. In a Server Component, read it from the headers:
+
+```tsx
+// app/example/page.tsx (Server Component)
+import { headers } from 'next/headers';
+
+export default function Page() {
+  const nonce = headers().get('x-nonce') ?? undefined;
+
+  return (
+    <>
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: '/* trusted code */' }} />
+      <style nonce={nonce}>{`/* trusted styles */`}</style>
+    </>
+  );
+}
+```
+
+Guidance:
+
+- Prefer external modules or Server Components over inline scripts whenever possible.
+- Never interpolate untrusted/user-supplied data into an inline script, even with a nonce — the nonce authorizes the script, it does not sanitize its contents.
+- If you add a new third-party origin (analytics, fonts, CDN), add it to the relevant directive in `next.config.js` and document the reason in the PR.
+
+#### Violation reporting
+
+CSP violations are POSTed to `/api/csp-report`, handled by `csp-report.controller.ts`. The controller validates the payload, logs it (without PHI), and forwards it to the security monitoring pipeline. Use these reports to catch policy regressions before tightening enforcement.
+
+#### Testing & validation
+
+- **Chrome CSP Evaluator:** paste the production `Content-Security-Policy` header value into the [CSP Evaluator](https://csp-evaluator.withgoogle.com/) and confirm there are no `unsafe-inline`/`unsafe-eval` findings.
+- **E2E test:** `e2e/security-headers.spec.ts` asserts the CSP header is present, contains a nonce, and does not contain `unsafe-inline` or `unsafe-eval`.
+- **Manual check:** load the app, open DevTools → Console, and confirm there are no CSP violation errors. Check the Network tab for the `Content-Security-Policy` response header.
+
 ### API Security
 
 #### Input Validation
@@ -574,7 +637,8 @@ Vulnerability reporting, response timelines, and the responsible disclosure poli
 - [ ] Input validation enabled
 - [ ] Output encoding applied
 - [ ] CSRF protection active
-- [ ] CSP headers set
+- [ ] CSP headers set (nonce-based, no `unsafe-inline`/`unsafe-eval`)
+- [ ] CSP violations reporting to `/api/csp-report` verified
 - [ ] Session timeout configured
 - [ ] Password policy enforced
 - [ ] Audit logging working

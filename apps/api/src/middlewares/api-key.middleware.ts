@@ -2,6 +2,10 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { ApiKeyModel, ApiKeyScope } from '../modules/api-keys/models/api-key.model';
 import { ApiKeyUsageModel } from '../modules/api-keys/models/api-key-usage.model';
+import {
+  scopeGrantsAccess,
+  getRequiredScopesForEndpoint,
+} from '../modules/api-keys/constants/scopes';
 
 const sha256 = (val: string) => crypto.createHash('sha256').update(val).digest('hex');
 
@@ -133,3 +137,37 @@ export const requireScope =
     }
     return next();
   };
+
+/** Full request path including the router mount prefix (query string stripped). */
+function fullPath(req: Request): string {
+  const raw = req.originalUrl || `${req.baseUrl || ''}${req.path || ''}`;
+  return raw.split('?')[0];
+}
+
+/**
+ * #1667 — endpoint-level scope enforcement.
+ *
+ * Requests that did not authenticate with an API key pass through untouched
+ * (JWT-authenticated traffic is governed by role checks). API-key requests
+ * must carry at least one scope that grants access to the requested
+ * endpoint + method; otherwise the request is rejected with 403.
+ */
+export const validateApiKeyScopes = (req: Request, res: Response, next: NextFunction) => {
+  const apiKey = (req as any).apiKey as ApiKeyContext | undefined;
+  if (!apiKey) return next();
+
+  const path = fullPath(req);
+  const method = req.method;
+  const scopes = apiKey.scopes ?? [];
+
+  const allowed = scopes.some((scope) => scopeGrantsAccess(scope, path, method));
+  if (allowed) return next();
+
+  trackApiKeyUsage(apiKey.id, apiKey.clinicId, path, 'rejected');
+
+  return res.status(403).json({
+    error: 'Forbidden',
+    message: 'API key does not have permission to access this endpoint',
+    requiredScopes: getRequiredScopesForEndpoint(path, method),
+  });
+};

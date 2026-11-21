@@ -1,0 +1,134 @@
+name: ELK Integration Test
+
+on:
+  pull_request:
+    paths:
+      - 'logging/**'
+      - 'api/**'
+      - 'stellar-service/**'
+      - '.github/workflows/elk-integration-test.yml'
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  elk-integration:
+    name: ELK Stack Integration Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify Docker availability
+        run: |
+          docker version
+          docker compose version
+
+      - name: Make integration test script executable
+        run: chmod +x logging/test-elk-integration.sh
+
+      - name: Run ELK integration test
+        id: elk_test
+        env:
+          CI: 'true'
+          COMPOSE_PROJECT_NAME: elk-it
+        run: ./logging/test-elk-integration.sh
+
+      - name: Collect container logs
+        if: failure()
+        run: |
+          mkdir -p elk-artifacts
+          for svc in elasticsearch logstash kibana api stellar-service; do
+            docker compose -f logging/docker-compose.elk.yml logs --no-color "$svc" > "elk-artifacts/${svc}.log" 2>&1 || true
+          done
+          docker ps -a > elk-artifacts/docker-ps.txt 2>&1 || true
+
+      - name: Upload ELK logs and artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elk-integration-artifacts
+          path: elk-artifacts/
+          retention-days: 7
+
+      - name: Tear down containers
+        if: always()
+        run: |
+          docker compose -f logging/docker-compose.elk.yml down -v --remove-orphans || true
+          docker system prune -af --volumes || true
+
+  infracost:
+    name: Infracost Cost Estimation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect IaC directories
+        id: iac
+        run: |
+          dirs=""
+          for d in terraform infra infrastructure deploy/terraform deploy/infrastructure; do
+            if [ -d "$d" ]; then
+              dirs="$dirs $d"
+            fi
+          done
+          if [ -z "$dirs" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "dirs=$dirs" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Infracost
+        if: steps.iac.outputs.found == 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Infracost installation
+        if: steps.iac.outputs.found == 'true'
+        run: infracost --version
+
+      - name: Generate Infracost diff
+        if: steps.iac.outputs.found == 'true'
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          for dir in ${{ steps.iac.outputs.dirs }}; do
+            infracost breakdown --path "$dir" --format json --out-file "infracost-$(basename "$dir").json" || true
+          done
+          infracost diff --path ${{ steps.iac.outputs.dirs }} --format json --out-file infracost-diff.json || true
+
+      - name: Post Infracost comment on PR
+        if: steps.iac.outputs.found == 'true' && github.event_name == 'pull_request'
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          infracost comment github \
+            --path infracost-diff.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --pull-request "${{ github.event.pull_request.number }}" \
+            --github-token "$GITHUB_TOKEN" \
+            --behavior update || true
+
+      - name: Upload Infracost reports
+        if: steps.iac.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: infracost-reports
+          path: infracost-*.json
+          retention-days: 7

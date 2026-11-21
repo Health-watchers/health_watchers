@@ -124,6 +124,58 @@ export const appConfig = {
   web: {
     url: env.WEB_URL,
   },
+
+  /** Operational timeouts (milliseconds) */
+  timeouts: {
+    /** Default HTTP request timeout */
+    requestMs: env.REQUEST_TIMEOUT_MS,
+    /** Timeout for outbound calls to the Stellar service */
+    stellarServiceMs: env.STELLAR_SERVICE_TIMEOUT_MS,
+    /** Timeout for AI/LLM provider calls */
+    aiRequestMs: env.AI_REQUEST_TIMEOUT_MS,
+    /** Timeout for database operations */
+    dbOperationMs: env.DB_OPERATION_TIMEOUT_MS,
+    /** Timeout for outbound email delivery */
+    emailSendMs: env.EMAIL_SEND_TIMEOUT_MS,
+  },
+
+  /** Retry policies */
+  retries: {
+    /** Max attempts for outbound HTTP calls */
+    httpMaxAttempts: env.HTTP_RETRY_MAX_ATTEMPTS,
+    /** Base delay between retries (milliseconds) */
+    httpBaseDelayMs: env.HTTP_RETRY_BASE_DELAY_MS,
+    /** Max attempts for Stellar service calls */
+    stellarMaxAttempts: env.STELLAR_RETRY_MAX_ATTEMPTS,
+    /** Max attempts for AI/LLM provider calls */
+    aiMaxAttempts: env.AI_RETRY_MAX_ATTEMPTS,
+    /** Max attempts for email delivery */
+    emailMaxAttempts: env.EMAIL_RETRY_MAX_ATTEMPTS,
+  },
+
+  /** Batch size limits */
+  batch: {
+    /** Max records per bulk database write */
+    dbWriteSize: env.DB_BATCH_WRITE_SIZE,
+    /** Max records per bulk export */
+    exportSize: env.EXPORT_BATCH_SIZE,
+    /** Max items processed per queue job */
+    queueJobSize: env.QUEUE_JOB_BATCH_SIZE,
+    /** Max records per notification fan-out */
+    notificationSize: env.NOTIFICATION_BATCH_SIZE,
+  },
+
+  /** Rate limiting thresholds */
+  rateLimit: {
+    /** Window length in milliseconds */
+    windowMs: env.RATE_LIMIT_WINDOW_MS,
+    /** Max requests per window for general API routes */
+    maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+    /** Max requests per window for auth routes */
+    authMaxRequests: env.RATE_LIMIT_AUTH_MAX_REQUESTS,
+    /** Max requests per window for AI routes */
+    aiMaxRequests: env.RATE_LIMIT_AI_MAX_REQUESTS,
+  },
 } as const;
 
 export type AppConfig = typeof appConfig;

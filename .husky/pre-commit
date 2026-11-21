@@ -1,5 +1,7 @@
 #!/bin/sh
 # Run lint-staged (ESLint + Prettier on staged files)
+# lint-staged is configured via .lintstagedrc.json which points at the
+# consolidated flat ESLint config in packages/config/eslint-config/.
 npx lint-staged
 
 # Run secret scanning on staged files

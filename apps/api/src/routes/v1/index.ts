@@ -122,15 +122,12 @@ import { comprehensiveHealthRoutes } from '../../modules/health/comprehensive-he
 // ── Public verification (#1426) ───────────────────────────────────────────────
 import immunizationVerifyRouter from '../../modules/immunizations/immunization-verify.routes';
 
-// ── Sharding (#1077) ──────────────────────────────────────────────────────────
-import shardingRouter from '../../routes/sharding';
-
 // ── CDN (#1078) ───────────────────────────────────────────────────────────────
 import cdnCacheRouter from '../../routes/cdn/cache-invalidation';
 import cdnHealthRouter from '../../routes/cdn/cdn-health';
 
-// ── Replication (#1080) ───────────────────────────────────────────────────────
-import replicationRouter from '../../routes/replication';
+// Note: sharding (#1077) and replication (#1080) admin routers are no longer
+// mounted on the public v1 surface — they live on the internal admin router.
 
 // ── Missing routes (#1427) ────────────────────────────────────────────────────
 import researchRouter from '../../modules/research/research.routes';
@@ -261,15 +258,9 @@ v1Router.use('/verify/immunization', immunizationVerifyRouter);
 // ── Comprehensive Health Checks (no auth required) ───────────────────────────
 v1Router.use('/health', comprehensiveHealthRoutes);
 
-// ── Sharding admin (#1077) ────────────────────────────────────────────────────
-v1Router.use('/sharding', shardingRouter);
-
 // ── CDN management (#1078) ────────────────────────────────────────────────────
 v1Router.use('/cdn', cdnCacheRouter);
 v1Router.use('/cdn', cdnHealthRouter);
-
-// ── Replication monitoring (#1080) ───────────────────────────────────────────
-v1Router.use('/replication', replicationRouter);
 
 // ── Federation / Stellar well-known (public) ──────────────────────────────────
 // Note: /.well-known and /federation are mounted at root level in app.ts (not /api/v1)

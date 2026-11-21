@@ -29,3 +29,13 @@ export { OtpInput, type OtpInputProps } from './OtpInput';
 export { ResponsiveContainer } from './ResponsiveContainer';
 export { ResponsiveGrid } from './ResponsiveGrid';
 export { ResponsiveStack } from './ResponsiveStack';
+
+// Issue #1679 — Bundle size optimization.
+// Heavy components (charts, PDF generator, signature pad) are intentionally NOT
+// re-exported here. Statically re-exporting them from this barrel file would pull
+// them into the initial bundle of every consumer of `@/components/ui`. Import them
+// directly from their own modules and load them with `next/dynamic`, e.g.:
+//
+//   const Chart = dynamic(() => import('@/components/ui/Chart'), { ssr: false });
+//   const PdfGenerator = dynamic(() => import('@/components/ui/PdfGenerator'), { ssr: false });
+//   const SignaturePad = dynamic(() => import('@/components/ui/SignaturePad'), { ssr: false });

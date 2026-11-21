@@ -26,12 +26,77 @@ interface MigrationTestResult {
 const MIGRATIONS_DIR = path.resolve(__dirname, "../../src/migrations");
 const REPORT_DIR = path.resolve(__dirname, "../../.migration-reports");
 
+/**
+ * Migration filenames must start with a full 14-digit `YYYYMMDDHHmmss`
+ * timestamp so ordering is deterministic. Files created before this rule was
+ * introduced only carry a date (`YYYYMMDD_`) and are grandfathered in; they
+ * cannot be renamed because the changelog collection keys on filename.
+ */
+const FULL_TIMESTAMP_PATTERN = /^\d{14}_/;
+const LEGACY_DATE_PATTERN = /^\d{8}_/;
+
+/**
+ * Files that predate the full-timestamp requirement. They are allowed to keep
+ * their date-only prefix, but no new entries may be added to this list.
+ */
+const GRANDFATHERED_MIGRATIONS = new Set<string>([
+  "20260425_add_emergency_contacts.ts",
+  "20260425_add_missing_indexes.ts",
+  "20260425_add_surveys.ts",
+  "20260527_add_audit_logs.ts",
+  "20260528_add_tenant_settings.ts",
+  "20260825_add_webhooks.ts",
+]);
+
 function listMigrations(): string[] {
   if (!fs.existsSync(MIGRATIONS_DIR)) return [];
   return fs
     .readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
     .sort();
+}
+
+/**
+ * Returns the names of migration files that do not use a full 14-digit
+ * timestamp prefix and are not grandfathered legacy files.
+ */
+function findInvalidMigrationNames(migrations: string[] = listMigrations()): string[] {
+  return migrations.filter((m) => {
+    if (FULL_TIMESTAMP_PATTERN.test(m)) return false;
+    if (LEGACY_DATE_PATTERN.test(m) && GRANDFATHERED_MIGRATIONS.has(m)) return false;
+    return true;
+  });
+}
+
+/**
+ * Applies every pending migration against a fresh database, then rolls them
+ * all back. Returns per-migration pass/fail information.
+ */
+function runUpDownCycle(): { migration: string; passed: boolean; error?: string }[] {
+  const results: { migration: string; passed: boolean; error?: string }[] = [];
+  const migrations = listMigrations();
+
+  try {
+    execSync(`npx migrate-mongo up`, { stdio: "pipe" });
+  } catch (err) {
+    const message = (err as Error).message;
+    console.error(`[up] applying migrations failed:`, message);
+    return migrations.map((migration) => ({ migration, passed: false, error: message }));
+  }
+
+  for (const migration of migrations) {
+    results.push({ migration, passed: true });
+  }
+
+  try {
+    execSync(`npx migrate-mongo down`, { stdio: "pipe" });
+  } catch (err) {
+    const message = (err as Error).message;
+    console.error(`[down] rolling back migrations failed:`, message);
+    return results.map((r) => ({ ...r, passed: false, error: message }));
+  }
+
+  return results;
 }
 
 /**
@@ -138,9 +203,29 @@ function generateRunbook(results: MigrationTestResult[]): string {
 
 function main() {
   const migrations = listMigrations();
+
+  const invalidNames = findInvalidMigrationNames(migrations);
+  if (invalidNames.length) {
+    console.error(
+      "Migration filenames must start with a 14-digit YYYYMMDDHHmmss timestamp:\n" +
+        invalidNames.map((m) => `  - ${m}`).join("\n")
+    );
+    process.exit(1);
+  }
+
   const conflicts = detectConflicts(migrations);
   if (conflicts.length) {
     console.warn("Conflicts detected:\n" + conflicts.join("\n"));
+  }
+
+  const upDownResults = runUpDownCycle();
+  const upDownFailed = upDownResults.filter((r) => !r.passed);
+  if (upDownFailed.length) {
+    console.error(
+      `${upDownFailed.length} migration(s) failed the up/down cycle:\n` +
+        upDownFailed.map((r) => `  - ${r.migration}: ${r.error ?? "unknown error"}`).join("\n")
+    );
+    process.exit(1);
   }
 
   const results: MigrationTestResult[] = migrations.map((migration) => {
@@ -183,6 +268,8 @@ if (require.main === module) {
 
 export {
   listMigrations,
+  findInvalidMigrationNames,
+  runUpDownCycle,
   dryRunValidate,
   rollbackTest,
   checkDataIntegrity,

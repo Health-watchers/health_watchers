@@ -60,7 +60,71 @@ export async function up(db: Db): Promise<void> {
     );
 }
 
+export async function addExternalProviderTracking(db: Db): Promise<void> {
+  // Add external provider fields and status timeline to Referral collection
+  await db.collection('referrals').updateMany(
+    {},
+    {
+      $set: {
+        providerType: 'internal',
+        externalProvider: null,
+        statusHistory: [],
+      },
+    }
+  );
+
+  // Index for filtering referrals by provider type
+  await db
+    .collection('referrals')
+    .createIndex(
+      { providerType: 1 },
+      { background: true, name: 'providerType_1' }
+    );
+
+  // Index for status timeline queries (most recent status updates)
+  await db
+    .collection('referrals')
+    .createIndex(
+      { 'statusHistory.updatedAt': -1 },
+      { background: true, name: 'statusHistory.updatedAt_-1' }
+    );
+
+  // Index to support the 30-day follow-up job and timeline lookups per clinic
+  await db
+    .collection('referrals')
+    .createIndex(
+      { toClinicId: 1, status: 1 },
+      { background: true, name: 'toClinicId_1_status_1' }
+    );
+}
+
 export async function down(db: Db): Promise<void> {
+  // Remove external provider tracking fields
+  await db.collection('referrals').updateMany(
+    {},
+    {
+      $unset: {
+        providerType: '',
+        externalProvider: '',
+        statusHistory: '',
+      },
+    }
+  );
+
+  // Drop external provider indexes
+  await db
+    .collection('referrals')
+    .dropIndex('providerType_1')
+    .catch(() => {});
+  await db
+    .collection('referrals')
+    .dropIndex('statusHistory.updatedAt_-1')
+    .catch(() => {});
+  await db
+    .collection('referrals')
+    .dropIndex('toClinicId_1_status_1')
+    .catch(() => {});
+
   // Remove outcome tracking fields
   await db.collection('referrals').updateMany(
     {},

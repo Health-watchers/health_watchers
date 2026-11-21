@@ -204,6 +204,18 @@ apps/docs/build/
 docker-compose.override.yml
 
 # =============================================================================
+# Editor / tool-specific working folders (kept local, never committed)
+# =============================================================================
+# Kiro editor specs and steering files (one-off tool specs, not project docs)
+.kiro/
+# Cursor editor rules
+.cursor/
+# Windsurf editor rules
+.windsurf/
+# JetBrains AI assistant local state
+.aidea/
+
+# =============================================================================
 # Security Scan Reports (generated artefacts — not source files)
 # =============================================================================
 gitleaks-report.json

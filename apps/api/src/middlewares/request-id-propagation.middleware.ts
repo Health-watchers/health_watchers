@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { setRequestId, extractRequestId } from '@api/utils/request-id';
+import {
+  setRequestId,
+  extractRequestId,
+  setLogContext,
+} from '@api/utils/request-id';
 
 /**
  * Middleware to propagate request IDs across the application.
@@ -37,6 +41,23 @@ export function requestIdPropagationMiddleware(
 
   setRequestId(requestId);
   res.setHeader('x-request-id', requestId);
+
+  // Populate the standardized logger context so every downstream log entry
+  // carries the mandatory `requestId` field plus `clinicId`/`userId` when
+  // they are available on the request (e.g. set by auth middleware).
+  const authReq = req as Request & {
+    clinicId?: string;
+    userId?: string;
+    user?: { id?: string; clinicId?: string };
+  };
+  const clinicId = authReq.clinicId ?? authReq.user?.clinicId;
+  const userId = authReq.userId ?? authReq.user?.id;
+
+  setLogContext({
+    requestId,
+    ...(clinicId ? { clinicId } : {}),
+    ...(userId ? { userId } : {}),
+  });
 
   next();
 }
