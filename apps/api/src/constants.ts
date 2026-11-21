@@ -21,7 +21,14 @@
  *   - Roles & Permissions
  *   - Audit actions
  *   - Job schedules
+ *
+ * Issue #1680 — Configurable values (timeouts, retry counts, batch sizes and
+ * rate-limit thresholds) are sourced from `packages/config` so they can be
+ * overridden via environment variables.  The literals below are only fallback
+ * defaults used when the config package does not supply a value.
  */
+
+import { config } from '../../../../packages/config/index';
 
 // ─── HTTP / Pagination ────────────────────────────────────────────────────────
 
@@ -55,36 +62,36 @@ export const CACHE_TTL = {
 
 export const RATE_LIMIT = {
   /** Auth endpoints: max requests per window. */
-  AUTH_MAX: 5,
-  AUTH_WINDOW_MS: 15 * 60 * 1_000,
+  AUTH_MAX: config.rateLimit.authMax,
+  AUTH_WINDOW_MS: config.rateLimit.authWindowMs,
 
   /** Forgot-password: max requests per window. */
-  FORGOT_PASSWORD_MAX: 3,
-  FORGOT_PASSWORD_WINDOW_MS: 60 * 60 * 1_000,
+  FORGOT_PASSWORD_MAX: config.rateLimit.forgotPasswordMax,
+  FORGOT_PASSWORD_WINDOW_MS: config.rateLimit.forgotPasswordWindowMs,
 
   /** General API: max requests per window. */
-  GENERAL_MAX: 300,
-  GENERAL_WINDOW_MS: 15 * 60 * 1_000,
+  GENERAL_MAX: config.rateLimit.generalMax,
+  GENERAL_WINDOW_MS: config.rateLimit.generalWindowMs,
 
   /** AI endpoints: max requests per window per clinic. */
-  AI_MAX: 20,
-  AI_WINDOW_MS: 60 * 1_000,
+  AI_MAX: config.rateLimit.aiMax,
+  AI_WINDOW_MS: config.rateLimit.aiWindowMs,
 
   /** Payment intent: max requests per window per clinic. */
-  PAYMENT_MAX: 20,
-  PAYMENT_WINDOW_MS: 60 * 1_000,
+  PAYMENT_MAX: config.rateLimit.paymentMax,
+  PAYMENT_WINDOW_MS: config.rateLimit.paymentWindowMs,
 
   /** Bulk export: max requests per window per user. */
-  BULK_EXPORT_MAX: 5,
-  BULK_EXPORT_WINDOW_MS: 60 * 60 * 1_000,
+  BULK_EXPORT_MAX: config.rateLimit.bulkExportMax,
+  BULK_EXPORT_WINDOW_MS: config.rateLimit.bulkExportWindowMs,
 
   /** Patient search: max requests per window per user. */
-  PATIENT_SEARCH_MAX: 100,
-  PATIENT_SEARCH_WINDOW_MS: 60 * 1_000,
+  PATIENT_SEARCH_MAX: config.rateLimit.patientSearchMax,
+  PATIENT_SEARCH_WINDOW_MS: config.rateLimit.patientSearchWindowMs,
 
   /** Report generation: max requests per window per user. */
-  REPORT_GENERATION_MAX: 10,
-  REPORT_GENERATION_WINDOW_MS: 60 * 60 * 1_000,
+  REPORT_GENERATION_MAX: config.rateLimit.reportGenerationMax,
+  REPORT_GENERATION_WINDOW_MS: config.rateLimit.reportGenerationWindowMs,
 } as const;
 
 // ─── Authentication / JWT ─────────────────────────────────────────────────────
@@ -100,10 +107,10 @@ export const AUTH = {
   MAX_FAILED_LOGIN_ATTEMPTS: 5,
 
   /** Account lockout duration in milliseconds (30 minutes). */
-  LOCKOUT_DURATION_MS: 30 * 60 * 1_000,
+  LOCKOUT_DURATION_MS: config.auth.lockoutDurationMs,
 
   /** Password reset token lifetime in milliseconds (1 hour). */
-  PASSWORD_RESET_TTL_MS: 60 * 60 * 1_000,
+  PASSWORD_RESET_TTL_MS: config.auth.passwordResetTtlMs,
 
   /** MFA grace period for new accounts (days). */
   MFA_GRACE_PERIOD_DAYS: 7,
@@ -132,7 +139,7 @@ export const PORTAL_LOGIN_SECURITY = {
   CAPTCHA_THRESHOLD: 5,
 
   /** Portal account lockout duration in milliseconds (30 minutes). */
-  LOCKOUT_DURATION_MS: 30 * 60 * 1_000,
+  LOCKOUT_DURATION_MS: config.portalLogin.lockoutDurationMs,
 
   /**
    * Progressive delay schedule (ms) indexed by the number of failed attempts.
@@ -141,13 +148,13 @@ export const PORTAL_LOGIN_SECURITY = {
   PROGRESSIVE_DELAYS_MS: [0, 0, 1_000, 2_000, 4_000, 8_000] as readonly number[],
 
   /** Maximum server-side sleep per failed attempt (avoids tying up handlers). */
-  MAX_SERVER_SLEEP_MS: 2_000,
+  MAX_SERVER_SLEEP_MS: config.portalLogin.maxServerSleepMs,
 
   /** Unlock verification token lifetime in milliseconds (15 minutes). */
-  UNLOCK_TOKEN_TTL_MS: 15 * 60 * 1_000,
+  UNLOCK_TOKEN_TTL_MS: config.portalLogin.unlockTokenTtlMs,
 
   /** Failed-attempt counter resets after this idle window (1 hour). */
-  ATTEMPT_WINDOW_MS: 60 * 60 * 1_000,
+  ATTEMPT_WINDOW_MS: config.portalLogin.attemptWindowMs,
 } as const;
 
 // ─── Patient / Clinical ───────────────────────────────────────────────────────
@@ -218,18 +225,18 @@ export const STELLAR = {
   MEMO_MAX_LENGTH: 28,
 
   /** XLM rate cache TTL in seconds (5 minutes). */
-  RATE_CACHE_TTL_SECONDS: 300,
+  RATE_CACHE_TTL_SECONDS: config.stellar.rateCacheTtlSeconds,
 
   /** Stale XLM rate threshold — alert if older than this many seconds. */
-  RATE_STALE_THRESHOLD_SECONDS: 900,
+  RATE_STALE_THRESHOLD_SECONDS: config.stellar.rateStaleThresholdSeconds,
 } as const;
 
 export const PAYMENT = {
   /** Default payment intent expiry (minutes). */
-  INTENT_EXPIRY_MINUTES: 30,
+  INTENT_EXPIRY_MINUTES: config.payment.intentExpiryMinutes,
 
   /** Maximum batch size for batch-payment operations. */
-  BATCH_MAX_SIZE: 50,
+  BATCH_MAX_SIZE: config.payment.batchMaxSize,
 
   /** Maximum dispute description length (characters). */
   DISPUTE_DESCRIPTION_MAX_LENGTH: 1_000,
@@ -248,23 +255,23 @@ export const DB = {
   POOL_WARN_THRESHOLD: 0.8,
 
   /** Max exponential-backoff retries for initial connection. */
-  CONNECT_MAX_RETRIES: 5,
+  CONNECT_MAX_RETRIES: config.db.connectMaxRetries,
 
   /** Initial retry delay in milliseconds. */
-  CONNECT_BASE_DELAY_MS: 1_000,
+  CONNECT_BASE_DELAY_MS: config.db.connectBaseDelayMs,
 
   /** System-profile slow-query threshold in milliseconds. */
-  SLOW_QUERY_THRESHOLD_MS: 100,
+  SLOW_QUERY_THRESHOLD_MS: config.db.slowQueryThresholdMs,
 } as const;
 
 // ─── Export / File ────────────────────────────────────────────────────────────
 
 export const EXPORT = {
   /** Maximum rows per streaming CSV chunk. */
-  CHUNK_SIZE: 500,
+  CHUNK_SIZE: config.export.chunkSize,
 
   /** Maximum records in a single bulk export. */
-  MAX_RECORDS: 10_000,
+  MAX_RECORDS: config.export.maxRecords,
 
   /** Supported export formats. */
   FORMAT: {
@@ -275,7 +282,7 @@ export const EXPORT = {
   },
 
   /** Signed URL expiry for download links (seconds). */
-  DOWNLOAD_URL_TTL_SECONDS: 3_600,
+  DOWNLOAD_URL_TTL_SECONDS: config.export.downloadUrlTtlSeconds,
 } as const;
 
 // ─── Roles & Permissions ──────────────────────────────────────────────────────

@@ -7,9 +7,8 @@
  * All encryption keys, JWT secrets, and SMTP credentials are validated here.
  * Missing critical HIPAA vars cause a hard exit in production.
  */
-import { randomBytes } from 'crypto';
 import { z } from 'zod';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { redactConnectionString } from '../utils/redact';
 import { logger } from '../utils/logger';
 
@@ -31,6 +30,15 @@ function isBase64_32Bytes(value: string): boolean {
 
 function isValidAes256Key(value: string): boolean {
   return HEX_32_BYTES.test(value) || isBase64_32Bytes(value);
+}
+
+// Positive-integer env var with a default. Rejects zero and non-numeric input.
+function positiveIntString(defaultValue: string) {
+  return z
+    .string()
+    .regex(/^\d+$/, 'must be a positive integer')
+    .refine((v) => Number(v) > 0, 'must be greater than 0')
+    .default(defaultValue);
 }
 
 const envSchema = z.object({
@@ -181,6 +189,20 @@ const envSchema = z.object({
     .regex(/^\d+$/, 'IDEMPOTENCY_TTL_SECONDS must be a positive integer')
     .refine((v) => Number(v) > 0, 'IDEMPOTENCY_TTL_SECONDS must be greater than 0')
     .default('86400'),
+
+  // ── Operational tuning (timeouts, retries, batch sizes, rate limits) ──────
+  // All values are positive integers with sensible defaults; override via env.
+  HTTP_REQUEST_TIMEOUT_MS: positiveIntString('30000'),
+  OUTBOUND_HTTP_TIMEOUT_MS: positiveIntString('5000'),
+  DB_QUERY_TIMEOUT_MS: positiveIntString('10000'),
+  RETRY_MAX_ATTEMPTS: positiveIntString('3'),
+  RETRY_BASE_DELAY_MS: positiveIntString('500'),
+  RETRY_MAX_DELAY_MS: positiveIntString('30000'),
+  BATCH_SIZE: positiveIntString('100'),
+  MAX_BATCH_SIZE: positiveIntString('1000'),
+  RATE_LIMIT_WINDOW_MS: positiveIntString('60000'),
+  RATE_LIMIT_MAX_REQUESTS: positiveIntString('100'),
+  AUTH_RATE_LIMIT_MAX_REQUESTS: positiveIntString('10'),
 });
 
 const result = envSchema.safeParse(process.env);
@@ -213,8 +235,9 @@ if (isProd) {
   if (!env.TELEHEALTH_LINK_SECRET) missingHmacSecrets.push('TELEHEALTH_LINK_SECRET');
 
   if (missingHmacSecrets.length > 0) {
-    console.error(
-      `🚨 SECURITY VIOLATION: ${missingHmacSecrets.join(', ')} must be set in production ` +
+    logger.error(
+      { missingHmacSecrets },
+      '🚨 SECURITY VIOLATION: HMAC secrets must be set in production ' +
         '(at least 32 characters). Refusing to start with forgeable HMAC secrets.'
     );
     process.exit(1);
@@ -222,14 +245,14 @@ if (isProd) {
 } else {
   if (!env.QR_CHECKIN_SECRET) {
     env.QR_CHECKIN_SECRET = randomBytes(32).toString('hex');
-    console.warn(
+    logger.warn(
       '⚠️  WARNING: QR_CHECKIN_SECRET is not set. Using a random per-process secret; ' +
         'QR check-in codes will not survive a restart or work across replicas.'
     );
   }
   if (!env.TELEHEALTH_LINK_SECRET) {
     env.TELEHEALTH_LINK_SECRET = randomBytes(32).toString('hex');
-    console.warn(
+    logger.warn(
       '⚠️  WARNING: TELEHEALTH_LINK_SECRET is not set. Using a random per-process secret; ' +
         'telehealth join links will not survive a restart or work across replicas.'
     );
@@ -269,18 +292,35 @@ if (env.TRANSCRIPTION_PROVIDER === 'whisper' && !env.OPENAI_API_KEY) {
   );
 }
 
-// Log non-secret config values at startup
-console.log('✅ Config validated:');
-console.log(`   API_PORT:        ${env.API_PORT}`);
-console.log(`   PORT override:   ${env.PORT ?? 'not set (using API_PORT)'}`);
-console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
-console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
-console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);
-console.log(`   HIPAA FIELD_ENCRYPTION_KEY: ${env.FIELD_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
-console.log(`   HIPAA AUDIT_ENCRYPTION_KEY: ${env.AUDIT_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
-console.log(`   HIPAA BACKUP_ENCRYPTION_KEY: ${env.BACKUP_ENCRYPTION_KEY ? '✅ set' : '⚠️  NOT SET'}`);
-console.log(`   HIPAA SMTP_HOST:             ${env.SMTP_HOST ? '✅ set' : '⚠️  NOT SET'}`);
-console.log(`   TRANSCRIPTION_PROVIDER:      ${env.TRANSCRIPTION_PROVIDER ?? '⚠️  NOT SET'}`);
-console.log(`   TRANSCRIPTION_MAX_AUDIO_BYTES: ${env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)'}`);
-console.log(`   QR_CHECKIN_SECRET:           ${env.QR_CHECKIN_SECRET ? '✅ set' : '⚠️  NOT SET'}`);
-console.log(`   TELEHEALTH_LINK_SECRET:      ${env.TELEHEALTH_LINK_SECRET ? '✅ set' : '⚠️  NOT SET'}`);
+// Log non-secret config values at startup as a single structured entry.
+logger.info(
+  {
+    config: {
+      apiPort: env.API_PORT,
+      portOverride: env.PORT ?? 'not set (using API_PORT)',
+      mongoUri: redactConnectionString(env.MONGO_URI),
+      stellarNetwork: env.STELLAR_NETWORK,
+      logLevel: env.LOG_LEVEL,
+      hipaaFieldEncryptionKey: env.FIELD_ENCRYPTION_KEY ? 'set' : 'NOT SET',
+      hipaaAuditEncryptionKey: env.AUDIT_ENCRYPTION_KEY ? 'set' : 'NOT SET',
+      hipaaBackupEncryptionKey: env.BACKUP_ENCRYPTION_KEY ? 'set' : 'NOT SET',
+      hipaaSmtpHost: env.SMTP_HOST ? 'set' : 'NOT SET',
+      transcriptionProvider: env.TRANSCRIPTION_PROVIDER ?? 'NOT SET',
+      transcriptionMaxAudioBytes: env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)',
+      qrCheckinSecret: env.QR_CHECKIN_SECRET ? 'set' : 'NOT SET',
+      telehealthLinkSecret: env.TELEHEALTH_LINK_SECRET ? 'set' : 'NOT SET',
+      httpRequestTimeoutMs: env.HTTP_REQUEST_TIMEOUT_MS,
+      outboundHttpTimeoutMs: env.OUTBOUND_HTTP_TIMEOUT_MS,
+      dbQueryTimeoutMs: env.DB_QUERY_TIMEOUT_MS,
+      retryMaxAttempts: env.RETRY_MAX_ATTEMPTS,
+      retryBaseDelayMs: env.RETRY_BASE_DELAY_MS,
+      retryMaxDelayMs: env.RETRY_MAX_DELAY_MS,
+      batchSize: env.BATCH_SIZE,
+      maxBatchSize: env.MAX_BATCH_SIZE,
+      rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
+      rateLimitMaxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+      authRateLimitMaxRequests: env.AUTH_RATE_LIMIT_MAX_REQUESTS,
+    },
+  },
+  '✅ Config validated'
+);

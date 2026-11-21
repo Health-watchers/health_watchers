@@ -50,6 +50,7 @@ import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
 import { errorAnalytics } from './services/error-analytics.service';
 import { migrationManager } from './services/migration-manager.service';
 import { config as appConfig } from './config/config.service';
+import { createRequestLoggerMiddleware } from './middlewares/request-logger.middleware';
 
 const app = express();
 const server = createServer(app);
@@ -118,6 +119,9 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // ── HTTP request logging with correlation ID ──────────────────────────────────
+// #1678 — standardised JSON log format. Every log line carries the mandatory
+// fields timestamp, level, service, requestId and message (emitted by the
+// shared logger), and request-scoped entries additionally carry clinicId/userId.
 const isProd = process.env.NODE_ENV === 'production';
 app.use(
   pinoHttp({
@@ -131,8 +135,29 @@ app.use(
           req.url === '/health/startup'),
     },
     redact: ['req.headers.authorization'],
+    // Bind request-scoped context (requestId, clinicId, userId) to every log
+    // entry emitted while handling this request.
+    customProps: (req) => {
+      const r = req as any;
+      return {
+        requestId: r.requestId ?? r.id,
+        clinicId: r.clinicId ?? r.user?.clinicId,
+        userId: r.user?.id ?? r.user?._id,
+      };
+    },
+    serializers: {
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+      }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
   })
 );
+// Attach clinicId/userId to the request-scoped logger once auth has populated
+// req.user, so downstream handlers log with full context.
+app.use(createRequestLoggerMiddleware);
 
 // ── Request ID correlation & propagation ──────────────────────────────────────
 // requestIdPropagationMiddleware: generates or passes through X-Request-ID, stores it
@@ -292,16 +317,16 @@ async function startServer() {
 
   // Initialize Socket.IO service
   const socketService = SocketService.getInstance(server);
-  logger.info('Socket.IO service initialized');
+  logger.info({ service: 'api' }, 'Socket.IO service initialized');
 
   server.listen(PORT, () => {
-    logger.info(`🚀 Server running on http://localhost:${PORT}`);
-    logger.info('📡 Socket.IO server ready for real-time connections');
+    logger.info({ port: PORT }, 'Server running');
+    logger.info({ service: 'api' }, 'Socket.IO server ready for real-time connections');
   });
 
   // Initialise Socket.IO on the same HTTP server
   initSocket(server);
-  logger.info('Socket.IO initialised');
+  logger.info({ service: 'api' }, 'Socket.IO initialised');
 
   // #1433 — every background job runs through the distributed BullMQ scheduler:
   // each schedule executes once per tick across all replicas.

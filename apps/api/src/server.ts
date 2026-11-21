@@ -26,14 +26,25 @@ function startPoolMetrics(): void {
         }
         logger.debug(
           {
+            service: 'api',
+            requestId: 'system',
             readyState: connection.readyState,
             name: connection.name,
+            message: 'MongoDB connection pool metrics',
           },
           'MongoDB connection pool metrics',
         );
       }
     } catch (err) {
-      logger.warn({ err }, 'Failed to collect MongoDB pool metrics');
+      logger.warn(
+        {
+          service: 'api',
+          requestId: 'system',
+          err,
+          message: 'Failed to collect MongoDB pool metrics',
+        },
+        'Failed to collect MongoDB pool metrics',
+      );
     }
   }, 15_000);
 
@@ -59,7 +70,15 @@ async function startServer(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     server = app.listen(PORT, () => {
-      logger.info({ port: PORT }, 'API server listening');
+      logger.info(
+        {
+          service: 'api',
+          requestId: 'system',
+          port: PORT,
+          message: 'API server listening',
+        },
+        'API server listening',
+      );
       resolve();
     });
     server.on('error', reject);
@@ -67,14 +86,30 @@ async function startServer(): Promise<void> {
 }
 
 async function shutdown(signal: string): Promise<void> {
-  logger.info({ signal }, 'Shutting down API server');
+  logger.info(
+    {
+      service: 'api',
+      requestId: 'system',
+      signal,
+      message: 'Shutting down API server',
+    },
+    'Shutting down API server',
+  );
 
   stopPoolMetrics();
 
   try {
     await stopJobs();
   } catch (err) {
-    logger.error({ err }, 'Error stopping jobs during shutdown');
+    logger.error(
+      {
+        service: 'api',
+        requestId: 'system',
+        err,
+        message: 'Error stopping jobs during shutdown',
+      },
+      'Error stopping jobs during shutdown',
+    );
   }
 
   if (server) {
@@ -87,7 +122,15 @@ async function shutdown(signal: string): Promise<void> {
   try {
     await mongoose.disconnect();
   } catch (err) {
-    logger.error({ err }, 'Error disconnecting from MongoDB during shutdown');
+    logger.error(
+      {
+        service: 'api',
+        requestId: 'system',
+        err,
+        message: 'Error disconnecting from MongoDB during shutdown',
+      },
+      'Error disconnecting from MongoDB during shutdown',
+    );
   }
 }
 
@@ -98,7 +141,15 @@ function registerShutdownHandlers(): void {
         process.exit(0);
       })
       .catch((err) => {
-        logger.fatal({ err }, 'Fatal error during shutdown');
+        logger.fatal(
+          {
+            service: 'api',
+            requestId: 'system',
+            err,
+            message: 'Fatal error during shutdown',
+          },
+          'Fatal error during shutdown',
+        );
         process.exit(1);
       });
   };
@@ -110,6 +161,14 @@ function registerShutdownHandlers(): void {
 registerShutdownHandlers();
 
 startServer().catch((err) => {
-  logger.fatal({ err });
+  logger.fatal(
+    {
+      service: 'api',
+      requestId: 'system',
+      err,
+      message: 'Fatal error during API server startup',
+    },
+    'Fatal error during API server startup',
+  );
   process.exit(1);
 });

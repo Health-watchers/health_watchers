@@ -11,6 +11,63 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
   openAnalyzer: false, // never auto-open in CI
 });
 
+/*
+ * Bundle optimization strategy
+ * ----------------------------
+ * 1. Analyze: run `ANALYZE=true pnpm --filter web build` to emit the
+ *    @next/bundle-analyzer treemap (`.next/analyze/*.html`). Use it to spot
+ *    the largest dependencies before reaching for alternatives.
+ * 2. Split: heavy, route-specific libraries (recharts, @sentry, socket.io-client)
+ *    are isolated into async chunks via the `cacheGroups` below and are loaded
+ *    through dynamic `import()` at the component level (charts, PDF generator,
+ *    signature pad) so they never land in the initial bundle.
+ * 3. Tree-shake: `optimizePackageImports` rewrites barrel imports for
+ *    recharts/@tanstack/lucide-react/clsx/tailwind-merge into deep imports, and
+ *    `usedExports`/`sideEffects` let Webpack drop unused modules.
+ * 4. CSS: Tailwind's content globs (see tailwind.config) purge unused classes at
+ *    build time; verify no stray global CSS is imported from unused modules.
+ * 5. Budget: `BUNDLE_SIZE_BUDGET_KB` (default 250 KB gzipped per client chunk)
+ *    is enforced by the `BundleSizeBudgetPlugin` below, which fails the build
+ *    when any emitted client chunk exceeds it.
+ */
+const zlib = require('zlib');
+
+const BUNDLE_SIZE_BUDGET_KB = Number(process.env.BUNDLE_SIZE_BUDGET_KB || 250);
+
+class BundleSizeBudgetPlugin {
+  constructor({ budgetKb, isServer }) {
+    this.budgetKb = budgetKb;
+    this.isServer = isServer;
+  }
+
+  apply(compiler) {
+    // Only enforce the budget for client bundles; server chunks are not shipped.
+    if (this.isServer) return;
+    compiler.hooks.thisCompilation.tap('BundleSizeBudgetPlugin', (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name: 'BundleSizeBudgetPlugin', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_REPORT },
+        (assets) => {
+          const violations = [];
+          for (const [name, asset] of Object.entries(assets)) {
+            if (!name.endsWith('.js')) continue;
+            const gzipped = zlib.gzipSync(asset.source()).length / 1024;
+            if (gzipped > this.budgetKb) {
+              violations.push(`${name}: ${gzipped.toFixed(1)} KB gzipped (budget ${this.budgetKb} KB)`);
+            }
+          }
+          if (violations.length > 0) {
+            compilation.errors.push(
+              new compiler.webpack.WebpackError(
+                `Bundle size budget exceeded:\n  ${violations.join('\n  ')}`,
+              ),
+            );
+          }
+        },
+      );
+    });
+  }
+}
+
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 // Only use the CDN when NEXT_PUBLIC_CDN_URL is explicitly set; otherwise assets are
 // served from the app origin. Next.js content-hashes every file under `/_next/static/`
@@ -111,6 +168,8 @@ const nextConfig = {
     ];
   },
   webpack: (config, { isServer }) => {
+    config.plugins = config.plugins || [];
+    config.plugins.push(new BundleSizeBudgetPlugin({ budgetKb: BUNDLE_SIZE_BUDGET_KB, isServer }));
     if (!isServer) {
       config.optimization = {
         ...config.optimization,

@@ -3,12 +3,12 @@ import baseConfig from '@health-watchers/config/eslint-config';
 export default [
   ...baseConfig,
   {
-    // API: stricter — no console.log (use logger), explicit return types required
+    // API-specific overrides: stricter than the shared config — no console.log
+    // (use the logger) and explicit return types are required.
     rules: {
       'no-console': 'error',
       '@typescript-eslint/explicit-function-return-type': 'error',
     },
-    ignores: ['dist/**', 'node_modules/**'],
   },
   {
     // Tenant scoping: forbid fetching records straight from URL params by ID in

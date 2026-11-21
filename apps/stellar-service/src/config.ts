@@ -25,6 +25,13 @@ export const stellarConfig = {
       : 'https://horizon-testnet.stellar.org',
   // Multiple Horizon endpoints for failover
   horizonUrls: getHorizonUrls(),
+  // HTTP request timeout for Horizon calls (ms)
+  horizonTimeoutMs: parseInt(process.env.STELLAR_HORIZON_TIMEOUT_MS || '30000', 10),
+  // Retry configuration for Horizon requests
+  maxRetries: parseInt(process.env.STELLAR_MAX_RETRIES || '3', 10),
+  retryDelayMs: parseInt(process.env.STELLAR_RETRY_DELAY_MS || '1000', 10),
+  // Batch size for processing transactions/payments
+  batchSize: parseInt(process.env.STELLAR_BATCH_SIZE || '50', 10),
 };
 
 function getHorizonUrls(): string[] {
