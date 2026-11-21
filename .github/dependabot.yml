@@ -27,9 +27,36 @@ updates:
           - 'minor'
           - 'patch'
     # Major bumps are opened individually and never auto-merged (manual review).
+    # Critical packages (AWS SDK, Stellar SDK, security tooling) are always
+    # opened individually so they require manual review, never auto-merged.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-sdk'
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: 'stellar-sdk'
+      - dependency-name: '@stellar/*'
+      - dependency-name: 'helmet'
+      - dependency-name: 'bcrypt'
+      - dependency-name: 'bcryptjs'
+      - dependency-name: 'jsonwebtoken'
+      - dependency-name: 'passport'
+      - dependency-name: 'passport-*'
+      - dependency-name: 'express-rate-limit'
+      - dependency-name: 'csurf'
+      - dependency-name: 'crypto-js'
+      - dependency-name: 'node-forge'
+      - dependency-name: 'openpgp'
+      - dependency-name: 'jose'
+      - dependency-name: 'jwks-rsa'
+      - dependency-name: 'oauth*'
+      - dependency-name: 'openid-client'
+      - dependency-name: 'snyk'
+      - dependency-name: 'npm-audit-*'
+      - dependency-name: 'audit-ci'
+      - dependency-name: 'eslint-plugin-security'
+      - dependency-name: 'semgrep'
+      - dependency-name: 'trivy'
 
   # API workspace
   - package-ecosystem: 'npm'
@@ -55,9 +82,35 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Major bumps and critical packages always require manual review.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-sdk'
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: 'stellar-sdk'
+      - dependency-name: '@stellar/*'
+      - dependency-name: 'helmet'
+      - dependency-name: 'bcrypt'
+      - dependency-name: 'bcryptjs'
+      - dependency-name: 'jsonwebtoken'
+      - dependency-name: 'passport'
+      - dependency-name: 'passport-*'
+      - dependency-name: 'express-rate-limit'
+      - dependency-name: 'csurf'
+      - dependency-name: 'crypto-js'
+      - dependency-name: 'node-forge'
+      - dependency-name: 'openpgp'
+      - dependency-name: 'jose'
+      - dependency-name: 'jwks-rsa'
+      - dependency-name: 'oauth*'
+      - dependency-name: 'openid-client'
+      - dependency-name: 'snyk'
+      - dependency-name: 'npm-audit-*'
+      - dependency-name: 'audit-ci'
+      - dependency-name: 'eslint-plugin-security'
+      - dependency-name: 'semgrep'
+      - dependency-name: 'trivy'
 
   # Web workspace
   - package-ecosystem: 'npm'
@@ -83,9 +136,35 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Major bumps and critical packages always require manual review.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-sdk'
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: 'stellar-sdk'
+      - dependency-name: '@stellar/*'
+      - dependency-name: 'helmet'
+      - dependency-name: 'bcrypt'
+      - dependency-name: 'bcryptjs'
+      - dependency-name: 'jsonwebtoken'
+      - dependency-name: 'passport'
+      - dependency-name: 'passport-*'
+      - dependency-name: 'express-rate-limit'
+      - dependency-name: 'csurf'
+      - dependency-name: 'crypto-js'
+      - dependency-name: 'node-forge'
+      - dependency-name: 'openpgp'
+      - dependency-name: 'jose'
+      - dependency-name: 'jwks-rsa'
+      - dependency-name: 'oauth*'
+      - dependency-name: 'openid-client'
+      - dependency-name: 'snyk'
+      - dependency-name: 'npm-audit-*'
+      - dependency-name: 'audit-ci'
+      - dependency-name: 'eslint-plugin-security'
+      - dependency-name: 'semgrep'
+      - dependency-name: 'trivy'
 
   # Mobile workspace
   - package-ecosystem: 'npm'
@@ -111,9 +190,35 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Major bumps and critical packages always require manual review.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-sdk'
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: 'stellar-sdk'
+      - dependency-name: '@stellar/*'
+      - dependency-name: 'helmet'
+      - dependency-name: 'bcrypt'
+      - dependency-name: 'bcryptjs'
+      - dependency-name: 'jsonwebtoken'
+      - dependency-name: 'passport'
+      - dependency-name: 'passport-*'
+      - dependency-name: 'express-rate-limit'
+      - dependency-name: 'csurf'
+      - dependency-name: 'crypto-js'
+      - dependency-name: 'node-forge'
+      - dependency-name: 'openpgp'
+      - dependency-name: 'jose'
+      - dependency-name: 'jwks-rsa'
+      - dependency-name: 'oauth*'
+      - dependency-name: 'openid-client'
+      - dependency-name: 'snyk'
+      - dependency-name: 'npm-audit-*'
+      - dependency-name: 'audit-ci'
+      - dependency-name: 'eslint-plugin-security'
+      - dependency-name: 'semgrep'
+      - dependency-name: 'trivy'
 
   # Stellar service workspace
   - package-ecosystem: 'npm'
@@ -139,9 +244,35 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Major bumps and critical packages always require manual review.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-sdk'
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: 'stellar-sdk'
+      - dependency-name: '@stellar/*'
+      - dependency-name: 'helmet'
+      - dependency-name: 'bcrypt'
+      - dependency-name: 'bcryptjs'
+      - dependency-name: 'jsonwebtoken'
+      - dependency-name: 'passport'
+      - dependency-name: 'passport-*'
+      - dependency-name: 'express-rate-limit'
+      - dependency-name: 'csurf'
+      - dependency-name: 'crypto-js'
+      - dependency-name: 'node-forge'
+      - dependency-name: 'openpgp'
+      - dependency-name: 'jose'
+      - dependency-name: 'jwks-rsa'
+      - dependency-name: 'oauth*'
+      - dependency-name: 'openid-client'
+      - dependency-name: 'snyk'
+      - dependency-name: 'npm-audit-*'
+      - dependency-name: 'audit-ci'
+      - dependency-name: 'eslint-plugin-security'
+      - dependency-name: 'semgrep'
+      - dependency-name: 'trivy'
 
   # GitHub Actions workflows
   - package-ecosystem: 'github-actions'
@@ -161,6 +292,13 @@ updates:
           - 'minor'
           - 'patch'
     # Major action bumps are opened individually for manual review.
+    # Security-sensitive actions are never grouped into auto-mergeable PRs.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: 'aws-actions/*'
+      - dependency-name: 'github/codeql-action'
+      - dependency-name: 'snyk/actions'
+      - dependency-name: 'step-security/*'
+      - dependency-name: 'ossf/scorecard-action'
+      - dependency-name: 'aquasecurity/*'

@@ -25,15 +25,11 @@ const cdnSources = cdnUrl ? `${cdnUrl} ` : '';
 const staticAssetCacheControl = isProduction
   ? 'public, max-age=31536000, immutable' // 1 year; filenames are content-hashed
   : 'public, max-age=0, must-revalidate';
-// Reuse the API's CSP violation report collector so browser-reported violations from pages
-// served by this app (which the API's own `report-uri` never sees, since Next.js serves its
-// own HTML/JS on a different origin/CSP) land in the same place as the API's.
-const cspReportUri = `${apiUrl}/api/v1/csp-report`;
+// The Content-Security-Policy is generated per-request in `middleware.ts` so that every
+// response gets a fresh nonce (see `buildCspHeader`). A static CSP here cannot carry a
+// nonce, so it is intentionally omitted. The middleware also reuses the API's CSP
+// violation report collector (`csp-report.controller.ts`) via `report-uri`.
 const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${cdnSources}; style-src 'self' 'unsafe-inline' ${cdnSources}; img-src 'self' data: https: ${cdnImageSources}; font-src 'self' data: ${cdnSources}; connect-src 'self' ${apiUrl} https://horizon-testnet.stellar.org https://horizon.stellar.org; frame-ancestors 'none'; report-uri ${cspReportUri};`,
-  },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

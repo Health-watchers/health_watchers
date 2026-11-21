@@ -20,6 +20,44 @@ log_error() {
   echo "[ERROR] $*" >&2
 }
 
+# Verify SHA-256 checksum of the backup against its .sha256 file
+verify_checksum() {
+  local backup_file="$1"
+  local checksum_file="${backup_file}.sha256"
+
+  log_info "Verifying SHA-256 checksum: $checksum_file"
+
+  if [[ ! -f "$checksum_file" ]]; then
+    log_error "Checksum file not found: $checksum_file"
+    return 1
+  fi
+
+  local expected
+  expected=$(awk '{print $1}' "$checksum_file" | head -n1)
+  if [[ -z "$expected" ]]; then
+    log_error "Checksum file is empty or malformed: $checksum_file"
+    return 1
+  fi
+
+  local actual
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$backup_file" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    actual=$(shasum -a 256 "$backup_file" | awk '{print $1}')
+  else
+    log_error "No SHA-256 utility found (sha256sum or shasum)"
+    return 1
+  fi
+
+  if [[ "$actual" != "$expected" ]]; then
+    log_error "Checksum mismatch for $backup_file (expected: $expected, actual: $actual)"
+    return 1
+  fi
+
+  log_success "Checksum verified"
+  return 0
+}
+
 # Check backup integrity
 verify_backup_integrity() {
   local backup_file="$1"
@@ -35,6 +73,12 @@ verify_backup_integrity() {
   local size=$(stat -f%z "$backup_file" 2>/dev/null || stat -c%s "$backup_file" 2>/dev/null || echo "0")
   if [[ $size -lt 1000 ]]; then
     log_error "Backup file too small: $size bytes"
+    return 1
+  fi
+
+  # Verify checksum after transfer before any decryption/restore
+  if ! verify_checksum "$backup_file"; then
+    log_error "Backup integrity verification failed: checksum mismatch or missing"
     return 1
   fi
   

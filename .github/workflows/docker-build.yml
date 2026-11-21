@@ -52,6 +52,8 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: 'v2.4.1'
 
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@ab9d16d4b419c9d1a02df5213fa0ebe965ca5a57 # v0.17.10
@@ -103,7 +105,7 @@ jobs:
           
           echo "✅ SBOM generated: sbom-${{ matrix.service }}.spdx.json"
 
-      - name: Sign image and attest SBOM with cosign
+      - name: Sign image and attest SBOM with cosign (keyless via GitHub OIDC)
         if: github.event_name == 'push'
         env:
           COSIGN_EXPERIMENTAL: "true"  # Enable keyless signing
@@ -111,16 +113,16 @@ jobs:
           IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}"
           IMAGE_DIGEST="${{ steps.build-push.outputs.digest }}"
           IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
-          
-          echo "Signing image: ${IMAGE_REF}"
+
+          echo "Signing image (keyless, GitHub OIDC): ${IMAGE_REF}"
           cosign sign --yes ${IMAGE_REF}
-          
+
           echo "Attesting SBOM to image"
           cosign attest --yes --predicate sbom-${{ matrix.service }}.spdx.json --type spdx ${IMAGE_REF}
-          
+
           echo "✅ Image signed and SBOM attested"
 
-      - name: Verify signature
+      - name: Verify signature (keyless)
         if: github.event_name == 'push'
         env:
           COSIGN_EXPERIMENTAL: "true"
@@ -128,12 +130,12 @@ jobs:
           IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}"
           IMAGE_DIGEST="${{ steps.build-push.outputs.digest }}"
           IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
-          
-          echo "Verifying signature for ${IMAGE_REF}"
+
+          echo "Verifying keyless signature for ${IMAGE_REF}"
           cosign verify ${IMAGE_REF} \
-            --certificate-identity-regexp="https://github.com/${{ github.repository }}.*" \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.*" \
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
-          
+
           echo "✅ Signature verification successful"
 
       - name: Scan image with Trivy
@@ -159,6 +161,22 @@ jobs:
         with:
           name: sbom-${{ matrix.service }}
           path: sbom-${{ matrix.service }}.spdx.json
+          retention-days: 90
+
+      - name: Record signed image digest
+        if: github.event_name == 'push'
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}"
+          IMAGE_DIGEST="${{ steps.build-push.outputs.digest }}"
+          echo "${IMAGE_NAME}@${IMAGE_DIGEST}" >> signed-images.txt
+          cat signed-images.txt
+
+      - name: Upload signed image references
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: signed-images-${{ matrix.service }}
+          path: signed-images.txt
           retention-days: 90
 
   build-validation:

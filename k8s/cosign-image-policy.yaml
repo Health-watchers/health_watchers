@@ -1,0 +1,166 @@
+# Kyverno ClusterPolicy: Verify cosign image signatures
+#
+# Rejects container images that do not have a valid cosign signature.
+# Supports both keyless (GitHub OIDC) and key-based verification.
+#
+# Prerequisites:
+#   - Kyverno >= 1.10 installed in the cluster
+#   - The public key stored in k8s/cosign.pub (for key-based verification)
+#   - Images signed in CI via sigstore/cosign with GitHub OIDC keyless signing
+#
+# Apply with:
+#   kubectl apply -f k8s/cosign.pub
+#   kubectl apply -f k8s/cosign-image-policy.yaml
+#
+# See docs/DEPLOYMENT_GUIDE.md for the full image signing process.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that container images are signed with cosign. Unsigned images
+      are rejected. Signatures are verified either keylessly against the
+      GitHub OIDC issuer/subject used in CI, or against the public key stored
+      in k8s/cosign.pub.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    # Keyless verification against the GitHub Actions OIDC identity used in CI.
+    - name: verify-keyless-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "*"
+          # Skip images from trusted system namespaces / registries that are
+          # not built by our CI pipeline.
+          skipImageReferences:
+            - "ghcr.io/kyverno/*"
+            - "registry.k8s.io/*"
+            - "k8s.gcr.io/*"
+            - "gcr.io/*"
+            - "docker.io/library/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          # Require the signature to be present; reject unsigned images.
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+    # Key-based verification using the public key stored in k8s/cosign.pub.
+    # Enabled as an alternative/additional check for images signed with a
+    # long-lived key. Comment out if using keyless-only signing.
+    - name: verify-key-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "*"
+          skipImageReferences:
+            - "ghcr.io/kyverno/*"
+            - "registry.k8s.io/*"
+            - "k8s.gcr.io/*"
+            - "gcr.io/*"
+            - "docker.io/library/*"
+          attestors:
+            - count: 1
+              entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      REPLACE_WITH_CONTENTS_OF_k8s/cosign.pub
+                      -----END PUBLIC KEY-----
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+---
+# Optional: OPA Gatekeeper ConstraintTemplate + Constraint equivalent.
+# Use this instead of the Kyverno policy above if the cluster runs Gatekeeper.
+# Requires the cosign verification provider (e.g. cosigned / sigstore policy
+# controller) to be installed.
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiresignedimages
+  annotations:
+    description: >-
+      Requires container images to be signed with cosign. Unsigned images are
+      rejected.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSignedImages
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptImages:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiresignedimages
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not exempt(container.image)
+          not signed(container.image)
+          msg := sprintf("container image %q is not signed with cosign", [container.image])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not exempt(container.image)
+          not signed(container.image)
+          msg := sprintf("init container image %q is not signed with cosign", [container.image])
+        }
+
+        exempt(image) {
+          pattern := input.parameters.exemptImages[_]
+          glob.match(pattern, ["/"], image)
+        }
+
+        # Placeholder: integrate with the sigstore policy controller /
+        # cosigned admission webhook which annotates verified images.
+        signed(image) {
+          startswith(image, "ghcr.io/kyverno/")
+        }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireSignedImages
+metadata:
+  name: require-signed-images
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    exemptImages:
+      - "ghcr.io/kyverno/*"
+      - "registry.k8s.io/*"
+      - "k8s.gcr.io/*"
+      - "gcr.io/*"
+      - "docker.io/library/*"
