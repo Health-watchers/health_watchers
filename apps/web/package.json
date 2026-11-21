@@ -58,7 +58,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.1",
+    "@axe-core/playwright": "^4.14.0",
     "@next/bundle-analyzer": "^14.2.35",
     "@babel/core": "^7.29.0",
     "@playwright/test": "^1.62.1",
