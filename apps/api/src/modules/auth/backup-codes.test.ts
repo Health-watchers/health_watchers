@@ -119,6 +119,7 @@ import crypto from 'crypto';
 import app from '@api/app';
 import { UserModel } from '@api/modules/auth/models/user.model';
 import { totpService } from '@api/modules/auth/totp.service';
+import { auditLog } from '@api/modules/audit/audit.service';
 import { signAccessToken } from './token.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -402,5 +403,103 @@ describe('POST /api/v1/auth/mfa/backup-codes/regenerate', () => {
 
     const codes: string[] = res.body.data.backupCodes;
     expect(new Set(codes).size).toBe(codes.length);
+  });
+});
+
+// ── POST /api/v1/auth/login — MFA enforcement (#1669) ────────────────────────
+
+describe('POST /api/v1/auth/login — MFA enforcement', () => {
+  const url = '/api/v1/auth/login';
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it.each(['ADMIN', 'DOCTOR', 'NURSE'])(
+    'rejects %s login without a TOTP or backup code (MFA required)',
+    async (role) => {
+      const user = await makeMockUser({ role });
+      (UserModel.findOne as jest.Mock).mockResolvedValue(user);
+
+      const res = await request(app)
+        .post(url)
+        .send({ email: user.email, password: VALID_PASSWORD });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('MfaRequired');
+      expect(res.body.data).toEqual({ mfaRequired: true });
+      // No session should be issued
+      expect(res.body.data).not.toHaveProperty('accessToken');
+      expect(user.save).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects admin login when the supplied TOTP code is invalid', async () => {
+    const user = await makeMockUser({ role: 'ADMIN' });
+    (UserModel.findOne as jest.Mock).mockResolvedValue(user);
+    (totpService.verify as jest.Mock).mockReturnValue(false);
+
+    const res = await request(app)
+      .post(url)
+      .send({ email: user.email, password: VALID_PASSWORD, totp: '000000' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('InvalidCode');
+    expect(user.save).not.toHaveBeenCalled();
+  });
+
+  it('allows admin login with a valid TOTP code and records a verified audit event', async () => {
+    const user = await makeMockUser({ role: 'ADMIN' });
+    (UserModel.findOne as jest.Mock).mockResolvedValue(user);
+    (totpService.verify as jest.Mock).mockReturnValue(true);
+
+    const res = await request(app)
+      .post(url)
+      .send({ email: user.email, password: VALID_PASSWORD, totp: '123456' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveProperty('accessToken');
+    expect(totpService.verify).toHaveBeenCalledWith(expect.any(String), '123456');
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'MFA_VERIFIED', userId: USER_ID })
+    );
+  });
+
+  it('allows doctor login with an unused backup code and consumes it', async () => {
+    const plainCode = 'AABBCCDD';
+    const unusedCode = hashCode(plainCode);
+    const user = await makeMockUser({
+      role: 'DOCTOR',
+      mfaBackupCodes: [unusedCode, hashCode('EEFF0011')],
+    });
+    (UserModel.findOne as jest.Mock).mockResolvedValue(user);
+
+    const res = await request(app)
+      .post(url)
+      .send({ email: user.email, password: VALID_PASSWORD, backupCode: plainCode });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveProperty('accessToken');
+    // The used code must be removed from the stored set
+    expect(user.mfaBackupCodes).not.toContain(unusedCode);
+    expect(user.mfaBackupCodes).toHaveLength(1);
+    expect(user.save).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'MFA_RECOVERY_CODE_USED', userId: USER_ID })
+    );
+  });
+
+  it('rejects login when the backup code has already been used', async () => {
+    const user = await makeMockUser({
+      role: 'DOCTOR',
+      mfaBackupCodes: [hashCode('EEFF0011')],
+    });
+    (UserModel.findOne as jest.Mock).mockResolvedValue(user);
+
+    const res = await request(app)
+      .post(url)
+      .send({ email: user.email, password: VALID_PASSWORD, backupCode: 'AABBCCDD' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('InvalidCode');
+    expect(user.save).not.toHaveBeenCalled();
   });
 });
