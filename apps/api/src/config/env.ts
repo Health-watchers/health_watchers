@@ -95,6 +95,23 @@ const envSchema = z.object({
 
   FIELD_ENCRYPTION_KEY_VERSION: z.string().optional(),
 
+  // Deterministic HMAC-SHA256 pepper for searchable blind indexes over
+  // encrypted PHI (nationalId, contactNumber, insuranceNumber).
+  FIELD_ENCRYPTION_BLIND_INDEX_KEY: z
+    .string()
+    .length(
+      64,
+      'FIELD_ENCRYPTION_BLIND_INDEX_KEY must be a 64-char hex string (32 bytes)'
+    )
+    .optional(),
+
+  // ── AWS Secrets Manager (key hydration at bootstrap) ──────────────────────
+  // When FIELD_ENCRYPTION_KEY is not injected by the environment (k8s
+  // ExternalSecrets / Helm / Terraform), the API fetches it from Secrets
+  // Manager at startup. See `lib/secrets-manager.ts`.
+  AWS_SECRETS_MANAGER_SECRET_ID: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+
   // ── HIPAA — Audit log encryption at rest (§ 164.312(b)) ───────────────────
   // 64-char hex = 32-byte AES-256 key.
   AUDIT_ENCRYPTION_KEY: z

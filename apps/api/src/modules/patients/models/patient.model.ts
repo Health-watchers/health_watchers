@@ -1,12 +1,25 @@
 import { Schema, model, models } from 'mongoose';
-import { encrypt, decrypt } from '@api/lib/encrypt';
+import { encrypt, decrypt, blindIndex } from '@api/lib/encrypt';
 import { sanitizeText } from '@api/utils/sanitize';
 import { baseSchema } from '@api/shared';
 
-const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth'] as const;
+// HIPAA Safe Harbor identifiers encrypted at rest with AES-256-GCM.
+// `contactNumber` is the storage field for the patient's phone number.
+const PHI_FIELDS = ['contactNumber', 'address', 'dateOfBirth', 'nationalId'] as const;
 
 // Insurance PHI fields that must be encrypted at rest
-const INSURANCE_PHI_FIELDS = ['policyNumber', 'groupNumber'] as const;
+const INSURANCE_PHI_FIELDS = ['policyNumber', 'groupNumber', 'insuranceNumber'] as const;
+
+// Deterministic blind-index fields (HMAC-SHA256) enabling equality lookups
+// without ever querying the encrypted ciphertext directly.
+const PATIENT_BLIND_INDEX_FIELDS = {
+  contactNumber: 'contactNumberHash',
+  nationalId: 'nationalIdHash',
+} as const;
+
+const INSURANCE_BLIND_INDEX_FIELDS = {
+  insuranceNumber: 'insuranceNumberHash',
+} as const;
 
 export interface IAllergy {
   _id?: Schema.Types.ObjectId;
@@ -47,6 +60,10 @@ export interface IInsurance {
   policyNumber: string;
   /** Encrypted PHI */
   groupNumber?: string;
+  /** Encrypted PHI — member/insurance number */
+  insuranceNumber?: string;
+  /** Deterministic blind index of `insuranceNumber` (never exposed) */
+  insuranceNumberHash?: string;
   coverageType: CoverageType;
   effectiveDate?: string;
   expirationDate?: string;
@@ -63,7 +80,13 @@ export interface PatientDocument {
   dateOfBirth: string;
   sex: 'M' | 'F' | 'O';
   contactNumber?: string;
+  /** Deterministic blind index of `contactNumber` (never exposed) */
+  contactNumberHash?: string;
   address?: string;
+  /** Encrypted PHI — national identity number */
+  nationalId?: string;
+  /** Deterministic blind index of `nationalId` (never exposed) */
+  nationalIdHash?: string;
   allergies: IAllergy[];
   emergencyContacts?: IEmergencyContact[];
   insurance?: IInsurance[];
@@ -122,6 +145,8 @@ const insuranceSchema = new Schema<IInsurance>(
     provider: { type: String, required: true, trim: true },
     policyNumber: { type: String, required: true },
     groupNumber: { type: String },
+    insuranceNumber: { type: String },
+    insuranceNumberHash: { type: String },
     coverageType: {
       type: String,
       enum: ['HMO', 'PPO', 'EPO', 'POS', 'HDHP', 'Medicare', 'Medicaid', 'other'],
@@ -143,7 +168,10 @@ const patientSchema = new Schema<PatientDocument>(
     dateOfBirth: { type: String, required: true },
     sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
+    contactNumberHash: { type: String },
     address: { type: String },
+    nationalId: { type: String },
+    nationalIdHash: { type: String },
     allergies: { type: [allergySchema], default: [] },
     emergencyContacts: { type: [emergencyContactSchema], default: [] },
     insurance: { type: [insuranceSchema], default: [] },
@@ -191,32 +219,61 @@ patientSchema.index(
   { clinicId: 1, riskLevel: 1, nextRiskReviewDate: 1 },
   { name: 'patients_clinicId_riskLevel_nextRiskReviewDate' }
 );
+// #1665 — Searchable blind indexes for encrypted PHI. Encrypted fields are
+// never queried directly; equality lookups go through these hashes.
+patientSchema.index(
+  { clinicId: 1, nationalIdHash: 1 },
+  { name: 'patients_clinicId_nationalIdHash', sparse: true }
+);
+patientSchema.index(
+  { clinicId: 1, contactNumberHash: 1 },
+  { name: 'patients_clinicId_contactNumberHash', sparse: true }
+);
 
 patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
+  const self = this as unknown as Record<string, unknown>;
   for (const field of PHI_FIELDS) {
     const val = this[field] as string | undefined;
-    if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
+    if (val) self[field] = encrypt(val);
+  }
+  // Blind indexes are computed from the plaintext before it is replaced.
+  for (const [field, hashField] of Object.entries(PATIENT_BLIND_INDEX_FIELDS)) {
+    const val = this[field as keyof PatientDocument] as string | undefined;
+    self[hashField] = val ? blindIndex(val) : undefined;
   }
   // Encrypt PHI fields within each insurance entry
   if (this.insurance) {
     for (const ins of this.insurance) {
+      const raw = ins as unknown as Record<string, unknown>;
       for (const field of INSURANCE_PHI_FIELDS) {
         const val = ins[field] as string | undefined;
-        if (val) (ins as unknown as Record<string, unknown>)[field] = encrypt(val);
+        if (val) raw[field] = encrypt(val);
+      }
+      for (const [field, hashField] of Object.entries(INSURANCE_BLIND_INDEX_FIELDS)) {
+        const val = raw[field] as string | undefined;
+        raw[hashField] = val ? blindIndex(val) : undefined;
       }
     }
   }
 });
 
-patientSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as Record<string, unknown> | null;
-  if (!update) return;
-  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+function applyUpdateEncryption(target: Record<string, unknown>) {
   for (const field of PHI_FIELDS) {
     const val = target[field];
     if (typeof val === 'string') target[field] = encrypt(val);
   }
+  for (const [field, hashField] of Object.entries(PATIENT_BLIND_INDEX_FIELDS)) {
+    const val = target[field];
+    if (typeof val === 'string') target[hashField] = blindIndex(val);
+  }
+}
+
+patientSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as Record<string, unknown> | null;
+  if (!update) return;
+  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+  applyUpdateEncryption(target);
 });
 
 function decryptDoc(doc: unknown) {
@@ -241,10 +298,7 @@ patientSchema.pre('updateMany', function () {
   const update = this.getUpdate() as Record<string, unknown> | null;
   if (!update) return;
   const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
-  for (const field of PHI_FIELDS) {
-    const val = target[field];
-    if (typeof val === 'string') target[field] = encrypt(val);
-  }
+  applyUpdateEncryption(target);
 });
 
 patientSchema.post('save', function () {
