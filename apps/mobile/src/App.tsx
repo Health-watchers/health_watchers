@@ -9,6 +9,8 @@ import { DocumentsScreen } from './screens/DocumentsScreen';
 import { CarePlansScreen } from './screens/CarePlansScreen';
 import { ImmunizationsScreen } from './screens/ImmunizationsScreen';
 import { NotificationService } from './services/notification.service';
+import { BiometricService } from './services/biometric.service';
+import { NotificationPreferencesScreen } from './screens/NotificationPreferencesScreen';
 import { configureSslPinning } from './security/sslPinning';
 import { checkDeviceIntegrity, DeviceIntegrity } from './security/deviceIntegrity';
 
@@ -97,8 +99,21 @@ function ImmunizationsStack() {
   );
 }
 
+function SettingsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="NotificationPreferences"
+        component={NotificationPreferencesScreen}
+        options={{ title: 'Notification Preferences' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   const [security, setSecurity] = useState<SecurityState>({ status: 'starting' });
+  const [biometricChecked, setBiometricChecked] = useState(false);
 
   useEffect(() => {
     // Pinning must be in place before the first network request (incl. push registration)
@@ -132,6 +147,23 @@ export default function App() {
     NotificationService.useNotificationListener();
   }, [ready]);
 
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    // Returning users with a stored token are prompted for biometrics (Face ID / fingerprint),
+    // falling back to PIN/password when biometrics are unavailable or fail.
+    BiometricService.authenticateReturningUser()
+      .catch((err: unknown) => {
+        console.error('[biometrics] startup authentication failed', err);
+      })
+      .finally(() => {
+        if (!cancelled) setBiometricChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready]);
+
   if (security.status === 'starting') {
     return (
       <View style={securityStyles.screen}>
@@ -155,6 +187,14 @@ export default function App() {
         title="Device not supported"
         body="For your privacy, Health Watchers can't be used on rooted or jailbroken devices."
       />
+    );
+  }
+
+  if (!biometricChecked) {
+    return (
+      <View style={securityStyles.screen}>
+        <ActivityIndicator />
+      </View>
     );
   }
 
@@ -204,6 +244,14 @@ export default function App() {
           options={{
             title: 'Immunizations',
             tabBarLabel: 'Immunizations',
+          }}
+        />
+        <Tab.Screen
+          name="SettingsStack"
+          component={SettingsStack}
+          options={{
+            title: 'Settings',
+            tabBarLabel: 'Settings',
           }}
         />
       </Tab.Navigator>

@@ -90,9 +90,61 @@ Cross-origin requests from a malicious site cannot read the `csrf-token` cookie 
 
 ### Authentication & Authorisation
 - JWT access tokens (1-hour expiry) with rotating refresh tokens (7-day expiry)
-- TOTP-based MFA enforced for all provider and admin accounts
+- TOTP-based MFA enforced for the `admin`, `doctor`, and `nurse` roles (see [Multi-Factor Authentication](#multi-factor-authentication) below)
 - Role-based access control (RBAC): `admin`, `clinic_admin`, `provider`, `staff`, `patient`
 - Clinic-scoped data isolation — providers can only access patients within their own clinic
+
+### Multi-Factor Authentication
+
+MFA is **mandatory** for privileged clinical and administrative roles. Enforcement is applied at login in `apps/api/src/modules/auth/totp.service.ts`; a user whose role requires MFA cannot obtain a session without completing the second factor.
+
+#### Enforced Roles
+
+| Role | MFA required |
+|------|--------------|
+| `admin` | ✅ Enforced |
+| `doctor` | ✅ Enforced |
+| `nurse` | ✅ Enforced |
+| `clinic_admin`, `provider`, `staff`, `patient` | Optional (user may self-enrol) |
+
+#### Login Enforcement
+
+- If a user with an enforced role has **not** enrolled MFA, login is rejected with `403 Forbidden` and an error instructing them to enrol before signing in. No access or refresh token is issued.
+- If the user has enrolled MFA but has not yet supplied a valid TOTP code, login returns a challenge response (`mfaRequired: true`) and **no** session tokens. Tokens are only issued after the TOTP code (or a backup code) is verified.
+- Invalid or expired TOTP codes are rejected and counted toward the auth rate limit (5 req/min on auth endpoints).
+
+#### Grace Period for Newly Enrolled Users
+
+To avoid locking users out immediately after enrolment, a **7-day grace period** applies from the moment MFA is first enrolled:
+
+- During the grace period the user may still authenticate with their password alone, but every such login is flagged in the audit log and the user is shown an enrolment/verification reminder.
+- Reminders are sent on **day 1, day 3, day 5, and day 7** after enrolment by `apps/api/src/modules/auth/mfa-grace-period-job.ts`.
+- When the grace period expires, full enforcement applies: password-only login for an enforced role is rejected until MFA is completed.
+- The grace period applies **only** to first-time enrolment. Disabling and re-enabling MFA does not restart it.
+
+#### Backup Code Recovery
+
+Users who lose access to their authenticator can recover their account with single-use backup codes:
+
+1. Ten backup codes are generated and displayed **once** at enrolment. Only hashes are stored server-side.
+2. At the MFA challenge, the user may submit a backup code instead of a TOTP code.
+3. A valid backup code is consumed immediately (single use) and cannot be reused.
+4. When the remaining code count falls to **3 or fewer**, the user is prompted to regenerate a new set.
+5. If all codes are exhausted, recovery requires an out-of-band identity verification by a security administrator, which is itself audited.
+
+#### MFA Audit Events
+
+All MFA lifecycle actions are written to the audit log with `userId`, `clinicId`, timestamp, IP, and user agent:
+
+| Event | When it is recorded |
+|-------|---------------------|
+| `mfa.enrolled` | A user completes TOTP enrolment (secret confirmed with a valid code) |
+| `mfa.verified` | A user successfully completes the MFA challenge at login |
+| `mfa.recovery_code_used` | A backup code is accepted at the MFA challenge |
+| `mfa.disabled` | MFA is turned off for a user (admin action or self-service where permitted) |
+| `mfa.grace_period_expired` | The 7-day grace period lapses and full enforcement begins |
+
+Repeated failed MFA attempts are also logged and rate-limited; sustained failures trigger an alert to the security team.
 
 ### Data Protection
 - AES-256-GCM field-level encryption for PHI (DOB, contact number, address, insurance policy/group numbers); see `docs/SECURITY_POLICY.md` for full field coverage
