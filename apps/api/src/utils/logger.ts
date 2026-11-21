@@ -8,6 +8,18 @@ const usePrettyTransport = process.env.NODE_ENV !== 'production' && process.env.
 // (see integration/phi-log-leak.flow.test.ts).
 export const loggerOptions: pino.LoggerOptions = {
   level: process.env.LOG_LEVEL ?? 'info',
+  // Standardized JSON log format with mandatory fields:
+  // timestamp, level, service, requestId, message.
+  // `timestamp` is emitted as an ISO-8601 string for reliable Logstash parsing.
+  timestamp: pino.stdTimeFunctions.isoTime,
+  base: {
+    service: process.env.SERVICE_NAME ?? 'api',
+    requestId: undefined,
+  },
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  messageKey: 'message',
   redact: {
     paths: [
       'req.headers.authorization',
@@ -33,5 +45,26 @@ const logger = pino({
     ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
     : {}),
 });
+
+/**
+ * Fields that may be attached to a request-scoped child logger.
+ */
+export interface RequestLogContext {
+  requestId?: string;
+  clinicId?: string;
+  userId?: string;
+}
+
+/**
+ * Build a request-scoped child logger that carries the mandatory `requestId`
+ * field plus the optional `clinicId` and `userId` fields on every entry.
+ */
+export function createRequestLogger(context: RequestLogContext = {}): pino.Logger {
+  const bindings: Record<string, string> = {};
+  if (context.requestId !== undefined) bindings.requestId = context.requestId;
+  if (context.clinicId !== undefined) bindings.clinicId = context.clinicId;
+  if (context.userId !== undefined) bindings.userId = context.userId;
+  return logger.child(bindings);
+}
 
 export default logger;

@@ -1,15 +1,12 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  // Issue #1679: broadened content globs so Tailwind's built-in PurgeCSS
+  // (JIT) scans every source file that can contain class names. This keeps
+  // unused CSS out of the bundle without a separate PurgeCSS pass.
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/hooks/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/lib/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/utils/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/contexts/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/providers/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/**/*.{html,md,mdx}',
   ],
   theme: {
     // Issue #1221: mobile-first container with per-breakpoint padding
