@@ -48,7 +48,7 @@
     "eslint": "^8.50.0",
     "jest": "^29.7.0",
     "jest-expo": "^50.0.0",
-    "typescript": "^5.2.0"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18.0.0"
