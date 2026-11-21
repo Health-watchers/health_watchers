@@ -76,7 +76,7 @@ jobs:
           echo "✅ Helm templates rendered successfully"
 
       - name: Setup kind cluster
-        uses: helm/kind-action@v1.10.0
+        uses: helm/kind-action@v1.15.2
         with:
           config: |
             kind: Cluster
