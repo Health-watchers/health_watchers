@@ -1,7 +1,17 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["tsconfig.base.json", ".env.example"],
+  "globalEnv": [
+    "NEXT_PUBLIC_*",
+    "NODE_ENV",
+    "CI",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "TURBO_TOKEN",
+    "TURBO_TEAM"
+  ],
   "remoteCache": {
-    "enabled": true
+    "enabled": false
   },
   "tasks": {
     "build": {
