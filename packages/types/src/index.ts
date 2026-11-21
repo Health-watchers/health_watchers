@@ -331,6 +331,146 @@ export const NOTIFICATION_TYPES = [
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// ─── RBAC Permission Matrix (Issue #1774) ────────────────────────────────────
+// Single source of truth for authorisation across the API and web app.
+// Replaces the parallel RBAC systems in rbac.middleware.ts, role.middleware.ts
+// and modules/rbac. Every route must be guarded by `requirePermission(...)`.
+
+/** Canonical application roles. */
+export const APP_ROLES = [
+  'SUPER_ADMIN',
+  'CLINIC_ADMIN',
+  'DOCTOR',
+  'NURSE',
+  'ASSISTANT',
+  'READ_ONLY',
+  'PATIENT',
+] as const;
+
+export type AppRole = (typeof APP_ROLES)[number];
+
+/** All permissions, expressed as `resource:action`. */
+export const PERMISSION_KEYS = [
+  // Patients
+  'patients:read',
+  'patients:write',
+  'patients:delete',
+  // Encounters
+  'encounters:read',
+  'encounters:write',
+  'encounters:delete',
+  // Appointments
+  'appointments:read',
+  'appointments:write',
+  'appointments:delete',
+  // Payments
+  'payments:read',
+  'payments:write',
+  'payments:refund',
+  // Prescriptions
+  'prescriptions:read',
+  'prescriptions:write',
+  // Lab results
+  'lab-results:read',
+  'lab-results:write',
+  // Users / staff management
+  'users:read',
+  'users:write',
+  'users:delete',
+  // Clinics
+  'clinics:read',
+  'clinics:write',
+  // Reports
+  'reports:read',
+  'reports:write',
+  // Audit logs
+  'audit-logs:read',
+  // Admin / ops endpoints
+  'cache:read',
+  'cache:write',
+  'migrations:read',
+  'rate-limits:read',
+  'rate-limits:write',
+  'errors:read',
+  'replication:read',
+  'replication:write',
+  'sharding:read',
+  'sharding:write',
+  'cdn:read',
+  'cdn:write',
+] as const;
+
+export type Permission = (typeof PERMISSION_KEYS)[number];
+
+const CLINICAL_ROLES: readonly AppRole[] = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE'];
+const CLINICAL_READ_ROLES: readonly AppRole[] = [...CLINICAL_ROLES, 'ASSISTANT', 'READ_ONLY'];
+const ADMIN_ROLES: readonly AppRole[] = ['SUPER_ADMIN', 'CLINIC_ADMIN'];
+const SUPER_ADMIN_ONLY: readonly AppRole[] = ['SUPER_ADMIN'];
+
+/**
+ * The permission matrix: permission → roles allowed to perform it.
+ * This is the single source of truth for RBAC (#1774).
+ */
+export const PERMISSIONS: Readonly<Record<Permission, readonly AppRole[]>> = {
+  'patients:read': CLINICAL_READ_ROLES,
+  'patients:write': CLINICAL_ROLES,
+  'patients:delete': ADMIN_ROLES,
+
+  'encounters:read': CLINICAL_READ_ROLES,
+  'encounters:write': CLINICAL_ROLES,
+  'encounters:delete': ADMIN_ROLES,
+
+  'appointments:read': CLINICAL_READ_ROLES,
+  'appointments:write': CLINICAL_ROLES,
+  'appointments:delete': ADMIN_ROLES,
+
+  'payments:read': ADMIN_ROLES,
+  'payments:write': ADMIN_ROLES,
+  'payments:refund': ADMIN_ROLES,
+
+  'prescriptions:read': CLINICAL_READ_ROLES,
+  'prescriptions:write': CLINICAL_ROLES,
+
+  'lab-results:read': CLINICAL_READ_ROLES,
+  'lab-results:write': CLINICAL_ROLES,
+
+  'users:read': ADMIN_ROLES,
+  'users:write': ADMIN_ROLES,
+  'users:delete': SUPER_ADMIN_ONLY,
+
+  'clinics:read': ADMIN_ROLES,
+  'clinics:write': ADMIN_ROLES,
+
+  'reports:read': ADMIN_ROLES,
+  'reports:write': ADMIN_ROLES,
+
+  'audit-logs:read': ADMIN_ROLES,
+
+  'cache:read': SUPER_ADMIN_ONLY,
+  'cache:write': SUPER_ADMIN_ONLY,
+  'migrations:read': SUPER_ADMIN_ONLY,
+  'rate-limits:read': SUPER_ADMIN_ONLY,
+  'rate-limits:write': SUPER_ADMIN_ONLY,
+  'errors:read': SUPER_ADMIN_ONLY,
+  'replication:read': SUPER_ADMIN_ONLY,
+  'replication:write': SUPER_ADMIN_ONLY,
+  'sharding:read': SUPER_ADMIN_ONLY,
+  'sharding:write': SUPER_ADMIN_ONLY,
+  'cdn:read': SUPER_ADMIN_ONLY,
+  'cdn:write': SUPER_ADMIN_ONLY,
+};
+
+/** Returns the roles allowed to perform `permission`. */
+export function rolesForPermission(permission: Permission): readonly AppRole[] {
+  return PERMISSIONS[permission] ?? [];
+}
+
+/** Returns true if `role` is allowed to perform `permission`. */
+export function can(role: AppRole | string | undefined | null, permission: Permission): boolean {
+  if (!role) return false;
+  return rolesForPermission(permission).includes(role as AppRole);
+}
+
 // ─── Real-time (Socket.IO) Event Contract (Issue #1504) ──────────────────────
 
 export * from './realtime';

@@ -1,10 +1,10 @@
 /**
  * Auth middleware barrel for lazy-loading and archive routes.
  *
- * Re-exports `authenticate` as `protect` (common Express convention)
- * and `authorize` from the RBAC middleware so route files can use
- * the familiar `protect` / `authorize` pairing.
+ * Re-exports the single authorisation middleware (`authorize` and
+ * `requirePermission`) from the RBAC middleware so route files can use
+ * a consistent permission model. The `authenticate` middleware is no
+ * longer aliased here; import it directly from `auth.middleware`.
  */
 
-export { authenticate as protect } from '../middlewares/auth.middleware';
-export { authorize } from '../middlewares/rbac.middleware';
+export { authorize, requirePermission } from '../middlewares/rbac.middleware';

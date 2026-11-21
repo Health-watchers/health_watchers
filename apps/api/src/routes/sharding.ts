@@ -14,6 +14,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '@api/middlewares/auth.middleware';
+import { requirePermission } from '@api/middlewares/rbac.middleware';
 import { authorize } from '@api/middlewares/rbac.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
 import { ShardingService } from '../services/sharding.service';
@@ -27,6 +28,7 @@ const router = Router();
 router.get(
   '/health',
   authenticate,
+  requirePermission('sharding:read'),
   authorize(['admin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const service = ShardingService.getInstance();
@@ -49,6 +51,7 @@ router.get(
 router.post(
   '/health-check',
   authenticate,
+  requirePermission('sharding:write'),
   authorize(['admin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const service = ShardingService.getInstance();
@@ -70,6 +73,7 @@ router.post(
 router.get(
   '/strategy',
   authenticate,
+  requirePermission('sharding:read'),
   authorize(['admin']),
   asyncHandler(async (_req: Request, res: Response) => {
     const service = ShardingService.getInstance();
@@ -93,6 +97,7 @@ router.get(
 router.get(
   '/balance/:collection',
   authenticate,
+  requirePermission('sharding:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { collection } = req.params;
@@ -114,6 +119,7 @@ router.get(
 router.get(
   '/route',
   authenticate,
+  requirePermission('sharding:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const { collection, key } = req.query as { collection?: string; key?: string };

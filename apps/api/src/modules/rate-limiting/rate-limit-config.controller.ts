@@ -4,7 +4,7 @@ import {
   SubscriptionTier,
 } from '../../services/advanced-rate-limiting.service';
 import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
-import { requireRole } from '../../middlewares/role.middleware';
+import { requirePermission } from '../../middlewares/rbac.middleware';
 import logger from '../../utils/logger';
 
 const router = Router();
@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   '/rate-limits/tiers',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('rate-limits:read'),
   (_req: Request, res: Response) => {
     try {
       const tiers = Object.values(SubscriptionTier).map((tier) => ({
@@ -30,7 +30,7 @@ router.get(
 router.get(
   '/rate-limits/metrics',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('rate-limits:read'),
   (_req: Request, res: Response) => {
     try {
       const metrics = advancedRateLimiting.getMetrics();
@@ -45,7 +45,7 @@ router.get(
 router.get(
   '/rate-limits/violations',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('rate-limits:read'),
   (req: Request, res: Response) => {
     try {
       const key = req.query.key as string;
@@ -67,7 +67,7 @@ router.get(
 router.post(
   '/rate-limits/check',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('rate-limits:write'),
   async (req: Request, res: Response) => {
     try {
       const { key, tier = SubscriptionTier.BASIC, limitType = 'minute' } = req.body;
@@ -88,7 +88,7 @@ router.post(
 router.post(
   '/rate-limits/reset',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('rate-limits:write'),
   (_req: Request, res: Response) => {
     try {
       advancedRateLimiting.resetCounters();
