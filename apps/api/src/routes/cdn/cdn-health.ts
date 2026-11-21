@@ -8,7 +8,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '@api/middlewares/auth.middleware';
-import { authorize } from '@api/middlewares/rbac.middleware';
+import { requirePermission } from '@api/middlewares/rbac.middleware';
 
 const router = Router();
 
@@ -71,7 +71,7 @@ function getCdnProviderStatuses(): CdnProviderStatus[] {
  * GET /api/v1/cdn/health
  * Returns CDN configuration health — which providers are configured, which is active.
  */
-router.get('/health', authenticate, authorize(['admin']), (_req: Request, res: Response) => {
+router.get('/health', authenticate, requirePermission('cdn:read'), (_req: Request, res: Response) => {
   try {
     const statuses = getCdnProviderStatuses();
     const activeProvider = (process.env.NEXT_PUBLIC_CDN_PROVIDER as CdnProvider) || 'custom';
@@ -105,7 +105,7 @@ router.get('/health', authenticate, authorize(['admin']), (_req: Request, res: R
  * GET /api/v1/cdn/config
  * Returns the active CDN provider configuration (non-sensitive fields only).
  */
-router.get('/config', authenticate, authorize(['admin']), (_req: Request, res: Response) => {
+router.get('/config', authenticate, requirePermission('cdn:read'), (_req: Request, res: Response) => {
   const activeProvider = (process.env.NEXT_PUBLIC_CDN_PROVIDER as CdnProvider) || 'custom';
   const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || null;
 
@@ -150,7 +150,7 @@ router.get('/config', authenticate, authorize(['admin']), (_req: Request, res: R
 router.post(
   '/test-delivery',
   authenticate,
-  authorize(['admin']),
+  requirePermission('cdn:write'),
   async (req: Request, res: Response) => {
     const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL;
     if (!cdnUrl) {

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { errorAnalytics } from '../../services/error-analytics.service';
 import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
-import { requireRole } from '../../middlewares/role.middleware';
+import { requirePermission } from '../../middlewares/rbac.middleware';
 import logger from '../../utils/logger';
 
 const router = Router();
@@ -9,7 +9,7 @@ const router = Router();
 router.get(
   '/errors/analytics/summary',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (_req: Request, res: Response) => {
     try {
       const summary = errorAnalytics.getSummary();
@@ -24,7 +24,7 @@ router.get(
 router.get(
   '/errors/analytics/by-code',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (req: Request, res: Response) => {
     try {
       const code = req.query.code as string | undefined;
@@ -40,7 +40,7 @@ router.get(
 router.get(
   '/errors/analytics/trends',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (req: Request, res: Response) => {
     try {
       const code = req.query.code as string | undefined;
@@ -57,7 +57,7 @@ router.get(
 router.get(
   '/errors/analytics/top',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (req: Request, res: Response) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
@@ -73,7 +73,7 @@ router.get(
 router.get(
   '/errors/analytics/critical',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (_req: Request, res: Response) => {
     try {
       const criticalErrors = errorAnalytics.getCriticalErrors();
@@ -88,7 +88,7 @@ router.get(
 router.get(
   '/errors/analytics/distribution',
   requireAuth,
-  requireRole('admin'),
+  requirePermission('errors:read'),
   (_req: Request, res: Response) => {
     try {
       const severity = errorAnalytics.getSeverityDistribution();

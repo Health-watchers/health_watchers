@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
+import { requirePermission } from '@/middlewares/rbac.middleware';
 import { authorize } from '@/middlewares/rbac.middleware';
 import { asyncHandler } from '@/middlewares/error.middleware';
 import {
@@ -26,6 +27,7 @@ const router = Router();
 router.get(
   '/status',
   authenticate,
+  requirePermission('replication:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const healthStatus = await getReplicationHealthStatus();
@@ -45,27 +47,15 @@ router.get(
 router.get(
   '/lag',
   authenticate,
+  requirePermission('replication:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const lagMetrics = await getReplicationLagMetrics();
 
-      if (!lagMetrics) {
-        return res.status(503).json({
-          error: 'Replication lag metrics unavailable',
-          message: 'Replica set status could not be retrieved',
-        });
-      }
-
-      res.json({
-        success: true,
-        data: lagMetrics,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to get replication lag',
-        message: errorMessage,
+    if (!lagMetrics) {
+      return res.status(503).json({
+        error: 'Replication lag metrics unavailable',
+        message: 'Replica set status could not be retrieved',
       });
     }
 
@@ -84,6 +74,7 @@ router.get(
 router.get(
   '/consistency',
   authenticate,
+  requirePermission('replication:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const consistency = await monitorConsistency();
@@ -106,10 +97,14 @@ router.get(
 /**
  * POST /internal/replication/test-failover
  * Test failover procedures (mutating — requires SUPER_ADMIN + MFA)
+ *
+ * NOTE: This is a candidate to move to an internal admin service or CLI.
+ * Exposing failover testing on the public API is a safety concern (#1773).
  */
 router.post(
   '/test-failover',
   authenticate,
+  requirePermission('replication:write'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const testResult = await testFailover();
@@ -129,6 +124,7 @@ router.post(
 router.get(
   '/read-preferences',
   authenticate,
+  requirePermission('replication:read'),
   authorize(['super_admin']),
   (req: Request, res: Response) => {
     res.json({
@@ -156,6 +152,7 @@ router.get(
 router.get(
   '/metrics',
   authenticate,
+  requirePermission('replication:read'),
   authorize(['admin']),
   asyncHandler(async (req: Request, res: Response) => {
     const [lagMetrics, consistency] = await Promise.all([
