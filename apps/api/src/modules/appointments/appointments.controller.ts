@@ -116,9 +116,10 @@ appointmentRoutes.post(
       }
 
       // The status change and its real-time event commit together (#1432).
+      // Scoped by clinicId so a cross-tenant id can never be written (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           {
             status: 'patient_arrived',
             checkedInAt: new Date(),
@@ -606,9 +607,10 @@ appointmentRoutes.put(
       const rescheduled = !!scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime();
 
       // The update and its real-time events commit together (#1432).
+      // Scoped by clinicId so a cross-tenant id can never be written (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
           { new: true, runValidators: true, session },
         ).lean();
@@ -726,10 +728,10 @@ appointmentRoutes.delete(
       const { cancellationReason } = req.body;
 
       // The cancellation, its real-time event and the `appointment.cancelled`
-      // webhook commit together (#1432).
+      // webhook commit together (#1432). Scoped by clinicId (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           {
             status: 'cancelled',
             cancelledBy: new Types.ObjectId(userId),
@@ -862,8 +864,8 @@ appointmentRoutes.post(
       const videoProvider = appointment.videoProvider || 'daily.co';
       const videoRoom = await createVideoRoom(videoProvider);
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         {
           isTelemedicine: true,
           videoRoomId: videoRoom.roomId,
@@ -1039,8 +1041,8 @@ appointmentRoutes.post(
 
       const { recordingConsent } = req.body;
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         { videoStartedAt: new Date(), recordingConsent: !!recordingConsent },
         { new: true },
       ).lean();
@@ -1143,8 +1145,8 @@ appointmentRoutes.post(
       const videoEndedAt = new Date();
       const videoDuration = calculateVideoDuration(appointment.videoStartedAt, videoEndedAt);
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         { videoEndedAt, videoDuration, status: 'completed' },
         { new: true },
       ).lean();
@@ -1167,7 +1169,10 @@ appointmentRoutes.post(
         createdBy: userId,
       });
 
-      await AppointmentModel.findByIdAndUpdate(req.params.id, { encounterId: encounter._id });
+      await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
+        { encounterId: encounter._id },
+      );
 
       return res.json({ status: 'success', data: { appointment: updated, encounter } });
     } catch (err: any) {
@@ -1176,4 +1181,135 @@ appointmentRoutes.post(
   },
 );
 
+// ── POST /appointments/bulk (bulk reschedule/cancel) ────────────────────────────
+/**
+ * @swagger
+ * /appointments/bulk:
+ *   post:
+ *     summary: Bulk reschedule or cancel appointments
+ *     description: Reschedule or cancel multiple appointments in bulk for a provider's day
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [actions]
+ *             properties:
+ *               actions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     appointmentId: { type: string }
+ *                     action: { type: string, enum: [reschedule, cancel] }
+ *                     rescheduleData:
+ *                       type: object
+ *                       properties:
+ *                         newDoctorId: { type: string }
+ *                         newScheduledAt: { type: string, format: date-time }
+ *                     cancelReason: { type: string }
+ *               dryRun: { type: boolean, default: false }
+ *     responses:
+ *       200:
+ *         description: Bulk operation results
+ */
+appointmentRoutes.post(
+  '/bulk',
+  validateRequest({
+    body: z.object({
+      actions: z.array(
+        z.object({
+          appointmentId: z.string(),
+          action: z.enum(['reschedule', 'cancel']),
+          rescheduleData: z
+            .object({
+              newDoctorId: z.string().optional(),
+              newScheduledAt: z.string().datetime().optional(),
+            })
+            .optional(),
+          cancelReason: z.string().optional(),
+        })
+      ),
+      dryRun: z.boolean().default(false),
+    }),
+  }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId, userId } = req.user!;
+      const { appointmentsBulkService } = await import('./appointments-bulk.service');
+
+      const actions = req.body.actions.map((a: any) => ({
+        ...a,
+        rescheduleData: a.rescheduleData ? {
+          ...a.rescheduleData,
+          newScheduledAt: a.rescheduleData.newScheduledAt ? new Date(a.rescheduleData.newScheduledAt) : undefined,
+        } : undefined,
+      }));
+
+      if (req.body.dryRun) {
+        const conflicts = await appointmentsBulkService.dryRun(actions);
+        return res.json({ dryRun: true, conflicts });
+      }
+
+      const results = await appointmentsBulkService.executeBulk(actions, userId, clinicId);
+      return res.json({ results });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── POST /appointments/check-in/:token (QR check-in) ──────────────────────────
+/**
+ * @swagger
+ * /appointments/check-in/{token}:
+ *   post:
+ *     summary: Check in using QR code token
+ *     description: Patient self check-in using signed token from QR code
+ *     tags: [Appointments]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Successfully checked in
+ *       400:
+ *         description: Token invalid or check-in window closed
+ *       404:
+ *         description: Appointment not found
+ */
+appointmentRoutes.post('/check-in/:token', async (req: Request, res: Response) => {
+  try {
+    const clinicId = req.user?.clinicId || req.query.clinicId;
+    if (!clinicId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'Clinic ID required' });
+    }
+
+    const { qrCheckinService } = await import('./qr-checkin.service');
+    const result = await qrCheckinService.validateAndCheckIn(req.params.token, String(clinicId));
+
+    if (!result.success) {
+      return res.status(400).json({ error: 'BadRequest', message: result.error });
+    }
+
+    // Emit socket event for real-time update
+    const { SocketService } = await import('../../services/socket.service');
+    const socketService = SocketService.getInstance();
+    const appointment = await AppointmentModel.findOne({
+      _id: result.appointmentId,
+      clinicId,
+    }).lean();
+
+    if (appointment) {
+      socketService.emitToClinic(String(appointment.clinicId), 'appointment:checked_in', {
+        appointmentId: result.appointmentId,
+        patientId: String(appointment.patientId),
+      });
+    }
 

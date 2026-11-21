@@ -8,6 +8,7 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Deployment](#docker-deployment)
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
+- [Terraform Infrastructure Bootstrap](#terraform-infrastructure-bootstrap)
 - [Blue-Green Deployment](BLUE_GREEN_DEPLOYMENT.md)
 - [Health Checks](#health-checks)
 - [Troubleshooting](#troubleshooting)
@@ -370,6 +371,168 @@ kubectl scale deployment api -n production --replicas=3
 # Autoscaling
 kubectl apply -f k8s/api/hpa.yaml -n production
 ```
+
+## Terraform Infrastructure Bootstrap
+
+All AWS infrastructure (VPC, EKS, S3, SES, IAM) is managed as code in the
+[`terraform/`](../terraform/) directory. Terraform state is stored remotely in S3
+with DynamoDB locking — never commit state files or plan output.
+
+### Terraform Directory Layout
+
+```
+terraform/
+├── modules/
+│   ├── vpc/            # VPC, subnets, NAT gateways, route tables
+│   ├── eks/            # EKS cluster, node groups, OIDC provider
+│   ├── s3/             # Application, backup, and log buckets
+│   ├── ses/            # SES domain identity, DKIM, sending limits
+│   └── iam/            # IRSA roles, CI deploy roles, service policies
+├── environments/
+│   ├── staging/        # Staging backend config + tfvars
+│   └── production/     # Production backend config + tfvars
+└── bootstrap/          # One-time state bucket + lock table creation
+```
+
+### Step 1: Bootstrap Remote State (one-time, per AWS account)
+
+The state bucket and lock table must exist before any environment can be
+initialized. Run this once per AWS account:
+
+```bash
+cd terraform/bootstrap
+
+# Review what will be created (S3 state bucket + DynamoDB lock table)
+terraform init
+terraform plan -out=bootstrap.tfplan
+
+# Apply
+terraform apply bootstrap.tfplan
+
+# Note the outputs — you will need them for the backend configs
+terraform output state_bucket_name
+terraform output lock_table_name
+```
+
+This creates:
+
+| Resource | Purpose |
+|----------|---------|
+| `health-watchers-terraform-state` (S3) | Remote state storage, versioned, encrypted, public access blocked |
+| `health-watchers-terraform-locks` (DynamoDB) | State locking (`LockID` partition key) |
+
+> The bootstrap module uses local state. Keep `terraform/bootstrap/terraform.tfstate`
+> in a secure location (e.g. a password manager or secrets vault) — it is gitignored.
+
+### Step 2: Initialize an Environment
+
+Each environment has its own backend config and variable file:
+
+```bash
+cd terraform/environments/staging
+
+# Initialize with the staging backend (S3 + DynamoDB)
+terraform init -backend-config=backend.hcl
+
+# Validate and plan
+terraform validate
+terraform plan -var-file=staging.tfvars -out=staging.tfplan
+
+# Apply
+terraform apply staging.tfplan
+```
+
+For production, use the same flow from `terraform/environments/production`:
+
+```bash
+cd terraform/environments/production
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=production.tfvars -out=production.tfplan
+terraform apply production.tfplan
+```
+
+Example `backend.hcl` (one per environment, distinct state key):
+
+```hcl
+bucket         = "health-watchers-terraform-state"
+key            = "environments/staging/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "health-watchers-terraform-locks"
+encrypt        = true
+```
+
+> Use a different `key` for each environment (e.g.
+> `environments/production/terraform.tfstate`). Never share a state key between
+> environments.
+
+### Step 3: Wire Terraform Outputs into Kubernetes
+
+After applying, feed the outputs into the Helm values / k8s manifests:
+
+```bash
+# EKS cluster name and endpoint
+terraform output eks_cluster_name
+terraform output eks_cluster_endpoint
+
+# Configure kubectl for the new cluster
+aws eks update-kubeconfig \
+  --name "$(terraform output -raw eks_cluster_name)" \
+  --region us-east-1
+
+# S3 bucket names for backups and uploads
+terraform output s3_backup_bucket
+terraform output s3_uploads_bucket
+
+# IAM role ARNs for IRSA (service accounts)
+terraform output iam_api_role_arn
+```
+
+Set the corresponding values in `helm/values-production.yaml` (or the staging
+equivalent) before running `helm upgrade`.
+
+### CI: `terraform plan` on Pull Requests
+
+The GitHub Actions workflow `.github/workflows/terraform-plan.yml` runs
+automatically on any pull request that touches `terraform/`:
+
+1. `terraform fmt -check -recursive` — formatting gate
+2. `terraform init -backend-config=...` for the affected environment
+3. `terraform validate`
+4. `terraform plan` — the plan is posted as a PR comment for review
+
+The workflow authenticates to AWS via OIDC (no long-lived keys) using the CI
+deploy role created by the `iam` module. `terraform apply` is **not** run in CI;
+applies are performed manually (or from a protected environment workflow) after
+the plan is reviewed and approved.
+
+To run the same checks locally before pushing:
+
+```bash
+cd terraform/environments/staging
+terraform fmt -check -recursive ../../
+terraform init -backend-config=backend.hcl
+terraform validate
+terraform plan -var-file=staging.tfvars
+```
+
+### Terraform Troubleshooting
+
+**State lock error (`Error acquiring the state lock`):**
+```bash
+# Inspect the lock entry
+aws dynamodb get-item \
+  --table-name health-watchers-terraform-locks \
+  --key '{"LockID": {"S": "health-watchers-terraform-state/environments/staging/terraform.tfstate-md5"}}'
+
+# Force-unlock only if you are certain no other apply is running
+terraform force-unlock <LOCK_ID>
+```
+
+**Backend initialization fails:** verify the S3 bucket and DynamoDB table exist
+(run the bootstrap step) and that your AWS credentials have access to both.
+
+**Drift detected:** run `terraform plan` to inspect differences; do not edit
+resources manually in the AWS console.
 
 ## Health Checks
 

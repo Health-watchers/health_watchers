@@ -440,10 +440,18 @@ scheduleRoutes.put(
         }
       }
 
-      const updated = await StaffScheduleModel.findByIdAndUpdate(req.params.id, updateData, {
-        new: true,
-        runValidators: true,
-      }).lean();
+      const updated = await StaffScheduleModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+        }
+      ).lean();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'NotFound', message: 'Schedule not found' });
+      }
 
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {

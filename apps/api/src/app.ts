@@ -30,6 +30,8 @@ import {
   getSupportedVersions,
   acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
+import { v1EnvelopeNormalizer } from './middlewares/v1-envelope.middleware';
+import { v1DeprecationForRoute } from './middlewares/v1-deprecation.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { startJobScheduler, stopJobScheduler } from './jobs';
 import { jobsAdminRouter } from './jobs/jobs-admin.controller';
@@ -65,11 +67,15 @@ import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.contr
 import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config.controller';
 import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
 import { errorAnalytics } from './services/error-analytics.service';
-import { checkPendingMigrations } from './services/migration-status.service';
+import { migrationManager } from './services/migration-manager.service';
+import { config as appConfig } from './config/config.service';
 
 const app = express();
 const server = createServer(app);
-const PORT = process.env.PORT || 4000;
+// Port comes from the validated API_PORT (default 3001) via config.service.
+// PORT is honoured only as a documented override for PaaS hosts (Heroku, Render, etc.)
+// that inject their own port and expect the process to bind to it.
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : appConfig.api.port;
 
 // Trust the first proxy hop (NGINX/load-balancer) so req.ip reflects the real client IP.
 // Without this, every request appears to come from the proxy IP and rate limiting breaks.
@@ -176,15 +182,17 @@ app.use(csrfMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
-// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports
-const MULTIPART_BYPASS = [
-  '/api/v1/patients/import',
-  '/api/v1/patients/',
-  '/api/v1/ai/transcribe-audio',
+// Bypass for multipart/form-data routes (e.g. CSV import) and CSP violation reports.
+// Patterns are anchored exact matches so only real upload endpoints skip the check —
+// a prefix like '/api/v1/patients/' would disable 415 enforcement for every patient route.
+const MULTIPART_BYPASS: RegExp[] = [
+  /^\/api\/v1\/patients\/import$/,
+  /^\/api\/v1\/patients\/[^/]+\/photo$/,
+  /^\/api\/v1\/ai\/transcribe-audio$/,
 ];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
-    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
+    if (MULTIPART_BYPASS.some((pattern) => pattern.test(req.path))) return next();
     if (req.path.startsWith('/api/v1/csp-report')) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
@@ -222,12 +230,17 @@ app.get('/api/versions', (_req, res) => {
 app.use('/api', acceptVersionMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
-app.use('/api/v1', v1DeprecationWarning);
+// #1795 — deprecation headers are only emitted for v1 routes that actually have
+// a v2 replacement (per-route map), instead of blanket-deprecating every route.
+app.use('/api/v1', v1DeprecationForRoute);
 app.use('/api/v1', apiVersionHeader('1.0'));
 app.use('/api/v1', traceIdHeader);
 app.use('/api/v1', rateLimitMonitor);
 app.use('/api/v1', generalLimiter);
 app.use('/api/v1', responseFilterMiddleware);
+// #1794 — v1 keeps its legacy response shapes; normalise them in one place so
+// clients see a single contract while modules migrate to res.ok()/res.fail().
+app.use('/api/v1', v1EnvelopeNormalizer);
 app.use('/api/v1', v1Router);
 
 // ── V2 API Routes (current) ───────────────────────────────────────────────────
@@ -256,7 +269,16 @@ app.use('/api/v2', jobsAdminRouter);
 setupSwagger(app);
 
 // ── 404 & global error handler ────────────────────────────────────────────────
-app.use('*', (_req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+// #1794 — standard error envelope: { error: { code, message, details?, requestId } }
+app.use('*', (req, res) =>
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Route not found',
+      requestId: (req as any).requestId ?? (req.headers['x-request-id'] as string) ?? null,
+    },
+  })
+);
 app.use(errorHandler);
 
 export default app;

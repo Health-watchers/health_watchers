@@ -4,6 +4,7 @@ import { ErasureRequestModel } from './erasure-request.model';
 import { erasureService } from './erasure.service';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
+import { auditLog } from '@api/utils/audit-logger';
 import { z } from 'zod';
 
 export const erasureRoutes = Router();
@@ -62,14 +63,31 @@ erasureRoutes.post(
 // GET /erasure-requests/:id - Patient views their request
 erasureRoutes.get('/:id', async (req: Request, res: Response) => {
   try {
-    const request = await ErasureRequestModel.findById(req.params.id);
-    if (!request) {
+    if (!Types.ObjectId.isValid(req.params.id)) {
       return res.status(404).json({ error: 'Request not found' });
     }
 
-    // Verify patient owns this request
-    if (request.patientId.toString() !== req.user?.patientId) {
-      return res.status(403).json({ error: 'Forbidden' });
+    const clinicId = req.user?.clinicId;
+    const patientId = req.user?.patientId;
+
+    // Scope the lookup to the caller's clinic and patient up front so that
+    // cross-tenant / cross-patient access is indistinguishable from a missing record.
+    const request = await ErasureRequestModel.findOne({
+      _id: req.params.id,
+      clinicId: new Types.ObjectId(clinicId),
+      patientId: new Types.ObjectId(patientId),
+    });
+
+    if (!request) {
+      await auditLog({
+        action: 'ERASURE_REQUEST_ACCESS_DENIED',
+        userId: req.user?.userId,
+        clinicId,
+        resourceType: 'ErasureRequest',
+        resourceId: req.params.id,
+        metadata: { reason: 'not_found_or_out_of_scope' },
+      });
+      return res.status(404).json({ error: 'Request not found' });
     }
 
     return res.json(request);
@@ -88,8 +106,27 @@ erasureRoutes.post(
         return res.status(403).json({ error: 'Only admins can approve erasure requests' });
       }
 
-      const request = await ErasureRequestModel.findById(req.params.id);
+      if (!Types.ObjectId.isValid(req.params.id)) {
+        return res.status(404).json({ error: 'Request not found' });
+      }
+
+      const clinicId = req.user?.clinicId;
+
+      // Scope the lookup to the admin's clinic so cross-tenant IDs return 404.
+      const request = await ErasureRequestModel.findOne({
+        _id: req.params.id,
+        clinicId: new Types.ObjectId(clinicId),
+      });
+
       if (!request) {
+        await auditLog({
+          action: 'ERASURE_REQUEST_APPROVE_DENIED',
+          userId: req.user?.userId,
+          clinicId,
+          resourceType: 'ErasureRequest',
+          resourceId: req.params.id,
+          metadata: { reason: 'not_found_or_out_of_scope' },
+        });
         return res.status(404).json({ error: 'Request not found' });
       }
 
@@ -139,7 +176,12 @@ erasureRoutes.get(
       }
 
       const status = req.query.status as string;
-      const filter = status ? { status } : {};
+      const filter: Record<string, unknown> = {
+        clinicId: new Types.ObjectId(req.user?.clinicId),
+      };
+      if (status) {
+        filter.status = status;
+      }
 
       const requests = await ErasureRequestModel.find(filter)
         .sort({ requestedAt: -1 })

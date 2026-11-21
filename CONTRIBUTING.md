@@ -26,8 +26,8 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** (check with `node --version`)
-- **npm** or **yarn** package manager
+- **Node.js 20+** (check with `node --version`) — the repo standardises on Node 20 LTS (see `.nvmrc`)
+- **npm** package manager (the version pinned in `packageManager`)
 - **MongoDB** (local installation or MongoDB Atlas account)
 - **Git** for version control
 - **Docker** (optional, for containerized development)
@@ -69,18 +69,35 @@ Before you begin, ensure you have the following installed:
    mongod --dbpath /path/to/data
    ```
 
-7. **Start development servers**:
+7. **Start the whole stack with one command**:
    ```bash
-   npm run dev
+   npm run dev:infra   # MongoDB + Redis via Docker Compose (core profile)
+   npm run dev         # API, worker, web and stellar-service via Turbo
    ```
    This will start:
    - API server on http://localhost:3001
    - Web frontend on http://localhost:3000
    - Stellar service on http://localhost:3002
+   - Background worker (jobs run locally, not just in production)
 
 8. **Verify setup**:
    - Open http://localhost:3000 in your browser
    - Check that the API is responding at http://localhost:3001/health
+
+### Quick Start (five steps)
+
+On a fresh clone, the full local stack is:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/health_watchers.git && cd health_watchers
+cp .env.example .env            # fill in MongoDB URI, JWT secrets, Stellar keys
+npm ci                          # install dependencies (Node 20+)
+npm run dev:infra               # start MongoDB and Redis only
+npm run dev                     # start API, worker, web and stellar-service
+```
+
+Then open http://localhost:3000 (web) and http://localhost:3001/health (API).
+Use `npm run clean` to remove `dist`, `.next`, `.turbo` and coverage output.
 
 ## Development Workflow
 
@@ -723,6 +740,35 @@ The main CI pipeline (`.github/workflows/ci.yml`) additionally runs `npm audit -
 
 The **Weekly Dependency Audit Report** workflow (`.github/workflows/dependency-report.yml`) runs every Monday and publishes a consolidated report (vulnerabilities, outdated packages, license breakdown) as a tracking issue labelled `dependencies, automated`. Review it weekly and remediate any **critical** findings before they block PRs.
 
+### Triaging the weekly audit report
+
+Work through the report in a consistent order so nothing critical lingers:
+
+1. **Criticals first.** Any 🔴 critical vulnerability blocks PR merges. Fix these immediately (usually a targeted `npm install <pkg>@<patched-version>` or an `overrides` entry in the root `package.json`), and confirm with `npm audit --audit-level=critical`.
+2. **Highs next.** Address 🟠 high findings in the same pass where possible; they are gated by `npm audit --audit-level=high` in CI.
+3. **Batch patch/minor upgrades.** Group the remaining outdated packages into small batches of patch/minor bumps (mirroring the Dependabot grouping) rather than upgrading everything at once.
+4. **Run the full test suite per batch.** After each batch run `npm test`, `npm run lint` and `npm run typecheck` before moving on, so a regression is attributable to a single batch.
+
+### Regenerating the lockfile
+
+The repo pins its package manager via `packageManager` in the root `package.json` (`npm@10.8.2`). **Any** change to a `package.json` dependency must be accompanied by a regenerated `package-lock.json` produced with that exact npm version:
+
+```bash
+npx npm@10.8.2 install
+```
+
+Commit `package.json` and `package-lock.json` together. A lockfile that is out of sync with `package.json` makes every `npm ci` fail, which takes the whole CI pipeline red.
+
+### Verifying the lockfile-drift guard locally
+
+CI runs a fast drift check on every pull request that fails if `package-lock.json` does not match `package.json`. Reproduce it locally before pushing:
+
+```bash
+npx npm@10.8.2 install --package-lock-only && git diff --exit-code package-lock.json
+```
+
+If the command exits non-zero, the lockfile is stale — run `npx npm@10.8.2 install`, commit the updated `package-lock.json`, and re-run the check until it passes.
+
 ## Architecture Decisions
 
 ### Adding New Modules
@@ -826,9 +872,11 @@ npm install package-name --workspace=apps/api
 
 ```bash
 # Development
+npm run dev                      # API, worker, web and stellar-service (Turbo, parallel)
+npm run dev:infra                # MongoDB + Redis only (docker compose --profile core)
 npm run dev --workspace=api      # API only (http://localhost:3001)
 npm run dev --workspace=web      # Web app only (http://localhost:3000)
-docker compose --profile core up -d   # Full core stack
+npm run clean                    # Remove dist, .next, .turbo and coverage output
 
 # Testing
 npm test                         # Run all tests (Turbo)
@@ -840,6 +888,10 @@ npm run lint                     # Run linters
 npm run format                   # Auto-format code
 npm run typecheck                # TypeScript check
 
+# GitHub Actions workflow linting (see "Linting GitHub Actions workflows")
+actionlint                       # Lint all workflows in .github/workflows
+actionlint .github/workflows/ci.yml  # Lint a single workflow
+
 # Database
 npm run migrate:up --workspace=api      # Run pending migrations
 npm run migrate:down --workspace=api    # Roll back last migration
@@ -848,6 +900,42 @@ npm run migrate:status --workspace=api  # Show migration status
 # Build
 npm run build                    # Build all workspaces
 ```
+
+## Linting GitHub Actions workflows
+
+Workflow files under `.github/workflows/` are linted with [actionlint](https://github.com/rhysd/actionlint), which also runs `shellcheck` on inline `run:` scripts. The `Lint GitHub Actions workflows` job in `ci.yml` runs it on every pull request, so it is worth running locally before pushing.
+
+### Installing actionlint
+
+Pick whichever method fits your setup:
+
+```bash
+# macOS
+brew install actionlint
+
+# Any platform with Go installed
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+
+# Prebuilt binary (Linux/macOS) — see releases for the latest version
+bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+```
+
+`shellcheck` must be on your `PATH` for the shell-script checks to run (`brew install shellcheck`, `apt-get install shellcheck`, etc.). If it is missing, actionlint still runs but skips the shellcheck findings.
+
+### Running actionlint
+
+```bash
+# Lint every workflow in the repository
+actionlint
+
+# Lint a single workflow
+actionlint .github/workflows/ci.yml
+
+# Show the shellcheck command actionlint would run for each script
+actionlint -verbose
+```
+
+The shellcheck severity threshold is configured in `.github/actionlint.yaml`. Findings at `warning` and above fail the job; `info`/`style` findings are reported but do not fail it. Fix the reported issues (quote variables, avoid useless `cat`, group repeated redirects into `{ ...; } >> "$GITHUB_STEP_SUMMARY"` blocks, remove unused variables) rather than suppressing them.
 
 ## Troubleshooting
 

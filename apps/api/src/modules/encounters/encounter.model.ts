@@ -2,6 +2,7 @@ import { Schema, model, models } from 'mongoose';
 import { sanitizeText, sanitizeHtml } from '../../utils/sanitize';
 import { ENCOUNTER_STATUSES, type EncounterStatus } from '@health-watchers/types';
 import { baseSchema } from '@api/shared';
+import { logger } from '../../utils/logger';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -309,3 +310,49 @@ encounterSchema.pre('findOneAndUpdate', function () {
 
 export const EncounterModel = (models.Encounter ||
   model<Encounter>('Encounter', encounterSchema)) as import('mongoose').Model<Encounter>;
+
+/**
+ * Re-sanitise all stored SOAP rich-text fields with the current `sanitizeHtml`
+ * implementation. Idempotent: fields whose sanitised value is unchanged are
+ * not written, so re-running the migration is a no-op.
+ *
+ * Returns the number of encounters that were actually updated.
+ */
+export async function resanitizeEncounterSoapNotes(): Promise<{
+  scanned: number;
+  updated: number;
+}> {
+  let scanned = 0;
+  let updated = 0;
+
+  const cursor = EncounterModel.find({
+    $or: SOAP_FIELDS.map((field) => ({ [`soapNotes.${field}`]: { $exists: true, $ne: null } })),
+  })
+    .select({ soapNotes: 1 })
+    .cursor();
+
+  for await (const doc of cursor) {
+    scanned += 1;
+    const soap = doc.soapNotes as SoapNotes | undefined;
+    if (!soap) continue;
+
+    const cleaned: SoapNotes = {};
+    let changed = false;
+
+    for (const field of SOAP_FIELDS) {
+      const val = soap[field];
+      if (typeof val !== 'string' || val.length === 0) continue;
+      const sanitized = sanitizeHtml(val);
+      cleaned[field] = sanitized;
+      if (sanitized !== val) changed = true;
+    }
+
+    if (!changed) continue;
+
+    await EncounterModel.updateOne({ _id: doc._id }, { $set: { soapNotes: cleaned } });
+    updated += 1;
+  }
+
+  logger.info({ scanned, updated }, 'Re-sanitised encounter SOAP notes');
+  return { scanned, updated };
+}

@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
 import crypto from 'crypto';
+import { env } from '../../config/env';
 
 const TOKEN_EXPIRY_MINUTES = 24 * 60; // 24 hours
 const DEFAULT_CHECKIN_WINDOW_BEFORE_MINUTES = 30;
@@ -13,7 +14,7 @@ export interface CheckinToken {
 }
 
 export class QRCheckinService {
-  private secret = process.env.QR_CHECKIN_SECRET || 'default-secret-change-in-prod';
+  private secret = env.QR_CHECKIN_SECRET;
 
   generateCheckInToken(appointmentId: string): CheckinToken {
     const expiresAt = new Date();
@@ -48,7 +49,13 @@ export class QRCheckinService {
         .update(payload)
         .digest('hex');
 
-      if (hash !== expectedHash) {
+      const providedBuffer = Buffer.from(hash, 'utf8');
+      const expectedBuffer = Buffer.from(expectedHash, 'utf8');
+
+      if (
+        providedBuffer.length !== expectedBuffer.length ||
+        !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
+      ) {
         return { success: false, error: 'Invalid token signature' };
       }
 

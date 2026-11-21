@@ -7,6 +7,7 @@
  * All encryption keys, JWT secrets, and SMTP credentials are validated here.
  * Missing critical HIPAA vars cause a hard exit in production.
  */
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { redactConnectionString } from '../utils/redact';
 
@@ -26,6 +27,13 @@ const envSchema = z.object({
     .min(32, 'JWT_REFRESH_TOKEN_SECRET must be at least 32 characters (too weak)'),
 
   API_PORT: z.string().default('3001'),
+
+  // Documented override for PaaS hosts (Heroku, Render, etc.) that inject PORT.
+  // When unset, the API listens on API_PORT.
+  PORT: z
+    .string()
+    .regex(/^\d+$/, 'PORT must be a positive integer')
+    .optional(),
 
   STELLAR_NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
 
@@ -113,6 +121,20 @@ const envSchema = z.object({
     .min(32, 'WEBHOOK_SIGNING_SECRET_PREVIOUS must be at least 32 characters (too weak)')
     .optional(),
 
+  // ── HMAC secrets for QR check-in and telehealth meeting links ─────────────
+  // Must be independent of the JWT secrets so a leaked key cannot compromise
+  // both systems. Required in production (see checks below); in development a
+  // random per-process secret is generated when unset.
+  QR_CHECKIN_SECRET: z
+    .string()
+    .min(32, 'QR_CHECKIN_SECRET must be at least 32 characters (too weak)')
+    .optional(),
+
+  TELEHEALTH_LINK_SECRET: z
+    .string()
+    .min(32, 'TELEHEALTH_LINK_SECRET must be at least 32 characters (too weak)')
+    .optional(),
+
   // ── Idempotency keys for payment endpoints ────────────────────────────────
   // TTL (in seconds) for idempotency key → response mappings. Default: 24 hours.
   IDEMPOTENCY_TTL_SECONDS: z
@@ -153,6 +175,38 @@ export const env = result.data;
 
 // ── HIPAA production checks ───────────────────────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';
+
+// ── HMAC secrets — mandatory in production, random per-process in dev ────────
+// A hardcoded fallback would let anyone who reads the source forge QR check-in
+// codes or telehealth join links, so production refuses to start without them.
+if (isProd) {
+  const missingHmacSecrets: string[] = [];
+  if (!env.QR_CHECKIN_SECRET) missingHmacSecrets.push('QR_CHECKIN_SECRET');
+  if (!env.TELEHEALTH_LINK_SECRET) missingHmacSecrets.push('TELEHEALTH_LINK_SECRET');
+
+  if (missingHmacSecrets.length > 0) {
+    console.error(
+      `🚨 SECURITY VIOLATION: ${missingHmacSecrets.join(', ')} must be set in production ` +
+        '(at least 32 characters). Refusing to start with forgeable HMAC secrets.'
+    );
+    process.exit(1);
+  }
+} else {
+  if (!env.QR_CHECKIN_SECRET) {
+    env.QR_CHECKIN_SECRET = randomBytes(32).toString('hex');
+    console.warn(
+      '⚠️  WARNING: QR_CHECKIN_SECRET is not set. Using a random per-process secret; ' +
+        'QR check-in codes will not survive a restart or work across replicas.'
+    );
+  }
+  if (!env.TELEHEALTH_LINK_SECRET) {
+    env.TELEHEALTH_LINK_SECRET = randomBytes(32).toString('hex');
+    console.warn(
+      '⚠️  WARNING: TELEHEALTH_LINK_SECRET is not set. Using a random per-process secret; ' +
+        'telehealth join links will not survive a restart or work across replicas.'
+    );
+  }
+}
 
 // Warn when REDIS_URL is absent in production — in-memory rate limiting is
 // per-pod and allows brute-force bypass in multi-replica deployments.
@@ -216,6 +270,7 @@ if (env.TRANSCRIPTION_PROVIDER === 'whisper' && !env.OPENAI_API_KEY) {
 // Log non-secret config values at startup
 console.log('✅ Config validated:');
 console.log(`   API_PORT:        ${env.API_PORT}`);
+console.log(`   PORT override:   ${env.PORT ?? 'not set (using API_PORT)'}`);
 console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
 console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
 console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);
@@ -225,3 +280,5 @@ console.log(`   HIPAA BACKUP_ENCRYPTION_KEY: ${env.BACKUP_ENCRYPTION_KEY ? '✅ 
 console.log(`   HIPAA SMTP_HOST:             ${env.SMTP_HOST ? '✅ set' : '⚠️  NOT SET'}`);
 console.log(`   TRANSCRIPTION_PROVIDER:      ${env.TRANSCRIPTION_PROVIDER ?? '⚠️  NOT SET'}`);
 console.log(`   TRANSCRIPTION_MAX_AUDIO_BYTES: ${env.TRANSCRIPTION_MAX_AUDIO_BYTES ?? 'default (25 MiB)'}`);
+console.log(`   QR_CHECKIN_SECRET:           ${env.QR_CHECKIN_SECRET ? '✅ set' : '⚠️  NOT SET'}`);
+console.log(`   TELEHEALTH_LINK_SECRET:      ${env.TELEHEALTH_LINK_SECRET ? '✅ set' : '⚠️  NOT SET'}`);

@@ -1,7 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '@/middlewares/auth.middleware';
 import { authorize } from '@/middlewares/rbac.middleware';
-import { requireMfaVerified } from '@/middlewares/mfa.middleware';
+import { asyncHandler } from '@/middlewares/error.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,
@@ -26,24 +26,16 @@ const router = Router();
 router.get(
   '/status',
   authenticate,
-  authorize(['super_admin']),
-  async (req: Request, res: Response) => {
-  try {
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const healthStatus = await getReplicationHealthStatus();
 
-      res.json({
-        success: true,
-        data: healthStatus,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to get replication status',
-        message: errorMessage,
-      });
-    }
-  }
+    res.json({
+      success: true,
+      data: healthStatus,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -53,11 +45,9 @@ router.get(
 router.get(
   '/lag',
   authenticate,
-  authorize(['super_admin']),
-  async (req: Request, res: Response) => {
-  try {
-    try {
-      const lagMetrics = await getReplicationLagMetrics();
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const lagMetrics = await getReplicationLagMetrics();
 
       if (!lagMetrics) {
         return res.status(503).json({
@@ -78,7 +68,13 @@ router.get(
         message: errorMessage,
       });
     }
-  }
+
+    res.json({
+      success: true,
+      data: lagMetrics,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -88,31 +84,23 @@ router.get(
 router.get(
   '/consistency',
   authenticate,
-  authorize(['super_admin']),
-  async (req: Request, res: Response) => {
-    try {
-      const consistency = await monitorConsistency();
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const consistency = await monitorConsistency();
 
-      if (!consistency) {
-        return res.status(503).json({
-          error: 'Consistency metrics unavailable',
-          message: 'Could not retrieve replica set status',
-        });
-      }
-
-      res.json({
-        success: true,
-        data: consistency,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to get consistency metrics',
-        message: errorMessage,
+    if (!consistency) {
+      return res.status(503).json({
+        error: 'Consistency metrics unavailable',
+        message: 'Could not retrieve replica set status',
       });
     }
-  }
+
+    res.json({
+      success: true,
+      data: consistency,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -122,25 +110,16 @@ router.get(
 router.post(
   '/test-failover',
   authenticate,
-  authorize(['super_admin']),
-  requireMfaVerified,
-  async (req: Request, res: Response) => {
-    try {
-      const testResult = await testFailover();
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const testResult = await testFailover();
 
-      res.json({
-        success: testResult.success,
-        data: testResult,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failover test failed',
-        message: errorMessage,
-      });
-    }
-  }
+    res.json({
+      success: testResult.success,
+      data: testResult,
+      timestamp: new Date().toISOString(),
+    });
+  })
 );
 
 /**
@@ -177,32 +156,24 @@ router.get(
 router.get(
   '/metrics',
   authenticate,
-  authorize(['super_admin']),
-  async (req: Request, res: Response) => {
-    try {
-      const [lagMetrics, consistency] = await Promise.all([
-        getReplicationLagMetrics(),
-        monitorConsistency(),
-      ]);
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const [lagMetrics, consistency] = await Promise.all([
+      getReplicationLagMetrics(),
+      monitorConsistency(),
+    ]);
 
-      const metrics = {
-        lag: lagMetrics,
-        consistency,
-        timestamp: new Date().toISOString(),
-      };
+    const metrics = {
+      lag: lagMetrics,
+      consistency,
+      timestamp: new Date().toISOString(),
+    };
 
-      res.json({
-        success: true,
-        data: metrics,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to get metrics',
-        message: errorMessage,
-      });
-    }
-  }
+    res.json({
+      success: true,
+      data: metrics,
+    });
+  })
 );
 
 export default router;
