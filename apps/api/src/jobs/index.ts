@@ -32,6 +32,7 @@ import { processDueExports } from '@api/modules/export/export-scheduler.service'
 import { runAgingReminders } from '@api/modules/billing/billing-aging';
 import { sendSurveyAssignmentNotifications } from '@api/modules/surveys/survey-assignment-notification-job';
 import { sendTrialExpiryNotifications } from '@api/modules/subscriptions/subscription-trial-expiry-job';
+import { runCacheWarmupJob } from '@api/jobs/handlers/cache-warmup.job';
 
 export const JOB_DEFINITIONS: JobDefinition[] = [
   {
@@ -201,6 +202,13 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     description: 'Send subscription trial-expiry notifications (#1682)',
     handler: () => sendTrialExpiryNotifications(),
     idempotencyKey: (scheduledFor: Date) => `subscription-trial-expiry:${scheduledFor.toISOString().slice(0, 10)}`,
+  },
+  {
+    name: 'cache-warmup',
+    cron: '0 4 * * *',
+    description: 'Warm the Redis cache for recently active clinics once per deploy (#1803)',
+    handler: () => runCacheWarmupJob(),
+    idempotencyKey: (scheduledFor: Date) => `cache-warmup:${scheduledFor.toISOString().slice(0, 10)}`,
   },
 ];
 

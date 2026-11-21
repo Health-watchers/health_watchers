@@ -47,6 +47,7 @@ import { migrationStatusRouter } from './modules/migrations/migration-status.con
 import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.controller';
 import { rateLimitConfigRouter } from './modules/rate-limiting/rate-limit-config.controller';
 import { cacheDebugRouter } from './modules/caching/cache-debug.controller';
+import { registerPatientListWarmup } from './services/cache.service';
 import { errorAnalytics } from './services/error-analytics.service';
 import { migrationManager } from './services/migration-manager.service';
 import { config as appConfig } from './config/config.service';
@@ -335,47 +336,19 @@ async function startServer() {
     logger.warn({ err }, 'Failed to load initial backup metrics')
   );
 
-  // #1071 — Register per-clinic patient-list cache warmup entries now that the
-  // DB pool is ready, then warm all registered keys that are currently cold.
+  // #1071 — Register per-clinic patient-list cache warmup entries for recently
+  // active clinics (updated in the last 24h) so startup work stays bounded.
+  // The actual loader is a module-level function in cache.service.ts.
   try {
-    const { PatientModel } = await import('./modules/patients/models/patient.model');
     const { ClinicModel } = await import('./modules/clinics/clinic.model');
-    const activeClinics = await ClinicModel.find({ isActive: true }).select('_id').lean();
-    for (const clinic of activeClinics) {
-      const clinicId = String(clinic._id);
-      registerWarmup({
-        key: `patients:list:${clinicId}:page=1:limit=20`,
-        ttlSeconds: 60,
-        loader: async () => {
-          const { paginate } = await import('./utils/paginate');
-          const { toPatientResponse } = await import('./modules/patients/patients.transformer');
-          const result = await paginate(
-            PatientModel,
-            { clinicId, isActive: true },
-            1,
-            20,
-            { createdAt: -1 },
-            {
-              projection: {
-                systemId: 1,
-                firstName: 1,
-                lastName: 1,
-                searchName: 1,
-                dateOfBirth: 1,
-                sex: 1,
-                contactNumber: 1,
-                clinicId: 1,
-                isActive: 1,
-                riskLevel: 1,
-                riskScore: 1,
-                createdAt: 1,
-              },
-              hint: 'clinicId_1_isActive_1',
-            }
-          );
-          return { data: result.data.map(toPatientResponse), pagination: result.meta };
-        },
-      });
+    const recentlyActive = await ClinicModel.find({
+      isActive: true,
+      updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    })
+      .select('_id')
+      .lean();
+    for (const clinic of recentlyActive) {
+      registerPatientListWarmup(String(clinic._id));
     }
   } catch (err) {
     logger.warn({ err }, '[cache] failed to register patient-list warmup entries');
