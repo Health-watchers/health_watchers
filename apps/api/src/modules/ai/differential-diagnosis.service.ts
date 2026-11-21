@@ -201,9 +201,10 @@ Rules:
 
   let parsed: Omit<DifferentialDiagnosisResult, 'disclaimer'>;
   try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error(`AI returned an unparseable response: ${raw.slice(0, 200)}`);
+    parsed = await generateJson<Omit<DifferentialDiagnosisResult, 'disclaimer'>>(prompt);
+  } catch (err) {
+    if (err instanceof AIUnavailableError) throw err;
+    throw new AIUnavailableError('AI returned an unparseable response', err);
   }
 
   // Validate shape

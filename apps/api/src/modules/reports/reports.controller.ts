@@ -395,13 +395,9 @@ ${benchmarkSummary}
 
 Provide concise, actionable recommendations:`;
 
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const { config } = await import('@health-watchers/config');
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const { generateText, isLLMUnavailableError } = await import('@api/lib/llm');
 
-    const result = await model.generateContent(prompt);
-    const insights = result.response.text();
+    const insights = await generateText(prompt);
 
     return res.json({
       success: true,
@@ -412,6 +408,12 @@ Provide concise, actionable recommendations:`;
         'AI-generated insights for operational guidance only. Not a substitute for professional consulting.',
     });
   } catch (error) {
+    if (isLLMUnavailableError(error)) {
+      return res.status(503).json({
+        error: 'AI_UNAVAILABLE',
+        message: 'AI service is temporarily unavailable. Please try again later.',
+      });
+    }
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({ error: 'InsightGenerationError', message: msg });
   }

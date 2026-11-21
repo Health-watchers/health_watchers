@@ -1,7 +1,7 @@
 import { EncounterModel } from '../encounters/encounter.model';
 import { PatientModel } from '../patients/models/patient.model';
 import { PopulationHealthModel } from './population-health.model';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText, LLMUnavailableError } from '../../lib/llm';
 import logger from '../../utils/logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -272,8 +272,6 @@ export async function getHighRiskCohorts(clinicId: string, filters: CohortFilter
 
 export async function generatePopulationInsights(clinicId: string, metrics: any) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
     const prompt = `Analyze the following population health metrics for a clinic and provide insights:
 
 Total Patients: ${metrics.totalPatients}
@@ -291,8 +289,10 @@ Please provide:
 
 Format as JSON with keys: keyTrends (array), highRiskSegments (array), recommendedInterventions (array), seasonalPatterns (array)`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = await generateText(prompt, {
+      feature: 'population-health.insights',
+      clinicId,
+    });
 
     // Parse JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -302,6 +302,10 @@ Format as JSON with keys: keyTrends (array), highRiskSegments (array), recommend
 
     return JSON.parse(jsonMatch[0]);
   } catch (err) {
+    if (err instanceof LLMUnavailableError) {
+      logger.error(`AI unavailable generating population insights: ${err.message}`);
+      throw err;
+    }
     logger.error(`Error generating population insights: ${err}`);
     throw err;
   }

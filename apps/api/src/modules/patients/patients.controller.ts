@@ -1719,13 +1719,7 @@ router.get(
     let recommendations: string[];
 
     if (isAIServiceAvailable()) {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: { responseMimeType: 'application/json' },
-      });
+      const { llmClient, LLMUnavailableError } = await import('@api/lib/llm');
 
       const prompt = `You are a clinical decision support AI. A patient has a risk score of ${patient.riskScore}/100 (${patient.riskLevel} risk).
 
@@ -1740,13 +1734,23 @@ Return ONLY valid JSON (no markdown) with this exact schema:
 }`;
 
       try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const text = (
+          await llmClient.generateText(prompt, {
+            responseMimeType: 'application/json',
+            feature: 'patient.risk-explanation',
+          })
+        ).trim();
         const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
         const parsed = JSON.parse(json);
         naturalLanguageExplanation = parsed.explanation ?? '';
         recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
-      } catch {
+      } catch (err) {
+        if (err instanceof LLMUnavailableError) {
+          return res.status(503).json({
+            error: 'AI_UNAVAILABLE',
+            message: 'The AI provider is currently unavailable. Please try again later.',
+          });
+        }
         naturalLanguageExplanation = `This patient has a ${patient.riskLevel} risk score of ${patient.riskScore}/100. The primary contributing factors are: ${patient.riskFactors.slice(0, 3).join(', ')}.`;
         recommendations = ['Consult with the care team to review the identified risk factors.'];
       }

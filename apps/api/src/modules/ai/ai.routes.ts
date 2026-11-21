@@ -42,8 +42,16 @@ import {
 import { populationHealthRoutes } from './population-health.controller';
 import multer from 'multer';
 import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
+import { generateText, isLLMUnavailableError } from '../../lib/llm';
 
 const router = Router();
+
+function sendAIUnavailable(res: Response) {
+  return res.status(503).json({
+    error: 'AI_UNAVAILABLE',
+    message: 'AI service is temporarily unavailable. Please try again later.',
+  });
+}
 
 // Mount population health routes
 router.use('/', populationHealthRoutes);
@@ -557,6 +565,9 @@ Provide a professional health trend summary:`;
   } catch (error: any) {
     if (handleAiGateError(error, res)) return;
     logger.error({ err: error }, 'AI health-trends error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -621,6 +632,9 @@ Provide a plain-language clinical interpretation:`;
   } catch (error: any) {
     if (handleAiGateError(error, res)) return;
     logger.error({ err: error }, 'AI interpret-labs error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -712,6 +726,9 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
     } catch (error: any) {
       if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'AI generate-care-plan error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({ error: 'InternalServerError', message: error.message });
     }
   }
@@ -903,6 +920,9 @@ triageRoutes.post(
     } catch (error: unknown) {
       if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'Triage assessment error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({
         error: 'TriageError',
         message: error instanceof Error ? error.message : 'Failed to assess triage',
@@ -988,11 +1008,8 @@ transcriptionRoutes.post(
     } catch (error: unknown) {
       if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'Transcription error');
-      if (error instanceof Error && error.message.includes('GEMINI')) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is temporarily unavailable',
-        });
+      if (isLLMUnavailableError(error) || (error instanceof Error && error.message.includes('GEMINI'))) {
+        return sendAIUnavailable(res);
       }
       return res.status(500).json({ error: 'InternalServerError' });
     }
@@ -1070,8 +1087,8 @@ transcriptionRoutes.post(
       }
       if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'Audio transcription error');
-      return res.status(502).json({
-        error: 'AIUnavailable',
+      return res.status(503).json({
+        error: 'AI_UNAVAILABLE',
         message: 'Transcription service is temporarily unavailable',
       });
     }
