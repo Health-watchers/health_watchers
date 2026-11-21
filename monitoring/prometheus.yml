@@ -25,6 +25,7 @@ rule_files:
   - 'alerts-cost.yml'
   - 'alerts-cdn.yml'
   - 'alerts-stellar.yml'
+  - 'alerts-certificates.yml'
 
 scrape_configs:
   # Health Watchers API
@@ -84,3 +85,16 @@ scrape_configs:
         labels:
           component: 'infrastructure'
     honor_labels: true
+
+  # cert-manager controller metrics (certificate expiry / renewal).
+  # NOTE: the target host depends on how cert-manager is installed. In the
+  # docker-compose stack cert-manager is not deployed by default, so this job
+  # will report as down until a cert-manager instance is reachable. Without it
+  # the certmanager_certificate_* metrics used by alerts-certificates.yml are
+  # never scraped.
+  - job_name: 'cert-manager'
+    static_configs:
+      - targets: ['cert-manager:9402']
+        labels:
+          component: 'certificates'
+    metrics_path: /metrics

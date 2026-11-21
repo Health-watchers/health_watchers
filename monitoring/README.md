@@ -165,6 +165,7 @@ Alert rules are split across four files, all loaded by Prometheus:
 | `recording-rules.yml` | `http-red-aggregations`, `slo-availability`, `subsystem-aggregations` | Pre-aggregated RED metrics + SLO ratios consumed by dashboards and burn-rate alerts (#1257) |
 | `alerts-application.yml` | `application-slo`, `application-subsystems` | Error-budget burn rate, latency SLO, event-loop lag, notification + telehealth subsystem health (#1257) |
 | `alerts-backup.yml` | `backup-pipeline` | Backup freshness/verification, monthly DR test, retention, storage-cost spike (#1262) |
+| `alerts-certificates.yml` | `certificates` | Certificate expiry (30d/7d/24h) and renewal failures (#1659) |
 
 > The full, authoritative list of loaded rule files is `rule_files:` in `prometheus.yml`.
 

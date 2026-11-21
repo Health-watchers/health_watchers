@@ -114,6 +114,15 @@ spec:
   - name: certificate.rules
     interval: 30s
     rules:
+    - alert: CertificateExpiry30Days
+      expr: certmanager_certificate_expiration_timestamp_seconds - time() < 30*24*3600
+      for: 1h
+      labels:
+        severity: warning
+      annotations:
+        summary: "Certificate expiring within 30 days"
+        description: "Certificate {{ $labels.name }} expires in less than 30 days"
+        runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
     - alert: CertificateExpirySoon
       expr: certmanager_certificate_expiration_timestamp_seconds - time() < 7*24*3600
       for: 1h
@@ -122,6 +131,7 @@ spec:
       annotations:
         summary: "Certificate expiring soon"
         description: "Certificate {{ $labels.name }} expires in less than 7 days"
+        runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
     - alert: CertificateExpiryImmediate
       expr: certmanager_certificate_expiration_timestamp_seconds - time() < 24*3600
       for: 5m
@@ -130,3 +140,4 @@ spec:
       annotations:
         summary: "Certificate expiring immediately"
         description: "Certificate {{ $labels.name }} expires in less than 24 hours"
+        runbook_url: "https://github.com/health-watchers/health_watchers/blob/main/monitoring/runbooks/CERTIFICATE_RENEWAL.md"
