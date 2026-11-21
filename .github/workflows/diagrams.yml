@@ -21,10 +21,6 @@ jobs:
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Lint each diagram with mermaid-cli
         run: |
@@ -38,7 +34,7 @@ jobs:
           status=0
           for f in "${files[@]}"; do
             echo "::group::Validating $f"
-            if npx mmdc -i "$f" -o /tmp/out.svg; then
+            if npx --yes @mermaid-js/mermaid-cli@10.9.1 mmdc -i "$f" -o /tmp/out.svg; then
               echo "✓ $f is valid"
             else
               echo "✗ $f failed to render" >&2

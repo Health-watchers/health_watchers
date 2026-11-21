@@ -112,9 +112,8 @@ jobs:
       
       - name: Start API server
         run: |
-          cd apps/api
-          npm run build
-          npm run start &
+          npm run build --workspace=api
+          npm run start --workspace=api &
           sleep 10
         env:
           MONGO_URI: mongodb://admin:password123@localhost:27017/health_watchers?authSource=admin
@@ -126,9 +125,8 @@ jobs:
       
       - name: Start Web server
         run: |
-          cd apps/web
-          npm run build
-          npm run start &
+          npm run build --workspace=web
+          npm run start --workspace=web &
           sleep 10
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3001
@@ -140,8 +138,7 @@ jobs:
       
       - name: Run security headers E2E tests
         run: |
-          cd apps/web
-          npx playwright test e2e/security-headers.spec.ts --reporter=html
+          npx playwright test e2e/security-headers.spec.ts --reporter=html --config=apps/web/playwright.config.ts
       
       - name: Upload test results
         if: always()

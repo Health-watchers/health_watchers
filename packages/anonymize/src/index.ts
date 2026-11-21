@@ -367,158 +367,57 @@ export function anonymizeBatch(
 }
 
 // ---------------------------------------------------------------------------
-// Outbound prompt anonymisation
+// Export-oriented anonymization
 // ---------------------------------------------------------------------------
 
-/** Replacement token used for direct identifiers inside free text. */
-export const PROMPT_REDACTION_TOKEN = '[REDACTED]';
-
-export interface PromptAnonymizationOptions {
-  /** Known patient names to scrub (first, last or full name). */
-  names?: string[];
-  /** Known medical record numbers to scrub. */
-  mrn?: string;
-  /** Known contact details (phone, email) to scrub. */
-  contactDetails?: string[];
-  /** Known date of birth (ISO or free text) to generalise. */
-  dateOfBirth?: string;
-  /** Bucket size used when generalising the date of birth (default 10 years). */
-  ageBucketSize?: number;
+export interface AnonymizeForExportOptions {
+  /** Anonymization level to apply. Defaults to de-identification. */
+  level?: AnonymizationLevel;
+  /** Session id used for consistent pseudonyms. */
+  sessionId?: string;
+  /** Purpose recorded in the audit log (defaults to 'export'). */
+  purpose?: string;
+  /** Who requested the export (recorded in the audit log). */
+  requestedBy?: string;
 }
 
-export interface PromptAnonymizationResult {
-  /** The anonymised prompt text, safe to send to a third-party LLM. */
-  text: string;
-  /** Which categories of identifiers were removed. */
-  redacted: string[];
-}
-
-const MRN_PATTERN = /\b(?:MRN|MR|Medical\s*Record(?:\s*(?:No|Number|#))?)\s*[:#]?\s*[A-Z0-9][A-Z0-9-]{2,}\b/gi;
-const ISO_DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g;
-const LONG_DATE_PATTERN = /\b(?:0?[1-9]|[12]\d|3[01])[\/\-](?:0?[1-9]|1[0-2])[\/\-](?:19|20)\d{2}\b/g;
-const MONTH_NAME_DATE_PATTERN =
-  /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2}\b/gi;
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function replaceLiteral(text: string, value: string | undefined): { text: string; replaced: boolean } {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed.length < 2) {
-    return { text, replaced: false };
-  }
-  const pattern = new RegExp(`\\b${escapeRegExp(trimmed)}\\b`, 'gi');
-  const next = text.replace(pattern, PROMPT_REDACTION_TOKEN);
-  return { text: next, replaced: next !== text };
+export interface AnonymizeForExportResult {
+  /** Anonymized records (or a single aggregate object for aggregation level). */
+  records: AnonymizedPatientData[] | AggregatedData;
+  /** Audit log entry describing the export anonymization. */
+  auditLog: AnonymizationAuditLog;
 }
 
 /**
- * Anonymise free-text clinical context before it is sent to an external LLM.
+ * Anonymize a dataset for research/export use.
  *
- * Removes direct identifiers (names, MRNs, phone numbers, emails, addresses),
- * generalises exact dates of birth into coarse age buckets and strips other
- * absolute dates. The result contains no direct identifiers and is safe to
- * include in an outbound prompt.
+ * Applies de-identification (or pseudonymization) record-by-record, or
+ * aggregation when requested, and returns the anonymized records together
+ * with an audit log entry. Reused by the population-health CSV export and
+ * the HIPAA patient data export.
  */
-export function anonymizePromptText(
-  text: string,
-  options: PromptAnonymizationOptions = {}
-): PromptAnonymizationResult {
-  if (!text) {
-    return { text: '', redacted: [] };
-  }
+export function anonymizeForExport(
+  records: PatientData[],
+  options: AnonymizeForExportOptions = {}
+): AnonymizeForExportResult {
+  const level: AnonymizationLevel = options.level ?? 'de-identification';
+  const anonymizationOptions: AnonymizationOptions = {
+    level,
+    sessionId: options.sessionId,
+    purpose: 'export',
+  };
 
-  const redacted = new Set<string>();
-  let sanitized = text;
+  const anonymized = anonymizeBatch(records, anonymizationOptions);
 
-  // Known names (full name first so "Jane Doe" is removed before "Jane").
-  const names = (options.names || [])
-    .map((name) => name?.trim())
-    .filter((name): name is string => Boolean(name))
-    .sort((a, b) => b.length - a.length);
-  for (const name of names) {
-    const result = replaceLiteral(sanitized, name);
-    sanitized = result.text;
-    if (result.replaced) {
-      redacted.add('name');
-    }
-  }
+  const auditLog = createAuditLog(
+    ['firstName', 'lastName', 'contactNumber', 'email', 'address', 'dateOfBirth', 'systemId'],
+    options.purpose ?? 'export',
+    options.requestedBy ?? 'system',
+    level,
+    records.length
+  );
 
-  // Known MRN.
-  const mrnResult = replaceLiteral(sanitized, options.mrn);
-  sanitized = mrnResult.text;
-  if (mrnResult.replaced) {
-    redacted.add('mrn');
-  }
-
-  // Known contact details.
-  for (const detail of options.contactDetails || []) {
-    const result = replaceLiteral(sanitized, detail);
-    sanitized = result.text;
-    if (result.replaced) {
-      redacted.add('contact');
-    }
-  }
-
-  // Known date of birth -> coarse age bucket.
-  if (options.dateOfBirth) {
-    const dob = new Date(options.dateOfBirth);
-    if (!Number.isNaN(dob.getTime())) {
-      const ageRange = generalizeAge(options.dateOfBirth, options.ageBucketSize ?? 10);
-      const dobResult = replaceLiteral(sanitized, options.dateOfBirth);
-      sanitized = dobResult.text;
-      if (dobResult.replaced) {
-        sanitized = `${sanitized} (age ${ageRange})`;
-        redacted.add('dateOfBirth');
-      }
-    }
-  }
-
-  // Generic MRN references (e.g. "MRN: 1234567").
-  const beforeMrn = sanitized;
-  sanitized = sanitized.replace(MRN_PATTERN, PROMPT_REDACTION_TOKEN);
-  if (sanitized !== beforeMrn) {
-    redacted.add('mrn');
-  }
-
-  // Contact details and other PII patterns.
-  for (const [pattern, replacement] of PII_PATTERNS) {
-    const before = sanitized;
-    sanitized = sanitized.replace(pattern, replacement);
-    if (sanitized !== before) {
-      if (replacement === '[PHONE]' || replacement === '[EMAIL]' || replacement === '[ADDRESS]') {
-        redacted.add('contact');
-      } else if (replacement === '[DATE]') {
-        redacted.add('date');
-      }
-    }
-  }
-
-  // Exact dates (ISO, numeric and month-name formats).
-  const beforeDates = sanitized;
-  sanitized = sanitized
-    .replace(ISO_DATE_PATTERN, '[DATE]')
-    .replace(LONG_DATE_PATTERN, '[DATE]')
-    .replace(MONTH_NAME_DATE_PATTERN, '[DATE]');
-  if (sanitized !== beforeDates) {
-    redacted.add('date');
-  }
-
-  return { text: sanitized, redacted: Array.from(redacted) };
-}
-
-/**
- * Anonymise a structured clinical context object (e.g. a differential
- * diagnosis request) by serialising it, scrubbing identifiers from the
- * resulting text and returning the safe string for the outbound prompt.
- */
-export function anonymizeClinicalContext(
-  context: Record<string, unknown> | string,
-  options: PromptAnonymizationOptions = {}
-): PromptAnonymizationResult {
-  const raw = typeof context === 'string' ? context : JSON.stringify(context ?? {});
-  return anonymizePromptText(raw, options);
+  return { records: anonymized, auditLog };
 }
 
 // Audit log entry

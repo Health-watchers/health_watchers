@@ -14,6 +14,14 @@ import logger from './logger.js';
 import { batchProcessor } from './batch-processor.js';
 import ResilientHorizonClient from './horizon-client.js';
 import {
+  discoverPaths,
+  quoteConversion,
+  buildPathPaymentOperation,
+  DEFAULT_SLIPPAGE_TOLERANCE,
+  type DexAsset,
+  type DexPathQuote,
+} from './dex.js';
+import {
   transactionsSubmittedTotal,
   transactionsConfirmedTotal,
   transactionsFailedTotal,
@@ -1547,6 +1555,208 @@ export async function processBatchPayments(
         error: toErrorContext(error),
       },
       'Failed to process batch payments'
+    );
+    throw error;
+  }
+}
+
+// ── DEX Path Payments (Issue #1685) ──────────────────────────────────────────
+
+export interface DexConversionParams {
+  /** Account that sends the source asset and pays the network fee. */
+  fromPublicKey: string;
+  /** Recipient of the destination asset. */
+  toPublicKey: string;
+  /** Asset the sender pays with (e.g. local-currency stablecoin or XLM). */
+  sourceAsset: DexAsset;
+  /** Asset the recipient receives (e.g. XLM). */
+  destinationAsset: DexAsset;
+  /** Amount of the source asset to send (strict-send semantics). */
+  sourceAmount: string;
+  /** Maximum acceptable rate movement, as a fraction (0.01 = 1%). */
+  slippageTolerance?: number;
+  /** Optional memo (text, truncated to 28 bytes). */
+  memo?: string;
+  /** Transaction timeout in seconds (defaults to 300). */
+  timeoutSeconds?: number;
+}
+
+export interface DexConversionResult {
+  hash: string;
+  sourceAmount: string;
+  destinationAmount: string;
+  /** Minimum destination amount enforced on-chain (slippage protection). */
+  minDestinationAmount: string;
+  exchangeRate: string;
+  dexFee: string;
+  dryRun: boolean;
+  durationMs: number;
+}
+
+/**
+ * Discover available DEX conversion paths between two assets.
+ * Thin wrapper over the DEX module so callers can preview rates before paying.
+ */
+export async function findConversionPaths(
+  sourceAsset: DexAsset,
+  destinationAsset: DexAsset,
+  amount: string,
+  mode: 'strict-send' | 'strict-receive' = 'strict-send'
+): Promise<DexPathQuote[]> {
+  return discoverPaths(sourceAsset, destinationAsset, amount, mode);
+}
+
+/**
+ * Execute a DEX path payment that converts `sourceAsset` into `destinationAsset`.
+ *
+ * The quote is refreshed immediately before submission; if the exchange rate
+ * has moved beyond `slippageTolerance` the payment is rejected rather than
+ * submitted. The on-chain operation also carries a `destMin`/`sendMax` bound
+ * derived from the same tolerance so the ledger itself enforces the limit.
+ */
+export async function executeDexConversion(
+  params: DexConversionParams
+): Promise<DexConversionResult> {
+  const {
+    fromPublicKey,
+    toPublicKey,
+    sourceAsset,
+    destinationAsset,
+    sourceAmount,
+    slippageTolerance = DEFAULT_SLIPPAGE_TOLERANCE,
+    memo,
+    timeoutSeconds = 300,
+  } = params;
+
+  assertTransactionLimit(parseFloat(sourceAmount));
+
+  const start = Date.now();
+  logger.info(
+    {
+      operation: 'executeDexConversion',
+      from: fromPublicKey,
+      to: toPublicKey,
+      sourceAmount,
+      sourceAsset: sourceAsset.code,
+      destinationAsset: destinationAsset.code,
+      slippageTolerance,
+    },
+    'Executing DEX conversion'
+  );
+
+  try {
+    // Re-quote immediately before submission and enforce slippage protection.
+    const quote = await quoteConversion(
+      sourceAsset,
+      destinationAsset,
+      sourceAmount,
+      'strict-send',
+      slippageTolerance
+    );
+
+    const server = getHorizonServer();
+    const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const account = await withHorizonCall('loadAccount', { publicKey: fromPublicKey }, () =>
+      server.loadAccount(fromPublicKey)
+    );
+    const fee = await withHorizonCall('fetchBaseFee', {}, () => server.fetchBaseFee());
+    recordNetworkFee(fee);
+
+    const pathPaymentOp = buildPathPaymentOperation({
+      mode: 'strict-send',
+      destination: toPublicKey,
+      sourceAsset,
+      destinationAsset,
+      sourceAmount,
+      quote,
+      slippageTolerance,
+    });
+
+    const builder = new TransactionBuilder(account, {
+      fee: String(fee),
+      networkPassphrase: getNetworkPassphrase(),
+    }).addOperation(pathPaymentOp);
+
+    if (memo) {
+      builder.addMemo({ type: 'text', value: memo.slice(0, 28) } as any);
+    }
+
+    const transaction = builder.setTimeout(timeoutSeconds).build();
+    transaction.sign(sourceKeypair);
+
+    if (stellarConfig.dryRun) {
+      const hash = 'dry-run-' + transaction.hash().toString('hex');
+      const durationMs = Date.now() - start;
+      logger.info(
+        {
+          operation: 'executeDexConversion',
+          hash,
+          sourceAmount,
+          destinationAmount: quote.destinationAmount,
+          outcome: 'success',
+          dryRun: true,
+          durationMs,
+        },
+        'DEX conversion built (dry run)'
+      );
+      return {
+        hash,
+        sourceAmount,
+        destinationAmount: quote.destinationAmount,
+        minDestinationAmount: quote.minDestinationAmount,
+        exchangeRate: quote.exchangeRate,
+        dexFee: quote.dexFee,
+        dryRun: true,
+        durationMs,
+      };
+    }
+
+    const result = await withHorizonCall(
+      'submitTransaction',
+      { operation: 'executeDexConversion', sourceAmount },
+      () => server.submitTransaction(transaction)
+    );
+
+    const durationMs = Date.now() - start;
+    recordTransactionSuccess('executeDexConversion', durationMs, result.hash);
+    logger.info(
+      {
+        operation: 'executeDexConversion',
+        hash: result.hash,
+        sourceAmount,
+        destinationAmount: quote.destinationAmount,
+        exchangeRate: quote.exchangeRate,
+        dexFee: quote.dexFee,
+        outcome: 'success',
+        durationMs,
+      },
+      'DEX conversion submitted'
+    );
+
+    return {
+      hash: result.hash,
+      sourceAmount,
+      destinationAmount: quote.destinationAmount,
+      minDestinationAmount: quote.minDestinationAmount,
+      exchangeRate: quote.exchangeRate,
+      dexFee: quote.dexFee,
+      dryRun: false,
+      durationMs,
+    };
+  } catch (error) {
+    const durationMs = Date.now() - start;
+    recordTransactionFailure('executeDexConversion', durationMs);
+    logger.error(
+      {
+        operation: 'executeDexConversion',
+        sourceAsset: sourceAsset.code,
+        destinationAsset: destinationAsset.code,
+        sourceAmount,
+        outcome: 'failure',
+        durationMs,
+        error: toErrorContext(error),
+      },
+      'Failed to execute DEX conversion'
     );
     throw error;
   }

@@ -1,3 +1,5 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import mongoose, { Schema, Document } from 'mongoose';
 import { config } from '@health-watchers/config';
 import { generateAnonymisedContent } from './llm-client';
 
@@ -33,10 +35,111 @@ export interface DifferentialDiagnosisResult {
   disclaimer: string;
 }
 
-export interface DifferentialDiagnosisContext {
-  clinicId: string;
-  userId?: string;
-  patientId?: string;
+export type SuggestionAction = 'accepted' | 'rejected' | 'modified';
+
+export interface DifferentialDiagnosisFeedback {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  action: SuggestionAction;
+  modifiedDiagnosis?: string;
+  feedbackFlag: boolean;
+  reason?: string;
+  createdAt: Date;
+}
+
+export interface DifferentialDiagnosisFeedbackDocument
+  extends DifferentialDiagnosisFeedback,
+    Document {}
+
+const differentialDiagnosisFeedbackSchema = new Schema<DifferentialDiagnosisFeedbackDocument>(
+  {
+    encounterId: { type: String, required: true, index: true },
+    clinicianId: { type: String, required: true, index: true },
+    suggestionIcdCode: { type: String, required: true },
+    suggestionDiagnosis: { type: String },
+    action: {
+      type: String,
+      required: true,
+      enum: ['accepted', 'rejected', 'modified'],
+    },
+    modifiedDiagnosis: { type: String },
+    feedbackFlag: { type: Boolean, default: false },
+    reason: { type: String },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { collection: 'differential_diagnosis_feedback' }
+);
+
+export const DifferentialDiagnosisFeedbackModel =
+  (mongoose.models.DifferentialDiagnosisFeedback as mongoose.Model<DifferentialDiagnosisFeedbackDocument>) ||
+  mongoose.model<DifferentialDiagnosisFeedbackDocument>(
+    'DifferentialDiagnosisFeedback',
+    differentialDiagnosisFeedbackSchema
+  );
+
+export interface LogSuggestionDecisionInput {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  action: SuggestionAction;
+  modifiedDiagnosis?: string;
+  reason?: string;
+}
+
+export async function logSuggestionDecision(
+  input: LogSuggestionDecisionInput
+): Promise<DifferentialDiagnosisFeedbackDocument> {
+  if (!input.encounterId) throw new Error('encounterId is required');
+  if (!input.clinicianId) throw new Error('clinicianId is required');
+  if (!input.suggestionIcdCode) throw new Error('suggestionIcdCode is required');
+  if (!['accepted', 'rejected', 'modified'].includes(input.action)) {
+    throw new Error(`Invalid action: ${input.action}`);
+  }
+  if (input.action === 'modified' && !input.modifiedDiagnosis) {
+    throw new Error('modifiedDiagnosis is required when action is "modified"');
+  }
+
+  return DifferentialDiagnosisFeedbackModel.create({
+    encounterId: input.encounterId,
+    clinicianId: input.clinicianId,
+    suggestionIcdCode: input.suggestionIcdCode,
+    suggestionDiagnosis: input.suggestionDiagnosis,
+    action: input.action,
+    modifiedDiagnosis: input.modifiedDiagnosis,
+    feedbackFlag: false,
+    reason: input.reason,
+    createdAt: new Date(),
+  });
+}
+
+export interface FlagIncorrectSuggestionInput {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  reason?: string;
+}
+
+export async function flagIncorrectSuggestion(
+  input: FlagIncorrectSuggestionInput
+): Promise<DifferentialDiagnosisFeedbackDocument> {
+  if (!input.encounterId) throw new Error('encounterId is required');
+  if (!input.clinicianId) throw new Error('clinicianId is required');
+  if (!input.suggestionIcdCode) throw new Error('suggestionIcdCode is required');
+
+  return DifferentialDiagnosisFeedbackModel.create({
+    encounterId: input.encounterId,
+    clinicianId: input.clinicianId,
+    suggestionIcdCode: input.suggestionIcdCode,
+    suggestionDiagnosis: input.suggestionDiagnosis,
+    action: 'rejected',
+    feedbackFlag: true,
+    reason: input.reason,
+    createdAt: new Date(),
+  });
 }
 
 export async function generateDifferentialDiagnosis(

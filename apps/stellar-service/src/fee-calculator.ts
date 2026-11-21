@@ -162,6 +162,73 @@ export function calculateCompleteFeatures(options: {
 }
 
 /**
+ * Minimal shape of a Stellar Horizon path record needed for fee estimation.
+ * Only the fields relevant to fee calculation are required.
+ */
+export interface DexPathRecord {
+  source_amount?: string;
+  destination_amount?: string;
+  source_asset_type?: string;
+  destination_asset_type?: string;
+  path?: Array<{
+    asset_type: string;
+    asset_code?: string;
+    asset_issuer?: string;
+  }>;
+}
+
+interface DexConversionFeeBreakdown {
+  networkFeeStroops: number;
+  dexFeeStroops: number;
+  totalFeeStroops: number;
+  display: string;
+}
+
+// Additional surcharge (in stroops) applied per intermediate hop in a path payment.
+// Path payments with more hops consume more network capacity and carry more
+// slippage/liquidity risk, so we model that as a DEX fee component.
+const DEX_FEE_PER_HOP_STROOPS = 100;
+
+/**
+ * Calculate the DEX conversion fee for a path payment.
+ *
+ * The total fee is composed of:
+ *  - network fee: the base fee for the path payment operation (plus any
+ *    additional operations already accounted for in `baseFee`)
+ *  - DEX fee: a surcharge based on the number of intermediate hops in the
+ *    conversion path, representing the spread/liquidity cost of routing
+ *    through the Stellar DEX.
+ *
+ * @param pathRecord Horizon path record describing the conversion route
+ * @param baseFee Base network fee in stroops (defaults to a single operation)
+ */
+export function calculateDexConversionFee(
+  pathRecord: DexPathRecord | null | undefined,
+  baseFee: number = parseInt(BASE_FEE, 10)
+): DexConversionFeeBreakdown {
+  const networkFeeStroops = Math.max(0, Math.ceil(baseFee));
+
+  const hops = Array.isArray(pathRecord?.path) ? pathRecord!.path!.length : 0;
+  const dexFeeStroops = hops * DEX_FEE_PER_HOP_STROOPS;
+
+  const totalFeeStroops = networkFeeStroops + dexFeeStroops;
+
+  const breakdown: DexConversionFeeBreakdown = {
+    networkFeeStroops,
+    dexFeeStroops,
+    totalFeeStroops,
+    display: `${stroopsToXlm(totalFeeStroops)} XLM (${totalFeeStroops} stroops: ${networkFeeStroops} network + ${dexFeeStroops} DEX)`,
+  };
+
+  logger.debug(
+    { hops, networkFeeStroops, dexFeeStroops, totalFeeStroops },
+    'Calculated DEX conversion fee'
+  );
+
+  return breakdown;
+}
+
+/**
  * Format fee for display with XLM conversion
  */
 export function formatFeeForDisplay(feeInStroops: number): {

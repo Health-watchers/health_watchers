@@ -12,6 +12,14 @@ coverage:
         flags: [web]
         target: auto
         threshold: 1%
+      stellar-service:
+        flags: [stellar-service]
+        target: auto
+        threshold: 1%
+      mobile:
+        flags: [mobile]
+        target: auto
+        threshold: 1%
     patch: off
 
 flags:
@@ -22,6 +30,14 @@ flags:
   web:
     paths:
       - apps/web/
+    carryforward: true
+  stellar-service:
+    paths:
+      - apps/stellar-service/
+    carryforward: true
+  mobile:
+    paths:
+      - apps/mobile/
     carryforward: true
 
 comment:

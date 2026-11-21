@@ -17,8 +17,33 @@ module.exports = {
     '!**/node_modules/**',
     '!**/coverage/**'
   ],
+  coverageReporters: ['text', 'text-summary', 'lcov', 'json', 'json-summary', 'clover'],
   coverageThreshold: {
     global: {
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70
+    },
+    './services/': {
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70
+    },
+    './screens/': {
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70
+    },
+    './components/': {
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70
+    },
+    './utils/': {
       statements: 70,
       branches: 70,
       functions: 70,
