@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { z } from 'zod';
 import { AppointmentModel } from './appointment.model';
 import { toAppointmentResponse } from './appointments.transformer';
 import { authenticate } from '@api/middlewares/auth.middleware';
@@ -10,114 +9,29 @@ import {
   updateAppointmentSchema,
   cancelAppointmentSchema,
   listAppointmentsQuerySchema,
-  availabilityQuerySchema,
   appointmentIdParamsSchema,
-  doctorIdParamsSchema,
   videoStartSchema,
 } from './appointments.validation';
-import { withOutboxTransaction, OutboxEventInput } from '../outbox/outbox.service';
-import type { OutboxTarget } from '../outbox/outbox-event.model';
+import { withOutboxTransaction } from '../outbox/outbox.service';
 import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
 import { isStaffAvailable } from '../schedules/schedules.service';
+import { appointmentStatusEvent } from './appointments.events';
+import { hasConflict } from './appointment.repository';
+import { availabilityRoutes } from './availability.routes';
+import { bulkRoutes } from './bulk.routes';
+import { checkInRoutes } from './check-in.routes';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function hasConflict(
-  doctorId: string,
-  scheduledAt: Date,
-  duration: number,
-  excludeId?: string,
-): Promise<boolean> {
-  const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
-
-  // Fetch only scheduled/confirmed appointments for this doctor
-  // that could potentially overlap — we avoid $expr to prevent
-  // user-controlled data from influencing query operators.
-  const filter: Record<string, unknown> = {
-    doctorId: new Types.ObjectId(doctorId),
-    status: { $in: ['scheduled', 'confirmed'] },
-    scheduledAt: { $lt: proposedEnd },
-  };
-
-  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
-
-  const candidates = await AppointmentModel.find(filter)
-    .select('scheduledAt duration')
-    .lean();
-
-  // Check overlap in JS — no user-controlled operators in the query
-  return candidates.some((appt) => {
-    const apptEnd = new Date(
-      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
-    );
-    return apptEnd > scheduledAt;
-  });
-}
-
-const STATUS_SOCKET_EVENTS: Record<string, string> = {
-  confirmed: 'appointment:confirmed',
-  cancelled: 'appointment:cancelled',
-  rescheduled: 'appointment:rescheduled',
-  patient_arrived: 'appointment:patient_arrived',
-};
-
-const STATUS_WEBHOOK_EVENTS: Record<string, string> = {
-  scheduled: 'appointment.created',
-  cancelled: 'appointment.cancelled',
-};
-
-/**
- * Build the outbox event for an appointment status change (#1432): the
- * Socket.IO updates to the appointment and clinic rooms plus, for creation and
- * cancellation, the outbound webhook. Returns null when nothing is published.
- */
-function appointmentStatusEvent(
-  appointmentId: string,
-  status: string,
-  appointment: any,
-  additionalData?: Record<string, unknown>
-): OutboxEventInput | null {
-  const clinicId = String(appointment.clinicId);
-  const targets: OutboxTarget[] = [];
-  const socketEvent = STATUS_SOCKET_EVENTS[status];
-  if (socketEvent) {
-    targets.push(
-      {
-        kind: 'socket',
-        via: 'socket-service',
-        room: 'appointment',
-        id: appointmentId,
-        event: socketEvent,
-        data: { appointment, ...additionalData },
-      },
-      {
-        kind: 'socket',
-        via: 'socket-service',
-        room: 'clinic',
-        id: clinicId,
-        event: socketEvent,
-        data: { appointmentId, appointment, ...additionalData },
-      }
-    );
-  }
-  const webhookEvent = STATUS_WEBHOOK_EVENTS[status];
-  if (webhookEvent) targets.push({ kind: 'webhook', event: webhookEvent });
-  if (targets.length === 0) return null;
-
-  return {
-    type: `appointment.${status}`,
-    aggregateType: 'Appointment',
-    aggregateId: appointmentId,
-    clinicId,
-    payload: { appointmentId, status, appointment, ...additionalData },
-    targets,
-  };
-}
+// Sub-resource routers. Mounted before the `/:id` routes so their static
+// prefixes (e.g. `/bulk`, `/check-in/:token`) are not shadowed.
+appointmentRoutes.use('/doctor', availabilityRoutes);
+appointmentRoutes.use('/bulk', bulkRoutes);
+appointmentRoutes.use('/check-in', checkInRoutes);
+=======
 
 // ── POST /appointments/:id/check-in ───────────────────────────────────────────
 /**
@@ -244,105 +158,6 @@ appointmentRoutes.post(
         error: 'InternalError', 
         message: err.message 
       });
-    }
-  },
-);
-
-// ── GET /appointments/doctor/:doctorId/availability ───────────────────────────
-/**
- * @swagger
- * /appointments/doctor/{doctorId}/availability:
- *   get:
- *     summary: Get a doctor's 30-minute appointment slot availability for a given day
- *     description: Generates slots from 08:00 to 17:00 local time and marks each as available or booked based on existing scheduled/confirmed appointments.
- *     tags: [Appointments]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: doctorId
- *         required: true
- *         schema: { type: string }
- *         description: Doctor's user MongoDB ObjectId
- *       - in: query
- *         name: date
- *         required: true
- *         schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$', example: '2026-09-15' }
- *         description: Date to check availability for, in YYYY-MM-DD format
- *     responses:
- *       200:
- *         description: List of 30-minute slots with availability
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       time: { type: string, format: date-time }
- *                       available: { type: boolean }
- *       400:
- *         description: Invalid date format
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Error' }
- */
-appointmentRoutes.get(
-  '/doctor/:doctorId/availability',
-  validateRequest({ params: doctorIdParamsSchema, query: availabilityQuerySchema }),
-  async (req: Request, res: Response) => {
-    try {
-      const { doctorId } = req.params;
-      const { date } = req.query as { date: string };
-
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const booked = await AppointmentModel.find({
-        doctorId: new Types.ObjectId(doctorId),
-        status: { $in: ['scheduled', 'confirmed'] },
-        scheduledAt: { $gte: dayStart, $lte: dayEnd },
-      })
-        .select('scheduledAt duration')
-        .sort({ scheduledAt: 1 })
-        .lean();
-
-      // Generate 30-min slots from 08:00 to 17:00
-      const slots: { time: string; available: boolean }[] = [];
-      for (let h = 8; h < 17; h++) {
-        for (const m of [0, 30]) {
-          const slotStart = new Date(date);
-          slotStart.setHours(h, m, 0, 0);
-          const slotEnd = new Date(slotStart.getTime() + 30 * 60_000);
-
-          const occupied = booked.some((appt) => {
-            const apptEnd = new Date(
-              new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
-            );
-            return new Date(appt.scheduledAt) < slotEnd && apptEnd > slotStart;
-          });
-
-          slots.push({
-            time: slotStart.toISOString(),
-            available: !occupied,
-          });
-        }
-      }
-
-      return res.json({ status: 'success', data: slots });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
     }
   },
 );
@@ -1498,8 +1313,3 @@ appointmentRoutes.post('/check-in/:token', async (req: Request, res: Response) =
       });
     }
 
-    return res.json({ status: 'success', data: { appointmentId: result.appointmentId } });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
-});

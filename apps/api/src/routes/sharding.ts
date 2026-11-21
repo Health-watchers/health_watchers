@@ -1,13 +1,15 @@
 /**
- * Sharding Admin Routes — Issue #1077
+ * Sharding Admin Routes — Issue #1077, #1799
  *
- * All endpoints require admin role.
+ * Mounted on the internal admin surface (/internal/sharding), not the public
+ * /api/v1 prefix. All endpoints require the SUPER_ADMIN role; mutations
+ * additionally require an MFA-verified session.
  *
- * GET  /api/v1/sharding/health          — overall shard health
- * GET  /api/v1/sharding/strategy        — configured sharding strategies
- * GET  /api/v1/sharding/balance/:collection — balance report for a collection
- * POST /api/v1/sharding/health-check    — trigger live health-check ping
- * GET  /api/v1/sharding/route           — determine shard for a document key
+ * GET  /internal/sharding/health          — overall shard health
+ * GET  /internal/sharding/strategy        — configured sharding strategies
+ * GET  /internal/sharding/balance/:collection — balance report for a collection
+ * POST /internal/sharding/health-check    — trigger live health-check ping
+ * GET  /internal/sharding/route           — determine shard for a document key
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -19,7 +21,7 @@ import { ShardingService } from '../services/sharding.service';
 const router = Router();
 
 /**
- * GET /api/v1/sharding/health
+ * GET /internal/sharding/health
  * Returns an in-memory summary of shard statuses.
  */
 router.get(
@@ -41,7 +43,7 @@ router.get(
 );
 
 /**
- * POST /api/v1/sharding/health-check
+ * POST /internal/sharding/health-check
  * Proactively pings each shard and updates statuses.
  */
 router.post(
@@ -62,7 +64,7 @@ router.post(
 );
 
 /**
- * GET /api/v1/sharding/strategy
+ * GET /internal/sharding/strategy
  * Returns all configured sharding strategies.
  */
 router.get(
@@ -85,7 +87,7 @@ router.get(
 );
 
 /**
- * GET /api/v1/sharding/balance/:collection
+ * GET /internal/sharding/balance/:collection
  * Returns a balance report for the given collection.
  */
 router.get(
@@ -106,7 +108,7 @@ router.get(
 );
 
 /**
- * GET /api/v1/sharding/route?collection=&key=
+ * GET /internal/sharding/route?collection=&key=
  * Determine which shard a given key would be routed to (read-only, no side effects).
  */
 router.get(

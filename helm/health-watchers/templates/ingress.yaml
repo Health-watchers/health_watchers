@@ -26,6 +26,9 @@ spec:
     - host: {{ .Values.ingress.host }}
       http:
         paths:
+          # Admin/ops and docs routes are intentionally NOT exposed here.
+          # They are served on the internal listener (port 9091) and are
+          # blocked at the ingress / restricted by NetworkPolicy.
           - path: /api
             pathType: Prefix
             backend:
@@ -33,8 +36,9 @@ spec:
                 name: api
                 port:
                   number: {{ .Values.api.service.port }}
-          - path: /health
-            pathType: Prefix
+          # Single readiness path used by Helm probes.
+          - path: /health/ready
+            pathType: Exact
             backend:
               service:
                 name: api
@@ -54,4 +58,52 @@ spec:
                 name: web
                 port:
                   number: {{ .Values.web.service.port }}
+{{- end }}
+{{- if .Values.migrations.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: health-watchers-migrate
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "health-watchers.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    # Run migrations as a dedicated step before new API pods roll out.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 0 }}
+  template:
+    metadata:
+      labels:
+        {{- include "health-watchers.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
+          command: ["npm", "run", "migrate:up"]
+          env:
+            {{- range $key, $val := .Values.api.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- if .Values.migrations.mongoUriSecret }}
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.migrations.mongoUriSecret.name }}
+                  key: {{ .Values.migrations.mongoUriSecret.key }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
 {{- end }}

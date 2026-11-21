@@ -28,13 +28,7 @@ import {
 } from './patients.validation';
 import { DuplicateDetectionService } from './duplicate-detection.service';
 import { DuplicateController } from './duplicate.controller';
-import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
-import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
-import {
-  createEmergencyContactSchema,
-  updateEmergencyContactSchema,
-} from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
 import { findActiveGrant } from '../emergency-access/emergency-access.service';
 import { withSpan } from '@api/utils/tracer';
@@ -42,6 +36,13 @@ import { cache } from '@api/services/cache.service';
 import { cacheResponse } from '@api/middlewares/cache.middleware';
 import { incrementUsage } from '../subscriptions/usage.service';
 import { communicationsRouter } from '../communications/communications.controller';
+import { allergiesRouter } from './allergies.routes';
+import { insuranceRouter } from './insurance.routes';
+import { emergencyContactsRouter } from './emergency-contacts.routes';
+import { patientImportRouter } from './import.routes';
+import { patientHealthScoreRouter } from './health-score.routes';
+import { patientRiskRouter } from './risk.routes';
+import { patientSubResourcesRouter } from './sub-resources.routes';
 
 const router = Router();
 // ObjectId validation is provided by @api/middlewares/common.middleware (issue #929)
@@ -60,17 +61,6 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'contactNumber',
   'address',
 ]);
-
-/** Calculate trend from last N readings: 'improving' | 'stable' | 'worsening' */
-function calcTrend(values: number[]): 'improving' | 'stable' | 'worsening' {
-  if (values.length < 2) return 'stable';
-  const first = values[0];
-  const last = values[values.length - 1];
-  const delta = last - first;
-  const threshold = first * 0.03; // 3% change threshold
-  if (Math.abs(delta) < threshold) return 'stable';
-  return delta < 0 ? 'improving' : 'worsening';
-}
 
 async function nextSystemId(clinicId: string): Promise<string> {
   const counter = await PatientCounterModel.findOneAndUpdate(
