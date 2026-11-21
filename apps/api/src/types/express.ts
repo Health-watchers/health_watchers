@@ -31,6 +31,7 @@ declare global {
       user?: AuthenticatedUser;
       requestId?: string;
       tokenJti?: string;
+      clinicId?: string;
       apiKey?: {
         id: string;
         userId: string;

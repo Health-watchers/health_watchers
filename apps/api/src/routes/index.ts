@@ -34,12 +34,24 @@
  * │  (all other routes)  │  generalLimiter                                  │
  * └──────────────────────┴──────────────────────────────────────────────────┘
  *
+ * Clinic scoping
+ * ──────────────
+ * Controllers must never extract `clinicId` from the JWT by hand. Instead,
+ * mount the `clinicScope` middleware (see middleware/clinicScope.ts) after
+ * `authenticate` on any clinic-scoped router. It verifies the JWT, resolves
+ * the caller's clinic, and attaches `req.clinicId` for downstream handlers.
+ * Requests without a valid clinic scope are rejected with 403.
+ *
+ *   router.use(authenticate, clinicScope);
+ *
  * Adding a new route group
  * ────────────────────────
  * 1. Create  src/routes/<group>/index.ts  (export a named Router)
  * 2. Re-export it here
  * 3. Mount it in the appropriate versioned router (v1/index.ts or v2/index.ts)
- * 4. Update the table above and ROUTES.md
+ * 4. If the group is clinic-scoped, mount `clinicScope` after `authenticate`
+ *    so every handler receives `req.clinicId`
+ * 5. Update the table above and ROUTES.md
  */
 
 import { Router } from 'express';
@@ -50,12 +62,24 @@ import {
   aiLimiter,
   portalMfaLimiter,
 } from '../middleware/rateLimit';
+import { authenticate } from '../middleware/auth';
+import { clinicScope } from '../middlewares/clinicScope';
 
 export { v1Router } from './v1';
 export { v2Router } from './v2';
 export { cdnRouter } from './cdn';
 export { default as replicationRouter } from './replication';
 export { readyRouter } from './ready';
+
+/**
+ * Clinic-scoped router for encounters.
+ *
+ * `authenticate` runs first to populate the JWT payload, then `clinicScope`
+ * verifies the clinic scope and attaches `req.clinicId` so every encounters
+ * handler is scoped to the caller's clinic.
+ */
+export const encountersRouter: Router = Router();
+encountersRouter.use(authenticate, clinicScope);
 
 /**
  * Sensitive route groups that require stricter rate limiting.
