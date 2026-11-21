@@ -202,9 +202,10 @@ appointmentRoutes.post(
       }
 
       // The status change and its real-time event commit together (#1432).
+      // Scoped by clinicId so a cross-tenant id can never be written (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           {
             status: 'patient_arrived',
             checkedInAt: new Date(),
@@ -791,9 +792,10 @@ appointmentRoutes.put(
       const rescheduled = !!scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime();
 
       // The update and its real-time events commit together (#1432).
+      // Scoped by clinicId so a cross-tenant id can never be written (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
           { new: true, runValidators: true, session },
         ).lean();
@@ -911,10 +913,10 @@ appointmentRoutes.delete(
       const { cancellationReason } = req.body;
 
       // The cancellation, its real-time event and the `appointment.cancelled`
-      // webhook commit together (#1432).
+      // webhook commit together (#1432). Scoped by clinicId (#1771).
       const updated = await withOutboxTransaction(async (session, emit) => {
-        const doc = await AppointmentModel.findByIdAndUpdate(
-          req.params.id,
+        const doc = await AppointmentModel.findOneAndUpdate(
+          { _id: req.params.id, clinicId },
           {
             status: 'cancelled',
             cancelledBy: new Types.ObjectId(userId),
@@ -1047,8 +1049,8 @@ appointmentRoutes.post(
       const videoProvider = appointment.videoProvider || 'daily.co';
       const videoRoom = await createVideoRoom(videoProvider);
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         {
           isTelemedicine: true,
           videoRoomId: videoRoom.roomId,
@@ -1224,8 +1226,8 @@ appointmentRoutes.post(
 
       const { recordingConsent } = req.body;
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         { videoStartedAt: new Date(), recordingConsent: !!recordingConsent },
         { new: true },
       ).lean();
@@ -1328,8 +1330,8 @@ appointmentRoutes.post(
       const videoEndedAt = new Date();
       const videoDuration = calculateVideoDuration(appointment.videoStartedAt, videoEndedAt);
 
-      const updated = await AppointmentModel.findByIdAndUpdate(
-        req.params.id,
+      const updated = await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
         { videoEndedAt, videoDuration, status: 'completed' },
         { new: true },
       ).lean();
@@ -1352,7 +1354,10 @@ appointmentRoutes.post(
         createdBy: userId,
       });
 
-      await AppointmentModel.findByIdAndUpdate(req.params.id, { encounterId: encounter._id });
+      await AppointmentModel.findOneAndUpdate(
+        { _id: req.params.id, clinicId },
+        { encounterId: encounter._id },
+      );
 
       return res.json({ status: 'success', data: { appointment: updated, encounter } });
     } catch (err: any) {
@@ -1481,7 +1486,10 @@ appointmentRoutes.post('/check-in/:token', async (req: Request, res: Response) =
     // Emit socket event for real-time update
     const { SocketService } = await import('../../services/socket.service');
     const socketService = SocketService.getInstance();
-    const appointment = await AppointmentModel.findById(result.appointmentId).lean();
+    const appointment = await AppointmentModel.findOne({
+      _id: result.appointmentId,
+      clinicId,
+    }).lean();
 
     if (appointment) {
       socketService.emitToClinic(String(appointment.clinicId), 'appointment:checked_in', {

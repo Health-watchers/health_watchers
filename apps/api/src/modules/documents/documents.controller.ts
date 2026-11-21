@@ -18,9 +18,40 @@ import { assignRetention } from './document-retention.service';
 import { indexDocument } from './document-ocr.service';
 import { generatePreview } from './document-preview.service';
 import { recordDocumentAudit } from './document-audit.service';
+import { findScoped } from '@api/utils/scoped-query';
 import logger from '@api/utils/logger';
 
 const router = Router();
+
+// Pre-signed download URLs are short-lived: 5 minutes (see #1770).
+const DOWNLOAD_URL_TTL_SECONDS = 5 * 60;
+
+/**
+ * Load a document scoped to the caller's tenant. Patient-portal callers are
+ * additionally scoped to their own patientId. Returns null when the document
+ * does not exist *or* belongs to another tenant, so callers always 404.
+ */
+async function loadScopedDocument(req: Request) {
+  return findScoped(DocumentModel, req.params.id, req.user, {
+    patientScoped: true,
+  });
+}
+
+/** Audit a cross-tenant / unauthorised document access attempt. */
+async function auditDeniedAccess(req: Request, action: string): Promise<void> {
+  try {
+    await recordDocumentAudit({
+      documentId: req.params.id,
+      clinicId: req.user?.clinicId ?? 'unknown',
+      actorId: req.user?.userId ?? 'unknown',
+      action: action as never,
+      req,
+      metadata: { denied: true, reason: 'cross_tenant_or_not_found' },
+    });
+  } catch (err) {
+    logger.warn({ err, documentId: req.params.id }, 'failed to audit denied document access');
+  }
+}
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -332,7 +363,7 @@ router.post(
  * @swagger
  * /documents/{id}/download:
  *   get:
- *     summary: Get a pre-signed download URL for a document (valid 15 minutes)
+ *     summary: Get a pre-signed download URL for a document (valid 5 minutes)
  *     tags: [Documents]
  *     security:
  *       - bearerAuth: []
@@ -354,15 +385,21 @@ router.post(
 router.get('/:id/download', authenticate, async (req: Request, res: Response) => {
   try {
     const { version } = req.query;
-    const doc = await DocumentModel.findById(req.params.id);
-    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Document not found.' });
+
+    // Authorisation happens before any storage access / URL generation.
+    const doc = await loadScopedDocument(req);
+    if (!doc) {
+      await auditDeniedAccess(req, 'download_denied');
+      return res.status(404).json({ error: 'NotFound', message: 'Document not found.' });
+    }
 
     let storageKey = doc.storageKey;
 
     if (version) {
       const versionNum = parseInt(version as string, 10);
       const versionRecord = await DocumentVersionModel.findOne({
-        documentId: req.params.id,
+        documentId: doc._id,
+        clinicId: doc.clinicId,
         version: versionNum,
       });
       if (!versionRecord) {
@@ -373,8 +410,11 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response) =>
       storageKey = versionRecord.storageKey;
     }
 
-    const url = await getDownloadUrl(storageKey);
-    return res.json({ status: 'success', data: { url, expiresInSeconds: 15 * 60 } });
+    const url = await getDownloadUrl(storageKey, DOWNLOAD_URL_TTL_SECONDS);
+    return res.json({
+      status: 'success',
+      data: { url, expiresInSeconds: DOWNLOAD_URL_TTL_SECONDS },
+    });
   } catch (err: any) {
     return res.status(500).json({ error: 'InternalError', message: err.message });
   }
@@ -403,10 +443,16 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response) =>
  */
 router.get('/:id/versions', authenticate, async (req: Request, res: Response) => {
   try {
-    const doc = await DocumentModel.findById(req.params.id);
-    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Document not found.' });
+    const doc = await loadScopedDocument(req);
+    if (!doc) {
+      await auditDeniedAccess(req, 'versions_denied');
+      return res.status(404).json({ error: 'NotFound', message: 'Document not found.' });
+    }
 
-    const versions = await DocumentVersionModel.find({ documentId: req.params.id })
+    const versions = await DocumentVersionModel.find({
+      documentId: doc._id,
+      clinicId: doc.clinicId,
+    })
       .sort({ version: -1 })
       .select('-storageKey')
       .lean();
@@ -430,11 +476,22 @@ router.get('/:id/versions', authenticate, async (req: Request, res: Response) =>
 router.get('/_local/:storageKey', authenticate, async (req: Request, res: Response) => {
   const storageKey = decodeURIComponent(req.params.storageKey);
 
+  // Scope the lookup to the caller's tenant so storage keys cannot be probed
+  // across clinics (#1770).
+  const tenantFilter: Record<string, unknown> = { storageKey };
+  if (req.user?.clinicId) tenantFilter.clinicId = req.user.clinicId;
+  if (req.user?.role === 'patient' && req.user?.patientId) {
+    tenantFilter.patientId = req.user.patientId;
+  }
+
   // If these bytes are envelope-encrypted (#1247), decrypt transparently.
   const [doc, ver] = await Promise.all([
-    DocumentModel.findOne({ storageKey }).select('encryption mimeType fileName').lean(),
-    DocumentVersionModel.findOne({ storageKey }).select('encryption mimeType fileName').lean(),
+    DocumentModel.findOne(tenantFilter).select('encryption mimeType fileName').lean(),
+    DocumentVersionModel.findOne(tenantFilter).select('encryption mimeType fileName').lean(),
   ]);
+  if (!doc && !ver) {
+    return res.status(404).json({ error: 'NotFound', message: 'File not found.' });
+  }
   const enc = doc?.encryption ?? ver?.encryption;
 
   if (enc) {
