@@ -458,12 +458,27 @@ The Mongoose connection is configured in `apps/api/src/config/db.ts` (used by `a
 | `MONGODB_SOCKET_TIMEOUT_MS` | `45000` | Idle socket timeout |
 | `MONGODB_CONNECT_TIMEOUT_MS` | `10000` | TCP connect timeout |
 | `MONGODB_HEARTBEAT_FREQUENCY_MS` | `10000` | Server monitoring heartbeat interval |
-| `MONGODB_WAIT_QUEUE_TIMEOUT_MS` | `5000` | Max time a request waits for a free connection before erroring |
+| `MONGODB_WAIT_QUEUE_TIMEOUT_MS` | `5000` | Max time a request waits for a free connection before erroring (`waitQueueTimeoutMS`) |
 | `MONGODB_POOL_WARN_THRESHOLD` | `0.8` | Pool utilization fraction that triggers a `warn` log |
 | `MONGODB_POOL_CRITICAL_THRESHOLD` | `0.95` | Pool utilization fraction that triggers an `error` log |
 | `MONGODB_MONITOR_INTERVAL_MS` | `30000` | How often pool utilization is sampled |
 
-Tune `MONGODB_POOL_SIZE` relative to instance count × pool size vs. your MongoDB deployment's own `maxConns` limit — an over-provisioned pool across many API instances can exhaust the server side before any single instance sees pressure.
+**The three settings that matter most under high traffic:**
+
+| Mongoose option | Env var | Default | Behaviour when misconfigured |
+|---|---|---|---|
+| `maxPoolSize` | `MONGODB_POOL_SIZE` | `10` | Too low → requests queue and eventually fail with `MongoWaitQueueTimeoutError`; too high → MongoDB server-side `maxConns` exhaustion, slow handshakes, memory pressure |
+| `minPoolSize` | `MONGODB_MIN_POOL_SIZE` | `2` | Too low → cold-start latency spikes after idle periods (new TCP + TLS + auth handshake per request burst); too high → idle connections held open on every instance |
+| `waitQueueTimeoutMS` | `MONGODB_WAIT_QUEUE_TIMEOUT_MS` | `5000` | Too low → spurious 500s during brief bursts; too high → requests pile up in the queue, latency climbs and the API fails slowly instead of shedding load |
+
+**Tuning guidance**
+
+- Size the pool from concurrency, not from instance count alone: `maxPoolSize ≈ peak concurrent DB-bound requests per instance`. For a typical API pod handling ~50 concurrent requests with short queries, `20–50` is a reasonable range; start at `10` and raise only when `mongodb_pool_wait_queue_size` is persistently non-zero.
+- Always keep `instanceCount × maxPoolSize` below the MongoDB deployment's `maxConns` (default `65536` on `mongos`, `~1000` per `mongod` by default via `net.maxIncomingConnections`), leaving headroom for migrations, admin shells and monitoring agents. An over-provisioned pool across many API instances can exhaust the server side before any single instance sees pressure.
+- Set `minPoolSize` to roughly 10–25% of `maxPoolSize` for latency-sensitive deployments so bursts do not pay handshake cost; set it to `0` for low-traffic or serverless-style deployments where idle connections are wasteful.
+- Keep `waitQueueTimeoutMS` slightly above your p99 query latency (e.g. `5000` when p99 is ~200ms) so normal bursts succeed while genuinely saturated periods fail fast with a clear error rather than hanging.
+- `maxConnecting` (default `2`) throttles concurrent connection establishment; raising it speeds up pool warm-up but can spike load on the server — leave at the default unless pool ramp-up is a measured bottleneck.
+- After changing any of these values, watch `mongodb_pool_size`, `mongodb_pool_available`, `mongodb_pool_wait_queue_size` and `mongodb_pool_wait_queue_timeouts_total` (see [`OBSERVABILITY.md`](./OBSERVABILITY.md)) for at least one full traffic cycle before considering the change settled.
 
 **Startup resilience** — `connectDB()` retries the initial connection up to `MAX_RETRIES` (5) times with exponential backoff (1s, 2s, 4s, 8s, 16s) before exiting the process. Connection lifecycle events (`connected`, `disconnected`, `reconnected`, `error`) are logged via the shared logger (see [`OBSERVABILITY.md`](./OBSERVABILITY.md)).
 

@@ -8,7 +8,7 @@ This guide covers deploying Health Watchers to production environments using Doc
 - [Docker Deployment](#docker-deployment)
 - [Docker Compose Deployment](#docker-compose-deployment)
 - [Kubernetes Deployment](#kubernetes-deployment)
-- [CDN Configuration](#cdn-configuration)
+- [Terraform Infrastructure Bootstrap](#terraform-infrastructure-bootstrap)
 - [Blue-Green Deployment](BLUE_GREEN_DEPLOYMENT.md)
 - [Health Checks](#health-checks)
 - [Troubleshooting](#troubleshooting)
@@ -372,125 +372,167 @@ kubectl scale deployment api -n production --replicas=3
 kubectl apply -f k8s/api/hpa.yaml -n production
 ```
 
-## CDN Configuration
+## Terraform Infrastructure Bootstrap
 
-The Next.js web app serves its static assets (`/_next/static/`) through a CDN (CloudFront by default) so that immutable, content-hashed bundles are cached at the edge and HTML is always revalidated.
+All AWS infrastructure (VPC, EKS, S3, SES, IAM) is managed as code in the
+[`terraform/`](../terraform/) directory. Terraform state is stored remotely in S3
+with DynamoDB locking — never commit state files or plan output.
 
-### Architecture Overview
+### Terraform Directory Layout
 
-| Path | Origin | Cache Behavior | `Cache-Control` |
-|------|--------|----------------|-----------------|
-| `/_next/static/*` | Web app (S3 or ALB origin) | Immutable, long TTL | `public, max-age=31536000, immutable` |
-| `/static/*`, `/images/*` | Web app | Long TTL | `public, max-age=31536000, immutable` |
-| `/*` (HTML, API routes) | Web app | Default, short TTL | `public, max-age=0, must-revalidate` |
+```
+terraform/
+├── modules/
+│   ├── vpc/            # VPC, subnets, NAT gateways, route tables
+│   ├── eks/            # EKS cluster, node groups, OIDC provider
+│   ├── s3/             # Application, backup, and log buckets
+│   ├── ses/            # SES domain identity, DKIM, sending limits
+│   └── iam/            # IRSA roles, CI deploy roles, service policies
+├── environments/
+│   ├── staging/        # Staging backend config + tfvars
+│   └── production/     # Production backend config + tfvars
+└── bootstrap/          # One-time state bucket + lock table creation
+```
 
-### CloudFront Distribution
+### Step 1: Bootstrap Remote State (one-time, per AWS account)
 
-Create a CloudFront distribution with the web app as origin and two cache behaviors:
-
-1. **`/_next/static/*` behavior**
-   - Path pattern: `/_next/static/*`
-   - Cache policy: `CachingOptimized` (or a custom policy with `DefaultTTL=31536000`, `MaxTTL=31536000`)
-   - Compress objects automatically: enabled
-   - Viewer protocol policy: `redirect-to-https`
-   - Origin request policy: `CORS-S3Origin` (or none if same-origin)
-
-2. **Default (`*`) behavior**
-   - Path pattern: `Default (*)`
-   - Cache policy: `CachingDisabled` or a custom policy with `DefaultTTL=0`, `MaxTTL=60`
-   - Forward headers: `Host`, `Accept`, `Accept-Language`
-   - Viewer protocol policy: `redirect-to-https`
-
-Example AWS CLI snippet to create the distribution (abbreviated):
+The state bucket and lock table must exist before any environment can be
+initialized. Run this once per AWS account:
 
 ```bash
-aws cloudfront create-distribution \
-  --origin-domain-name "$WEB_ORIGIN_DOMAIN" \
-  --default-root-object "" \
-  --comment "Health Watchers web CDN" \
-  --enabled
+cd terraform/bootstrap
+
+# Review what will be created (S3 state bucket + DynamoDB lock table)
+terraform init
+terraform plan -out=bootstrap.tfplan
+
+# Apply
+terraform apply bootstrap.tfplan
+
+# Note the outputs — you will need them for the backend configs
+terraform output state_bucket_name
+terraform output lock_table_name
 ```
 
-> The distribution ID is captured in `CLOUDFRONT_DISTRIBUTION_ID` and used by the deploy pipeline for invalidation.
+This creates:
 
-### Cache Busting via Content Hashes
+| Resource | Purpose |
+|----------|---------|
+| `health-watchers-terraform-state` (S3) | Remote state storage, versioned, encrypted, public access blocked |
+| `health-watchers-terraform-locks` (DynamoDB) | State locking (`LockID` partition key) |
 
-Next.js emits content-hashed filenames for every build artifact under `/_next/static/` (e.g. `/_next/static/chunks/main-3f9a1c2b.js`). Because the hash changes whenever the file content changes, the immutable long TTL is safe: a new deploy produces new URLs, and old URLs remain valid until they fall out of the cache. **No manual cache busting is required for `/_next/static/`.**
+> The bootstrap module uses local state. Keep `terraform/bootstrap/terraform.tfstate`
+> in a secure location (e.g. a password manager or secrets vault) — it is gitignored.
 
-HTML documents are *not* content-hashed, so they must use a short TTL (`max-age=0, must-revalidate`) and be invalidated on each deploy.
+### Step 2: Initialize an Environment
 
-### Environment Variables
-
-Copy `.env.cdn.example` and fill in the values:
+Each environment has its own backend config and variable file:
 
 ```bash
-cp .env.cdn.example .env.cdn
+cd terraform/environments/staging
+
+# Initialize with the staging backend (S3 + DynamoDB)
+terraform init -backend-config=backend.hcl
+
+# Validate and plan
+terraform validate
+terraform plan -var-file=staging.tfvars -out=staging.tfplan
+
+# Apply
+terraform apply staging.tfplan
 ```
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_CDN_URL` | Public CDN base URL used by the Next.js app for asset prefixes | `https://cdn.healthwatchers.com` |
-| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution ID used for invalidation | `E2ABCDEFGHIJKL` |
-| `AWS_REGION` | AWS region of the distribution / S3 origin | `us-east-1` |
-| `CDN_CACHE_MAX_AGE` | TTL (seconds) for immutable static assets | `31536000` |
-| `CDN_HTML_CACHE_MAX_AGE` | TTL (seconds) for HTML documents | `0` |
-| `CDN_INVALIDATION_PATHS` | Comma-separated paths to invalidate after deploy | `/*` |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credentials with `cloudfront:CreateInvalidation` permission | — |
-
-Set `NEXT_PUBLIC_CDN_URL` in the web app's build environment so `next.config.js` can set `assetPrefix`:
-
-```js
-// apps/web/next.config.js
-module.exports = {
-  assetPrefix: process.env.NEXT_PUBLIC_CDN_URL || undefined,
-};
-```
-
-### Cache Invalidation in the Deployment Pipeline
-
-`scripts/deploy.sh` runs a post-deploy invalidation step after the new web image is live. It invalidates the HTML paths (and any other non-hashed paths listed in `CDN_INVALIDATION_PATHS`) so users immediately receive the new document referencing the new hashed bundles:
+For production, use the same flow from `terraform/environments/production`:
 
 ```bash
-# Executed automatically by scripts/deploy.sh after the web rollout
-aws cloudfront create-invalidation \
-  --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
-  --paths "${CDN_INVALIDATION_PATHS:-/*}"
+cd terraform/environments/production
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=production.tfvars -out=production.tfplan
+terraform apply production.tfplan
 ```
 
-Invalidating `/_next/static/*` is unnecessary and wasteful — those paths are content-hashed and immutable. If a deploy fails before the web rollout completes, the invalidation step is skipped.
+Example `backend.hcl` (one per environment, distinct state key):
 
-### Validating the CDN
+```hcl
+bucket         = "health-watchers-terraform-state"
+key            = "environments/staging/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "health-watchers-terraform-locks"
+encrypt        = true
+```
 
-After a deploy, verify that the edge is serving the expected cache headers:
+> Use a different `key` for each environment (e.g.
+> `environments/production/terraform.tfstate`). Never share a state key between
+> environments.
+
+### Step 3: Wire Terraform Outputs into Kubernetes
+
+After applying, feed the outputs into the Helm values / k8s manifests:
 
 ```bash
-# Checks Cache-Control on /_next/static/ and HTML paths
-./scripts/cdn/verify-cache-headers.sh
+# EKS cluster name and endpoint
+terraform output eks_cluster_name
+terraform output eks_cluster_endpoint
 
-# Optionally target a specific host
-CDN_HOST=cdn.healthwatchers.com ./scripts/cdn/verify-cache-headers.sh
+# Configure kubectl for the new cluster
+aws eks update-kubeconfig \
+  --name "$(terraform output -raw eks_cluster_name)" \
+  --region us-east-1
+
+# S3 bucket names for backups and uploads
+terraform output s3_backup_bucket
+terraform output s3_uploads_bucket
+
+# IAM role ARNs for IRSA (service accounts)
+terraform output iam_api_role_arn
 ```
 
-The script asserts:
-- `/_next/static/*` responses include `Cache-Control: public, max-age=31536000, immutable`
-- HTML responses include `Cache-Control: public, max-age=0, must-revalidate`
-- Responses are served over HTTPS and include `x-cache` (Hit/Miss) headers
+Set the corresponding values in `helm/values-production.yaml` (or the staging
+equivalent) before running `helm upgrade`.
 
-### Monitoring CDN Performance
+### CI: `terraform plan` on Pull Requests
 
-Generate a cache hit-ratio and latency report from CloudFront access logs / CloudWatch metrics:
+The GitHub Actions workflow `.github/workflows/terraform-plan.yml` runs
+automatically on any pull request that touches `terraform/`:
+
+1. `terraform fmt -check -recursive` — formatting gate
+2. `terraform init -backend-config=...` for the affected environment
+3. `terraform validate`
+4. `terraform plan` — the plan is posted as a PR comment for review
+
+The workflow authenticates to AWS via OIDC (no long-lived keys) using the CI
+deploy role created by the `iam` module. `terraform apply` is **not** run in CI;
+applies are performed manually (or from a protected environment workflow) after
+the plan is reviewed and approved.
+
+To run the same checks locally before pushing:
 
 ```bash
-./scripts/cdn/cdn-performance-report.sh
+cd terraform/environments/staging
+terraform fmt -check -recursive ../../
+terraform init -backend-config=backend.hcl
+terraform validate
+terraform plan -var-file=staging.tfvars
 ```
 
-The report summarizes:
-- Cache hit ratio per path prefix (`/_next/static/` vs HTML)
-- p50/p95 origin latency
-- Bytes served from edge vs origin
-- Top invalidated paths in the last 24 hours
+### Terraform Troubleshooting
 
-Run it after each production deploy and review it during the weekly ops check.
+**State lock error (`Error acquiring the state lock`):**
+```bash
+# Inspect the lock entry
+aws dynamodb get-item \
+  --table-name health-watchers-terraform-locks \
+  --key '{"LockID": {"S": "health-watchers-terraform-state/environments/staging/terraform.tfstate-md5"}}'
+
+# Force-unlock only if you are certain no other apply is running
+terraform force-unlock <LOCK_ID>
+```
+
+**Backend initialization fails:** verify the S3 bucket and DynamoDB table exist
+(run the bootstrap step) and that your AWS credentials have access to both.
+
+**Drift detected:** run `terraform plan` to inspect differences; do not edit
+resources manually in the AWS console.
 
 ## Health Checks
 

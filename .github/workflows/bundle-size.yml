@@ -9,11 +9,17 @@ on:
 env:
   NODE_VERSION: 20
 
+permissions:
+  contents: read
+
 jobs:
   bundle-size:
     name: Analyze Next.js Bundle Size
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -49,7 +55,9 @@ jobs:
       # exceeds its budget.  This is the gate that fails CI.
       - name: Check first-load JS size budgets
         id: size_check
-        run: npx size-limit --json > /tmp/size-limit-output.json 2>&1; echo "exit_code=$?" >> $GITHUB_OUTPUT
+        run: |
+          npx size-limit --json > /tmp/size-limit-output.json 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
         working-directory: apps/web
         continue-on-error: true  # Collect output before deciding to fail
 
@@ -159,6 +167,8 @@ jobs:
       - name: Fail CI on budget exceeded
         if: steps.size_check.outputs.exit_code != '0'
         run: |
-          echo "❌ First-load JS budget exceeded for one or more routes."
-          echo "Review the bundle-stats artifact and the PR comment for details."
+          {
+            echo "❌ First-load JS budget exceeded for one or more routes."
+            echo "Review the bundle-stats artifact and the PR comment for details."
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1

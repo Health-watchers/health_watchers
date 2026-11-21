@@ -19,6 +19,7 @@ rule_files:
   - 'alerts-security.yml'
   - 'alerts-business.yml'
   - 'alerts-database-replication.yml'
+  - 'alerts-database-pool.yml'
   - 'alerts-secrets.yml'
   - 'alerts-disaster-recovery.yml'
   - 'alerts-backup.yml'

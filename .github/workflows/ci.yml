@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: 20
   # ── Turborepo Remote Cache ──────────────────────────────────────────────────
@@ -61,9 +64,13 @@ jobs:
         run: npx --yes npm@10.8.2 ci --dry-run --ignore-scripts --no-audit --no-fund
 
   # Stage 0: Lint workflow files
+  # Runs in parallel with the rest of the pipeline: a style-level lint failure
+  # must not gate tests, builds or quality checks (see issue #1753).
   actionlint:
     name: Lint GitHub Actions workflows
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Run actionlint
@@ -245,7 +252,7 @@ jobs:
   quality-checks:
     name: Quality Checks
     runs-on: ubuntu-latest
-    needs: [lockfile-check, actionlint, validate-k8s, helm-lint-dry-run, migration-check]
+    needs: [validate-k8s, helm-lint-dry-run, migration-check]
 
     strategy:
       fail-fast: false
@@ -304,7 +311,6 @@ jobs:
   validate-k8s:
     name: Validate Kubernetes Manifests
     runs-on: ubuntu-latest
-    needs: [actionlint]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -346,7 +352,7 @@ jobs:
   mobile-checks:
     name: Mobile App Checks
     runs-on: ubuntu-latest
-    needs: [lockfile-check, actionlint, validate-k8s]
+    needs: [validate-k8s]
 
     strategy:
       fail-fast: false
@@ -469,8 +475,9 @@ jobs:
       # On PRs: Only run tests for changed packages and their dependents
       - name: Run tests (PR - filtered)
         if: github.event_name == 'pull_request'
-        run: npx turbo run test --filter="...[origin/${{ github.base_ref }}]" --concurrency=2
+        run: npx turbo run test --filter="...[origin/${BASE_REF}]" --concurrency=2
         env:
+          BASE_REF: ${{ github.base_ref }}
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
           JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
           STELLAR_NETWORK: testnet
@@ -887,14 +894,16 @@ jobs:
               echo "| 📈 Pass rate | ${RATE} |"
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$FAILED" -gt 0 ]; then
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "⚠️ Some snapshots differ from their baselines. Download the **visual-regression-report** artefact and review the diffs." >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "To approve intentional changes, run locally:" >> "$GITHUB_STEP_SUMMARY"
-              echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
-              echo "npm run test:visual:update --workspace=web  # regenerate baselines" >> "$GITHUB_STEP_SUMMARY"
-              echo "git add apps/web/e2e/snapshots && git commit -m 'chore: update visual baselines'" >> "$GITHUB_STEP_SUMMARY"
-              echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+              {
+                echo ""
+                echo "⚠️ Some snapshots differ from their baselines. Download the **visual-regression-report** artefact and review the diffs."
+                echo ""
+                echo "To approve intentional changes, run locally:"
+                echo "\`\`\`bash"
+                echo "npm run test:visual:update --workspace=web  # regenerate baselines"
+                echo "git add apps/web/e2e/snapshots && git commit -m 'chore: update visual baselines'"
+                echo "\`\`\`"
+              } >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
         continue-on-error: true
@@ -1078,12 +1087,14 @@ jobs:
             -f helm/health-watchers/values-staging.yaml
 
       - name: Deploy to staging with Helm
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           echo "🚀 Deploying to staging with Helm..."
 
-          IMAGE_TAG="${{ github.sha }}"
           REGISTRY="ghcr.io"
-          REPO="${{ github.repository }}"
+          OWNER_LOWER=$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
 
           helm upgrade --install health-watchers ./helm/health-watchers \
             -f helm/health-watchers/values.yaml \
@@ -1095,7 +1106,7 @@ jobs:
             --set api.image.tag="${IMAGE_TAG}" \
             --set web.image.tag="${IMAGE_TAG}" \
             --set stellarService.image.tag="${IMAGE_TAG}" \
-            --set global.imageRegistry="${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            --set global.imageRegistry="${REGISTRY}/${OWNER_LOWER}" \
             || echo "⚠️  Helm deploy skipped — configure KUBE_CONFIG_STAGING secret to enable"
 
           echo "✅ Staging deployment complete"
@@ -1152,11 +1163,14 @@ jobs:
           echo "✅ Kubernetes manifests validated"
 
       - name: Deploy to production with Helm
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           echo "🚀 Deploying to production with Helm..."
 
-          IMAGE_TAG="${{ github.sha }}"
           REGISTRY="ghcr.io"
+          OWNER_LOWER=$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
 
           helm upgrade --install health-watchers ./helm/health-watchers \
             -f helm/health-watchers/values.yaml \
@@ -1168,7 +1182,7 @@ jobs:
             --set api.image.tag="${IMAGE_TAG}" \
             --set web.image.tag="${IMAGE_TAG}" \
             --set stellarService.image.tag="${IMAGE_TAG}" \
-            --set global.imageRegistry="${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            --set global.imageRegistry="${REGISTRY}/${OWNER_LOWER}" \
             || echo "⚠️  Helm deploy skipped — configure KUBE_CONFIG_PRODUCTION secret to enable"
 
           echo "✅ Production deployment complete"
@@ -1180,12 +1194,12 @@ jobs:
           PROD_URL="https://app.healthwatchers.example.com"
           MAX_RETRIES=5
           COUNT=0
-          until curl --max-time 10 -f "$PROD_URL/health" || [ $COUNT -eq $MAX_RETRIES ]; do
+          until curl --max-time 10 -f "$PROD_URL/health" || [ "$COUNT" -eq "$MAX_RETRIES" ]; do
             COUNT=$((COUNT+1))
             echo "Retry $COUNT/$MAX_RETRIES..."
             sleep 10
           done
-          [ $COUNT -lt $MAX_RETRIES ] && echo "✅ Production smoke test passed" || echo "⚠️  Smoke test skipped — production URL not yet configured"
+          [ "$COUNT" -lt "$MAX_RETRIES" ] && echo "✅ Production smoke test passed" || echo "⚠️  Smoke test skipped — production URL not yet configured"
         continue-on-error: true
 
       - name: Notify production deployment
@@ -1261,9 +1275,13 @@ jobs:
       - name: Comment PR with E2E test results
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         with:
           script: |
-            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const runUrl = `${process.env.SERVER_URL}/${process.env.REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -1376,7 +1394,7 @@ jobs:
             "https://api.getpostman.com/collections/${POSTMAN_COLLECTION_UID}" \
             -H "X-Api-Key: ${POSTMAN_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "{\"collection\": $(cat docs/postman/health-watchers.postman_collection.json)}")
+            --data-binary "@docs/postman/health-watchers.postman_collection.json")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
@@ -1393,6 +1411,8 @@ jobs:
       - name: Post Postman collection link to PR (Issue #1584)
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
         with:
           script: |
             const collectionUrl = `https://www.postman.com/api/collections/${process.env.POSTMAN_COLLECTION_UID}`;
@@ -1420,5 +1440,3 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
-        env:
-          POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}

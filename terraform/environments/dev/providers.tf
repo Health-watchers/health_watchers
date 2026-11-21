@@ -15,6 +15,14 @@ terraform {
       version = "~> 4.0"
     }
   }
+
+  backend "s3" {
+    bucket         = "health-watchers-terraform-state"
+    key            = "environments/dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "health-watchers-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
