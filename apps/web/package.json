@@ -83,6 +83,6 @@
     "jest-environment-jsdom": "^30.3.0",
     "typescript": "^5.0.0",
     "@size-limit/preset-app": "^11.1.6",
-    "size-limit": "^11.1.6"
+    "size-limit": "^11.2.0"
   }
 }
