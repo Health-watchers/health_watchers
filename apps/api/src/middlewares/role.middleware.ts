@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 
-export type UserRole = 'admin' | 'doctor' | 'staff' | 'patient' | 'clinic_manager';
+export type UserRole = 'admin' | 'doctor' | 'staff' | 'patient' | 'clinic_manager' | 'medical_director';
 
 export function requireRole(...allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {

@@ -1,4 +1,5 @@
 import CDSRecommendationsClient from './CDSRecommendationsClient';
+import CDSRuleManagementSummary from './CDSRuleManagementSummary';
 
 export const metadata = { title: 'Clinical Decision Support' };
 
@@ -16,6 +17,10 @@ export default function CDSPage() {
           <div className="mt-6">
             <CDSRecommendationsClient />
           </div>
+        </div>
+
+        <div className="mt-6">
+          <CDSRuleManagementSummary />
         </div>
       </div>
     </div>
