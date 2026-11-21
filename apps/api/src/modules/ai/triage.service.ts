@@ -1,8 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { TriageQueue } from './triage.model';
 import { TriageAssessmentInput } from './triage.validation';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+import { generateContent, LlmUnavailableError } from '../../lib/llm';
 
 interface TriageResult {
   urgencyLevel: 'immediate' | 'urgent' | 'semi-urgent' | 'non-urgent';
@@ -33,9 +31,13 @@ Respond in JSON format:
   "estimatedWaitTime": "time estimate"
 }`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text: string;
+  try {
+    text = await generateContent(prompt);
+  } catch (error) {
+    if (error instanceof LlmUnavailableError) throw error;
+    throw new LlmUnavailableError('AI triage assessment failed', error);
+  }
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Invalid response format');

@@ -1,12 +1,19 @@
 name: Dependabot Auto-merge
 
-# Enables GitHub auto-merge for Dependabot patch updates. The PR is only merged
-# once ALL required status checks (CI, Critical Vulnerability Gate, license
-# compatibility) pass — auto-merge respects branch protection. Minor and major
-# updates are left for manual review.
+# Enables GitHub auto-merge for Dependabot minor and patch updates to
+# non-security-critical packages. The PR is only merged once ALL required status
+# checks (CI, Critical Vulnerability Gate, license compatibility) pass —
+# auto-merge respects branch protection rules.
+#
+# Manual review is ALWAYS required for:
+#   - major version bumps
+#   - security-related packages (auth, crypto, JWT, etc.)
+#   - AWS SDK packages
+#   - Stellar SDK packages
 on:
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,7 +21,7 @@ permissions:
 
 jobs:
   auto-merge:
-    name: Auto-merge patch updates
+    name: Auto-merge minor/patch updates
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -24,25 +31,108 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Approve patch updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      - name: Determine auto-merge eligibility
+        id: gate
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        run: |
+          set -euo pipefail
+
+          # Only minor and patch updates are eligible for auto-merge.
+          case "$UPDATE_TYPE" in
+            version-update:semver-minor|version-update:semver-patch)
+              eligible="true"
+              ;;
+            *)
+              eligible="false"
+              ;;
+          esac
+
+          # Critical packages that must always be reviewed manually.
+          # Matched case-insensitively as substrings of the dependency names.
+          critical_patterns=(
+            "aws-sdk"
+            "@aws-sdk"
+            "stellar-sdk"
+            "@stellar"
+            "helmet"
+            "bcrypt"
+            "jsonwebtoken"
+            "passport"
+            "crypto"
+            "jose"
+            "oauth"
+            "openid"
+            "argon2"
+            "node-forge"
+            "tweetnacl"
+            "elliptic"
+            "express-jwt"
+            "csurf"
+            "cookie-session"
+            "express-session"
+          )
+
+          names_lower=$(printf '%s' "$DEPENDENCY_NAMES" | tr '[:upper:]' '[:lower:]')
+          critical="false"
+          for pattern in "${critical_patterns[@]}"; do
+            pattern_lower=$(printf '%s' "$pattern" | tr '[:upper:]' '[:lower:]')
+            if [[ "$names_lower" == *"$pattern_lower"* ]]; then
+              critical="true"
+              echo "Matched critical package pattern: $pattern"
+              break
+            fi
+          done
+
+          if [[ "$critical" == "true" ]]; then
+            eligible="false"
+          fi
+
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "critical=$critical" >> "$GITHUB_OUTPUT"
+          echo "Auto-merge eligible: $eligible (critical package: $critical)"
+
+      - name: Comment on PRs requiring manual review
+        if: steps.gate.outputs.eligible != 'true'
+        run: |
+          if [[ "${{ steps.gate.outputs.critical }}" == "true" ]]; then
+            reason="this update touches a **security-critical package** (AWS SDK, Stellar SDK, or a security-related dependency)"
+          else
+            reason="this is a **${{ steps.metadata.outputs.update-type }}** update"
+          fi
+          gh pr comment "$PR_URL" --body \
+            "ℹ️ This PR will **not** be auto-merged because ${reason}. A maintainer must review and merge it manually after all required checks pass."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment change summary on auto-merged PRs
+        if: steps.gate.outputs.eligible == 'true'
+        run: |
+          gh pr comment "$PR_URL" --body \
+            "🤖 **Auto-merge enabled** for this Dependabot update.
+
+          - **Dependencies:** \`${{ steps.metadata.outputs.dependency-names }}\`
+          - **Update type:** \`${{ steps.metadata.outputs.update-type }}\`
+          - **From:** \`${{ steps.metadata.outputs.previous-version }}\`
+          - **To:** \`${{ steps.metadata.outputs.new-version }}\`
+
+          Auto-merge will complete only after all required status checks (branch protection) pass."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve eligible updates
+        if: steps.gate.outputs.eligible == 'true'
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for patch updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      - name: Enable auto-merge for eligible updates
+        if: steps.gate.outputs.eligible == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Comment on minor/major updates (manual review required)
-        if: steps.metadata.outputs.update-type != 'version-update:semver-patch'
-        run: |
-          gh pr comment "$PR_URL" --body \
-            "ℹ️ This is a **${{ steps.metadata.outputs.update-type }}** update and will **not** be auto-merged. A maintainer must review and merge it manually after checks pass."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

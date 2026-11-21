@@ -60,7 +60,6 @@ jobs:
     if: needs.preflight.outputs.has_credentials == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-=======
 
     services:
       mongodb:

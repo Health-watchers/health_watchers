@@ -48,3 +48,79 @@ export interface TradeRecord {
   tradeType: 'dex';
   createdAt: Date;
 }
+
+/**
+ * DEX trading is not implemented yet (see #1685). The feature flag is off by
+ * default; set `DEX_TRADING_ENABLED=true` to expose the trade endpoints.
+ */
+export function isDexTradingEnabled(): boolean {
+  return process.env.DEX_TRADING_ENABLED === 'true';
+}
+
+export interface TradeRecordDocument extends TradeRecord {
+  _id?: unknown;
+}
+
+export interface TradeRecordModelLike {
+  create(doc: TradeRecord): Promise<TradeRecordDocument>;
+  find(filter: { clinicId: string }): {
+    sort(order: { createdAt: -1 }): { limit(n: number): Promise<TradeRecordDocument[]> };
+  };
+}
+
+export interface StellarOfferClient {
+  createOffer(params: {
+    clinicId: string;
+    sellAsset: string;
+    buyAsset: string;
+    sellAmount: number;
+    minAcceptablePrice: number;
+  }): Promise<{ offerId: string }>;
+}
+
+export interface TradeRecordDeps {
+  tradeRecordModel: TradeRecordModelLike;
+  stellarService: StellarOfferClient;
+}
+
+export async function createPendingTradeRecord(
+  deps: Pick<TradeRecordDeps, 'tradeRecordModel'>,
+  req: TradeRequest
+): Promise<TradeRecordDocument> {
+  return deps.tradeRecordModel.create({
+    clinicId: req.clinicId,
+    sellAsset: req.sellAsset,
+    buyAsset: req.buyAsset,
+    sellAmount: req.sellAmount,
+    expectedPrice: req.expectedPrice,
+    maxSlippagePercent: req.maxSlippagePercent,
+    status: 'pending',
+    tradeType: 'dex',
+    createdAt: new Date(),
+  });
+}
+
+export async function submitManageSellOffer(
+  deps: Pick<TradeRecordDeps, 'stellarService'>,
+  req: TradeRequest,
+  minAcceptablePrice: number
+): Promise<{ offerId: string }> {
+  return deps.stellarService.createOffer({
+    clinicId: req.clinicId,
+    sellAsset: req.sellAsset,
+    buyAsset: req.buyAsset,
+    sellAmount: req.sellAmount,
+    minAcceptablePrice,
+  });
+}
+
+export async function findTradeHistory(
+  deps: Pick<TradeRecordDeps, 'tradeRecordModel'>,
+  clinicId: string,
+  limit = 50
+): Promise<TradeRecordDocument[]> {
+  return deps.tradeRecordModel
+    .find({ clinicId })
+    .sort({ createdAt: -1 })
+    .limit(limit);
+}

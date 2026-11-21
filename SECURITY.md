@@ -90,9 +90,61 @@ Cross-origin requests from a malicious site cannot read the `csrf-token` cookie 
 
 ### Authentication & Authorisation
 - JWT access tokens (1-hour expiry) with rotating refresh tokens (7-day expiry)
-- TOTP-based MFA enforced for all provider and admin accounts
+- TOTP-based MFA enforced for the `admin`, `doctor`, and `nurse` roles (see [Multi-Factor Authentication](#multi-factor-authentication) below)
 - Role-based access control (RBAC): `admin`, `clinic_admin`, `provider`, `staff`, `patient`
 - Clinic-scoped data isolation — providers can only access patients within their own clinic
+
+### Multi-Factor Authentication
+
+MFA is **mandatory** for privileged clinical and administrative roles. Enforcement is applied at login in `apps/api/src/modules/auth/totp.service.ts`; a user whose role requires MFA cannot obtain a session without completing the second factor.
+
+#### Enforced Roles
+
+| Role | MFA required |
+|------|--------------|
+| `admin` | ✅ Enforced |
+| `doctor` | ✅ Enforced |
+| `nurse` | ✅ Enforced |
+| `clinic_admin`, `provider`, `staff`, `patient` | Optional (user may self-enrol) |
+
+#### Login Enforcement
+
+- If a user with an enforced role has **not** enrolled MFA, login is rejected with `403 Forbidden` and an error instructing them to enrol before signing in. No access or refresh token is issued.
+- If the user has enrolled MFA but has not yet supplied a valid TOTP code, login returns a challenge response (`mfaRequired: true`) and **no** session tokens. Tokens are only issued after the TOTP code (or a backup code) is verified.
+- Invalid or expired TOTP codes are rejected and counted toward the auth rate limit (5 req/min on auth endpoints).
+
+#### Grace Period for Newly Enrolled Users
+
+To avoid locking users out immediately after enrolment, a **7-day grace period** applies from the moment MFA is first enrolled:
+
+- During the grace period the user may still authenticate with their password alone, but every such login is flagged in the audit log and the user is shown an enrolment/verification reminder.
+- Reminders are sent on **day 1, day 3, day 5, and day 7** after enrolment by `apps/api/src/modules/auth/mfa-grace-period-job.ts`.
+- When the grace period expires, full enforcement applies: password-only login for an enforced role is rejected until MFA is completed.
+- The grace period applies **only** to first-time enrolment. Disabling and re-enabling MFA does not restart it.
+
+#### Backup Code Recovery
+
+Users who lose access to their authenticator can recover their account with single-use backup codes:
+
+1. Ten backup codes are generated and displayed **once** at enrolment. Only hashes are stored server-side.
+2. At the MFA challenge, the user may submit a backup code instead of a TOTP code.
+3. A valid backup code is consumed immediately (single use) and cannot be reused.
+4. When the remaining code count falls to **3 or fewer**, the user is prompted to regenerate a new set.
+5. If all codes are exhausted, recovery requires an out-of-band identity verification by a security administrator, which is itself audited.
+
+#### MFA Audit Events
+
+All MFA lifecycle actions are written to the audit log with `userId`, `clinicId`, timestamp, IP, and user agent:
+
+| Event | When it is recorded |
+|-------|---------------------|
+| `mfa.enrolled` | A user completes TOTP enrolment (secret confirmed with a valid code) |
+| `mfa.verified` | A user successfully completes the MFA challenge at login |
+| `mfa.recovery_code_used` | A backup code is accepted at the MFA challenge |
+| `mfa.disabled` | MFA is turned off for a user (admin action or self-service where permitted) |
+| `mfa.grace_period_expired` | The 7-day grace period lapses and full enforcement begins |
+
+Repeated failed MFA attempts are also logged and rate-limited; sustained failures trigger an alert to the security team.
 
 ### Data Protection
 - AES-256-GCM field-level encryption for PHI (DOB, contact number, address, insurance policy/group numbers); see `docs/SECURITY_POLICY.md` for full field coverage
@@ -122,6 +174,64 @@ Cross-origin requests from a malicious site cannot read the `csrf-token` cookie 
 - No secrets in source code — enforced by `gitleaks` pre-commit hook and CI secrets scanning
 - All credentials stored in AWS Secrets Manager or GitHub Actions encrypted secrets
 - Secret rotation schedule: JWT secrets quarterly, DB credentials monthly
+
+---
+
+## Multi-Tenancy & Tenant Isolation
+
+Health Watchers is a multi-tenant platform: a single deployment serves many clinics. This section documents how tenant (clinic) data is isolated, the assumptions that isolation relies on, and the compliance considerations for multi-tenant deployments.
+
+### Current Tenancy Model
+
+- **Tenant identifier** — every tenant-scoped document carries a `clinicId`. The authenticated user's `clinicId` is taken from their JWT and is never trusted from the request body or query string.
+- **Application-layer scoping** — all repository/service queries for tenant data include a `clinicId` filter derived from the authenticated principal. Cross-clinic access is rejected with `403 Forbidden` by the authorisation layer.
+- **Shared infrastructure** — tenants share the API deployment, MongoDB cluster, and Kubernetes namespace. Isolation is therefore *logical*, enforced by application code, not by separate physical resources.
+
+### Security Assumptions
+
+The application-layer model is only sound while **all** of the following hold:
+
+1. Every query that reads or writes tenant data includes the `clinicId` scope. New endpoints must use the shared scoped-repository helpers rather than raw collection access.
+2. `clinicId` is always derived from the verified JWT — never from client-supplied input.
+3. `clinic_admin` and `staff` roles cannot change their own `clinicId` or impersonate another clinic.
+4. Database credentials used by the API are not exposed to tenants; tenants interact only through the API.
+5. Audit logs record `clinicId` alongside `userId` so cross-tenant access attempts are detectable.
+
+A defect in any of these assumptions is a **cross-tenant data exposure** and must be treated as a critical (HIPAA reportable) incident.
+
+### Infrastructure-Level Isolation
+
+To add defence in depth beyond application scoping:
+
+- **Kubernetes `NetworkPolicy`** — default-deny ingress/egress per namespace, with explicit allow rules only for required traffic (API → MongoDB, API → secrets manager, ingress controller → API). If a dedicated namespace per clinic tier is adopted, each clinic namespace is isolated so pods cannot reach another clinic's namespace. See `k8s/network-policies/`.
+- **Per-tier database users** — MongoDB users are provisioned per clinic tier with least-privilege roles:
+  - `hw_read_<tier>` — read-only, scoped to the tier's collections/views.
+  - `hw_write_<tier>` — read/write, scoped to the tier's collections.
+  - The API uses the write user for its tier; reporting/analytics jobs use the read user. No user has cluster-wide `dbAdmin`/`root` privileges in production.
+
+These controls reduce blast radius if application scoping is bypassed, but they do **not** replace the `clinicId` filter — both layers must hold.
+
+### Cross-Tenant Penetration Test Scenario
+
+The following scenario is part of the recurring penetration test (see [`docs/PENTEST_FINDINGS.md`](docs/PENTEST_FINDINGS.md)):
+
+1. Authenticate as a user belonging to **Clinic A**.
+2. Attempt to read, update, and delete resources belonging to **Clinic B** by:
+   - substituting Clinic B resource IDs in path parameters,
+   - injecting `clinicId` of Clinic B into request bodies/query strings,
+   - tampering with the `clinicId` claim in the JWT (must fail signature verification),
+   - replaying Clinic B's tokens/cookies from a Clinic A session.
+3. **Expected result:** every attempt returns `403 Forbidden` (or `404` where resource existence must not be disclosed), no Clinic B data is returned, and the attempt is recorded in the audit log with the requesting `clinicId`.
+
+Any successful cross-tenant access is a release blocker.
+
+### Multi-Tenant Compliance Considerations
+
+- **HIPAA minimum necessary** — tenant isolation is a technical safeguard supporting the minimum-necessary standard; access to PHI is limited to the treating clinic.
+- **Business Associate Agreements** — each clinic tenant must have a BAA in place before PHI is stored; the shared platform is covered by the platform-level BAA.
+- **Audit integrity** — audit records are tenant-tagged and retained for 7 years; cross-tenant access attempts are retained and reviewed.
+- **Breach scope assessment** — because infrastructure is shared, any suspected isolation failure must be assessed for impact across *all* tenants, not just the affected clinic, and handled under the breach notification procedure in `docs/SECURITY_POLICY.md`.
+- **Data residency & deletion** — tenant offboarding must purge that tenant's PHI across shared stores; deletion procedures must be verified per tenant.
 
 ---
 

@@ -26,8 +26,9 @@ Complete reference for all environment variables used by Health Watchers, auto-g
 ### API_PORT
 - **Type:** `string`
 - **Default:** `'3001'`
-- **Description:** Port the Express API server listens on
+- **Description:** Port the Express API server listens on. This is the single source of truth for the listening port and the default is `3001` everywhere (API, Dockerfile, Compose, Helm values, k8s Service/probes, smoke tests, k6 scripts).
 - **Example:** `API_PORT=3001`
+- **Note:** `PORT` is honoured only as a documented override for PaaS hosts that inject it (e.g. Heroku, Render); do not set it in Docker, Compose or Kubernetes.
 
 ### NODE_ENV
 - **Type:** `string`
@@ -89,12 +90,6 @@ Complete reference for all environment variables used by Health Watchers, auto-g
 - **Description:** Secret key for temporary tokens (password reset, email verification)
 - **Example:** `JWT_TEMP_TOKEN_SECRET=your-secret-for-temporary-tokens-min-32-chars`
 
-### JWT_SECRET
-- **Type:** `string`
-- **Optional:** Yes
-- **Description:** Legacy JWT secret (prefer JWT_ACCESS_TOKEN_SECRET)
-- **Note:** Deprecated; use JWT_ACCESS_TOKEN_SECRET instead
-
 ### JWT_ISSUER
 - **Type:** `string`
 - **Optional:** Yes
@@ -106,6 +101,26 @@ Complete reference for all environment variables used by Health Watchers, auto-g
 - **Optional:** Yes
 - **Description:** JWT audience claim (`aud`); identifies intended recipient
 - **Example:** `JWT_AUDIENCE=health-watchers-client`
+
+### QR_CHECKIN_SECRET
+- **Type:** `string`
+- **Minimum Length:** 32 characters
+- **Required in Production:** Yes (the API refuses to start without it)
+- **Description:** HMAC secret used to sign and verify appointment QR check-in codes. Must be distinct from all JWT secrets; in development a random per-process secret is generated and a warning is logged.
+- **Example:** `QR_CHECKIN_SECRET=your-very-long-qr-checkin-secret-with-32-chars-minimum`
+- **Generation:** `openssl rand -hex 32`
+- **Rotation:** Quarterly, or immediately if exposed; rotate during a low-traffic window since outstanding QR codes become invalid
+- **Security:** Never reuse the JWT access/refresh secrets; HMAC comparisons use `crypto.timingSafeEqual`
+
+### TELEHEALTH_LINK_SECRET
+- **Type:** `string`
+- **Minimum Length:** 32 characters
+- **Required in Production:** Yes (the API refuses to start without it)
+- **Description:** HMAC secret used to sign and verify telehealth meeting join links. Must be distinct from all JWT secrets; in development a random per-process secret is generated and a warning is logged.
+- **Example:** `TELEHEALTH_LINK_SECRET=your-very-long-telehealth-link-secret-with-32-chars-minimum`
+- **Generation:** `openssl rand -hex 32`
+- **Rotation:** Quarterly, or immediately if exposed; rotate during a low-traffic window since previously issued join links become invalid
+- **Security:** Never reuse the JWT access/refresh secrets; HMAC comparisons use `crypto.timingSafeEqual`
 
 ---
 

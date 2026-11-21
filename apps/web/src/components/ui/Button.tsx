@@ -32,6 +32,11 @@ const button = cva(
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof button> {
+  /**
+   * Shows a spinner and disables the button while an async action is in flight.
+   * Used by telemedicine call actions (e.g. "Start Video Call", "Join Call")
+   * to prevent duplicate room/token requests.
+   */
   loading?: boolean;
   /** Ignored — kept for API compatibility */
   asChild?: boolean;

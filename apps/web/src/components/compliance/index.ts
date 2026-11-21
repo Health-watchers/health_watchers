@@ -7,4 +7,15 @@ export { ConsentManager } from './ConsentManager';
 export { PolicyAcknowledgment } from './PolicyAcknowledgment';
 export { EmployeeTraining } from './EmployeeTraining';
 export { SecurityAssessment } from './SecurityAssessment';
-export { ComplianceReportGenerator } from './ComplianceReportGenerator';
+
+import dynamic from 'next/dynamic';
+
+export const ComplianceReportGenerator = dynamic(
+  () =>
+    import('./ComplianceReportGenerator').then(
+      (mod) => mod.ComplianceReportGenerator
+    ),
+  {
+    loading: () => null,
+  }
+);

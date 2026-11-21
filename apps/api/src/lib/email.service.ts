@@ -461,20 +461,46 @@ export function sendDisputeEvidenceSubmittedEmail(
   enqueue(to, 'Dispute Evidence Submitted — Health Watchers', text, html);
 }
 
+function buildDataExportReadyEmail(
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): EmailContent {
+  const expiryStr = expiresAt.toUTCString();
+  if (resolveLanguage(language) === 'fr') {
+    return {
+      subject: 'Votre export de données de santé est prêt — Health Watchers',
+      text: `Votre export de données de santé est prêt.\n\nTéléchargez-le en toute sécurité ici (le lien expire le ${expiryStr}) :\n${downloadUrl}\n\nPour votre sécurité, ce lien est à usage unique et limité dans le temps. Ne le partagez pas.`,
+      html: `<h3>Votre export de données de santé est prêt</h3><p>Vous avez demandé une copie de votre dossier de santé. Elle est maintenant prête à être téléchargée.</p><p><a href="${downloadUrl}">Télécharger vos données en toute sécurité</a></p><p>Ce lien expire le <strong>${expiryStr}</strong> (30 jours). Pour votre sécurité, ne le partagez pas.</p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Health Record Export Is Ready — Health Watchers',
+    text: `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`,
+    html: `<h3>Your Health Record Export Is Ready</h3><p>You requested a copy of your health record. It is now ready to download.</p><p><a href="${downloadUrl}">Download your records securely</a></p><p>This link expires <strong>${expiryStr}</strong> (30 days). For your security, do not share it.</p>`,
+  };
+}
+
 /**
  * Data export ready — sends a SECURE DOWNLOAD LINK (never the data as an
  * attachment) for a patient's HIPAA Right of Access export.
  */
-export function sendDataExportReadyEmail(to: string, downloadUrl: string, expiresAt: Date): void {
-  const expiryStr = expiresAt.toUTCString();
-  const text = `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`;
-  const html = `
-    <h3>Your Health Record Export Is Ready</h3>
-    <p>You requested a copy of your health record. It is now ready to download.</p>
-    <p><a href="${downloadUrl}">Download your records securely</a></p>
-    <p>This link expires <strong>${expiryStr}</strong>. For your security, do not share it.</p>
-  `;
-  enqueue(to, 'Your Health Record Export Is Ready — Health Watchers', text, html);
+export function sendDataExportReadyEmail(
+  to: string,
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'dataExportReady',
+    language,
+    buildDataExportReadyEmail,
+    downloadUrl,
+    expiresAt,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
 /** Low balance warning sent when XLM balance drops below the warning threshold */
@@ -870,6 +896,147 @@ export function sendMultisigVoidedEmail(
     ? `<h3>Paiement multi-signature annulé</h3><p>Bonjour <strong>${signerName}</strong>,</p><p>Le paiement <strong>${payment.paymentId}</strong> de <strong>${payment.amount} ${payment.assetCode}</strong> a été automatiquement annulé car le seuil de signatures (${payment.collectedSignatures}/${payment.requiredSignatures}) n'a pas été atteint dans les 24 heures.</p><p>Vous pouvez initier un nouveau paiement si nécessaire.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
     : `<h3>Multi-Signature Payment Voided</h3><p>Hello <strong>${signerName}</strong>,</p><p>The payment <strong>${payment.paymentId}</strong> of <strong>${payment.amount} ${payment.assetCode}</strong> was automatically voided because the signature threshold (${payment.collectedSignatures}/${payment.requiredSignatures}) was not reached within 24 hours.</p><p>You may initiate a new payment if needed.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
   enqueue(to, subject, text, html);
+}
+
+/** Aging reminder sent to a patient (or payer) for an overdue invoice at 30/60/90 days */
+export function sendAgingReminderEmail(
+  to: string,
+  patientName: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    daysOverdue: number;
+    stellarPayURI: string;
+  },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'agingReminder',
+    language,
+    buildAgingReminderEmail,
+    patientName,
+    invoice,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+/** Survey assigned notification sent to a patient when a new survey is assigned */
+export function sendSurveyAssignedEmail(
+  to: string,
+  patientName: string,
+  survey: { title: string; surveyId: string; dueDate?: Date | null },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'surveyAssigned',
+    language,
+    buildSurveyAssignedEmail,
+    patientName,
+    survey,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+/** Trial expiry notification sent to a clinic admin when the subscription trial is ending soon */
+export function sendTrialExpiryEmail(
+  to: string,
+  clinicName: string,
+  trial: { planName: string; trialEndsAt: Date; daysRemaining: number },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'trialExpiry',
+    language,
+    buildTrialExpiryEmail,
+    clinicName,
+    trial,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+function buildAgingReminderEmail(
+  patientName: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    daysOverdue: number;
+    stellarPayURI: string;
+  },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const dueDateStr = invoice.dueDate.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const subject = isFrench
+    ? `Rappel de facture en retard (${invoice.daysOverdue} jours) — ${invoice.invoiceNumber}`
+    : `Overdue Invoice Reminder (${invoice.daysOverdue} days) — ${invoice.invoiceNumber}`;
+  const text = isFrench
+    ? `Bonjour ${patientName},\n\nLa facture ${invoice.invoiceNumber} d'un montant de ${invoice.total} ${invoice.currency} est en retard de ${invoice.daysOverdue} jours (échéance : ${dueDateStr}).\n\nVeuillez régler le montant dû dès que possible : ${invoice.stellarPayURI}`
+    : `Hello ${patientName},\n\nThe invoice ${invoice.invoiceNumber} for ${invoice.total} ${invoice.currency} is ${invoice.daysOverdue} days overdue (due date: ${dueDateStr}).\n\nPlease settle the outstanding amount as soon as possible: ${invoice.stellarPayURI}`;
+  const html = isFrench
+    ? `<h3>Rappel de facture en retard</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>La facture <strong>${invoice.invoiceNumber}</strong> est en retard de <strong>${invoice.daysOverdue} jours</strong>.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Montant dû</td><td style="padding:8px">${invoice.total} ${invoice.currency}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Date d'échéance</td><td style="padding:8px">${dueDateStr}</td></tr><tr><td style="padding:8px;font-weight:bold">Jours de retard</td><td style="padding:8px;color:#dc2626">${invoice.daysOverdue}</td></tr></table><p><a href="${invoice.stellarPayURI}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Payer maintenant</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Overdue Invoice Reminder</h3><p>Hello <strong>${patientName}</strong>,</p><p>The invoice <strong>${invoice.invoiceNumber}</strong> is <strong>${invoice.daysOverdue} days overdue</strong>.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Amount Due</td><td style="padding:8px">${invoice.total} ${invoice.currency}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Due Date</td><td style="padding:8px">${dueDateStr}</td></tr><tr><td style="padding:8px;font-weight:bold">Days Overdue</td><td style="padding:8px;color:#dc2626">${invoice.daysOverdue}</td></tr></table><p><a href="${invoice.stellarPayURI}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Pay Now</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
+}
+
+function buildSurveyAssignedEmail(
+  patientName: string,
+  survey: { title: string; surveyId: string; dueDate?: Date | null },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const surveyUrl = `${APP_BASE_URL()}/portal/surveys/${survey.surveyId}`;
+  const dueDateStr = survey.dueDate
+    ? survey.dueDate.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+  const subject = isFrench
+    ? 'Nouveau questionnaire à remplir — Health Watchers'
+    : 'New Survey to Complete — Health Watchers';
+  const text = isFrench
+    ? `Bonjour ${patientName},\n\nUn nouveau questionnaire vous a été assigné : ${survey.title}.${dueDateStr ? `\n\nÀ remplir avant le : ${dueDateStr}` : ''}\n\nRemplir le questionnaire : ${surveyUrl}`
+    : `Hello ${patientName},\n\nA new survey has been assigned to you: ${survey.title}.${dueDateStr ? `\n\nPlease complete it by: ${dueDateStr}` : ''}\n\nComplete the survey: ${surveyUrl}`;
+  const html = isFrench
+    ? `<h3>Nouveau questionnaire à remplir</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>Un nouveau questionnaire vous a été assigné : <strong>${survey.title}</strong>.</p>${dueDateStr ? `<p><strong>À remplir avant le :</strong> ${dueDateStr}</p>` : ''}<p><a href="${surveyUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Remplir le questionnaire</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>New Survey to Complete</h3><p>Hello <strong>${patientName}</strong>,</p><p>A new survey has been assigned to you: <strong>${survey.title}</strong>.</p>${dueDateStr ? `<p><strong>Please complete it by:</strong> ${dueDateStr}</p>` : ''}<p><a href="${surveyUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete Survey</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
+}
+
+function buildTrialExpiryEmail(
+  clinicName: string,
+  trial: { planName: string; trialEndsAt: Date; daysRemaining: number },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const billingUrl = `${APP_BASE_URL()}/settings/billing`;
+  const endsAtStr = trial.trialEndsAt.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const subject = isFrench
+    ? `Votre essai ${trial.planName} se termine bientôt — Health Watchers`
+    : `Your ${trial.planName} Trial Is Ending Soon — Health Watchers`;
+  const text = isFrench
+    ? `Bonjour ${clinicName},\n\nVotre essai gratuit du plan ${trial.planName} se termine le ${endsAtStr} (${trial.daysRemaining} jour(s) restant(s)).\n\nAjoutez un moyen de paiement pour continuer à utiliser Health Watchers sans interruption : ${billingUrl}`
+    : `Hello ${clinicName},\n\nYour free trial of the ${trial.planName} plan ends on ${endsAtStr} (${trial.daysRemaining} day(s) remaining).\n\nAdd a payment method to keep using Health Watchers without interruption: ${billingUrl}`;
+  const html = isFrench
+    ? `<h3>Votre essai ${trial.planName} se termine bientôt</h3><p>Bonjour <strong>${clinicName}</strong>,</p><p>Votre essai gratuit du plan <strong>${trial.planName}</strong> se termine le <strong>${endsAtStr}</strong> (${trial.daysRemaining} jour(s) restant(s)).</p><p>Ajoutez un moyen de paiement pour continuer à utiliser Health Watchers sans interruption.</p><p><a href="${billingUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Gérer l'abonnement</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Your ${trial.planName} Trial Is Ending Soon</h3><p>Hello <strong>${clinicName}</strong>,</p><p>Your free trial of the <strong>${trial.planName}</strong> plan ends on <strong>${endsAtStr}</strong> (${trial.daysRemaining} day(s) remaining).</p><p>Add a payment method to keep using Health Watchers without interruption.</p><p><a href="${billingUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Manage Subscription</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
 }
 
 /** Claimable balance expiry notification sent to patient */

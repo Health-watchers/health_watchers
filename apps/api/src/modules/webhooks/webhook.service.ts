@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import logger from '@api/utils/logger';
 import { validateWebhookUrl } from '@api/utils/url-validator';
+import { logBlockedOutboundRequest } from '@api/utils/ssrf-audit';
 import { WebhookModel, WebhookDeliveryModel, WebhookEventLogModel } from './webhook.model';
 import type { IWebhookDelivery } from './webhook.model';
 import { buildSignatureHeaders } from './webhook-signature';
@@ -103,7 +104,13 @@ export async function enqueueWebhookDelivery(
       isTest: !!options.isTest,
       error: `Blocked URL: ${reason}`,
     });
-    logger.error({ webhookId, event, url, reason }, 'Webhook delivery blocked: invalid URL');
+    await logBlockedOutboundRequest({
+      url,
+      reason: reason || 'Blocked URL',
+      source: 'webhook-enqueue',
+      webhookId,
+      deliveryId: String((delivery as any)._id ?? ''),
+    });
     return delivery;
   }
 
@@ -180,13 +187,35 @@ export async function enqueueWebhookDelivery(
   return delivery;
 }
 
-async function executeDelivery(delivery: IWebhookDelivery, secret: string): Promise<void> {
+export async function executeDelivery(delivery: IWebhookDelivery, secret: string): Promise<void> {
   const webhook = await WebhookModel.findById(delivery.webhookId);
   const maxAttempts = webhook?.retryConfig?.maxRetries ?? 3;
   const initialDelay = webhook?.retryConfig?.initialDelayMs ?? 1000;
   const backoffType = webhook?.retryConfig?.backoffType ?? 'exponential';
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // SSRF protection (#1668): re-validate on every attempt — the URL may have
+    // been mutated in the DB since enqueue time.
+    const urlCheck = validateWebhookUrl(delivery.url);
+    if (!urlCheck.valid) {
+      const reason = urlCheck.reason || 'Blocked URL';
+      delivery.status = 'dead';
+      delivery.error = `Blocked URL: ${reason}`;
+      await delivery.save();
+      await WebhookEventLogModel.findOneAndUpdate(
+        { deliveryId: delivery._id },
+        { status: 'dead', error: delivery.error }
+      );
+      await logBlockedOutboundRequest({
+        url: delivery.url,
+        reason,
+        source: 'webhook-delivery',
+        webhookId: String(delivery.webhookId),
+        deliveryId: String(delivery._id),
+      });
+      return;
+    }
+
     const bodyString = JSON.stringify(delivery.payload);
     const headers = normaliseHeaders(outboundHeaders(secret, bodyString, delivery));
     const startedAt = Date.now();

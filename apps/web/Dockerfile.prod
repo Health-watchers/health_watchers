@@ -1,6 +1,6 @@
 # Production Dockerfile for Web (Next.js) - Multi-stage build
 # Stage 1: Dependencies
-FROM node:18-alpine AS deps
+FROM node:20-alpine AS deps
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY turbo.json ./
 RUN npm ci --production=false
 
 # Stage 2: Builder
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -41,7 +41,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build --workspace=web
 
 # Stage 3: Final production image
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 
 # Security: Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

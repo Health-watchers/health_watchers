@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: 20
   # ── Turborepo Remote Cache ──────────────────────────────────────────────────
@@ -24,10 +27,50 @@ env:
   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
+  # Stage 0: Lockfile drift guard (Issues #1751, #1752)
+  # Fails fast (before any heavy install) when package-lock.json no longer
+  # matches package.json, which otherwise breaks every `npm ci` downstream.
+  lockfile-check:
+    name: Lockfile Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify package-lock.json is in sync with package.json
+        run: |
+          set -euo pipefail
+          # Use the npm version declared in package.json "packageManager".
+          npx --yes npm@10.8.2 install --package-lock-only --ignore-scripts --no-audit --no-fund
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error::package-lock.json is out of sync with package.json."
+            echo ""
+            echo "Regenerate it with the npm version declared in packageManager (npm@10.8.2):"
+            echo "  npx npm@10.8.2 install --package-lock-only"
+            echo "  git add package-lock.json"
+            echo "  git commit -m 'chore: regenerate package-lock.json'"
+            echo ""
+            echo "Then verify a clean install works:"
+            echo "  rm -rf node_modules && npx npm@10.8.2 ci"
+            exit 1
+          fi
+          echo "✅ package-lock.json is in sync with package.json"
+
+      - name: Verify npm ci succeeds (dry run)
+        run: npx --yes npm@10.8.2 ci --dry-run --ignore-scripts --no-audit --no-fund
+
   # Stage 0: Lint workflow files
+  # Runs in parallel with the rest of the pipeline: a style-level lint failure
+  # must not gate tests, builds or quality checks (see issue #1753).
   actionlint:
     name: Lint GitHub Actions workflows
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Run actionlint
@@ -110,6 +153,7 @@ jobs:
   migration-check:
     name: Database Migration Check
     runs-on: ubuntu-latest
+    needs: [lockfile-check]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -208,7 +252,7 @@ jobs:
   quality-checks:
     name: Quality Checks
     runs-on: ubuntu-latest
-    needs: [actionlint, validate-k8s, helm-lint-dry-run, migration-check]
+    needs: [validate-k8s, helm-lint-dry-run, migration-check]
 
     strategy:
       fail-fast: false
@@ -267,7 +311,6 @@ jobs:
   validate-k8s:
     name: Validate Kubernetes Manifests
     runs-on: ubuntu-latest
-    needs: [actionlint]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -309,7 +352,7 @@ jobs:
   mobile-checks:
     name: Mobile App Checks
     runs-on: ubuntu-latest
-    needs: [actionlint, validate-k8s]
+    needs: [validate-k8s]
 
     strategy:
       fail-fast: false
@@ -341,15 +384,15 @@ jobs:
 
       - name: TypeScript type checking
         if: matrix.check == 'typecheck'
-        run: npm run typecheck --workspace=mobile
+        run: npm run typecheck --workspace=health-watchers-mobile
 
       - name: ESLint (zero-warning policy)
         if: matrix.check == 'lint'
-        run: npm run lint --workspace=mobile
+        run: npm run lint --workspace=health-watchers-mobile
 
       - name: Run mobile tests
         if: matrix.check == 'test'
-        run: npm test --workspace=mobile
+        run: npm test --workspace=health-watchers-mobile
 
       - name: Run expo-doctor check
         if: matrix.check == 'expo-doctor'
@@ -363,6 +406,7 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: [lockfile-check]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -431,8 +475,9 @@ jobs:
       # On PRs: Only run tests for changed packages and their dependents
       - name: Run tests (PR - filtered)
         if: github.event_name == 'pull_request'
-        run: npx turbo run test --filter="...[origin/${{ github.base_ref }}]" --concurrency=2
+        run: npx turbo run test --filter="...[origin/${BASE_REF}]" --concurrency=2
         env:
+          BASE_REF: ${{ github.base_ref }}
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
           JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
           STELLAR_NETWORK: testnet
@@ -522,16 +567,10 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
-      # apps/web is not part of the root npm workspaces, so install it in place.
-      - name: Install web dependencies
-        run: npm install --no-package-lock --no-audit --no-fund
-        working-directory: apps/web
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-
+      # apps/web is a root workspace, so the root `npm ci` above already
+      # installed its dependencies — no per-app install needed.
       - name: Check web coverage thresholds
-        run: npm run test:coverage
-        working-directory: apps/web
+        run: npm run test:coverage --workspace=web
 
       - name: Upload API coverage to Codecov
         if: always() && matrix.node-version == 20
@@ -557,7 +596,7 @@ jobs:
   build:
     name: Build Applications
     runs-on: ubuntu-latest
-    needs: [quality-checks, security-scan, test]
+    needs: [lockfile-check, quality-checks, security-scan, test]
 
     strategy:
       matrix:
@@ -644,7 +683,7 @@ jobs:
   e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [lockfile-check, build]
     timeout-minutes: 15
 
     services:
@@ -856,14 +895,16 @@ jobs:
               echo "| 📈 Pass rate | ${RATE} |"
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$FAILED" -gt 0 ]; then
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "⚠️ Some snapshots differ from their baselines. Download the **visual-regression-report** artefact and review the diffs." >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "To approve intentional changes, run locally:" >> "$GITHUB_STEP_SUMMARY"
-              echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
-              echo "npm run test:visual:update --workspace=web  # regenerate baselines" >> "$GITHUB_STEP_SUMMARY"
-              echo "git add apps/web/e2e/snapshots && git commit -m 'chore: update visual baselines'" >> "$GITHUB_STEP_SUMMARY"
-              echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+              {
+                echo ""
+                echo "⚠️ Some snapshots differ from their baselines. Download the **visual-regression-report** artefact and review the diffs."
+                echo ""
+                echo "To approve intentional changes, run locally:"
+                echo "\`\`\`bash"
+                echo "npm run test:visual:update --workspace=web  # regenerate baselines"
+                echo "git add apps/web/e2e/snapshots && git commit -m 'chore: update visual baselines'"
+                echo "\`\`\`"
+              } >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
         continue-on-error: true
@@ -1047,12 +1088,14 @@ jobs:
             -f helm/health-watchers/values-staging.yaml
 
       - name: Deploy to staging with Helm
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           echo "🚀 Deploying to staging with Helm..."
 
-          IMAGE_TAG="${{ github.sha }}"
           REGISTRY="ghcr.io"
-          REPO="${{ github.repository }}"
+          OWNER_LOWER=$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
 
           helm upgrade --install health-watchers ./helm/health-watchers \
             -f helm/health-watchers/values.yaml \
@@ -1064,7 +1107,7 @@ jobs:
             --set api.image.tag="${IMAGE_TAG}" \
             --set web.image.tag="${IMAGE_TAG}" \
             --set stellarService.image.tag="${IMAGE_TAG}" \
-            --set global.imageRegistry="${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            --set global.imageRegistry="${REGISTRY}/${OWNER_LOWER}" \
             || echo "⚠️  Helm deploy skipped — configure KUBE_CONFIG_STAGING secret to enable"
 
           echo "✅ Staging deployment complete"
@@ -1121,11 +1164,14 @@ jobs:
           echo "✅ Kubernetes manifests validated"
 
       - name: Deploy to production with Helm
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           echo "🚀 Deploying to production with Helm..."
 
-          IMAGE_TAG="${{ github.sha }}"
           REGISTRY="ghcr.io"
+          OWNER_LOWER=$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
 
           helm upgrade --install health-watchers ./helm/health-watchers \
             -f helm/health-watchers/values.yaml \
@@ -1137,7 +1183,7 @@ jobs:
             --set api.image.tag="${IMAGE_TAG}" \
             --set web.image.tag="${IMAGE_TAG}" \
             --set stellarService.image.tag="${IMAGE_TAG}" \
-            --set global.imageRegistry="${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
+            --set global.imageRegistry="${REGISTRY}/${OWNER_LOWER}" \
             || echo "⚠️  Helm deploy skipped — configure KUBE_CONFIG_PRODUCTION secret to enable"
 
           echo "✅ Production deployment complete"
@@ -1149,12 +1195,12 @@ jobs:
           PROD_URL="https://app.healthwatchers.example.com"
           MAX_RETRIES=5
           COUNT=0
-          until curl --max-time 10 -f "$PROD_URL/health" || [ $COUNT -eq $MAX_RETRIES ]; do
+          until curl --max-time 10 -f "$PROD_URL/health" || [ "$COUNT" -eq "$MAX_RETRIES" ]; do
             COUNT=$((COUNT+1))
             echo "Retry $COUNT/$MAX_RETRIES..."
             sleep 10
           done
-          [ $COUNT -lt $MAX_RETRIES ] && echo "✅ Production smoke test passed" || echo "⚠️  Smoke test skipped — production URL not yet configured"
+          [ "$COUNT" -lt "$MAX_RETRIES" ] && echo "✅ Production smoke test passed" || echo "⚠️  Smoke test skipped — production URL not yet configured"
         continue-on-error: true
 
       - name: Notify production deployment
@@ -1178,11 +1224,88 @@ jobs:
             }
         continue-on-error: true
 
+  # Stage 8: Aggregated CI gate (Issue #1764)
+  # This is the ONLY required status check in branch protection. It depends on
+  # every gating job and fails if any of them failed or was cancelled. Because
+  # it runs with `if: always()`, it is reported even when upstream jobs are
+  # skipped, so a skipped required check can never be mistaken for a pass.
+  # Renaming or adding individual jobs only requires updating this `needs` list,
+  # not branch-protection settings.
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs:
+      - actionlint
+      - helm-lint-dry-run
+      - migration-check
+      - validate-k8s
+      - quality-checks
+      - mobile-checks
+      - security-scan
+      - test
+      - build
+      - docker
+      - e2e
+      - visual-regression-gate
+      - e2e-tests
+      - postman-sync
+      - deploy-staging
+      - deploy-production
+    if: always()
+
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          echo "Aggregated CI gate — inspecting results of all needed jobs."
+          echo ""
+          echo "needs context:"
+          echo '${{ toJSON(needs) }}'
+          echo ""
+
+          # Jobs that are intentionally conditional (event/ref gated) and may
+          # legitimately be `skipped` without indicating a problem.
+          CONDITIONAL_JOBS="helm-lint-dry-run docker e2e-tests deploy-staging deploy-production"
+
+          FAILED=0
+          for job in $(echo '${{ toJSON(needs) }}' | jq -r 'keys[]'); do
+            result=$(echo '${{ toJSON(needs) }}' | jq -r --arg j "$job" '.[$j].result')
+            case "$result" in
+              success)
+                echo "✅ ${job}: success"
+                ;;
+              skipped)
+                if echo " ${CONDITIONAL_JOBS} " | grep -q " ${job} "; then
+                  echo "⏭️  ${job}: skipped (intentionally conditional — allowed)"
+                else
+                  echo "❌ ${job}: skipped (not an intentionally conditional job)"
+                  FAILED=1
+                fi
+                ;;
+              failure|cancelled)
+                echo "❌ ${job}: ${result}"
+                FAILED=1
+                ;;
+              *)
+                echo "❌ ${job}: unexpected result '${result}'"
+                FAILED=1
+                ;;
+            esac
+          done
+
+          echo ""
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::One or more required CI jobs failed, were cancelled, or were unexpectedly skipped."
+            exit 1
+          fi
+
+          echo "✅ All required CI jobs passed."
+=======
+
   # Stage 6b: End-to-End Tests (Issue #1581)
   e2e-tests:
     name: Playwright E2E Tests
     runs-on: ubuntu-latest
-    needs: [quality-checks]
+    needs: [lockfile-check, quality-checks]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1230,9 +1353,13 @@ jobs:
       - name: Comment PR with E2E test results
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         with:
           script: |
-            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const runUrl = `${process.env.SERVER_URL}/${process.env.REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -1262,7 +1389,7 @@ jobs:
   postman-sync:
     name: Validate Postman Collection
     runs-on: ubuntu-latest
-    needs: [quality-checks, e2e-tests]
+    needs: [lockfile-check, quality-checks, e2e-tests]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1345,7 +1472,7 @@ jobs:
             "https://api.getpostman.com/collections/${POSTMAN_COLLECTION_UID}" \
             -H "X-Api-Key: ${POSTMAN_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "{\"collection\": $(cat docs/postman/health-watchers.postman_collection.json)}")
+            --data-binary "@docs/postman/health-watchers.postman_collection.json")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
@@ -1362,6 +1489,8 @@ jobs:
       - name: Post Postman collection link to PR (Issue #1584)
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
+        env:
+          POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
         with:
           script: |
             const collectionUrl = `https://www.postman.com/api/collections/${process.env.POSTMAN_COLLECTION_UID}`;
@@ -1389,5 +1518,3 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
-        env:
-          POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}

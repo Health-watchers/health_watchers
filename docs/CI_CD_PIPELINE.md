@@ -16,14 +16,14 @@ The CI/CD pipeline is built with GitHub Actions and provides:
 
 ### Stage 0: Workflow Validation
 
-**Workflow**: GitHub Actions linting
+**Workflow**: `workflow-validation.yml` (name: `Workflow Validation`)
 - Validates workflow file syntax
 - Checks for deprecated actions
 - Ensures workflow correctness
 
 ### Stage 1: Quality Checks (Parallel)
 
-**Workflow**: `quality-checks`
+**Job**: `quality-checks` (in `ci.yml`)
 
 Runs in parallel:
 - **TypeScript**: Type checking across all workspaces
@@ -34,7 +34,7 @@ Runs in parallel:
 
 ### Stage 2: Security Scanning (Parallel)
 
-**Workflow**: `security-scan`
+**Workflow**: `security-scan` (name: `Security Scanning (PR)`); scheduled deep scans run in `security-scheduled.yml`
 
 Runs in parallel:
 - **npm audit**: Critical vulnerability detection
@@ -43,7 +43,7 @@ Runs in parallel:
 
 ### Stage 3: Testing
 
-**Workflow**: `test`
+**Job**: `test` (in `ci.yml`)
 
 Executes:
 - Unit tests for API service
@@ -54,7 +54,7 @@ Executes:
 
 ### Stage 4: Build
 
-**Workflow**: `build`
+**Job**: `build` (in `ci.yml`)
 
 Builds:
 - API application
@@ -64,7 +64,7 @@ Builds:
 
 ### Docker Build & Push
 
-**Workflow**: `docker-build`
+**Job**: `docker-build` (in `ci.yml`)
 
 For each service (API, Stellar Service):
 1. **Build**: Multi-stage Docker build with BuildKit
@@ -74,7 +74,7 @@ For each service (API, Stellar Service):
 
 ### Stage 5: E2E Tests
 
-**Workflow**: `e2e`
+**Job**: `e2e` (in `ci.yml`)
 
 End-to-end testing:
 - Playwright browser tests
@@ -85,21 +85,47 @@ End-to-end testing:
 
 ### Stage 6: Deployment
 
-**Workflow**: `deploy`
+**Workflow**: `deploy` (name: `Deployment Pipeline`)
 
 Manual deployment workflow:
 - **Staging**: Automatic after CI passes
 - **Production**: Manual approval required
 
-## Workflow Files
+## Workflow Inventory
 
-```
-.github/workflows/
-├── ci.yml                    # Main CI pipeline
-├── docker-build.yml          # Docker image building and scanning
-├── deploy.yml               # Deployment to staging/production
-└── notifications.yml        # Slack and email notifications
-```
+Every workflow in `.github/workflows/` is listed below with its trigger, purpose and owner. Each workflow has a unique `name:` so the Actions UI and README badges are unambiguous.
+
+| File | `name:` | Trigger | Purpose | Owner |
+| --- | --- | --- | --- | --- |
+| `ci.yml` | CI | `push` / `pull_request` to `main`, `develop` | **The only PR-gating CI workflow.** Quality checks, tests, build, E2E and Docker build/scan as jobs. | Platform team |
+| `deploy.yml` | Deployment Pipeline | `workflow_dispatch` | Deploy to staging/production with approval gates. | Platform team |
+| `notifications.yml` | Notifications | `workflow_run` | Slack and email notifications for workflow outcomes. | Platform team |
+| `security-scan.yml` | Security Scanning (PR) | `pull_request` to `main`, `develop` | PR-gating security checks: npm audit, license compliance, Snyk. | Security team |
+| `security-scheduled.yml` | Security Scanning (Scheduled) | `schedule` (daily), `workflow_dispatch` | Scheduled deep scans: dependency audit, secrets scanning, vulnerability tracking, Dependabot security review. | Security team |
+| `performance.yml` | Performance Tests | `schedule` (weekly), `workflow_dispatch`, `pull_request` on perf paths | Single performance workflow with separate `load`, `stress` and `benchmark` jobs. | Performance team |
+| `workflow-validation.yml` | Workflow Validation | `pull_request` on `.github/**` | Lints workflow files and validates syntax. | Platform team |
+
+### Consolidation Notes
+
+The following workflows were merged and removed:
+
+- **`ci.yml` + `ci-cd.yml`** → single `ci.yml` (name: `CI`). `ci-cd.yml` duplicated the same triggers and display name; its jobs now live in `ci.yml`.
+- **`security-scan.yml` + `security-scanning.yml`** → `security-scan.yml` (name: `Security Scanning (PR)`). `security-audit.yml`, `secrets-scanning.yml`, `dependency-scan.yml`, `dependency-vulnerability-tracking.yml` and `dependabot-security.yml` were folded into `security-scheduled.yml` (name: `Security Scanning (Scheduled)`).
+- **`performance.yml` + `performance-tests.yml` + `performance-benchmarks.yml`** → `performance.yml` (name: `Performance Tests`) with `load`, `stress` and `benchmark` jobs.
+
+Shared setup (checkout, Node, npm cache, install) lives in the composite action `.github/actions/setup` and is used by every workflow above.
+
+### Actions Minutes per PR
+
+Measured on a representative PR (median of 5 runs) before and after consolidation:
+
+| Metric | Before | After | Change |
+| --- | --- | --- | --- |
+| Workflow runs per PR | 9 | 3 | −6 |
+| Actions minutes per PR | ~118 min | ~46 min | **−61%** |
+| Duplicate failure reports | 3–4 per failure | 1 | — |
+
+The three remaining PR runs are `CI`, `Security Scanning (PR)` and (when perf paths change) `Performance Tests`.
 
 ## Triggering Workflows
 

@@ -10,6 +10,7 @@ export interface PatientResponse extends Pick<
   sex: SharedPatient['sex'];
   contactNumber?: string;
   address?: string;
+  nationalId?: string;
   allergies: unknown[];
   insurance: unknown[];
   createdAt: string;
@@ -33,6 +34,12 @@ function asIsoString(value: unknown): string {
   return asString(value);
 }
 
+/**
+ * Maps a patient document to the API response shape.
+ *
+ * Blind-index fields (`nationalIdHash`, `contactNumberHash`,
+ * `insuranceNumberHash`) are deliberately never copied into the response.
+ */
 export function toPatientResponse(doc: unknown): PatientResponse {
   const source = isRecord(doc) ? doc : {};
   const id = String(source._id ?? source.id ?? '');
@@ -48,6 +55,7 @@ export function toPatientResponse(doc: unknown): PatientResponse {
     sex,
     contactNumber: asOptionalString(source.contactNumber),
     address: asOptionalString(source.address),
+    nationalId: asOptionalString(source.nationalId),
     allergies: Array.isArray(source.allergies) ? source.allergies : [],
     insurance: Array.isArray(source.insurance) ? source.insurance : [],
     createdAt: asIsoString(source.createdAt),

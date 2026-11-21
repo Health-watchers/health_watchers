@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { portalGet, portalFetch } from '@/lib/portalApi';
+import TelemedicineCall from '@/components/TelemedicineCall';
 
 interface Appointment {
   _id: string;
@@ -9,6 +10,7 @@ interface Appointment {
   type: string;
   status: string;
   chiefComplaint?: string;
+  isTelemedicine?: boolean;
 }
 
 interface WaitlistEntry {
@@ -39,6 +41,7 @@ export default function PortalAppointmentsPage() {
   const [showWaitlistForm, setShowWaitlistForm] = useState(false);
   const [joining, setJoining] = useState(false);
   const [leavingWaitlist, setLeavingWaitlist] = useState(false);
+  const [videoAppt, setVideoAppt] = useState<Appointment | null>(null);
   const [form, setForm] = useState({
     appointmentType: 'consultation' as (typeof APPOINTMENT_TYPES)[number],
     priority: 'routine' as 'routine' | 'urgent',
@@ -115,6 +118,24 @@ export default function PortalAppointmentsPage() {
   };
 
   if (loading) return <p className="text-gray-500 dark:text-gray-400">Loading…</p>;
+
+  if (videoAppt) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => setVideoAppt(null)}
+          className="text-sm text-gray-500 hover:underline dark:text-gray-400"
+        >
+          ← Back to appointments
+        </button>
+        <TelemedicineCall
+          appointmentId={videoAppt._id}
+          role="patient"
+          onLeave={() => setVideoAppt(null)}
+        />
+      </div>
+    );
+  }
 
   const upcoming = appointments.filter((a) => ['scheduled', 'confirmed'].includes(a.status));
   const past = appointments.filter((a) => !['scheduled', 'confirmed'].includes(a.status));
@@ -247,6 +268,7 @@ export default function PortalAppointmentsPage() {
               appt={a}
               onCancel={() => requestCancellation(a._id)}
               cancelling={cancelling === a._id}
+              onJoinVideo={() => setVideoAppt(a)}
             />
           ))
         )}
@@ -276,10 +298,12 @@ function AppointmentRow({
   appt,
   onCancel,
   cancelling,
+  onJoinVideo,
 }: {
   appt: Appointment;
   onCancel?: () => void;
   cancelling?: boolean;
+  onJoinVideo?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0 dark:border-gray-700">
@@ -294,6 +318,14 @@ function AppointmentRow({
         >
           {appt.status}
         </span>
+        {onJoinVideo && appt.isTelemedicine && ['scheduled', 'confirmed'].includes(appt.status) && (
+          <button
+            onClick={onJoinVideo}
+            className="rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+          >
+            Join Video Call
+          </button>
+        )}
         {onCancel && appt.status !== 'cancelled' && (
           <button
             onClick={onCancel}

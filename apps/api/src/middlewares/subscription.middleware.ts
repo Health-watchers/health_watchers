@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SubscriptionModel } from '../modules/subscriptions/subscription.model';
 import { UsageModel } from '../modules/subscriptions/usage.model';
-import { TIER_LIMITS } from '../modules/subscriptions/subscription.tiers';
+import { TIER_LIMITS, hasFeature, FeatureKey } from '../modules/subscriptions/subscription.tiers';
 import { createNotification } from '../modules/notifications/notification.service';
 import { UserModel } from '../modules/auth/models/user.model';
 import logger from '../utils/logger';
@@ -104,6 +104,37 @@ export function checkSubscriptionLimit(resource: LimitKey) {
           'Failed to send subscription warning notification'
         );
       }
+    }
+
+    return next();
+  };
+}
+
+export function requireFeature(feature: FeatureKey) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const clinicId = req.user?.clinicId;
+    if (!clinicId) return next();
+
+    const subscription = await SubscriptionModel.findOne({ clinicId });
+    if (!subscription) return next();
+
+    if (subscription.status === 'suspended') {
+      return res.status(402).json({
+        error: 'AccountSuspended',
+        message:
+          'Your account has been suspended due to non-payment. Please update your billing information.',
+        upgradeUrl: '/settings?section=subscription',
+      });
+    }
+
+    if (!hasFeature(subscription.tier, feature)) {
+      return res.status(402).json({
+        error: 'FeatureNotAvailable',
+        message: `The ${feature} feature is not available on your ${subscription.tier} plan.`,
+        feature,
+        tier: subscription.tier,
+        upgradeUrl: '/settings?section=subscription',
+      });
     }
 
     return next();

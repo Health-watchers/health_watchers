@@ -18,6 +18,8 @@ import {
 } from '../auth/services/login-alert.service';
 import { imageUpload } from '@api/middlewares/upload.middleware';
 import { uploadFile, getDownloadUrl, deleteFile } from '../documents/storage.service';
+import { generateBackupCodes, verifyBackupCode } from '../auth/services/backup-codes.service';
+import { recordMfaAuditEvent } from '../auth/services/mfa-audit.service';
 
 function isValidTimezone(tz: string): boolean {
   try {
@@ -330,11 +332,95 @@ router.post(
     }
 
     user.mfaEnabled = true;
+    user.mfaEnrolledAt = new Date();
+    const { plainCodes, hashedCodes } = await generateBackupCodes();
+    user.mfaBackupCodes = hashedCodes;
     await user.save();
+
+    await recordMfaAuditEvent({
+      userId: String(user._id),
+      clinicId: String(user.clinicId),
+      event: 'enrolled',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
     return res.json({
       status: 'success',
       message: 'MFA enabled successfully',
+      data: { backupCodes: plainCodes },
+    });
+  }
+);
+
+const mfaRecoverySchema = z.object({
+  email: z.string().email('A valid email is required'),
+  backupCode: z.string().min(1, 'A backup code is required'),
+});
+
+/**
+ * @swagger
+ * /users/me/mfa/recover:
+ *   post:
+ *     summary: Complete an MFA challenge using a backup recovery code
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, backupCode]
+ *             properties:
+ *               email:      { type: string, format: email }
+ *               backupCode: { type: string }
+ *     responses:
+ *       200:
+ *         description: Recovery code accepted; the code is consumed
+ *       400:
+ *         description: Invalid or already-used recovery code
+ */
+router.post(
+  '/me/mfa/recover',
+  validateRequest({ body: mfaRecoverySchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findOne({ email: req.body.email.toLowerCase() }).select(
+      '+mfaBackupCodes'
+    );
+    if (!user || !user.mfaEnabled) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid or already-used recovery code',
+      });
+    }
+
+    const { matched, remainingCodes } = await verifyBackupCode(
+      req.body.backupCode,
+      user.mfaBackupCodes ?? []
+    );
+
+    if (!matched) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid or already-used recovery code',
+      });
+    }
+
+    user.mfaBackupCodes = remainingCodes;
+    await user.save();
+
+    await recordMfaAuditEvent({
+      userId: String(user._id),
+      clinicId: String(user.clinicId),
+      event: 'recovery_code_used',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Recovery code accepted',
+      data: { remainingBackupCodes: remainingCodes.length },
     });
   }
 );
@@ -368,6 +454,69 @@ router.post('/me/mfa/disable', authenticate, async (req: Request, res: Response)
     message: 'MFA disabled successfully',
   });
 });
+
+const pushTokenSchema = z.object({
+  expoPushToken: z
+    .string()
+    .regex(/^ExponentPushToken\[[^\]]+\]$|^ExpoPushToken\[[^\]]+\]$/, 'Invalid Expo push token'),
+  deviceId: z.string().max(200).optional(),
+  platform: z.enum(['ios', 'android', 'web']).optional(),
+});
+
+/**
+ * @swagger
+ * /users/me/push-token:
+ *   post:
+ *     summary: Register the device's Expo push token (#1672)
+ *     description: >
+ *       Called by the mobile app on login so appointment reminders can be
+ *       delivered to the device. Re-registering the same token is idempotent.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [expoPushToken]
+ *             properties:
+ *               expoPushToken: { type: string, example: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]' }
+ *               deviceId:      { type: string }
+ *               platform:      { type: string, enum: [ios, android, web] }
+ *     responses:
+ *       200:
+ *         description: Push token stored
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  '/me/push-token',
+  authenticate,
+  validateRequest({ body: pushTokenSchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+    }
+
+    const { expoPushToken, deviceId, platform } = req.body;
+    const existing = (user.pushTokens ?? []).filter((t) => t.token !== expoPushToken);
+    existing.push({
+      token: expoPushToken,
+      deviceId,
+      platform,
+      updatedAt: new Date(),
+    });
+    user.pushTokens = existing;
+    await user.save();
+
+    return res.json({ status: 'success', message: 'Push token registered' });
+  }
+);
 
 const notificationTypesSchema = z
   .object({

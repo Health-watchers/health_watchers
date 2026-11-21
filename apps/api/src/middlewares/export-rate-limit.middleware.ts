@@ -39,3 +39,38 @@ export async function exportRateLimit(req: Request, res: Response, next: NextFun
     return next(err);
   }
 }
+
+/**
+ * Patient-initiated HIPAA export rate limiter: max 5 export requests per patient per hour.
+ * Backed by the shared Redis sliding-window limiter.
+ */
+const PATIENT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const PATIENT_MAX_REQUESTS = 5;
+
+export async function patientExportRateLimit(req: Request, res: Response, next: NextFunction) {
+  const patientId = req.user?.patientId ?? req.user?.id;
+  if (!patientId)
+    return res.status(401).json({ error: 'Unauthorized', message: 'No patient context' });
+
+  try {
+    const result = await checkRateLimit({
+      key: `export:patient:${patientId}`,
+      limit: PATIENT_MAX_REQUESTS,
+      windowMs: PATIENT_WINDOW_MS,
+    });
+
+    setRateLimitHeaders(res, result);
+
+    if (!result.allowed) {
+      return sendRateLimitExceeded(
+        res,
+        result,
+        `Export limit of ${PATIENT_MAX_REQUESTS} requests per hour exceeded.`,
+      );
+    }
+
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}

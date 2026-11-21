@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 12;
@@ -15,6 +15,10 @@ const IV_LEN = 12;
  *     e.g. FIELD_ENCRYPTION_KEY_V1=<old key>  while FIELD_ENCRYPTION_KEY=<new key>
  *   - Encrypted values are prefixed with `v<n>:` so the correct key can be
  *     selected at decrypt time.
+ *
+ * The key is hydrated at bootstrap from AWS Secrets Manager (see
+ * `lib/secrets-manager.ts`) when it is not already injected by the
+ * environment (k8s ExternalSecrets / Helm / Terraform).
  */
 
 function getCurrentVersion(): number {
@@ -89,4 +93,42 @@ export function decrypt(encoded: string): string {
   const decipher = createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
   return decipher.update(Buffer.from(ctHex, 'hex')).toString('utf8') + decipher.final('utf8');
+}
+
+/**
+ * Resolves the blind-index pepper key.
+ *
+ * The pepper is deliberately separate from the encryption key so that a
+ * compromise of one does not weaken the other, and so hashes cannot be
+ * correlated with ciphertexts produced by another system.
+ */
+function getBlindIndexKey(): Buffer {
+  const hex = process.env.FIELD_ENCRYPTION_BLIND_INDEX_KEY ?? '';
+  if (hex.length !== 64)
+    throw new Error(
+      'FIELD_ENCRYPTION_BLIND_INDEX_KEY must be a 64-char hex string (32 bytes)'
+    );
+  return Buffer.from(hex, 'hex');
+}
+
+/**
+ * Computes a deterministic HMAC-SHA256 "blind index" for a PHI value.
+ *
+ * AES-256-GCM ciphertext is randomized (random IV), so encrypted columns can
+ * never be queried directly. The blind index is deterministic — the same
+ * normalized plaintext always yields the same 64-char hex digest — which
+ * allows equality lookups (`{ nationalIdHash: blindIndex(nationalId) }`)
+ * without ever storing or querying the plaintext.
+ *
+ * Trade-off: determinism leaks equality (two records with the same value are
+ * linkable). This is an accepted trade-off for searchability; the separate
+ * pepper limits cross-system correlation.
+ *
+ * Values are normalized (trimmed + lowercased) before hashing so that
+ * formatting differences do not break lookups.
+ */
+export function blindIndex(plaintext: string): string {
+  const key = getBlindIndexKey();
+  const normalized = plaintext.trim().toLowerCase();
+  return createHmac('sha256', key).update(normalized, 'utf8').digest('hex');
 }

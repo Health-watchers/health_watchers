@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ReportBuilder } from '@/components/analytics/ReportBuilder';
 import type { ReportDefinition } from '@/lib/analytics/reportTypes';
 
@@ -21,6 +22,15 @@ export default function ReportBuilderPage() {
           filtering, drill-down, export, scheduling, sharing, and benchmark comparisons.
         </p>
       </div>
+
+      <nav aria-label="Related reports" className="flex flex-wrap gap-4 text-sm">
+        <Link href="/reports/patient-surveys" className="text-blue-600 hover:underline">
+          Patient surveys
+        </Link>
+        <Link href="/reports/population-health" className="text-blue-600 hover:underline">
+          Population health
+        </Link>
+      </nav>
 
       <ReportBuilder onGenerate={setLastGenerated} />
 

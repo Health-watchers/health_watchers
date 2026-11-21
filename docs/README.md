@@ -24,6 +24,7 @@ Repository-level documents:
 | [RESPONSIVE_DESIGN_SYSTEM.md](./RESPONSIVE_DESIGN_SYSTEM.md) | Breakpoints and responsive UI rules |
 | [adr/](./adr/README.md) | Architecture Decision Records |
 | [design/](./design/) | Product/UX design specifications |
+| [design/README.md](./design/README.md) | Design assets, Figma source, and export workflow |
 | [diagrams/](./diagrams/README.md) | Mermaid diagram sources |
 
 ## API
@@ -119,3 +120,9 @@ Repository-level documents:
 | `runbooks/BACKUP_AND_DR_RUNBOOK.md` | [runbooks/05-backup.md](./runbooks/05-backup.md#backup--dr-automation) |
 | Root `SECURITY_SECRETS_REMEDIATION.md` | [SECURITY_REMEDIATION.md](./SECURITY_REMEDIATION.md#secrets-leak-remediation) |
 | Root `IMPLEMENTATION_SUMMARY.md`, `SECURITY_IMPLEMENTATION_SUMMARY.md`, `BATCH_*_IMPLEMENTATION.md` | [CHANGELOG.md — Implementation History](../CHANGELOG.md#implementation-history) |
+| Root `BATCH_94_REFACTORING_PLAN.md`, `BATCH_96_REFACTORING_PLAN.md` | [adr/](./adr/README.md) (plans converted to ADRs) and [CHANGELOG.md — Implementation History](../CHANGELOG.md#implementation-history) |
+| `apps/api/BACKEND_INFRASTRUCTURE_IMPLEMENTATION.md` | [ARCHITECTURE.md](./ARCHITECTURE.md) and [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) |
+| `apps/web/BUNDLE_OPTIMIZATION_GUIDE.md` | [FRONTEND_PERFORMANCE_OPTIMIZATION.md](./FRONTEND_PERFORMANCE_OPTIMIZATION.md) |
+| `apps/web/MOBILE_RESPONSIVE_GUIDE.md` | [RESPONSIVE_DESIGN_SYSTEM.md](./RESPONSIVE_DESIGN_SYSTEM.md) |
+| `UI Designs/` | [design/](./design/README.md) |
+| `.kiro/specs/stellar-batch-payments/*` | [adr/](./adr/README.md) (editor-tool specs are local-only; see `.gitignore`) |

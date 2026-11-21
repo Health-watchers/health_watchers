@@ -1,10 +1,13 @@
-import { Request } from 'express';
+import { Request, Response } from 'express';
 
 /**
- * Standard v2 response envelope (docs/api-versioning-strategy.md).
+ * Standard v2 response envelope (docs/ERROR_HANDLING_STANDARDIZATION.md).
  *
- * Lists return `items` + a `meta` object instead of the v1 `data[]` +
- * `pagination` pair; `links` carries ready-to-follow paging URLs.
+ * Success: `{ data, meta? }`
+ * Error:   `{ error: { code, message, details?, requestId } }`
+ *
+ * Lists put their items in `data` and their paging information in `meta`
+ * (including `links` with ready-to-follow paging URLs).
  */
 export interface V2ListMeta {
   limit: number;
@@ -14,32 +17,43 @@ export interface V2ListMeta {
   [key: string]: unknown;
 }
 
-export interface V2ListResponse<T> {
-  success: true;
-  version: '2.0';
-  items: T[];
-  meta: V2ListMeta & { requestId?: string };
-  links: { self: string; next: string | null };
+export interface V2SuccessResponse<T> {
+  data: T;
+  meta?: Record<string, unknown>;
+}
+
+export interface V2ErrorBody {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  requestId: string;
 }
 
 export interface V2ErrorResponse {
-  success: false;
-  version: '2.0';
-  error: { code: string; message: string } & Record<string, unknown>;
+  error: V2ErrorBody;
 }
 
-export function v2List<T>(req: Request, items: T[], meta: V2ListMeta): V2ListResponse<T> {
+function resolveRequestId(req: Request): string {
+  return req.requestId ?? (req.headers['x-request-id'] as string) ?? '';
+}
+
+export function v2Success<T>(data: T, meta?: Record<string, unknown>): V2SuccessResponse<T> {
+  return meta === undefined ? { data } : { data, meta };
+}
+
+export function v2List<T>(req: Request, items: T[], meta: V2ListMeta): V2SuccessResponse<T[]> {
   const self = `${req.baseUrl}${req.path === '/' ? '' : req.path}`;
   const next = meta.nextCursor ? new URLSearchParams(req.query as Record<string, string>) : null;
   if (next && meta.nextCursor) next.set('cursor', meta.nextCursor);
   return {
-    success: true,
-    version: '2.0',
-    items,
-    meta: { ...meta, requestId: req.requestId ?? (req.headers['x-request-id'] as string) },
-    links: {
-      self: req.originalUrl,
-      next: next ? `${self}?${next.toString()}` : null,
+    data: items,
+    meta: {
+      ...meta,
+      requestId: resolveRequestId(req),
+      links: {
+        self: req.originalUrl,
+        next: next ? `${self}?${next.toString()}` : null,
+      },
     },
   };
 }
@@ -47,7 +61,37 @@ export function v2List<T>(req: Request, items: T[], meta: V2ListMeta): V2ListRes
 export function v2Error(
   code: string,
   message: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  requestId = ''
 ): V2ErrorResponse {
-  return { success: false, version: '2.0', error: { code, message, ...details } };
+  const error: V2ErrorBody = { code, message, requestId };
+  if (details !== undefined) error.details = details;
+  return { error };
+}
+
+declare module 'express-serve-static-core' {
+  interface Response {
+    /** Send a standard v2 success envelope: `{ data, meta? }`. */
+    ok<T>(data: T, meta?: Record<string, unknown>): Response;
+    /** Send a standard v2 error envelope: `{ error: { code, message, details?, requestId } }`. */
+    fail(code: string, message: string, details?: Record<string, unknown>): Response;
+  }
+}
+
+/**
+ * Attach the `ok` / `fail` helpers to an Express response. Registered as
+ * middleware so every v2 route can respond with the standard envelope.
+ */
+export function envelopeHelpers(req: Request, res: Response, next: () => void): void {
+  res.ok = function ok<T>(data: T, meta?: Record<string, unknown>): Response {
+    return this.json(v2Success(data, meta));
+  };
+  res.fail = function fail(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>
+  ): Response {
+    return this.json(v2Error(code, message, details, resolveRequestId(req)));
+  };
+  next();
 }

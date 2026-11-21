@@ -1,17 +1,19 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { config } from '@health-watchers/config';
 import { z } from 'zod';
-
-let clientInstance: GoogleGenerativeAI | null = null;
-
-function getGeminiClient(): GoogleGenerativeAI {
-  if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
-  if (!clientInstance) clientInstance = new GoogleGenerativeAI(config.geminiApiKey);
-  return clientInstance;
-}
+import {
+  generateText,
+  generateJson,
+  isLLMConfigured,
+  AIUnavailableError,
+} from '../../lib/llm';
 
 export function isAIServiceAvailable(): boolean {
-  return !!config.geminiApiKey;
+  return isLLMConfigured();
+}
+
+function wrapLLMError(operation: string, error: unknown): Error {
+  if (error instanceof AIUnavailableError) return error;
+  const msg = error instanceof Error ? error.message : 'Unknown error';
+  return new Error(`Failed to ${operation}: ${msg}`);
 }
 
 export const AI_DISCLAIMER =
@@ -44,8 +46,6 @@ export interface ClinicalNotesInput {
 }
 
 export async function generateClinicalSummary(clinicalNotes: ClinicalNotesInput): Promise<string> {
-  const client = getGeminiClient();
-
   const rawText = [
     `Chief Complaint: ${clinicalNotes.chiefComplaint}`,
     clinicalNotes.notes ? `Clinical Notes: ${clinicalNotes.notes}` : '',
@@ -60,27 +60,20 @@ export async function generateClinicalSummary(clinicalNotes: ClinicalNotesInput)
   const prompt = `Summarize the following clinical encounter in 2-3 sentences for a medical professional. Include chief complaint, key findings, and recommended follow-up:\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate AI summary: ${msg}`);
+    throw wrapLLMError('generate AI summary', error);
   }
 }
 
 export async function generateRawTextSummary(text: string): Promise<string> {
-  const client = getGeminiClient();
   const safeText = stripPII(text);
   const prompt = `Summarize the following clinical notes in 2-3 sentences for a medical professional. Include chief complaint, key findings, and recommended follow-up:\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate AI summary: ${msg}`);
+    throw wrapLLMError('generate AI summary', error);
   }
 }
 
@@ -108,8 +101,6 @@ export interface PatientFriendlySummaryInput {
 export async function generatePatientFriendlySummary(
   input: PatientFriendlySummaryInput
 ): Promise<string> {
-  const client = getGeminiClient();
-
   const parts: string[] = [`Chief Complaint: ${input.chiefComplaint}`];
   if (input.soapNotes?.assessment) parts.push(`Assessment: ${input.soapNotes.assessment}`);
   if (input.soapNotes?.plan) parts.push(`Plan: ${input.soapNotes.plan}`);
@@ -127,18 +118,13 @@ export async function generatePatientFriendlySummary(
   const prompt = `You are a patient-friendly health assistant. Summarize the following clinical encounter in plain, easy-to-understand language (no medical jargon) in 2-4 sentences. Focus on: what the visit was about, what was found, and what the patient should do next. Do not include any personally identifiable information.\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient-friendly summary: ${msg}`);
+    throw wrapLLMError('generate patient-friendly summary', error);
   }
 }
 
 export async function generatePatientInsights(encounters: EncounterSummary[]): Promise<string> {
-  const client = getGeminiClient();
-
   const encounterText = encounters
     .map((e, i) => {
       const date = new Date(e.createdAt).toLocaleDateString();
@@ -156,12 +142,9 @@ export async function generatePatientInsights(encounters: EncounterSummary[]): P
   const prompt = `You are a medical AI assistant. Based on the following ${encounters.length} clinical encounters for a single patient, provide a longitudinal health trend summary in 3-5 sentences. Identify recurring conditions, patterns, or areas of concern:\n\n${encounterText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient insights: ${msg}`);
+    throw wrapLLMError('generate patient insights', error);
   }
 }
 
@@ -213,8 +196,6 @@ export interface PatientHealthSummary {
 export async function generatePatientHealthSummary(
   input: PatientHealthSummaryInput
 ): Promise<PatientHealthSummary> {
-  const client = getGeminiClient();
-
   const promptPayload = {
     demographics: {
       age: input.age ?? null,
@@ -267,18 +248,10 @@ Patient context:
 ${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     return patientHealthSummarySchema.parse(parsed);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient health summary: ${msg}`);
+    throw wrapLLMError('generate patient health summary', error);
   }
 }
 
@@ -368,20 +341,10 @@ Rules:
 export async function generateDifferentialDiagnosis(
   input: DifferentialDiagnosisInput
 ): Promise<DifferentialDiagnosisResponse> {
-  const client = getGeminiClient();
   const prompt = buildDifferentialDiagnosisPrompt(input);
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-
-    // The model might still return markdown code fences even with responseMimeType
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = differentialDiagnosisResponseSchema.parse(parsed);
 
     return {
@@ -389,8 +352,7 @@ export async function generateDifferentialDiagnosis(
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate differential diagnosis: ${msg}`);
+    throw wrapLLMError('generate differential diagnosis', error);
   }
 }
 
@@ -432,8 +394,6 @@ const dosageResponseSchema = z.object({
 export async function calculateDosage(
   input: DosageCalculatorInput
 ): Promise<DosageCalculatorResponse> {
-  const client = getGeminiClient();
-
   const context = [
     `Drug: ${input.drugName}`,
     `Indication: ${input.indication}`,
@@ -471,14 +431,7 @@ Rules:
 5. If the drug is contraindicated for this patient, still return the structure but include the contraindication.`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = dosageResponseSchema.parse(parsed);
 
     return {
@@ -486,8 +439,7 @@ Rules:
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to calculate dosage: ${msg}`);
+    throw wrapLLMError('calculate dosage', error);
   }
 }
 
@@ -786,26 +738,11 @@ Rules:
 
 async function checkViaGemini(medications: string[]): Promise<DrugInteractionResult | null> {
   if (!isAIServiceAvailable()) return null;
-  const client = getGeminiClient();
-
-  const model = client.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const prompt = buildDrugInteractionPrompt(medications, attempt > 0);
-    let rawText = '';
     try {
-      const result = await model.generateContent(prompt);
-      rawText = result.response.text().trim();
-
-      // Log raw output at debug level only — never expose to client
-      const { default: logger } = await import('../../utils/logger');
-      logger.debug({ attempt, rawText }, '[ai] drug interaction raw LLM response');
-
-      const jsonStr = extractJSON(rawText);
-      const parsed = JSON.parse(jsonStr);
+      const parsed = await generateJson(prompt);
       const validated = drugInteractionResultSchema.parse(parsed);
 
       const interactions: DrugInteraction[] = validated.interactions.map((interaction) => ({
@@ -919,8 +856,6 @@ export async function suggestClinicalCodes(input: {
   clinicalNotes: string;
   procedures?: string[];
 }): Promise<ClinicalCodingResponse> {
-  const client = getGeminiClient();
-
   const safeNotes = stripPII(input.clinicalNotes);
   const procedureList = input.procedures?.length ? input.procedures.join(', ') : 'None documented';
 
@@ -962,14 +897,7 @@ Rules:
 7. Codes must be valid ICD-10 or CPT codes.`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = clinicalCodingResponseSchema.parse(parsed);
 
     return {
@@ -977,8 +905,7 @@ Rules:
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to suggest clinical codes: ${msg}`);
+    throw wrapLLMError('suggest clinical codes', error);
   }
 }
 
@@ -998,7 +925,6 @@ export async function transcribeAndCorrect(text: string): Promise<TranscriptionR
     throw new Error('Text input is required');
   }
 
-  const client = getGeminiClient();
   const safeText = stripPII(text);
 
   const prompt = `You are a medical scribe. Given raw voice transcription, correct medical terminology, expand abbreviations (e.g. SOB → shortness of breath), add punctuation, and structure the note into SOAP format.
@@ -1018,14 +944,10 @@ Raw transcription:
 ${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = (await generateJson(prompt)) as {
+      corrected?: string;
+      soap?: { S?: string; O?: string; A?: string; P?: string };
+    };
 
     return {
       corrected: parsed.corrected || '',
@@ -1037,8 +959,7 @@ ${safeText}`;
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to transcribe and correct: ${msg}`);
+    throw wrapLLMError('transcribe and correct', error);
   }
 }
 
@@ -1063,23 +984,24 @@ export function isTranscribableAudioType(mimeType: string): boolean {
  * expansion happens client-side.
  */
 export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<string> {
-  const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        data: audio.toString('base64'),
-        mimeType: mimeType.split(';')[0].trim().toLowerCase(),
-      },
-    },
-    {
-      text:
-        'Transcribe this clinical dictation verbatim. Keep medical abbreviations exactly as ' +
-        'spoken, add sentence punctuation, and return only the transcript text with no ' +
-        'commentary. If there is no speech, return an empty string.',
-    },
-  ]);
-
-  return result.response.text().trim();
+  try {
+    return await generateText({
+      parts: [
+        {
+          inlineData: {
+            data: audio.toString('base64'),
+            mimeType: mimeType.split(';')[0].trim().toLowerCase(),
+          },
+        },
+        {
+          text:
+            'Transcribe this clinical dictation verbatim. Keep medical abbreviations exactly as ' +
+            'spoken, add sentence punctuation, and return only the transcript text with no ' +
+            'commentary. If there is no speech, return an empty string.',
+        },
+      ],
+    });
+  } catch (error) {
+    throw wrapLLMError('transcribe audio', error);
+  }
 }

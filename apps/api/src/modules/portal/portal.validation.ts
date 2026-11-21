@@ -3,9 +3,24 @@ import { z } from 'zod';
 export const portalLoginSchema = z.object({
   email: z.string().email(),
   dateOfBirth: z.string().min(1),
+  captchaToken: z.string().optional(),
 });
 
 export type PortalLoginDto = z.infer<typeof portalLoginSchema>;
+
+export const portalUnlockRequestSchema = z.object({
+  email: z.string().email(),
+  channel: z.enum(['email', 'sms']).default('email'),
+});
+
+export type PortalUnlockRequestDto = z.infer<typeof portalUnlockRequestSchema>;
+
+export const portalUnlockVerifySchema = z.object({
+  email: z.string().email(),
+  token: z.string().min(1),
+});
+
+export type PortalUnlockVerifyDto = z.infer<typeof portalUnlockVerifySchema>;
 
 export const portalMfaSetupSchema = z.object({
   method: z.enum(['totp', 'sms']),
