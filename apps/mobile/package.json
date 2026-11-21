@@ -21,7 +21,7 @@
     "@health-watchers/types": "*",
     "@react-navigation/bottom-tabs": "^6.5.0",
     "@react-navigation/native": "^6.1.0",
-    "@react-navigation/native-stack": "^6.9.0",
+    "@react-navigation/native-stack": "^6.11.0",
     "expo": "^50.0.0",
     "expo-local-authentication": "^14.0.0",
     "expo-notifications": "^0.27.0",
