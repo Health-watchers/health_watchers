@@ -4,10 +4,10 @@
   "description": "Backend API service for Health Watchers healthcare management platform",
   "license": "MIT",
   "scripts": {
-    "dev": "ts-node-dev --respawn -r tsconfig-paths/register src/app.ts",
+    "dev": "ts-node-dev --respawn -r tsconfig-paths/register src/server.ts",
     "dev:worker": "ts-node-dev --respawn -r tsconfig-paths/register src/worker.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",

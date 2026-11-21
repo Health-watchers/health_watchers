@@ -4,8 +4,6 @@ import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
 import express from 'express';
-import { createServer } from 'http';
-import mongoose from 'mongoose';
 import helmet from 'helmet';
 import cors, { type CorsOptions } from 'cors';
 import {
@@ -14,12 +12,9 @@ import {
 } from './middlewares/compression.middleware';
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
-import { connectDB, getPoolMetrics } from './config/db';
 import { healthRoutes } from './modules/health/health.controller';
 import { backupHealthRoutes } from './modules/health/backup-health.controller';
 import { readyRoutes } from './modules/health/ready.controller';
-import { initSocket } from './realtime/socket';
-import { initializeBackupMetrics } from './services/backup-metrics.service';
 import { setupSwagger } from './docs/swagger';
 import { errorHandler } from './middlewares/error.middleware';
 import { generalLimiter } from './middlewares/rate-limit.middleware';
@@ -33,31 +28,17 @@ import {
 import { v1EnvelopeNormalizer } from './middlewares/v1-envelope.middleware';
 import { v1DeprecationForRoute } from './middlewares/v1-deprecation.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
-import { startJobScheduler, stopJobScheduler } from './jobs';
 import { jobsAdminRouter } from './jobs/jobs-admin.controller';
 import { fhirRouter } from './modules/fhir/fhir.router';
-import { warmCache, registerWarmup } from './services/cache.service';
-
-// ── #1071 Cache warm-up registrations ─────────────────────────────────────────
-// Register a loader for the first page of active patients per clinic.
-// warmCache() is called after DB connects in startServer(); until then only
-// the registry is populated (no DB access here at module load time).
-// Individual clinic registrations happen inside startServer() once the DB
-// pool is ready and the clinic list is available.
-
-import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import logger from './utils/logger';
-import { registerGracefulShutdown } from './utils/graceful-shutdown';
 import { v2Router } from './routes/v2';
 import { v1Router } from './routes/v1';
-import { SocketService } from './services/socket.service';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import { mutationAuditMiddleware } from './middlewares/mutation-audit.middleware';
 import cookieParser from 'cookie-parser';
 import { csrfMiddleware } from './middlewares/csrf.middleware';
-import { seedBuiltInRules } from './modules/cds/cds-seed';
 import federationRouter from './modules/federation/federation.router';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { correlationMiddleware } from './middlewares/correlation.middleware';
