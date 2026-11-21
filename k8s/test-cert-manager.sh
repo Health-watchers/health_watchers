@@ -1,16 +1,18 @@
 #!/bin/bash
 
 # Test suite for SSL/TLS Certificate Management
+# Validates the actual manifest in k8s/cert-manager-setup.yaml.
 
 PASSED=0
 FAILED=0
 NAMESPACE="health-watchers"
+MANIFEST="$(dirname "$0")/cert-manager-setup.yaml"
 
 assert_equals() {
   local expected="$1"
   local actual="$2"
   local message="$3"
-  
+
   if [[ "$expected" == "$actual" ]]; then
     echo "✓ $message"
     ((PASSED++))
@@ -24,7 +26,7 @@ assert_contains() {
   local haystack="$1"
   local needle="$2"
   local message="$3"
-  
+
   if [[ "$haystack" == *"$needle"* ]]; then
     echo "✓ $message"
     ((PASSED++))
@@ -34,74 +36,84 @@ assert_contains() {
   fi
 }
 
+assert_manifest_contains() {
+  local needle="$1"
+  local message="$2"
+
+  if grep -qF -- "$needle" "$MANIFEST"; then
+    echo "✓ $message"
+    ((PASSED++))
+  else
+    echo "✗ $message (missing: $needle)"
+    ((FAILED++))
+  fi
+}
+
 # Test: Certificate CRD definition
 test_certificate_crd() {
   echo "Testing Certificate CRD..."
-  
-  # Verify CRD structure
-  local crd_name="certificates.cert-manager.io"
-  assert_contains "$crd_name" "certificates" "CRD name includes 'certificates'"
+
+  assert_manifest_contains "certificates.cert-manager.io" "Certificate CRD defined"
 }
 
 # Test: Issuer configuration
 test_issuer_config() {
   echo "Testing Issuer Configuration..."
-  
-  # Verify Let's Encrypt ACME server
-  local acme_server="https://acme-v02.api.letsencrypt.org/directory"
-  assert_contains "$acme_server" "acme-v02" "ACME server URL correct"
+
+  assert_manifest_contains "https://acme-v02.api.letsencrypt.org/directory" "Let's Encrypt ACME v02 server configured"
+  assert_manifest_contains "name: letsencrypt-prod" "letsencrypt-prod issuer defined"
 }
 
 # Test: Certificate configuration
 test_certificate_config() {
   echo "Testing Certificate Configuration..."
-  
-  # Verify DNS names
-  local dns_names="api.healthwatchers.com healthwatchers.com www.healthwatchers.com"
-  assert_contains "$dns_names" "api.healthwatchers.com" "Certificate includes primary domain"
-  
-  # Verify renewal period (720h = 30 days)
-  assert_contains "720h" "720" "Renewal before period set to 720 hours"
+
+  assert_manifest_contains "api.healthwatchers.com" "Certificate includes primary domain"
+  assert_manifest_contains "www.healthwatchers.com" "Certificate includes www domain"
+  assert_manifest_contains "renewBefore: 720h" "Renewal before period set to 720 hours (30 days)"
 }
 
 # Test: Alert rules for expiry monitoring
 test_alert_rules() {
   echo "Testing Alert Rules..."
-  
-  local alert1="CertificateExpirySoon"
-  local alert2="CertificateExpiryImmediate"
-  
-  assert_equals "$alert1" "CertificateExpirySoon" "7-day expiry alert defined"
-  assert_equals "$alert2" "CertificateExpiryImmediate" "24-hour expiry alert defined"
+
+  assert_manifest_contains "CertificateExpiry30Days" "30-day expiry alert defined"
+  assert_manifest_contains "30*24*3600" "30-day expiry expression present"
+  assert_manifest_contains "CertificateExpirySoon" "7-day expiry alert defined"
+  assert_manifest_contains "CertificateExpiryImmediate" "24-hour expiry alert defined"
+  assert_manifest_contains "runbook_url" "Alerts reference the renewal runbook"
 }
 
 # Test: Secret reference
 test_secret_reference() {
   echo "Testing Secret Reference..."
-  
-  local secret_name="health-watchers-tls"
-  assert_equals "$secret_name" "health-watchers-tls" "Certificate stores secret correctly"
+
+  assert_manifest_contains "secretName: health-watchers-tls" "Certificate stores secret correctly"
 }
 
 # Test: Namespace context
 test_namespace() {
   echo "Testing Namespace Context..."
-  
-  assert_equals "$NAMESPACE" "health-watchers" "Correct namespace configured"
+
+  assert_manifest_contains "namespace: $NAMESPACE" "Correct namespace configured"
 }
 
 # Test: HTTP01 solver configuration
 test_http01_solver() {
   echo "Testing HTTP01 Solver..."
-  
-  local solver="http01"
-  assert_contains "http01" "http01" "HTTP01 challenge solver configured"
+
+  assert_manifest_contains "http01" "HTTP01 challenge solver configured"
 }
 
 run_tests() {
   echo "Running SSL/TLS Certificate Management Tests..."
   echo "================================================"
-  
+
+  if [[ ! -f "$MANIFEST" ]]; then
+    echo "✗ Manifest not found: $MANIFEST"
+    exit 1
+  fi
+
   test_certificate_crd
   test_issuer_config
   test_certificate_config
@@ -109,11 +121,11 @@ run_tests() {
   test_secret_reference
   test_namespace
   test_http01_solver
-  
+
   echo "================================================"
   echo "Tests Passed: $PASSED"
   echo "Tests Failed: $FAILED"
-  
+
   if [[ $FAILED -gt 0 ]]; then
     exit 1
   fi

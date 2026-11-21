@@ -173,6 +173,53 @@ Security headers are automatically added:
 - Referrer-Policy: strict-origin-when-cross-origin
 - Permissions-Policy: camera, microphone, geolocation disabled
 
+### Certificate Management (cert-manager)
+
+TLS certificates are issued and renewed automatically by
+[cert-manager](https://cert-manager.io/) using Let's Encrypt (ACME v02). The
+manifests live in `k8s/cert-manager-setup.yaml`.
+
+**Prerequisite:** install cert-manager and its CRDs in the cluster:
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+
+**Issuer** — `letsencrypt-prod` (namespace `health-watchers`):
+
+- ACME server: `https://acme-v02.api.letsencrypt.org/directory`
+- Solver: `http01` via ingress class `nginx`
+
+**Certificate** — `health-watchers-cert`:
+
+| Field | Value |
+| --- | --- |
+| `secretName` | `health-watchers-tls` |
+| `dnsNames` | `api.healthwatchers.com`, `healthwatchers.com`, `www.healthwatchers.com` |
+| `issuerRef` | `letsencrypt-prod` |
+| `renewBefore` | `720h` (renews 30 days before expiry) |
+
+The Ingress references the issuer via the
+`cert-manager.io/cluster-issuer: letsencrypt-prod` annotation, so cert-manager
+creates and refreshes the `health-watchers-tls` secret automatically.
+
+**Verify:**
+
+```bash
+kubectl get certificate -n health-watchers
+kubectl describe certificate health-watchers-cert -n health-watchers
+kubectl get secret health-watchers-tls -n health-watchers \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+```
+
+**Expiry alerts** — the `cert-expiry-alerts` PrometheusRule fires
+`CertificateExpiry30Days` (warning), `CertificateExpirySoon` (7 days, warning)
+and `CertificateExpiryImmediate` (24 hours, critical). The docker-compose
+monitoring stack mirrors these in `monitoring/alerts-certificates.yml`.
+
+**Renewal failure:** see
+[`monitoring/runbooks/CERTIFICATE_RENEWAL.md`](../monitoring/runbooks/CERTIFICATE_RENEWAL.md).
+
 ### Network Policies
 
 NetworkPolicies control traffic flow:
@@ -362,9 +409,10 @@ kubectl get ingress -n health-watchers
 kubectl describe ingress health-watchers -n health-watchers
 ```
 
-Verify cert-manager:
+Verify cert-manager (see [Certificate Management](#certificate-management-cert-manager)):
 ```bash
 kubectl get certificate -n health-watchers
+kubectl describe certificate health-watchers-cert -n health-watchers
 ```
 
 ## Production Checklist
