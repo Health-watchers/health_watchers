@@ -33,7 +33,7 @@
     "@google/generative-ai": "^0.24.1",
     "@health-watchers/anonymize": "*",
     "@health-watchers/config": "*",
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "@opentelemetry/auto-instrumentations-node": "^0.77.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
     "@opentelemetry/sdk-node": "^0.215.0",
