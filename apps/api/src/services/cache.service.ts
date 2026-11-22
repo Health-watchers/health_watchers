@@ -66,6 +66,48 @@ export function registerWarmup<T>(entry: WarmupEntry<T>): void {
 }
 
 /**
+ * Register a patient-list warmup entry for a clinic.
+ * Replaces per-clinic closures with dynamic imports by using a single
+ * module-level loader factory. Safe to call at startup or from a job.
+ */
+export function registerPatientListWarmup(clinicId: string): void {
+  registerWarmup({
+    key: `patients:list:${clinicId}:page=1:limit=20`,
+    ttlSeconds: 60,
+    loader: async () => {
+      const { paginate } = await import('../utils/paginate');
+      const { toPatientResponse } = await import('../modules/patients/patients.transformer');
+      const { PatientModel } = await import('../modules/patients/models/patient.model');
+      const result = await paginate(
+        PatientModel,
+        { clinicId, isActive: true },
+        1,
+        20,
+        { createdAt: -1 },
+        {
+          projection: {
+            systemId: 1,
+            firstName: 1,
+            lastName: 1,
+            searchName: 1,
+            dateOfBirth: 1,
+            sex: 1,
+            contactNumber: 1,
+            clinicId: 1,
+            isActive: 1,
+            riskLevel: 1,
+            riskScore: 1,
+            createdAt: 1,
+          },
+          hint: 'clinicId_1_isActive_1',
+        }
+      );
+      return { data: result.data.map(toPatientResponse), pagination: result.meta };
+    },
+  });
+}
+
+/**
  * Warm the cache by running all registered loaders that are currently missing.
  * Safe to call on startup — each loader is only executed if the key is absent.
  */
