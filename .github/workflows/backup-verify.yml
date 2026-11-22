@@ -12,7 +12,7 @@ on:
         default: false
 
 env:
-  NODE_VERSION: 20
+  NODE_VERSION: 18
 
 jobs:
   # Guard job: checks required secrets via env indirection so the workflow
@@ -157,7 +157,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*✅ Backup Verification Successful*\n\nThe MongoDB backup has been successfully verified and restored.\n\n*Timestamp:* ${{ steps.verify.outputs.timestamp }}\n*PITR Test:* ${{ steps.pitr_test.outputs.pitr_status || 'N/A' }}\n*PITR Target:* ${{ steps.pitr_test.outputs.pitr_target_time || 'N/A' }}\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+                    "text": "*✅ Backup Verification Successful*\n\nThe MongoDB backup has been successfully verified and restored.\n\n*Timestamp:* ${{ steps.verify.outputs.timestamp }}\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
                   }
                 }
               ]

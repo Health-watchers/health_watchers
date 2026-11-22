@@ -4,10 +4,18 @@ on:
   schedule:
     # Full backup daily at 2 AM UTC
     - cron: '0 2 * * *'
-    # Oplog archive every 5 minutes for PITR
+    # Incremental backup every 6 hours
+    - cron: '0 2,8,14,20 * * *'
+    # Oplog archive for PITR every 5 minutes
     - cron: '*/5 * * * *'
+    # Weekly E2E verification on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
+      verify:
+        description: 'Run restore verification after backup'
+        type: boolean
+        default: false
       backup_type:
         description: 'Backup type to run'
         type: choice
@@ -16,10 +24,6 @@ on:
           - oplog
           - both
         default: both
-      verify:
-        description: 'Run restore verification after backup'
-        type: boolean
-        default: false
       legacy_backup:
         description: 'Run the legacy GitHub Actions backup (primary backups run as k8s CronJobs)'
         type: boolean

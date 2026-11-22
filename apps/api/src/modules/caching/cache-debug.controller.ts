@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { advancedCaching } from '../../services/advanced-caching.service';
 import { authenticate as requireAuth } from '../../middlewares/auth.middleware';
-import { requireRole } from '../../middlewares/role.middleware';
+import { requirePermission } from '../../middlewares/rbac.middleware';
 import logger from '../../utils/logger';
 
 const router = Router();
 
-router.get('/cache/metrics', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
+router.get('/cache/metrics', requireAuth, requirePermission('cache:read'), (_req: Request, res: Response) => {
   try {
     const metrics = advancedCaching.getMetrics();
     res.json(metrics);
@@ -16,7 +16,7 @@ router.get('/cache/metrics', requireAuth, requireRole('admin'), (_req: Request, 
   }
 });
 
-router.get('/cache/debug', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
+router.get('/cache/debug', requireAuth, requirePermission('cache:read'), (_req: Request, res: Response) => {
   try {
     const debugInfo = advancedCaching.getDebugInfo();
     res.json(debugInfo);
@@ -26,7 +26,7 @@ router.get('/cache/debug', requireAuth, requireRole('admin'), (_req: Request, re
   }
 });
 
-router.get('/cache/entries', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
+router.get('/cache/entries', requireAuth, requirePermission('cache:read'), (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     const debugInfo = advancedCaching.getDebugInfo();
@@ -38,7 +38,7 @@ router.get('/cache/entries', requireAuth, requireRole('admin'), (req: Request, r
   }
 });
 
-router.post('/cache/clear', requireAuth, requireRole('admin'), (_req: Request, res: Response) => {
+router.post('/cache/clear', requireAuth, requirePermission('cache:write'), (_req: Request, res: Response) => {
   try {
     advancedCaching.clear();
     res.json({ message: 'Cache cleared successfully' });
@@ -48,7 +48,7 @@ router.post('/cache/clear', requireAuth, requireRole('admin'), (_req: Request, r
   }
 });
 
-router.post('/cache/evict', requireAuth, requireRole('admin'), (req: Request, res: Response) => {
+router.post('/cache/evict', requireAuth, requirePermission('cache:write'), (req: Request, res: Response) => {
   try {
     const maxEntries = parseInt(req.body.maxEntries as string) || 1000;
     const evicted = advancedCaching.evict(maxEntries);

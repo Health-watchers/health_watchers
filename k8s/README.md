@@ -416,7 +416,11 @@ groups:
 
 ## TLS / Ingress
 
-TLS is terminated at the Ingress using cert-manager with Let's Encrypt. Path routing:
+TLS is terminated at the Ingress using cert-manager with Let's Encrypt. The
+`health-watchers-cert` Certificate renews 30 days before expiry
+(`renewBefore: 720h`); expiry alerts fire at 30 days, 7 days and 24 hours.
+See [`monitoring/runbooks/CERTIFICATE_RENEWAL.md`](../monitoring/runbooks/CERTIFICATE_RENEWAL.md)
+for renewal troubleshooting. Path routing:
 
 | Path      | Backend         |
 |-----------|-----------------|

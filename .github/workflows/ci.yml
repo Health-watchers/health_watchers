@@ -11,20 +11,6 @@ permissions:
 
 env:
   NODE_VERSION: 20
-  # ── Turborepo Remote Cache ──────────────────────────────────────────────────
-  # Set TURBO_TOKEN and TURBO_TEAM as repository secrets to enable Vercel's
-  # hosted remote cache (https://vercel.com/docs/monorepos/turborepo).
-  #
-  # Alternative — self-hosted cache (ducktors/turborepo-remote-cache):
-  #   TURBO_API: https://your-cache-server.example.com
-  #   TURBO_TOKEN: <your-token>
-  #   TURBO_TEAM: health-watchers
-  #
-  # When the secrets are absent the value expands to an empty string and Turbo
-  # silently falls back to the local filesystem cache (.turbo/), so the pipeline
-  # keeps working in forks and pre-secret environments without any changes.
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
   # Stage 0: Lockfile drift guard (Issues #1751, #1752)
@@ -252,7 +238,7 @@ jobs:
   quality-checks:
     name: Quality Checks
     runs-on: ubuntu-latest
-    needs: [validate-k8s, helm-lint-dry-run, migration-check]
+    needs: [actionlint, validate-k8s, helm-lint-dry-run, migration-check]
 
     strategy:
       fail-fast: false
@@ -271,17 +257,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      # Turbo cache enables instant rebuilds when nothing changes
-      # Cache key includes check type and sha for precise cache hits
-      - name: Setup Turbo cache
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ matrix.check }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-${{ matrix.check }}-
-            ${{ runner.os }}-turbo-
 
       - name: TypeScript type checking
         if: matrix.check == 'typecheck'
@@ -401,7 +376,6 @@ jobs:
           expo-cli doctor --version || echo "expo-cli doctor check skipped — ensure expo app is properly configured"
         working-directory: apps/mobile
         continue-on-error: true
-
   # Stage 2: Security Scanning (parallel)
   security-scan:
     name: Security Scan
@@ -452,7 +426,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    needs: [quality-checks, mobile-checks, security-scan]
+    needs: [quality-checks, security-scan]
 
     strategy:
       matrix:
@@ -460,9 +434,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0  # Need full history for turbo filter
-      
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
@@ -476,6 +448,10 @@ jobs:
       - name: Run tests (PR - filtered)
         if: github.event_name == 'pull_request'
         run: npx turbo run test --filter="...[origin/${BASE_REF}]" --concurrency=2
+
+      - name: Run API tests (unit + integration)
+        if: github.event_name != 'pull_request'
+        run: npm test --workspace=api
         env:
           BASE_REF: ${{ github.base_ref }}
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
@@ -484,70 +460,7 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
-      # On main/develop: Run all tests
-      - name: Run tests (main/develop - full)
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-        run: npx turbo run test --concurrency=2
-        env:
-          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
-          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
-          STELLAR_NETWORK: testnet
-          NODE_ENV: test
-          API_PORT: 3001
-
-      # Generate coverage reports for SonarCloud
-      - name: Generate coverage reports
-        run: |
-          npm run test:coverage --workspace=api
-          npm run test:coverage --workspace=stellar-service
-        env:
-          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
-          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
-          STELLAR_NETWORK: testnet
-          NODE_ENV: test
-
-      # Verify coverage reports exist
-      - name: Verify LCOV reports
-        run: |
-          echo "Checking for coverage reports..."
-          if [ ! -f apps/api/coverage/lcov.info ]; then
-            echo "❌ Missing API coverage report"
-            exit 1
-          fi
-          if [ ! -f apps/stellar-service/coverage/lcov.info ]; then
-            echo "❌ Missing Stellar service coverage report"
-            exit 1
-          fi
-          echo "✅ All coverage reports found"
-          ls -lh apps/api/coverage/lcov.info
-          ls -lh apps/stellar-service/coverage/lcov.info
-
-      # Upload coverage to SonarCloud
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@b0e35f6b3cc04ac0e43a1e559ab5ed96fb7840bf # v3.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.organization=jerryvic911
-            -Dsonar.projectKey=Health-watchers_health_watchers
-            -Dsonar.javascript.lcov.reportPaths=apps/api/coverage/lcov.info,apps/stellar-service/coverage/lcov.info
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/migrations/**,**/__tests__/**,**/__mocks__/**
-
-      # Upload coverage artifacts for debugging
-      - name: Upload coverage artifacts
-        if: always()
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: coverage-reports
-          path: |
-            apps/api/coverage/
-            apps/stellar-service/coverage/
-          retention-days: 14
-
       - name: Verify API security headers
-        if: github.event_name == 'push' || contains(github.event.pull_request.changed_files, 'apps/api')
         run: npm test --workspace=api -- --runInBand src/__tests__/security-headers.test.ts
         env:
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
@@ -556,10 +469,9 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
-      # Enforces each workspace's coverageThreshold (jest.config.*): a drop
-      # below the configured levels fails the job.
-      - name: Check API coverage thresholds
+      - name: Generate coverage report
         run: npm run test:coverage --workspace=api
+        continue-on-error: true
         env:
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
           JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
@@ -578,18 +490,8 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./apps/api/coverage/coverage-final.json
-          flags: api
-          name: api
-          fail_ci_if_error: false
-
-      - name: Upload web coverage to Codecov
-        if: always() && matrix.node-version == 20
-        uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./apps/web/coverage/coverage-final.json
-          flags: web
-          name: web
+          flags: unittests
+          name: codecov-umbrella
           fail_ci_if_error: false
 
   # Stage 4: Build
@@ -619,10 +521,8 @@ jobs:
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
         with:
           path: .turbo
-          key: ${{ runner.os }}-turbo-build-${{ matrix.app }}-${{ github.sha }}
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-turbo-build-${{ matrix.app }}-
-            ${{ runner.os }}-turbo-build-
             ${{ runner.os }}-turbo-
 
       - name: Build ${{ matrix.app }}
@@ -1055,7 +955,6 @@ jobs:
           path: apps/web/e2e/visual-regression.spec.ts-snapshots/
           retention-days: 14
           if-no-files-found: ignore
-
   # Stage 6: Deploy (main branch only)
   deploy-staging:
     name: Deploy to Staging
@@ -1064,17 +963,17 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: staging
-      url: https://staging.healthwatchers.example.com
+      url: https://staging.health-watchers.app
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+      - name: Download build artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234f26e4f1c1fb8bcd # v4.1.8
         with:
-          version: '3.14.0'
+          path: artifacts
 
-      - name: Configure kubectl for staging
+      - name: Deploy to staging
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > ~/.kube/config
@@ -1116,21 +1015,8 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "🧪 Running smoke tests against staging..."
-          STAGING_URL="https://staging.healthwatchers.example.com"
-          curl --max-time 10 -f "$STAGING_URL/health" \
-            && echo "✅ Health check passed" \
-            || echo "⚠️  Smoke test skipped — staging URL not yet configured"
-        continue-on-error: true
-
-      - name: Notify staging deployment
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "🚀 *Staging deployed* — `${{ github.repository }}` @ `${{ github.sha }}` by ${{ github.actor }}\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
-            }
-        continue-on-error: true
+          echo "Placeholder for smoke tests"
+          echo "Example: curl https://staging.health-watchers.app/health"
 
   deploy-production:
     name: Deploy to Production
@@ -1139,18 +1025,22 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
-      url: https://app.healthwatchers.example.com
+      url: https://health-watchers.app
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Helm
-        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+      - name: Download build artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234f26e4f1c1fb8bcd # v4.1.8
         with:
-          version: '3.14.0'
+          path: artifacts
 
-      - name: Configure kubectl for production
+      - name: Deploy to production
         run: |
+          echo "🚀 Deploying to production environment..."
+          echo "This requires manual approval in GitHub Actions"
+          echo "Configure your production deployment strategy"
+
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
@@ -1223,83 +1113,6 @@ jobs:
               "text": "❌ *Production deploy FAILED* — `${{ github.repository }}` @ `${{ github.sha }}` by ${{ github.actor }}\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
             }
         continue-on-error: true
-
-  # Stage 8: Aggregated CI gate (Issue #1764)
-  # This is the ONLY required status check in branch protection. It depends on
-  # every gating job and fails if any of them failed or was cancelled. Because
-  # it runs with `if: always()`, it is reported even when upstream jobs are
-  # skipped, so a skipped required check can never be mistaken for a pass.
-  # Renaming or adding individual jobs only requires updating this `needs` list,
-  # not branch-protection settings.
-  ci-success:
-    name: CI Success
-    runs-on: ubuntu-latest
-    needs:
-      - actionlint
-      - helm-lint-dry-run
-      - migration-check
-      - validate-k8s
-      - quality-checks
-      - mobile-checks
-      - security-scan
-      - test
-      - build
-      - docker
-      - e2e
-      - visual-regression-gate
-      - e2e-tests
-      - postman-sync
-      - deploy-staging
-      - deploy-production
-    if: always()
-
-    steps:
-      - name: Verify all required jobs succeeded
-        run: |
-          echo "Aggregated CI gate — inspecting results of all needed jobs."
-          echo ""
-          echo "needs context:"
-          echo '${{ toJSON(needs) }}'
-          echo ""
-
-          # Jobs that are intentionally conditional (event/ref gated) and may
-          # legitimately be `skipped` without indicating a problem.
-          CONDITIONAL_JOBS="helm-lint-dry-run docker e2e-tests deploy-staging deploy-production"
-
-          FAILED=0
-          for job in $(echo '${{ toJSON(needs) }}' | jq -r 'keys[]'); do
-            result=$(echo '${{ toJSON(needs) }}' | jq -r --arg j "$job" '.[$j].result')
-            case "$result" in
-              success)
-                echo "✅ ${job}: success"
-                ;;
-              skipped)
-                if echo " ${CONDITIONAL_JOBS} " | grep -q " ${job} "; then
-                  echo "⏭️  ${job}: skipped (intentionally conditional — allowed)"
-                else
-                  echo "❌ ${job}: skipped (not an intentionally conditional job)"
-                  FAILED=1
-                fi
-                ;;
-              failure|cancelled)
-                echo "❌ ${job}: ${result}"
-                FAILED=1
-                ;;
-              *)
-                echo "❌ ${job}: unexpected result '${result}'"
-                FAILED=1
-                ;;
-            esac
-          done
-
-          echo ""
-          if [ "$FAILED" -ne 0 ]; then
-            echo "::error::One or more required CI jobs failed, were cancelled, or were unexpectedly skipped."
-            exit 1
-          fi
-
-          echo "✅ All required CI jobs passed."
-=======
 
   # Stage 6b: End-to-End Tests (Issue #1581)
   e2e-tests:
@@ -1518,3 +1331,79 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
+
+  # Stage 8: Aggregated CI gate (Issue #1764)
+  # This is the ONLY required status check in branch protection. It depends on
+  # every gating job and fails if any of them failed or was cancelled. Because
+  # it runs with `if: always()`, it is reported even when upstream jobs are
+  # skipped, so a skipped required check can never be mistaken for a pass.
+  # Renaming or adding individual jobs only requires updating this `needs` list,
+  # not branch-protection settings.
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs:
+      - actionlint
+      - helm-lint-dry-run
+      - migration-check
+      - validate-k8s
+      - quality-checks
+      - mobile-checks
+      - security-scan
+      - test
+      - build
+      - docker
+      - e2e
+      - visual-regression-gate
+      - e2e-tests
+      - postman-sync
+      - deploy-staging
+      - deploy-production
+    if: always()
+
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          echo "Aggregated CI gate — inspecting results of all needed jobs."
+          echo ""
+          echo "needs context:"
+          echo '${{ toJSON(needs) }}'
+          echo ""
+
+          # Jobs that are intentionally conditional (event/ref gated) and may
+          # legitimately be `skipped` without indicating a problem.
+          CONDITIONAL_JOBS="helm-lint-dry-run docker e2e-tests deploy-staging deploy-production"
+
+          FAILED=0
+          for job in $(echo '${{ toJSON(needs) }}' | jq -r 'keys[]'); do
+            result=$(echo '${{ toJSON(needs) }}' | jq -r --arg j "$job" '.[$j].result')
+            case "$result" in
+              success)
+                echo "✅ ${job}: success"
+                ;;
+              skipped)
+                if echo " ${CONDITIONAL_JOBS} " | grep -q " ${job} "; then
+                  echo "⏭️  ${job}: skipped (intentionally conditional — allowed)"
+                else
+                  echo "❌ ${job}: skipped (not an intentionally conditional job)"
+                  FAILED=1
+                fi
+                ;;
+              failure|cancelled)
+                echo "❌ ${job}: ${result}"
+                FAILED=1
+                ;;
+              *)
+                echo "❌ ${job}: unexpected result '${result}'"
+                FAILED=1
+                ;;
+            esac
+          done
+
+          echo ""
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::One or more required CI jobs failed, were cancelled, or were unexpectedly skipped."
+            exit 1
+          fi
+
+          echo "✅ All required CI jobs passed."

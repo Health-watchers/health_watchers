@@ -40,7 +40,6 @@ jobs:
     needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 25
-=======
 
     services:
       mongodb:
