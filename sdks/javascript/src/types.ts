@@ -7,11 +7,19 @@
  * server-side model.
  */
 
-/** Generic envelope the API wraps successful responses in. */
-export interface ApiSuccess<T> {
-  status: 'success';
-  data: T;
-}
+/**
+ * Generic envelope the API wraps successful responses in.
+ *
+ * The API is not fully consistent: some handlers return `{ status: 'success', data }`
+ * while others return `{ success: true, data }`. Both shapes are modelled here so
+ * callers can narrow on either discriminant.
+ */
+export type ApiSuccess<T> =
+  | { status: 'success'; data: T }
+  | { success: true; data: T };
+
+/** Alias for {@link ApiSuccess} — either supported success envelope. */
+export type ApiEnvelope<T> = ApiSuccess<T>;
 
 /** Generic envelope the API wraps error responses in. */
 export interface ApiError {
@@ -29,11 +37,9 @@ export interface PaginationMeta {
   hasPrev?: boolean;
 }
 
-export interface PaginatedResponse<T> {
-  status: 'success';
-  data: T[];
-  pagination: PaginationMeta;
-}
+export type PaginatedResponse<T> =
+  | { status: 'success'; data: T[]; pagination: PaginationMeta }
+  | { success: true; data: T[]; pagination: PaginationMeta };
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 

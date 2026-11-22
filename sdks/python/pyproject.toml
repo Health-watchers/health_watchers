@@ -27,9 +27,23 @@ dependencies = [
     "requests>=2.31",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "responses>=0.23",
+]
+
 [project.urls]
 Homepage = "https://github.com/health-watchers/health-watchers"
 Documentation = "https://api.healthwatchers.com/docs"
 
 [tool.setuptools.packages.find]
 include = ["health_watchers*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra"

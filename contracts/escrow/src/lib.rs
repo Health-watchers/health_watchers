@@ -44,6 +44,8 @@ pub enum Error {
     NotExpired = 4,
     Unauthorized = 5,
     AlreadyExists = 6,
+    NotInitialized = 7,
+    Paused = 8,
 }
 
 /// Storage keys.
@@ -52,6 +54,10 @@ pub enum Error {
 pub enum DataKey {
     Escrow(BytesN<32>),
     Nonce,
+    Admin,
+    Arbiter,
+    AllowedTokens,
+    Paused,
 }
 
 /// Default escrow lifetime: 14 days in seconds.
@@ -62,6 +68,70 @@ pub struct Escrow;
 
 #[contractimpl]
 impl Escrow {
+    /// One-time initialisation of governance state.
+    ///
+    /// # Arguments
+    /// * `env` - Soroban environment
+    /// * `admin` - Multisig account that governs the contract
+    /// * `arbiter` - Account that resolves disputes
+    /// * `allowed_tokens` - Tokens permitted for escrow deposits
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        arbiter: Address,
+        allowed_tokens: Vec<Address>,
+    ) {
+        if env.storage().instance().has(&DataKey::Admin) {
+            panic_with_error!(&env, Error::AlreadyExists);
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Arbiter, &arbiter);
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedTokens, &allowed_tokens);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "initialized")),
+            (admin, arbiter),
+        );
+    }
+
+    /// Pause new deposits. Refunds, releases and cancels remain available.
+    pub fn pause(env: Env) {
+        let admin = Self::require_admin(&env);
+        env.storage().instance().set(&DataKey::Paused, &true);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "admin_paused")),
+            admin,
+        );
+    }
+
+    /// Resume new deposits.
+    pub fn unpause(env: Env) {
+        let admin = Self::require_admin(&env);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "admin_unpaused")),
+            admin,
+        );
+    }
+
+    /// Upgrade the contract WASM. Admin only.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        let admin = Self::require_admin(&env);
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "admin_upgraded")),
+            (admin, new_wasm_hash),
+        );
+    }
+
     /// Deposit funds into escrow.
     /// Called by the patient to hold payment for the clinic.
     ///
@@ -82,6 +152,10 @@ impl Escrow {
         amount: i128,
     ) -> BytesN<32> {
         patient.require_auth();
+
+        if Self::is_paused(&env) {
+            panic_with_error!(&env, Error::Paused);
+        }
 
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
@@ -283,6 +357,24 @@ impl Escrow {
 
     // ── Helper functions ──────────────────────────────────────────────────
 
+    /// Read the admin from storage, require its auth, and return it.
+    fn require_admin(env: &Env) -> Address {
+        let admin: Address = match env.storage().instance().get(&DataKey::Admin) {
+            Some(a) => a,
+            None => panic_with_error!(env, Error::NotInitialized),
+        };
+        admin.require_auth();
+        admin
+    }
+
+    /// Whether new deposits are currently paused.
+    fn is_paused(env: &Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
     /// Build a deterministic 32-byte escrow ID from patient, clinic, and nonce.
     fn generate_escrow_id(
         env: &Env,
@@ -323,6 +415,11 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
 
         let contract_id = env.register_contract(None, Escrow);
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
         (env, contract_id, patient, clinic, token_id)
     }
 
@@ -455,6 +552,10 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
         let contract_id = env.register_contract(None, Escrow);
         let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
 
         // Patient authorizes the deposit only.
         env.mock_auths(&[MockAuth {
@@ -484,6 +585,79 @@ mod tests {
 
         let attacker = Address::generate(&env);
         let result = client.try_refund(&escrow_id, &attacker);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_reinitialisation_rejected() {
+        let (env, contract_id, _patient, _clinic, token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+
+        let result = client.try_initialize(&admin, &arbiter, &allowed);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pause_blocks_deposits_but_not_refunds() {
+        let (env, contract_id, patient, clinic, token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+
+        client.pause();
+
+        let result = client.try_deposit(&patient, &clinic, &token_id, &1000);
+        assert!(result.is_err());
+
+        // Refunds still work while paused.
+        env.ledger().set_timestamp(1000 + ESCROW_TTL_SECS + 1);
+        let refunded = client.refund(&escrow_id, &patient);
+        assert!(refunded);
+
+        // Unpause restores deposits.
+        client.unpause();
+        let escrow_id2 = client.deposit(&patient, &clinic, &token_id, &500);
+        let record = client.get_escrow(&escrow_id2);
+        assert_eq!(record.amount, 500);
+    }
+
+    #[test]
+    fn test_unauthorized_pause() {
+        let env = Env::default();
+        env.ledger().set_timestamp(1000);
+
+        let admin = Address::generate(&env);
+        let patient = Address::generate(&env);
+        let token_id = create_token(&env, &admin, &patient, 10_000);
+        let contract_id = env.register_contract(None, Escrow);
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
+
+        // No auth mocked for the admin: pause must fail.
+        let result = client.try_pause();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_upgrade() {
+        let (env, contract_id, _patient, _clinic, _token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let new_wasm_hash = env.deployer().upload_contract_wasm(Escrow::wasm());
+        client.upgrade(&new_wasm_hash);
+
+        // Contract remains callable after upgrade.
+        let missing = BytesN::from_array(&env, &[0u8; 32]);
+        let result = client.try_get_escrow(&missing);
         assert!(result.is_err());
     }
 }

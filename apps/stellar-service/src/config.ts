@@ -32,7 +32,30 @@ export const stellarConfig = {
   retryDelayMs: parseInt(process.env.STELLAR_RETRY_DELAY_MS || '1000', 10),
   // Batch size for processing transactions/payments
   batchSize: parseInt(process.env.STELLAR_BATCH_SIZE || '50', 10),
+  // Soroban escrow contract IDs per network
+  escrowContractIdTestnet: process.env.ESCROW_CONTRACT_ID_TESTNET || '',
+  escrowContractIdMainnet: process.env.ESCROW_CONTRACT_ID_MAINNET || '',
+  // Resolved escrow contract ID for the active network (see resolveEscrowContractId)
+  escrowContractId: resolveEscrowContractId(),
+  // How often the escrow event poller queries Soroban RPC getEvents (ms)
+  escrowEventPollIntervalMs: parseInt(process.env.ESCROW_EVENT_POLL_INTERVAL_MS || '5000', 10),
+  // Ledger to start indexing escrow events from (0 = let the poller bootstrap)
+  escrowEventStartLedger: parseInt(process.env.ESCROW_EVENT_START_LEDGER || '0', 10),
 };
+
+function resolveEscrowContractId(): string {
+  const isMainnet = process.env.STELLAR_NETWORK === 'mainnet';
+
+  if (isMainnet) {
+    // Never hand out a mainnet contract ID unless mainnet use is explicitly confirmed.
+    if (process.env.MAINNET_CONFIRMED !== 'true') {
+      return '';
+    }
+    return process.env.ESCROW_CONTRACT_ID_MAINNET || '';
+  }
+
+  return process.env.ESCROW_CONTRACT_ID_TESTNET || '';
+}
 
 function getHorizonUrls(): string[] {
   const isMainnet = process.env.STELLAR_NETWORK === 'mainnet';

@@ -123,6 +123,8 @@ import {
   escrowRelease,
   escrowRefund,
 } from './soroban/index.js';
+// #1834: Escrow contract event indexing
+import { startEscrowEventPoller } from './operations/escrow-events.js';
 
 dotenv.config();
 
@@ -2310,6 +2312,9 @@ exchangeRateManager.startPeriodicRefresh();
 // Start batch processor auto-flush (every 10 seconds, up to 50 jobs per flush)
 batchProcessor.startAutoFlush();
 
+// #1834: Escrow event poller — indexes `escrow:*` events from the Soroban escrow contract.
+let stopEscrowEventPoller: (() => void) | undefined;
+
 const server: Server = app.listen(PORT, () => {
   logger.info(
     {
@@ -2319,9 +2324,36 @@ const server: Server = app.listen(PORT, () => {
       secret: SHARED_SECRET ? 'SET' : 'MISSING',
       metricsPath: '/metrics',
       metricsAuth: METRICS_PASSWORD ? 'SET' : 'MISSING',
+      escrowContractId: stellarConfig.escrowContractId ?? 'NOT_CONFIGURED',
     },
     'Stellar Service running'
   );
+
+  if (stellarConfig.escrowContractId) {
+    logger.info(
+      {
+        escrowContractId: stellarConfig.escrowContractId,
+        network: stellarConfig.network,
+      },
+      'Starting escrow event poller'
+    );
+    try {
+      stopEscrowEventPoller = startEscrowEventPoller({
+        contractId: stellarConfig.escrowContractId,
+        network: stellarConfig.network,
+      });
+    } catch (error: any) {
+      logger.error(
+        { error: error.message, escrowContractId: stellarConfig.escrowContractId },
+        'Failed to start escrow event poller'
+      );
+    }
+  } else {
+    logger.warn(
+      { network: stellarConfig.network },
+      'ESCROW_CONTRACT_ID not configured; escrow event indexing disabled'
+    );
+  }
 });
 
 // Graceful shutdown handler
@@ -2332,6 +2364,17 @@ const shutdown = async (signal: string) => {
   exchangeRateManager.stopPeriodicRefresh();
   batchProcessor.stopAutoFlush();
   batchProcessor.pause();
+
+  // #1834: Stop escrow event poller
+  if (stopEscrowEventPoller) {
+    try {
+      stopEscrowEventPoller();
+      stopEscrowEventPoller = undefined;
+      logger.info('Escrow event poller stopped');
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Failed to stop escrow event poller');
+    }
+  }
 
   // Stop accepting new connections
   closePaymentStream();

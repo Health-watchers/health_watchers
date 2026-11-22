@@ -85,6 +85,39 @@ def _raise_for_status(response: requests.Response) -> None:
     )
 
 
+def _unwrap(response: requests.Response) -> Dict[str, Any]:
+    """Decode a response body, treating HTTP status as the source of truth.
+
+    The API is in the middle of standardising its response envelope, so two
+    success shapes are in circulation:
+
+    * ``{"status": "success", "data": {...}}``
+    * ``{"success": true, "data": {...}}``
+
+    Both are accepted here. Success/failure is decided by the HTTP status
+    code (via :func:`_raise_for_status`) rather than by inspecting the body,
+    so a ``{"success": true}`` payload is never mistaken for a failure.
+
+    Returns:
+        The decoded JSON body as a ``dict`` (empty for empty responses).
+    """
+    _raise_for_status(response)
+    if not response.content:
+        return {}
+    body = response.json()
+    if isinstance(body, dict):
+        return body
+    return {"data": body}
+
+
+def _payload(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract the ``data`` payload from a decoded envelope, if present."""
+    data = body.get("data")
+    if isinstance(data, dict):
+        return data
+    return body
+
+
 class _BaseResource:
     """Shared plumbing for resource sub-clients."""
 
@@ -93,6 +126,10 @@ class _BaseResource:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
         return self._client._request(method, path, **kwargs)
+
+    def _request_payload(self, method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
+        """Like :meth:`_request`, but returns the unwrapped ``data`` payload."""
+        return _payload(self._client._request(method, path, **kwargs))
 
 
 class PatientsResource(_BaseResource):
@@ -130,8 +167,7 @@ class PatientsResource(_BaseResource):
             body["contactNumber"] = contact_number
         if address is not None:
             body["address"] = address
-        result = self._request("POST", "/patients", json=body)
-        return result.get("data", result)
+        return self._request_payload("POST", "/patients", json=body)
 
     def list(
         self,
@@ -157,8 +193,7 @@ class PatientsResource(_BaseResource):
 
     def get(self, patient_id: str) -> Dict[str, Any]:
         """Fetch a single patient by ID."""
-        result = self._request("GET", f"/patients/{patient_id}")
-        return result.get("data", result)
+        return self._request_payload("GET", f"/patients/{patient_id}")
 
 
 class AppointmentsResource(_BaseResource):
@@ -200,8 +235,7 @@ class AppointmentsResource(_BaseResource):
             body["chiefComplaint"] = chief_complaint
         if notes is not None:
             body["notes"] = notes
-        result = self._request("POST", "/appointments", json=body)
-        return result.get("data", result)
+        return self._request_payload("POST", "/appointments", json=body)
 
     def list(
         self,
@@ -265,8 +299,7 @@ class PaymentsResource(_BaseResource):
             body["issuer"] = issuer
         if idempotency_key is not None:
             body["idempotencyKey"] = idempotency_key
-        result = self._request("POST", "/payments/intent", json=body)
-        return result.get("data", result)
+        return self._request_payload("POST", "/payments/intent", json=body)
 
     def confirm_intent(self, intent_id: str, tx_hash: str) -> Dict[str, Any]:
         """Confirm a payment intent with the on-chain Stellar transaction hash.
@@ -278,12 +311,11 @@ class PaymentsResource(_BaseResource):
         Returns:
             The API's ``data`` payload for the confirmed payment record.
         """
-        result = self._request(
+        return self._request_payload(
             "PATCH",
             f"/payments/{intent_id}/confirm",
             json={"txHash": tx_hash},
         )
-        return result.get("data", result)
 
 
 class HealthWatchersClient:
@@ -387,6 +419,8 @@ class HealthWatchersClient:
         data = response.get("data") or {}
         if response.get("status") == "mfa_required" or data.get("mfaRequired"):
             return response
+        # Success is decided by HTTP status (already checked in _request);
+        # accept both the {"status": "success"} and {"success": true} envelopes.
         access_token = data.get("accessToken")
         if access_token:
             self.access_token = access_token
@@ -409,7 +443,4 @@ class HealthWatchersClient:
             json=json,
             timeout=self.timeout,
         )
-        _raise_for_status(response)
-        if not response.content:
-            return {}
-        return response.json()
+        return _unwrap(response)
