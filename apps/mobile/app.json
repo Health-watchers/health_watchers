@@ -14,14 +14,21 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTabletMode": true,
-      "bundleIdentifier": "com.healthwatchers.mobile"
+      "bundleIdentifier": "com.healthwatchers.mobile",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.healthwatchers.mobile"
+      "package": "com.healthwatchers.mobile",
+      "allowBackup": false,
+      "usesCleartextTraffic": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,6 +39,18 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#ffffff"
+        }
+      ],
+      [
+        "./plugins/withEncryptedCacheBackupExclusion",
+        {
+          "cacheDirectory": "encrypted-cache",
+          "excludeFromBackup": true,
+          "androidAllowBackup": false,
+          "androidBackupRules": {
+            "fullBackupContent": "./android-backup-rules.xml",
+            "dataExtractionRules": "./android-data-extraction-rules.xml"
+          }
         }
       ]
     ]
