@@ -619,9 +619,10 @@ jobs:
           PORT: 3001
 
       - name: Seed test data
-        run: npm run seed || echo "Seed script not found, skipping"
+        run: npm run seed --workspace=api
         env:
           MONGO_URI: mongodb://localhost:27017/health_watchers_e2e
+          NODE_ENV: development
 
       - name: Start web server
         run: npm run dev --workspace=web &
