@@ -8,6 +8,9 @@ import { PaymentScreen } from './screens/PaymentScreen';
 import { DocumentsScreen } from './screens/DocumentsScreen';
 import { CarePlansScreen } from './screens/CarePlansScreen';
 import { ImmunizationsScreen } from './screens/ImmunizationsScreen';
+import { AppointmentsScreen } from './screens/AppointmentsScreen';
+import { AppointmentDetailScreen } from './screens/AppointmentDetailScreen';
+import { BookAppointmentScreen } from './screens/BookAppointmentScreen';
 import { NotificationService } from './services/notification.service';
 import { BiometricService } from './services/biometric.service';
 import { NotificationPreferencesScreen } from './screens/NotificationPreferencesScreen';
@@ -42,6 +45,26 @@ function SecurityNotice({ title, body }: { title: string; body: string }) {
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const linking = {
+  prefixes: ['healthwatchers://'],
+  config: {
+    screens: {
+      AppointmentsStack: {
+        screens: {
+          Appointments: 'appointments',
+          AppointmentDetail: 'appointments/:id',
+          BookAppointment: 'appointments/book',
+        },
+      },
+      SettingsStack: {
+        screens: {
+          NotificationPreferences: 'settings/notifications',
+        },
+      },
+    },
+  },
+};
 
 function DashboardStack() {
   return (
@@ -94,6 +117,28 @@ function ImmunizationsStack() {
         name="Immunizations"
         component={ImmunizationsScreen}
         options={{ title: 'Immunizations' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function AppointmentsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Appointments"
+        component={AppointmentsScreen}
+        options={{ title: 'Appointments' }}
+      />
+      <Stack.Screen
+        name="AppointmentDetail"
+        component={AppointmentDetailScreen}
+        options={{ title: 'Appointment' }}
+      />
+      <Stack.Screen
+        name="BookAppointment"
+        component={BookAppointmentScreen}
+        options={{ title: 'Book Appointment' }}
       />
     </Stack.Navigator>
   );
@@ -199,7 +244,13 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      linking={linking}
+      onReady={() => {
+        // Handle a notification that launched the app (cold start deep link)
+        NotificationService.consumeInitialNotification?.();
+      }}
+    >
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
@@ -220,6 +271,14 @@ export default function App() {
           options={{
             title: 'Payments',
             tabBarLabel: 'Payments',
+          }}
+        />
+        <Tab.Screen
+          name="AppointmentsStack"
+          component={AppointmentsStack}
+          options={{
+            title: 'Appointments',
+            tabBarLabel: 'Appointments',
           }}
         />
         <Tab.Screen
