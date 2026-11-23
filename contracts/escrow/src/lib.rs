@@ -44,6 +44,7 @@ pub enum Error {
     NotExpired = 4,
     Unauthorized = 5,
     AlreadyExists = 6,
+    Expired = 7,
 }
 
 /// Storage keys.
@@ -130,7 +131,8 @@ impl Escrow {
     }
 
     /// Release escrowed funds to the clinic.
-    /// Called by the clinic to confirm service delivery.
+    /// Called by the clinic to confirm service delivery. Funds can only be
+    /// released before the escrow expires; after expiry only `refund` succeeds.
     pub fn release(env: Env, escrow_id: BytesN<32>, clinic: Address) -> bool {
         clinic.require_auth();
 
@@ -145,6 +147,9 @@ impl Escrow {
         }
         if record.status != EscrowStatus::Active {
             panic_with_error!(&env, Error::InvalidStatus);
+        }
+        if env.ledger().timestamp() >= record.expires_at {
+            panic_with_error!(&env, Error::Expired);
         }
 
         let contract_id = env.current_contract_address();
@@ -485,5 +490,23 @@ mod tests {
         let attacker = Address::generate(&env);
         let result = client.try_refund(&escrow_id, &attacker);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_release_after_expiry_fails() {
+        let (env, contract_id, patient, clinic, token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+
+        // Advance past expiry; only refund may succeed now.
+        env.ledger().set_timestamp(1000 + ESCROW_TTL_SECS + 1);
+
+        let result = client.try_release(&escrow_id, &clinic);
+        assert!(result.is_err());
+
+        // Refund still works after expiry.
+        let refunded = client.refund(&escrow_id, &patient);
+        assert!(refunded);
     }
 }
