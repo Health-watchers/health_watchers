@@ -68,6 +68,7 @@ jest-results.json
 
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
+*.snap
 
 # Jest test result JSON files
 jest-results*.json
