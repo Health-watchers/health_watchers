@@ -112,6 +112,25 @@ impl Escrow {
             panic_with_error!(&env, Error::InvalidAmount);
         }
 
+        // Reject tokens that are not on the admin-managed allow-list.
+        let allowed: Vec<Address> = env
+            .storage()
+            .instance()
+            .get::<DataKey, Vec<Address>>(&DataKey::AllowedTokens)
+            .unwrap_or_else(|| Vec::new(&env));
+        let mut token_allowed = false;
+        let mut i = 0u32;
+        while i < allowed.len() {
+            if allowed.get(i).unwrap() == token {
+                token_allowed = true;
+                break;
+            }
+            i += 1;
+        }
+        if !token_allowed {
+            panic_with_error!(&env, Error::TokenNotAllowed);
+        }
+
         // Transfer tokens from patient to contract (escrow holder).
         let contract_id = env.current_contract_address();
         token::Client::new(&env, &token).transfer(&patient, &contract_id, &amount);
@@ -120,12 +139,23 @@ impl Escrow {
         let expires_at = now + ESCROW_TTL_SECS;
 
         // Monotonic nonce ensures unique IDs even for identical parties.
-        let nonce: u64 = env
+        let nonce: u64 = match env
             .storage()
             .instance()
             .get::<DataKey, u64>(&DataKey::Nonce)
-            .unwrap_or(0);
+        {
+            Some(n) => {
+                env.storage()
+                    .instance()
+                    .extend_ttl(&DataKey::Nonce, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
+                n
+            }
+            None => 0,
+        };
         env.storage().instance().set(&DataKey::Nonce, &(nonce + 1));
+        env.storage()
+            .instance()
+            .extend_ttl(&DataKey::Nonce, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
 
         let escrow_id = Self::generate_escrow_id(&env, &patient, &clinic, nonce);
 
@@ -145,6 +175,7 @@ impl Escrow {
         };
 
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "deposited")),
@@ -155,13 +186,17 @@ impl Escrow {
     }
 
     /// Release escrowed funds to the clinic.
-    /// Called by the clinic to confirm service delivery.
+    /// Called by the clinic to confirm service delivery. Funds can only be
+    /// released before the escrow expires; after expiry only `refund` succeeds.
     pub fn release(env: Env, escrow_id: BytesN<32>, clinic: Address) -> bool {
         clinic.require_auth();
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -170,6 +205,9 @@ impl Escrow {
         }
         if record.status != EscrowStatus::Active {
             panic_with_error!(&env, Error::InvalidStatus);
+        }
+        if env.ledger().timestamp() >= record.expires_at {
+            panic_with_error!(&env, Error::Expired);
         }
 
         let contract_id = env.current_contract_address();
@@ -181,6 +219,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Released;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "released")),
@@ -197,7 +236,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -220,6 +262,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Refunded;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "refunded")),
@@ -236,7 +279,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -249,6 +295,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Disputed;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "disputed")),
@@ -329,13 +376,17 @@ impl Escrow {
     }
 
     /// Cancel an active escrow and return funds to the patient.
-    /// Only the patient may cancel, and only before expiry.
+    /// Only the patient may cancel, and only within the cooling-off window
+    /// (CANCEL_WINDOW_SECS) after deposit; after that the clinic's claim is protected.
     pub fn cancel(env: Env, escrow_id: BytesN<32>, patient: Address) -> bool {
         patient.require_auth();
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -344,6 +395,9 @@ impl Escrow {
         }
         if record.status != EscrowStatus::Active {
             panic_with_error!(&env, Error::InvalidStatus);
+        }
+        if env.ledger().timestamp() >= record.created_at + CANCEL_WINDOW_SECS {
+            panic_with_error!(&env, Error::CancelWindowExpired);
         }
 
         let contract_id = env.current_contract_address();
@@ -355,6 +409,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Cancelled;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "cancelled")),
@@ -366,12 +421,12 @@ impl Escrow {
 
     /// Read an escrow record (view helper for off-chain callers).
     pub fn get_escrow(env: Env, escrow_id: BytesN<32>) -> EscrowRecord {
-        match env
-            .storage()
-            .persistent()
-            .get::<DataKey, EscrowRecord>(&DataKey::Escrow(escrow_id))
-        {
-            Some(r) => r,
+        let key = DataKey::Escrow(escrow_id);
+        match env.storage().persistent().get::<DataKey, EscrowRecord>(&key) {
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         }
     }
