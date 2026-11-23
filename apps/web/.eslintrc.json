@@ -18,7 +18,28 @@
       {
         "selector": "CallExpression[callee.property.name='setItem'][arguments.0.value='refreshToken']",
         "message": "Do not store 'refreshToken' in Web Storage — keep it in the httpOnly cookie set by the BFF."
+      },
+      {
+        "selector": "Literal[value=/localhost:/]",
+        "message": "Hardcoded localhost URLs are not allowed in source files. Use NEXT_PUBLIC_API_URL via lib/config.ts or the fetch helpers in lib/api.ts instead."
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/__tests__/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/jest.setup.*",
+        "**/playwright/**",
+        "**/e2e/**"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }

@@ -2,6 +2,12 @@ import { ApiErrorCode } from '@health-watchers/types';
 import { webConfig } from './config';
 
 if (!process.env.NEXT_PUBLIC_API_URL) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[api] NEXT_PUBLIC_API_URL is not set. ' +
+        'Set it in your deployment environment before running `next build`.'
+    );
+  }
   console.warn('⚠️ NEXT_PUBLIC_API_URL is not set. API calls may fail.');
 }
 

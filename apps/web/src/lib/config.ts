@@ -22,9 +22,22 @@
 
 // ── Public config (safe in Client & Server Components) ────────────────────────
 
+const _rawApiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+// Fail the build in production when the API URL is not configured.
+// NEXT_PUBLIC_* vars are inlined at build time, so this check runs during
+// `next build` for production builds and prevents a silent misconfiguration
+// from reaching real users.
+if (!_rawApiUrl && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    '[config] NEXT_PUBLIC_API_URL is not set. ' +
+      'Set it in your deployment environment before running `next build`.'
+  );
+}
+
 const publicConfig = {
   /** Base URL of the API service, e.g. http://localhost:3001 */
-  apiUrl: process.env.NEXT_PUBLIC_API_URL ?? '',
+  apiUrl: _rawApiUrl,
 
   /** Stellar network — 'testnet' | 'mainnet' */
   stellarNetwork: (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet',

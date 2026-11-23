@@ -11,13 +11,10 @@ import { VaccinationStatus } from '@/components/dashboard/VaccinationStatus';
 import { AppointmentTimeline } from '@/components/dashboard/AppointmentTimeline';
 import { ActionItems } from '@/components/dashboard/ActionItems';
 import { PendingPeerReviewsWidget } from '@/components/dashboard/PendingPeerReviewsWidget';
-
-const API = 'http://localhost:3001/api/v1';
+import { apiV1Fetch } from '@/lib/api';
 
 async function fetchDashboard() {
-  const res = await fetch(`${API}/dashboard`);
-  if (!res.ok) throw new Error('Failed to load dashboard');
-  const json = await res.json();
+  const json = await apiV1Fetch('/dashboard');
   return json.data;
 }
 

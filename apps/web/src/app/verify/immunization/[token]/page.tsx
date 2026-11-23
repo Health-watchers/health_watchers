@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { API_V1 } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -264,9 +265,7 @@ export default function VerifyImmunizationPage({
 
   useEffect(() => {
     // Single fetch on mount — no automatic retries (rate-limit-friendly).
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-    const url = `${apiBase}/api/v1/verify/immunization/${encodeURIComponent(token)}`;
+    const url = `${API_V1}/verify/immunization/${encodeURIComponent(token)}`;
 
     fetch(url, { method: 'GET', headers: { Accept: 'application/json' } })
       .then(async (res) => {

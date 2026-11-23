@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
+import { API_V1 } from '@/lib/api';
 
 const DAYS = [
   'monday',
@@ -13,7 +14,6 @@ const DAYS = [
   'saturday',
   'sunday',
 ] as const;
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface WorkingDay {
   open: string;
@@ -54,14 +54,14 @@ interface ClinicSettings {
 }
 
 async function fetchSettings(): Promise<ClinicSettings> {
-  const res = await fetch(`${API}/api/v1/settings`, { credentials: 'include' });
+  const res = await fetch(`${API_V1}/settings`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to load settings');
   const body = await res.json();
   return body.data;
 }
 
 async function saveSettings(data: Partial<ClinicSettings>): Promise<ClinicSettings> {
-  const res = await fetch(`${API}/api/v1/settings`, {
+  const res = await fetch(`${API_V1}/settings`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -91,7 +91,7 @@ export default function ClinicSettingsClient() {
     formData.append('logo', file);
     setUploadingLogo(true);
     try {
-      const res = await fetch(`${API}/api/v1/settings/logo`, {
+      const res = await fetch(`${API_V1}/settings/logo`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
