@@ -104,6 +104,10 @@ impl Escrow {
     ) -> BytesN<32> {
         patient.require_auth();
 
+        if Self::is_paused(&env) {
+            panic_with_error!(&env, Error::Paused);
+        }
+
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
@@ -374,6 +378,24 @@ impl Escrow {
 
     // ── Helper functions ──────────────────────────────────────────────────
 
+    /// Read the admin from storage, require its auth, and return it.
+    fn require_admin(env: &Env) -> Address {
+        let admin: Address = match env.storage().instance().get(&DataKey::Admin) {
+            Some(a) => a,
+            None => panic_with_error!(env, Error::NotInitialized),
+        };
+        admin.require_auth();
+        admin
+    }
+
+    /// Whether new deposits are currently paused.
+    fn is_paused(env: &Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
     /// Build a deterministic 32-byte escrow ID from patient, clinic, and nonce.
     fn generate_escrow_id(
         env: &Env,
@@ -414,6 +436,11 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
 
         let contract_id = env.register_contract(None, Escrow);
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
         (env, contract_id, patient, clinic, token_id)
     }
 
@@ -546,6 +573,10 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
         let contract_id = env.register_contract(None, Escrow);
         let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
 
         // Patient authorizes the deposit only.
         env.mock_auths(&[MockAuth {
