@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface ILineItem {
   description: string;
@@ -59,6 +60,7 @@ const InvoiceSchema = new Schema<IInvoice>(
   { timestamps: true, versionKey: false }
 );
 
+InvoiceSchema.add(baseSchema);
 InvoiceSchema.index({ clinicId: 1, createdAt: -1 });
 InvoiceSchema.index({ patientId: 1, createdAt: -1 });
 InvoiceSchema.index({ status: 1 });

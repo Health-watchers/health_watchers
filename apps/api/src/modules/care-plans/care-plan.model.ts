@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 import { sanitizeText } from '@api/utils/sanitize';
 
 export interface ICarePlanGoal {
@@ -101,11 +102,12 @@ const carePlanSchema = new Schema<ICarePlan>(
       default: 'active',
       index: true,
     },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     aiGenerated: { type: Boolean, default: false },
   },
   { timestamps: true, versionKey: false }
 );
+
+carePlanSchema.add(baseSchema);
 
 function sanitizeGoals(goals: unknown): void {
   if (!Array.isArray(goals)) return;

@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 import type { SubscriptionTier } from './subscription.tiers';
 
 export interface ISubscription {
@@ -41,6 +42,8 @@ const subscriptionSchema = new Schema<ISubscription>(
   },
   { timestamps: true, versionKey: false }
 );
+
+subscriptionSchema.add(baseSchema);
 
 export const SubscriptionModel = (models.Subscription ||
   model<ISubscription>(

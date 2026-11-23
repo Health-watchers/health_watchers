@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface IErasureRequest extends Document {
   patientId: mongoose.Types.ObjectId;
@@ -43,6 +44,7 @@ const ErasureRequestSchema = new Schema<IErasureRequest>(
 
 ErasureRequestSchema.index({ patientId: 1, status: 1 });
 ErasureRequestSchema.index({ clinicId: 1, status: 1 });
+ErasureRequestSchema.add(baseSchema);
 ErasureRequestSchema.index({ requestedAt: -1 });
 
 export const ErasureRequestModel = (mongoose.models.ErasureRequest ||

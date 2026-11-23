@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type CreditNoteStatus = 'issued' | 'applied' | 'voided';
 
@@ -48,6 +49,7 @@ const CreditNoteSchema = new Schema<ICreditNote>(
   { timestamps: true, versionKey: false }
 );
 
+CreditNoteSchema.add(baseSchema);
 CreditNoteSchema.index({ clinicId: 1, createdAt: -1 });
 CreditNoteSchema.index({ patientId: 1, createdAt: -1 });
 CreditNoteSchema.index({ invoiceId: 1 });

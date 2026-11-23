@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface IEncounterTemplate {
   clinicId: Types.ObjectId;
@@ -65,6 +66,8 @@ const encounterTemplateSchema = new Schema<IEncounterTemplate>(
   },
   { timestamps: true, versionKey: false }
 );
+
+encounterTemplateSchema.add(baseSchema);
 
 encounterTemplateSchema.index({ visibility: 1, isApproved: 1 });
 encounterTemplateSchema.index({ tags: 1 });

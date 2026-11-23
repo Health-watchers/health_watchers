@@ -1,4 +1,5 @@
 import { Schema, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface ArchivedRecord {
   originalCollectionName: string;
@@ -42,10 +43,11 @@ const archivedRecordSchema = new Schema<ArchivedRecord>(
         { _id: false }
       ),
     },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );
+
+archivedRecordSchema.add(baseSchema);
 
 // Compound indexes for archival queries
 archivedRecordSchema.index({ clinicId: 1, originalCollectionName: 1, archivedAt: -1 });

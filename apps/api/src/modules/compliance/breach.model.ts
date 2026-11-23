@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface BreachNotification extends Document {
   clinicId: mongoose.Types.ObjectId;
@@ -26,6 +27,8 @@ const breachSchema = new Schema<BreachNotification>(
   },
   { timestamps: true }
 );
+
+breachSchema.add(baseSchema);
 
 export const BreachNotificationModel = mongoose.model<BreachNotification>(
   'BreachNotification',

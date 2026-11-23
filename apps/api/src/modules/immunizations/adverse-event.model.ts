@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type AdverseEventSeverity = 'mild' | 'moderate' | 'severe' | 'life-threatening';
 export type AdverseEventOutcome = 'recovered' | 'recovering' | 'ongoing' | 'fatal' | 'unknown';
@@ -51,6 +52,8 @@ const VaccineAdverseEventSchema = new Schema<IVaccineAdverseEvent>(
   },
   { timestamps: true, versionKey: false }
 );
+
+VaccineAdverseEventSchema.add(baseSchema);
 
 VaccineAdverseEventSchema.index({ clinicId: 1, createdAt: -1 });
 VaccineAdverseEventSchema.index({ patientId: 1, createdAt: -1 });

@@ -1,4 +1,5 @@
 import { Schema, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface IWebhook {
   clinicId: Schema.Types.ObjectId;
@@ -86,6 +87,8 @@ const webhookSchema = new Schema<IWebhook>(
   },
   { timestamps: true, versionKey: false }
 );
+
+webhookSchema.add(baseSchema);
 
 webhookSchema.index({ clinicId: 1, isActive: 1 });
 

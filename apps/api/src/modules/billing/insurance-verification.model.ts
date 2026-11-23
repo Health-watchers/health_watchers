@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type InsuranceVerificationStatus = 'in_progress' | 'verified' | 'not_verified' | 'error';
 
@@ -80,6 +81,7 @@ const InsuranceVerificationSchema = new Schema<IInsuranceVerification>(
 
 InsuranceVerificationSchema.index({ clinicId: 1, createdAt: -1 });
 InsuranceVerificationSchema.index({ patientId: 1, createdAt: -1 });
+InsuranceVerificationSchema.add(baseSchema);
 InsuranceVerificationSchema.index({ patientId: 1, status: 1 });
 
 export const InsuranceVerificationModel = (mongoose.models.InsuranceVerification ||

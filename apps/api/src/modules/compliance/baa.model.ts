@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface BAA extends Document {
   clinicId: mongoose.Types.ObjectId;
@@ -28,5 +29,7 @@ const baaSchema = new Schema<BAA>(
   },
   { timestamps: true }
 );
+
+baaSchema.add(baseSchema);
 
 export const BAAModel = mongoose.model<BAA>('BAA', baaSchema);

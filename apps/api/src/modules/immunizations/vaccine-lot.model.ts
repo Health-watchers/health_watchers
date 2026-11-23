@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type VaccineLotStatus = 'active' | 'low' | 'depleted' | 'expired' | 'recalled';
 
@@ -51,6 +52,8 @@ const VaccineLotSchema = new Schema<IVaccineLot>(
   },
   { timestamps: true, versionKey: false }
 );
+
+VaccineLotSchema.add(baseSchema);
 
 VaccineLotSchema.index({ clinicId: 1, lotNumber: 1 }, { unique: true });
 VaccineLotSchema.index({ clinicId: 1, status: 1, expiryDate: 1 });
