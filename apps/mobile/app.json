@@ -36,6 +36,18 @@
           "icon": "./assets/notification-icon.png",
           "color": "#ffffff"
         }
+      ],
+      [
+        "./plugins/withEncryptedCacheBackupExclusion",
+        {
+          "cacheDirectory": "encrypted-cache",
+          "excludeFromBackup": true,
+          "androidAllowBackup": false,
+          "androidBackupRules": {
+            "fullBackupContent": "./android-backup-rules.xml",
+            "dataExtractionRules": "./android-data-extraction-rules.xml"
+          }
+        }
       ]
     ]
   }

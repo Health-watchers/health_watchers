@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { useQuery, useQueryClient } from 'react-query';
 import { authService } from './auth.service';
+import { EncryptedCacheService } from './encrypted-cache.service';
 
 const CACHE_KEYS = {
   appointments: 'appointments',
@@ -13,7 +14,23 @@ const CACHE_KEYS = {
   pendingSync: 'pendingSync',
 };
 
+/**
+ * Legacy plaintext keys written by earlier versions of this service. These are
+ * deleted on first launch after the upgrade (see migrateLegacyCache).
+ */
+const LEGACY_PLAINTEXT_KEYS = Object.values(CACHE_KEYS);
+
+const MIGRATION_FLAG_KEY = 'offlineCache:legacyMigration:v1';
+
+/** Maximum age (ms) of a cached entry before it is treated as expired. */
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 const MAX_CACHED_PATIENTS = 50;
+
+interface CacheEnvelope<T> {
+  data: T;
+  cachedAt: number;
+}
 
 export interface CachedResult<T> {
   data: T;
@@ -53,6 +70,33 @@ function encounterKey(patientId: string): string {
   return `${CACHE_KEYS.encounters}:${patientId}`;
 }
 
+function isExpired(cachedAt: number | undefined): boolean {
+  if (!cachedAt) return true;
+  return Date.now() - cachedAt > CACHE_TTL_MS;
+}
+
+/**
+ * Read a value from the encrypted cache, enforcing the TTL. Expired entries are
+ * removed and null is returned.
+ */
+async function readEncrypted<T>(key: string): Promise<T | null> {
+  const envelope = await EncryptedCacheService.get<CacheEnvelope<T>>(key);
+  if (!envelope) return null;
+  if (isExpired(envelope.cachedAt)) {
+    await EncryptedCacheService.remove(key);
+    return null;
+  }
+  return envelope.data;
+}
+
+/**
+ * Write a value to the encrypted cache wrapped in a timestamped envelope.
+ */
+async function writeEncrypted<T>(key: string, data: T): Promise<void> {
+  const envelope: CacheEnvelope<T> = { data, cachedAt: Date.now() };
+  await EncryptedCacheService.set(key, envelope);
+}
+
 function shallowDiff(cached: any, server: any): FieldDiff[] {
   const diffs: FieldDiff[] = [];
   const keys = new Set([...Object.keys(cached || {}), ...Object.keys(server || {})]);
@@ -71,30 +115,30 @@ export class OfflineCacheService {
   private static unsubscribeNetInfo: (() => void) | null = null;
 
   static async cacheAppointments(appointments: any[]): Promise<void> {
-    await AsyncStorage.setItem(CACHE_KEYS.appointments, JSON.stringify(appointments));
+    await writeEncrypted(CACHE_KEYS.appointments, appointments);
   }
 
   static async getCachedAppointments(): Promise<any[]> {
-    const cached = await AsyncStorage.getItem(CACHE_KEYS.appointments);
-    return cached ? JSON.parse(cached) : [];
+    const cached = await readEncrypted<any[]>(CACHE_KEYS.appointments);
+    return cached || [];
   }
 
   static async cacheEncounters(encounters: any[]): Promise<void> {
-    await AsyncStorage.setItem(CACHE_KEYS.encounters, JSON.stringify(encounters));
+    await writeEncrypted(CACHE_KEYS.encounters, encounters);
   }
 
   static async getCachedEncounters(): Promise<any[]> {
-    const cached = await AsyncStorage.getItem(CACHE_KEYS.encounters);
-    return cached ? JSON.parse(cached) : [];
+    const cached = await readEncrypted<any[]>(CACHE_KEYS.encounters);
+    return cached || [];
   }
 
   static async cacheLabResults(results: any[]): Promise<void> {
-    await AsyncStorage.setItem(CACHE_KEYS.labResults, JSON.stringify(results));
+    await writeEncrypted(CACHE_KEYS.labResults, results);
   }
 
   static async getCachedLabResults(): Promise<any[]> {
-    const cached = await AsyncStorage.getItem(CACHE_KEYS.labResults);
-    return cached ? JSON.parse(cached) : [];
+    const cached = await readEncrypted<any[]>(CACHE_KEYS.labResults);
+    return cached || [];
   }
 
   /**
@@ -110,35 +154,30 @@ export class OfflineCacheService {
       cachedAt: Date.now(),
     };
 
-    const indexRaw = await AsyncStorage.getItem(CACHE_KEYS.patientIndex);
-    const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+    const index = (await readEncrypted<string[]>(CACHE_KEYS.patientIndex)) || [];
     const nextIndex = [patientId, ...index.filter((id) => id !== patientId)].slice(
       0,
       MAX_CACHED_PATIENTS
     );
     const evicted = index.filter((id) => !nextIndex.includes(id));
 
-    const writes: [string, string][] = [
-      [patientKey(patientId), JSON.stringify(record)],
-      [CACHE_KEYS.patientIndex, JSON.stringify(nextIndex)],
-    ];
-    await AsyncStorage.multiSet(writes);
+    await writeEncrypted(patientKey(patientId), record);
+    await writeEncrypted(CACHE_KEYS.patientIndex, nextIndex);
 
     if (evicted.length > 0) {
-      await AsyncStorage.multiRemove(
+      await EncryptedCacheService.removeMany(
         evicted.flatMap((id) => [patientKey(id), encounterKey(id)])
       );
     }
   }
 
   static async getCachedPatientRecord(patientId: string): Promise<CachedPatientRecord | null> {
-    const raw = await AsyncStorage.getItem(patientKey(String(patientId)));
-    return raw ? JSON.parse(raw) : null;
+    return readEncrypted<CachedPatientRecord>(patientKey(String(patientId)));
   }
 
   static async getCachedPatientIds(): Promise<string[]> {
-    const raw = await AsyncStorage.getItem(CACHE_KEYS.patientIndex);
-    return raw ? JSON.parse(raw) : [];
+    const ids = await readEncrypted<string[]>(CACHE_KEYS.patientIndex);
+    return ids || [];
   }
 
   static async getCachedPatients(): Promise<CachedPatientRecord[]> {
@@ -152,15 +191,14 @@ export class OfflineCacheService {
    * replayed when connectivity is restored.
    */
   static async queuePendingSync(item: any): Promise<void> {
-    const raw = await AsyncStorage.getItem(CACHE_KEYS.pendingSync);
-    const queue = raw ? JSON.parse(raw) : [];
+    const queue = (await readEncrypted<any[]>(CACHE_KEYS.pendingSync)) || [];
     queue.push({ ...item, queuedAt: Date.now() });
-    await AsyncStorage.setItem(CACHE_KEYS.pendingSync, JSON.stringify(queue));
+    await writeEncrypted(CACHE_KEYS.pendingSync, queue);
   }
 
   static async getPendingSync(): Promise<any[]> {
-    const raw = await AsyncStorage.getItem(CACHE_KEYS.pendingSync);
-    return raw ? JSON.parse(raw) : [];
+    const queue = await readEncrypted<any[]>(CACHE_KEYS.pendingSync);
+    return queue || [];
   }
 
   /**
@@ -208,7 +246,7 @@ export class OfflineCacheService {
           return { synced: 0, conflicts: [] };
         }
       }
-      await AsyncStorage.removeItem(CACHE_KEYS.pendingSync);
+      await EncryptedCacheService.remove(CACHE_KEYS.pendingSync);
 
       const response = await api.get('/patients');
       const serverPatients = response.data.data || [];
@@ -265,12 +303,56 @@ export class OfflineCacheService {
     }
   }
 
+  /**
+   * Wipe all cached PHI. Called on logout and when device-integrity checks
+   * fail. Also removes any legacy plaintext keys that may still exist.
+   */
   static async clearCache(): Promise<void> {
     const ids = await this.getCachedPatientIds();
-    await AsyncStorage.multiRemove([
+    await EncryptedCacheService.removeMany([
       ...Object.values(CACHE_KEYS),
       ...ids.flatMap((id) => [patientKey(id), encounterKey(id)]),
     ]);
+    await this.removeLegacyPlaintextKeys();
+  }
+
+  /**
+   * Wipe the cache in response to a logout event.
+   */
+  static async wipeOnLogout(): Promise<void> {
+    await this.clearCache();
+  }
+
+  /**
+   * Wipe the cache when a device-integrity check fails (e.g. rooted/jailbroken
+   * device detected).
+   */
+  static async wipeOnIntegrityFailure(): Promise<void> {
+    await this.clearCache();
+  }
+
+  /**
+   * Delete legacy plaintext cache keys written by earlier versions. Safe to
+   * call repeatedly; the migration flag prevents redundant work.
+   */
+  static async migrateLegacyCache(): Promise<void> {
+    const migrated = await AsyncStorage.getItem(MIGRATION_FLAG_KEY);
+    if (migrated === 'true') return;
+    await this.removeLegacyPlaintextKeys();
+    await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+  }
+
+  private static async removeLegacyPlaintextKeys(): Promise<void> {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const legacyKeys = allKeys.filter(
+      (key) =>
+        LEGACY_PLAINTEXT_KEYS.includes(key) ||
+        key.startsWith(`${CACHE_KEYS.patients}:`) ||
+        key.startsWith(`${CACHE_KEYS.encounters}:`)
+    );
+    if (legacyKeys.length > 0) {
+      await AsyncStorage.multiRemove(legacyKeys);
+    }
   }
 }
 
