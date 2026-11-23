@@ -44,6 +44,8 @@ pub enum Error {
     NotExpired = 4,
     Unauthorized = 5,
     AlreadyExists = 6,
+    AlreadyInitialized = 7,
+    InvalidSplit = 8,
 }
 
 /// Storage keys.
@@ -52,16 +54,35 @@ pub enum Error {
 pub enum DataKey {
     Escrow(BytesN<32>),
     Nonce,
+    Arbiter,
 }
 
 /// Default escrow lifetime: 14 days in seconds.
 const ESCROW_TTL_SECS: u64 = 14 * 24 * 60 * 60;
+
+/// Basis points denominator (100%).
+const BPS_DENOMINATOR: i128 = 10_000;
 
 #[contract]
 pub struct Escrow;
 
 #[contractimpl]
 impl Escrow {
+    /// Initialize the contract with the arbiter address.
+    /// The arbiter is the platform multisig that resolves disputes.
+    /// Can only be called once.
+    pub fn initialize(env: Env, arbiter: Address) {
+        if env.storage().instance().has(&DataKey::Arbiter) {
+            panic_with_error!(&env, Error::AlreadyInitialized);
+        }
+        env.storage().instance().set(&DataKey::Arbiter, &arbiter);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "initialized")),
+            arbiter,
+        );
+    }
+
     /// Deposit funds into escrow.
     /// Called by the patient to hold payment for the clinic.
     ///
@@ -228,6 +249,76 @@ impl Escrow {
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "disputed")),
             (escrow_id, caller, reason),
+        );
+
+        true
+    }
+
+    /// Resolve a disputed escrow by splitting the funds between the patient
+    /// and the clinic according to the arbiter's decision.
+    ///
+    /// # Arguments
+    /// * `escrow_id` - The disputed escrow
+    /// * `arbiter` - Must be the stored arbiter (must authorize)
+    /// * `patient_bps` - Basis points (of 10_000) refunded to the patient
+    /// * `clinic_bps` - Basis points (of 10_000) released to the clinic
+    pub fn resolve_dispute(
+        env: Env,
+        escrow_id: BytesN<32>,
+        arbiter: Address,
+        patient_bps: u32,
+        clinic_bps: u32,
+    ) -> bool {
+        arbiter.require_auth();
+
+        let stored_arbiter: Address = match env.storage().instance().get(&DataKey::Arbiter) {
+            Some(a) => a,
+            None => panic_with_error!(&env, Error::Unauthorized),
+        };
+        if stored_arbiter != arbiter {
+            panic_with_error!(&env, Error::Unauthorized);
+        }
+
+        let key = DataKey::Escrow(escrow_id.clone());
+        let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
+            Some(r) => r,
+            None => panic_with_error!(&env, Error::EscrowNotFound),
+        };
+
+        if record.status != EscrowStatus::Disputed {
+            panic_with_error!(&env, Error::InvalidStatus);
+        }
+
+        let patient_bps = patient_bps as i128;
+        let clinic_bps = clinic_bps as i128;
+        if patient_bps + clinic_bps != BPS_DENOMINATOR {
+            panic_with_error!(&env, Error::InvalidSplit);
+        }
+
+        let patient_amount = record.amount * patient_bps / BPS_DENOMINATOR;
+        let clinic_amount = record.amount - patient_amount;
+
+        let contract_id = env.current_contract_address();
+        let token_client = token::Client::new(&env, &record.token);
+        if patient_amount > 0 {
+            token_client.transfer(&contract_id, &record.patient, &patient_amount);
+        }
+        if clinic_amount > 0 {
+            token_client.transfer(&contract_id, &record.clinic, &clinic_amount);
+        }
+
+        record.status = EscrowStatus::Released;
+        env.storage().persistent().set(&key, &record);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "resolved")),
+            (
+                escrow_id,
+                record.patient,
+                record.clinic,
+                patient_amount,
+                clinic_amount,
+            ),
         );
 
         true
@@ -484,6 +575,109 @@ mod tests {
 
         let attacker = Address::generate(&env);
         let result = client.try_refund(&escrow_id, &attacker);
+        assert!(result.is_err());
+    }
+
+    /// Set up an initialized contract plus a disputed escrow.
+    fn setup_dispute<'a>() -> (Env, Address, Address, Address, Address, Address, BytesN<32>) {
+        let (env, contract_id, patient, clinic, token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        client.initialize(&arbiter);
+
+        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+        client.dispute(&escrow_id, &patient, &Bytes::new(&env));
+
+        (env, contract_id, patient, clinic, token_id, arbiter, escrow_id)
+    }
+
+    #[test]
+    fn test_initialize_twice_fails() {
+        let (env, contract_id, _, _, _) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        client.initialize(&arbiter);
+
+        let result = client.try_initialize(&arbiter);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dispute_full_refund() {
+        let (env, contract_id, patient, _clinic, token_id, arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &10_000, &0);
+        assert!(resolved);
+
+        let record = client.get_escrow(&escrow_id);
+        assert_eq!(record.status, EscrowStatus::Released);
+
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&patient), 10_000);
+        assert_eq!(token_client.balance(&contract_id), 0);
+    }
+
+    #[test]
+    fn test_resolve_dispute_full_release() {
+        let (env, contract_id, _patient, clinic, token_id, arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &0, &10_000);
+        assert!(resolved);
+
+        let record = client.get_escrow(&escrow_id);
+        assert_eq!(record.status, EscrowStatus::Released);
+
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&clinic), 1_000);
+        assert_eq!(token_client.balance(&contract_id), 0);
+    }
+
+    #[test]
+    fn test_resolve_dispute_split() {
+        let (env, contract_id, patient, clinic, token_id, arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &6_000, &4_000);
+        assert!(resolved);
+
+        let record = client.get_escrow(&escrow_id);
+        assert_eq!(record.status, EscrowStatus::Released);
+
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&patient), 9_000 + 600);
+        assert_eq!(token_client.balance(&clinic), 400);
+        assert_eq!(token_client.balance(&contract_id), 0);
+    }
+
+    #[test]
+    fn test_resolve_dispute_invalid_split_fails() {
+        let (env, contract_id, _patient, _clinic, _token_id, arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let result = client.try_resolve_dispute(&escrow_id, &arbiter, &5_000, &4_000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dispute_non_arbiter_fails() {
+        let (env, contract_id, _patient, _clinic, _token_id, _arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let attacker = Address::generate(&env);
+        let result = client.try_resolve_dispute(&escrow_id, &attacker, &10_000, &0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dispute_wrong_status_fails() {
+        let (env, contract_id, patient, clinic, token_id, arbiter, _escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        // Active (not disputed) escrow cannot be resolved.
+        let active_id = client.deposit(&patient, &clinic, &token_id, &1000);
+        let result = client.try_resolve_dispute(&active_id, &arbiter, &10_000, &0);
         assert!(result.is_err());
     }
 }

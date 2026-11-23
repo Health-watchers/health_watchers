@@ -294,6 +294,7 @@ describe('JOB_DEFINITIONS', () => {
         'notification-dispatch',
         'immunization-compliance',
         'outbox-relay',
+        'cache-warmup',
       ])
     );
   });

@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -13,13 +14,9 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "bundleIdentifier": "com.healthwatchers.mobile",
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": false
-        }
-      }
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,8 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.healthwatchers.mobile",
-      "allowBackup": false,
-      "usesCleartextTraffic": false
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
