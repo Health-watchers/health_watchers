@@ -57,6 +57,13 @@ pub enum DataKey {
 /// Default escrow lifetime: 14 days in seconds.
 const ESCROW_TTL_SECS: u64 = 14 * 24 * 60 * 60;
 
+/// Soroban persistent/instance storage rent. `extend_ttl` is called on every
+/// read and write so entries never reach the default ledger TTL and get
+/// archived. Values are in ledgers (~5s each); extend-to is ~30 days,
+/// comfortably longer than the 14-day business expiry (ESCROW_TTL_SECS).
+const STORAGE_THRESHOLD: u32 = 17_280; // extend when remaining TTL drops below ~1 day
+const STORAGE_EXTEND_TO: u32 = 518_400; // extend to ~30 days
+
 #[contract]
 pub struct Escrow;
 
@@ -95,12 +102,23 @@ impl Escrow {
         let expires_at = now + ESCROW_TTL_SECS;
 
         // Monotonic nonce ensures unique IDs even for identical parties.
-        let nonce: u64 = env
+        let nonce: u64 = match env
             .storage()
             .instance()
             .get::<DataKey, u64>(&DataKey::Nonce)
-            .unwrap_or(0);
+        {
+            Some(n) => {
+                env.storage()
+                    .instance()
+                    .extend_ttl(&DataKey::Nonce, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
+                n
+            }
+            None => 0,
+        };
         env.storage().instance().set(&DataKey::Nonce, &(nonce + 1));
+        env.storage()
+            .instance()
+            .extend_ttl(&DataKey::Nonce, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
 
         let escrow_id = Self::generate_escrow_id(&env, &patient, &clinic, nonce);
 
@@ -120,6 +138,7 @@ impl Escrow {
         };
 
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "deposited")),
@@ -136,7 +155,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -156,6 +178,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Released;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "released")),
@@ -172,7 +195,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -195,6 +221,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Refunded;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "refunded")),
@@ -211,7 +238,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -224,6 +254,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Disputed;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "disputed")),
@@ -240,7 +271,10 @@ impl Escrow {
 
         let key = DataKey::Escrow(escrow_id.clone());
         let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
-            Some(r) => r,
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         };
 
@@ -260,6 +294,7 @@ impl Escrow {
 
         record.status = EscrowStatus::Cancelled;
         env.storage().persistent().set(&key, &record);
+        Self::extend_escrow_ttl(&env, &key);
 
         env.events().publish(
             (Symbol::new(&env, "escrow"), Symbol::new(&env, "cancelled")),
@@ -271,17 +306,24 @@ impl Escrow {
 
     /// Read an escrow record (view helper for off-chain callers).
     pub fn get_escrow(env: Env, escrow_id: BytesN<32>) -> EscrowRecord {
-        match env
-            .storage()
-            .persistent()
-            .get::<DataKey, EscrowRecord>(&DataKey::Escrow(escrow_id))
-        {
-            Some(r) => r,
+        let key = DataKey::Escrow(escrow_id);
+        match env.storage().persistent().get::<DataKey, EscrowRecord>(&key) {
+            Some(r) => {
+                Self::extend_escrow_ttl(&env, &key);
+                r
+            }
             None => panic_with_error!(&env, Error::EscrowNotFound),
         }
     }
 
     // ── Helper functions ──────────────────────────────────────────────────
+
+    /// Refresh the ledger TTL of an escrow record so it is not archived.
+    fn extend_escrow_ttl(env: &Env, key: &DataKey) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
+    }
 
     /// Build a deterministic 32-byte escrow ID from patient, clinic, and nonce.
     fn generate_escrow_id(
@@ -485,5 +527,28 @@ mod tests {
         let attacker = Address::generate(&env);
         let result = client.try_refund(&escrow_id, &attacker);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_storage_remains_available_after_ledger_advance() {
+        let (env, contract_id, patient, clinic, token_id) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+
+        // Advance the ledger well beyond the default persistent/instance TTL.
+        // Without extend_ttl the record and the nonce would be archived.
+        let seq = env.ledger().sequence();
+        env.ledger().set_sequence(seq + 20_000);
+        env.ledger().set_timestamp(1000 + 20_000 * 5);
+
+        // Persistent entry: still readable because deposit extended its TTL.
+        let record = client.get_escrow(&escrow_id);
+        assert_eq!(record.status, EscrowStatus::Active);
+
+        // Instance entry (nonce): a second deposit still works, proving the
+        // nonce was not archived (it would otherwise read as 0 and collide).
+        let escrow_id2 = client.deposit(&patient, &clinic, &token_id, &1000);
+        assert_ne!(escrow_id, escrow_id2);
     }
 }
