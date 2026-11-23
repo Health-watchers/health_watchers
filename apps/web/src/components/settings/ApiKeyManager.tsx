@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { apiV1Fetch, ApiError } from '@/lib/api';
 
 const ALL_SCOPES = [
   'patients:read',
@@ -39,6 +38,7 @@ interface NewKeyResult {
 export default function ApiKeyManager() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [newKeyResult, setNewKeyResult] = useState<NewKeyResult | null>(null);
@@ -49,17 +49,17 @@ export default function ApiKeyManager() {
   const [selectedScopes, setSelectedScopes] = useState<Scope[]>([]);
   const [expiresAt, setExpiresAt] = useState('');
 
-  const getToken = () =>
-    typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
-
+  // Auth flows through the httpOnly access-token cookie set by the BFF
+  // (lib/authProxy.ts). apiV1Fetch sends credentials: 'include' and the CSRF
+  // header for state-changing requests — never read a token from localStorage.
   const fetchKeys = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/api-keys`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const json = await res.json();
+      const json = await apiV1Fetch('/api-keys');
       if (json.status === 'success') setKeys(json.data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load API keys');
     } finally {
       setLoading(false);
     }
@@ -79,17 +79,16 @@ export default function ApiKeyManager() {
     e.preventDefault();
     if (!name.trim() || selectedScopes.length === 0) return;
     setCreating(true);
+    setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/api-keys`, {
+      const json = await apiV1Fetch('/api-keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({
           name: name.trim(),
           scopes: selectedScopes,
           expiresAt: expiresAt || undefined,
         }),
       });
-      const json = await res.json();
       if (json.status === 'success') {
         setNewKeyResult(json.data);
         setShowForm(false);
@@ -98,6 +97,8 @@ export default function ApiKeyManager() {
         setExpiresAt('');
         fetchKeys();
       }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to create API key');
     } finally {
       setCreating(false);
     }
@@ -105,10 +106,7 @@ export default function ApiKeyManager() {
 
   const handleRevoke = async (id: string) => {
     if (!confirm('Revoke this API key? This cannot be undone.')) return;
-    await fetch(`${API_BASE}/api/v1/api-keys/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
+    await apiV1Fetch(`/api-keys/${id}`, { method: 'DELETE' });
     fetchKeys();
   };
 
@@ -121,6 +119,14 @@ export default function ApiKeyManager() {
 
   return (
     <div className="mt-8 space-y-6">
+      {error && (
+        <div
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          {error}
+        </div>
+      )}
       {/* One-time key display */}
       {newKeyResult && (
         <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4">

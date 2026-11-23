@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Modal } from '@/components/ui';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { apiV1Fetch, ApiError } from '@/lib/api';
 
 const ALL_EVENTS = [
   'payment.confirmed',
@@ -78,6 +77,7 @@ export default function WebhookManager() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedWebhook, setSelectedWebhook] = useState<Webhook | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -86,24 +86,21 @@ export default function WebhookManager() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
 
-  const getToken = () =>
-    typeof window !== 'undefined' ? localStorage.getItem('accessToken') || '' : '';
-
+  // Auth flows through the httpOnly access-token cookie set by the BFF
+  // (lib/authProxy.ts). apiV1Fetch sends credentials: 'include' and the CSRF
+  // header for state-changing requests — never read a token from localStorage.
   const fetchWebhooks = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const [whRes, statsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/webhooks`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }),
-        fetch(`${API_BASE}/api/v1/webhooks/stats/overview`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }),
+      const [whJson, statsJson] = await Promise.all([
+        apiV1Fetch('/webhooks'),
+        apiV1Fetch('/webhooks/stats/overview'),
       ]);
-      const whJson = await whRes.json();
-      const statsJson = await statsRes.json();
       if (whJson.status === 'success') setWebhooks(whJson.data);
       if (statsJson.status === 'success') setStats(statsJson.data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load webhooks');
     } finally {
       setLoading(false);
     }
@@ -116,10 +113,7 @@ export default function WebhookManager() {
   const fetchDeliveries = async (webhookId: string) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/webhooks/${webhookId}/deliveries`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const json = await res.json();
+      const json = await apiV1Fetch(`/webhooks/${webhookId}/deliveries`);
       if (json.status === 'success') setDeliveries(json.data);
     } finally {
       setDetailLoading(false);
@@ -129,10 +123,7 @@ export default function WebhookManager() {
   const fetchEventLogs = async (webhookId: string) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/webhooks/${webhookId}/events`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      const json = await res.json();
+      const json = await apiV1Fetch(`/webhooks/${webhookId}/events`);
       if (json.status === 'success') setEventLogs(json.data.events);
     } finally {
       setDetailLoading(false);
@@ -156,9 +147,8 @@ export default function WebhookManager() {
   };
 
   const handleRetry = async (webhookId: string, deliveryId: string) => {
-    await fetch(`${API_BASE}/api/v1/webhooks/${webhookId}/deliveries/${deliveryId}/retry`, {
+    await apiV1Fetch(`/webhooks/${webhookId}/deliveries/${deliveryId}/retry`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${getToken()}` },
     });
     await fetchDeliveries(webhookId);
   };
@@ -167,10 +157,7 @@ export default function WebhookManager() {
   const handleSendTest = async (webhookId: string) => {
     setSendingTest(true);
     try {
-      await fetch(`${API_BASE}/api/v1/webhooks/${webhookId}/test`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      await apiV1Fetch(`/webhooks/${webhookId}/test`, { method: 'POST' });
       setActiveTab('deliveries');
       await fetchDeliveries(webhookId);
     } finally {
@@ -179,12 +166,8 @@ export default function WebhookManager() {
   };
 
   const handleToggle = async (webhook: Webhook) => {
-    await fetch(`${API_BASE}/api/v1/webhooks/${webhook.id}`, {
+    await apiV1Fetch(`/webhooks/${webhook.id}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
       body: JSON.stringify({ isActive: !webhook.isActive }),
     });
     fetchWebhooks();
@@ -192,10 +175,7 @@ export default function WebhookManager() {
 
   const handleDelete = async (webhook: Webhook) => {
     if (!confirm(`Delete webhook for ${webhook.url}? This cannot be undone.`)) return;
-    await fetch(`${API_BASE}/api/v1/webhooks/${webhook.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
+    await apiV1Fetch(`/webhooks/${webhook.id}`, { method: 'DELETE' });
     setSelectedWebhook(null);
     fetchWebhooks();
   };
@@ -219,6 +199,14 @@ export default function WebhookManager() {
 
   return (
     <div className="mt-8 space-y-6">
+      {error && (
+        <div
+          role="alert"
+          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          {error}
+        </div>
+      )}
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card padding="sm">
@@ -329,7 +317,6 @@ export default function WebhookManager() {
             setShowCreateForm(false);
             fetchWebhooks();
           }}
-          getToken={getToken}
         />
       )}
 
@@ -483,11 +470,9 @@ export default function WebhookManager() {
 function CreateWebhookForm({
   onClose,
   onCreated,
-  getToken,
 }: {
   onClose: () => void;
   onCreated: () => void;
-  getToken: () => string;
 }) {
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
@@ -509,12 +494,8 @@ function CreateWebhookForm({
     setCreating(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/webhooks`, {
+      const json = await apiV1Fetch('/webhooks', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
-        },
         body: JSON.stringify({
           url: url.trim(),
           events: selectedEvents,
@@ -526,14 +507,13 @@ function CreateWebhookForm({
           },
         }),
       });
-      const json = await res.json();
       if (json.status === 'success') {
         onCreated();
       } else {
         setError(json.message || 'Failed to create webhook');
       }
-    } catch {
-      setError('Network error');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Network error');
     } finally {
       setCreating(false);
     }
