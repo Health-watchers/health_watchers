@@ -7,7 +7,7 @@ import { MedicationHistoryModel } from './medication-history.model';
  * Query params: active (bool), startDate, endDate, doctorId
  */
 export async function getMyMedications(req: Request, res: Response) {
-  const { patientId } = req.user as any;
+  const { patientId } = req.user!;
   const { active, startDate, endDate, doctorId, limit = 100 } = req.query;
 
   const filter: any = { patientId };
@@ -32,7 +32,7 @@ export async function getMyMedications(req: Request, res: Response) {
  * GET /api/v1/portal/medications/:prescriptionId/refill-history
  */
 export async function getRefillHistory(req: Request, res: Response) {
-  const { patientId } = req.user as any;
+  const { patientId } = req.user!;
   const { prescriptionId } = req.params;
 
   const medication = await MedicationHistoryModel.findOne({

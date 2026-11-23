@@ -272,21 +272,26 @@ const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
 
 encounterSchema.pre('save', function () {
+  // Cast to a record type so dynamic field access type-checks without `as any`.
+  const doc = this as unknown as Record<string, unknown>;
   for (const field of FREE_TEXT_FIELDS) {
-    const val = this[field];
-    if (val) (this as any)[field] = sanitizeText(val);
+    const val = doc[field];
+    if (val) doc[field] = sanitizeText(val);
   }
   // Sanitize SOAP rich-text HTML fields (strip dangerous tags/attrs)
   if (this.soapNotes) {
+    const soapNotes = this.soapNotes as unknown as Record<string, string | undefined>;
     for (const field of SOAP_FIELDS) {
-      const val = (this.soapNotes as any)[field];
-      if (val) (this.soapNotes as any)[field] = sanitizeHtml(val);
+      const val = soapNotes[field];
+      if (val) soapNotes[field] = sanitizeHtml(val);
     }
   }
 });
 
 encounterSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as any;
+  const update = this.getUpdate() as unknown as Record<string, unknown> & {
+    $set?: Record<string, unknown>;
+  };
   if (!update) return;
 
   for (const field of FREE_TEXT_FIELDS) {

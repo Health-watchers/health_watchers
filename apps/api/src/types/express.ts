@@ -32,6 +32,8 @@ declare global {
       requestId?: string;
       tokenJti?: string;
       clinicId?: string;
+      /** Raw request body captured by express.json verify callback */
+      rawBody?: Buffer;
       apiKey?: {
         id: string;
         userId: string;
