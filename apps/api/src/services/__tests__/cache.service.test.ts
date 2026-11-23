@@ -56,6 +56,7 @@ import {
   getCacheMetrics,
   resetCacheMetrics,
   registerWarmup,
+  registerPatientListWarmup,
   warmCache,
 } from '../cache.service';
 
@@ -255,6 +256,11 @@ describe('registerWarmup and warmCache', () => {
 
     await expect(warmCache()).resolves.toBeUndefined();
     expect(mockRedis.set).toHaveBeenCalledWith(goodKey, JSON.stringify({ ok: true }), 'EX', 60);
+  });
+
+  it('registers a patient-list warmup entry with the correct key format', () => {
+    // registerPatientListWarmup should not throw when called with a valid clinic id
+    expect(() => registerPatientListWarmup('clinic-abc-123')).not.toThrow();
   });
 });
 

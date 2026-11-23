@@ -7,9 +7,16 @@
 #   restore drill       monthly 1st 03:00  scripts/dr/dr-drill.sh --scope monthly
 #   cost report         weekly  Mon 06:00  scripts/backup/backup-cost-report.sh
 #
-# All jobs run the API image (which carries the scripts) with mongo tools on
-# PATH. Secret values live in `health-watchers-backup-secrets` — populate it
-# via External Secrets Operator in production (see k8s/external-secrets.yaml).
+# These in-cluster CronJobs are the PRIMARY backup mechanism (#1757). GitHub
+# Actions is used only for verification (see .github/workflows/backup-verify.yml).
+#
+# All jobs run the API image (which carries the scripts) with MongoDB Database
+# Tools (mongodump/mongorestore) on PATH. Secret values live in
+# `health-watchers-backup-secrets` — populate it via External Secrets Operator
+# in production (see k8s/external-secrets.yaml).
+#
+# Each successful run pushes the `backup_last_success_timestamp_seconds` gauge
+# to Pushgateway; monitoring/alerts-backup.yml alerts when it goes stale.
 # ============================================================
 apiVersion: v1
 kind: ConfigMap
@@ -30,6 +37,12 @@ data:
   GLACIER_AFTER_DAYS: "30"
   DR_TEST_SCOPE: "monthly"
   PUSHGATEWAY_URL: "http://pushgateway.monitoring:9091"
+  # Metric consumed by monitoring/alerts-backup.yml (staleness alert).
+  BACKUP_METRIC_NAME: "backup_last_success_timestamp_seconds"
+  BACKUP_METRIC_JOB: "mongodb_backup"
+  # Ensure MongoDB Database Tools are resolvable regardless of image PATH.
+  MONGODB_TOOLS_DIR: "/usr/local/bin"
+=======
 ---
 apiVersion: v1
 kind: Secret
@@ -83,6 +96,11 @@ spec:
             - name: backup
               image: ghcr.io/chisom92/health-watchers-api:latest
               command: ["bash", "scripts/backup/backup-scheduler.sh", "--mode", "full"]
+              env:
+                - name: BACKUP_MODE
+                  value: "full"
+                - name: PATH
+                  value: "/usr/local/bin:/usr/bin:/bin"
               envFrom:
                 - configMapRef:
                     name: health-watchers-backup-config
@@ -129,6 +147,11 @@ spec:
             - name: backup
               image: ghcr.io/chisom92/health-watchers-api:latest
               command: ["bash", "scripts/backup/backup-scheduler.sh", "--mode", "incremental"]
+              env:
+                - name: BACKUP_MODE
+                  value: "incremental"
+                - name: PATH
+                  value: "/usr/local/bin:/usr/bin:/bin"
               envFrom:
                 - configMapRef:
                     name: health-watchers-backup-config

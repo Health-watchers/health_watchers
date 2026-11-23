@@ -1,76 +1,88 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { z } from 'zod';
 
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 }
 
-export const stellarConfig = {
-  network: process.env.STELLAR_NETWORK || 'testnet',
-  mainnetConfirmed: process.env.MAINNET_CONFIRMED === 'true',
-  dryRun: process.env.STELLAR_DRY_RUN === 'true',
-  maxTransactionXlm: parseFloat(process.env.STELLAR_MAX_TRANSACTION_XLM || '1000'),
-  // Prefer STELLAR_PORT, keep STELLAR_SERVICE_PORT for backward compatibility.
-  port: process.env.STELLAR_PORT || process.env.STELLAR_SERVICE_PORT || '3002',
-  platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || '',
-  // Server-side signing key — never exposed to clients
-  stellarSecretKey: process.env.STELLAR_SECRET_KEY || '',
-  // API base URL for posting payment confirmations back to the API
-  apiUrl: process.env.API_URL || 'http://localhost:3000',
-  // Shared secret used to authenticate internal callbacks to the API
-  sharedSecret: process.env.STELLAR_SERVICE_SECRET || '',
-  horizonUrl:
-    process.env.STELLAR_NETWORK === 'mainnet'
-      ? 'https://horizon.stellar.org'
-      : 'https://horizon-testnet.stellar.org',
-  // Multiple Horizon endpoints for failover
-  horizonUrls: getHorizonUrls(),
-  // HTTP request timeout for Horizon calls (ms)
-  horizonTimeoutMs: parseInt(process.env.STELLAR_HORIZON_TIMEOUT_MS || '30000', 10),
-  // Retry configuration for Horizon requests
-  maxRetries: parseInt(process.env.STELLAR_MAX_RETRIES || '3', 10),
-  retryDelayMs: parseInt(process.env.STELLAR_RETRY_DELAY_MS || '1000', 10),
-  // Batch size for processing transactions/payments
-  batchSize: parseInt(process.env.STELLAR_BATCH_SIZE || '50', 10),
-  // Soroban escrow contract IDs per network
-  escrowContractIdTestnet: process.env.ESCROW_CONTRACT_ID_TESTNET || '',
-  escrowContractIdMainnet: process.env.ESCROW_CONTRACT_ID_MAINNET || '',
-  // Resolved escrow contract ID for the active network (see resolveEscrowContractId)
-  escrowContractId: resolveEscrowContractId(),
-  // How often the escrow event poller queries Soroban RPC getEvents (ms)
-  escrowEventPollIntervalMs: parseInt(process.env.ESCROW_EVENT_POLL_INTERVAL_MS || '5000', 10),
-  // Ledger to start indexing escrow events from (0 = let the poller bootstrap)
-  escrowEventStartLedger: parseInt(process.env.ESCROW_EVENT_START_LEDGER || '0', 10),
-};
+// ── Schema ──────────────────────────────────────────────────────────
 
-function resolveEscrowContractId(): string {
-  const isMainnet = process.env.STELLAR_NETWORK === 'mainnet';
+const stellarConfigSchema = z.object({
+  STELLAR_NETWORK: z.enum(['mainnet', 'testnet']).default('testnet'),
+  MAINNET_CONFIRMED: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
+  STELLAR_DRY_RUN: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
+  STELLAR_MAX_TRANSACTION_XLM: z.string().default('1000'),
+  STELLAR_PORT: z.string().optional(),
+  STELLAR_SERVICE_PORT: z.string().optional(),
+  STELLAR_PLATFORM_PUBLIC_KEY: z.string().default(''),
+  STELLAR_SECRET_KEY: z.string().min(1, 'STELLAR_SECRET_KEY is required'),
+  API_URL: z.string().url().default('http://localhost:3000'),
+  STELLAR_SERVICE_SECRET: z.string().min(1, 'STELLAR_SERVICE_SECRET is required'),
+  STELLAR_HORIZON_URLS: z.string().optional(),
+  STELLAR_HORIZON_TIMEOUT_MS: z.string().default('30000'),
+  STELLAR_MAX_RETRIES: z.string().default('3'),
+  STELLAR_RETRY_DELAY_MS: z.string().default('1000'),
+  STELLAR_BATCH_SIZE: z.string().default('50'),
+});
 
-  if (isMainnet) {
-    // Never hand out a mainnet contract ID unless mainnet use is explicitly confirmed.
-    if (process.env.MAINNET_CONFIRMED !== 'true') {
-      return '';
-    }
-    return process.env.ESCROW_CONTRACT_ID_MAINNET || '';
-  }
+// ── Validation ──────────────────────────────────────────────────────
 
-  return process.env.ESCROW_CONTRACT_ID_TESTNET || '';
+const parsed = stellarConfigSchema.safeParse(process.env);
+
+if (!parsed.success) {
+  const errors = parsed.error.issues
+    .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+    .join('\n');
+  console.error(`FATAL: Stellar service configuration is invalid:\n${errors}`);
+  process.exit(1);
 }
 
+const cfg = parsed.data;
+
+// Mainnet safety: MAINNET_CONFIRMED must be true when using mainnet Horizon URLs.
+const isMainnet = cfg.STELLAR_NETWORK === 'mainnet';
+const customHorizonUrls = cfg.STELLAR_HORIZON_URLS?.split(',').map((u) => u.trim()).filter(Boolean);
+const usesMainnetHorizon =
+  isMainnet && (!customHorizonUrls || customHorizonUrls.some((u) => u.includes('stellar.org')));
+
+if (usesMainnetHorizon && !cfg.MAINNET_CONFIRMED) {
+  console.error(
+    "FATAL: MAINNET_CONFIRMED must be 'true' when STELLAR_NETWORK=mainnet and mainnet Horizon URLs are used."
+  );
+  process.exit(1);
+}
+
+// ── Exported config ─────────────────────────────────────────────────
+
 function getHorizonUrls(): string[] {
-  const isMainnet = process.env.STELLAR_NETWORK === 'mainnet';
-  const customUrls =
-    process.env.STELLAR_HORIZON_URLS?.split(',')
-      .map((u) => u.trim())
-      .filter(Boolean) || [];
-
-  if (customUrls.length > 0) {
-    return customUrls;
-  }
-
+  if (customHorizonUrls.length > 0) return customHorizonUrls;
   if (isMainnet) {
     return ['https://horizon.stellar.org', 'https://horizon.stellar.lobstr.co'];
   }
-
   return ['https://horizon-testnet.stellar.org', 'https://horizon.stellar.lobstr.co/testnet'];
 }
+
+export const stellarConfig = {
+  network: cfg.STELLAR_NETWORK,
+  mainnetConfirmed: cfg.MAINNET_CONFIRMED,
+  dryRun: cfg.STELLAR_DRY_RUN,
+  maxTransactionXlm: parseFloat(cfg.STELLAR_MAX_TRANSACTION_XLM),
+  port: cfg.STELLAR_PORT || cfg.STELLAR_SERVICE_PORT || '3002',
+  platformPublicKey: cfg.STELLAR_PLATFORM_PUBLIC_KEY,
+  stellarSecretKey: cfg.STELLAR_SECRET_KEY,
+  apiUrl: cfg.API_URL,
+  sharedSecret: cfg.STELLAR_SERVICE_SECRET,
+  horizonUrl: isMainnet ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org',
+  horizonUrls: getHorizonUrls(),
+  horizonTimeoutMs: parseInt(cfg.STELLAR_HORIZON_TIMEOUT_MS, 10),
+  maxRetries: parseInt(cfg.STELLAR_MAX_RETRIES, 10),
+  retryDelayMs: parseInt(cfg.STELLAR_RETRY_DELAY_MS, 10),
+  batchSize: parseInt(cfg.STELLAR_BATCH_SIZE, 10),
+};

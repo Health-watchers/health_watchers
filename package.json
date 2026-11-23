@@ -42,7 +42,8 @@
     "security:report": "node scripts/track-vulnerabilities.js report",
     "security:full": "npm run security:scan && npm run security:track && npm run security:report",
     "test:contract:consumer": "npm run test:contract --workspace=apps/web",
-    "test:contract:provider": "npm run test:contract --workspace=apps/api"
+    "test:contract:provider": "npm run test:contract --workspace=apps/api",
+    "seed": "npm run seed --workspace=api"
   },
   "overrides": {
     "ip": "^2.0.1",
