@@ -139,7 +139,7 @@ app.use(
     // Bind request-scoped context (requestId, clinicId, userId) to every log
     // entry emitted while handling this request.
     customProps: (req) => {
-      const r = req as any;
+      const r = req as unknown as express.Request;
       return {
         requestId: r.requestId ?? r.id,
         clinicId: r.clinicId ?? r.user?.clinicId,
@@ -177,7 +177,7 @@ app.use(
   express.json({
     limit: standardLimit,
     verify: (req, _res, buf) => {
-      (req as any).rawBody = buf;
+      req.rawBody = buf;
     },
   })
 );
@@ -282,7 +282,7 @@ app.use('*', (req, res) =>
     error: {
       code: 'NOT_FOUND',
       message: 'Route not found',
-      requestId: (req as any).requestId ?? (req.headers['x-request-id'] as string) ?? null,
+      requestId: req.requestId ?? req.headers['x-request-id'] ?? null,
     },
   })
 );

@@ -35,7 +35,7 @@ async function findCareTeamMembers(clinicId: string) {
 }
 
 export async function uploadDocument(req: Request, res: Response) {
-  const { patientId, clinicId } = req.user as any;
+  const { patientId, clinicId } = req.user!;
   const file = (req as any).file;
 
   if (!file) return res.status(400).json({ success: false, message: 'No file provided.' });
@@ -179,7 +179,7 @@ async function notifyCareTeam({
 }
 
 export async function listMyDocuments(req: Request, res: Response) {
-  const { patientId } = req.user as any;
+  const { patientId } = req.user!;
   const { category, limit = 50 } = req.query;
 
   const filter: any = { patientId, deletedAt: { $exists: false } };
