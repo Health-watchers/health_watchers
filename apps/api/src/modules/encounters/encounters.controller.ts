@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { EncounterModel, Prescription } from './encounter.model';
 import { EncounterTemplateModel } from './encounter-template.model';
 import { toEncounterResponse } from './encounters.transformer';
@@ -112,6 +113,15 @@ async function triggerSurveyAfterEncounter(encounterId: string, encounter: any):
 
 const router = Router();
 router.use(authenticate);
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// Encounters carry rich-text SOAP notes that can legitimately exceed the 16 KB
+// global default. Apply a 256 KB cap on mutating requests only; GET/HEAD keep
+// the default limit enforced upstream by the global middleware in app.ts.
+router.use(
+  express.json({ limit: '256kb' }),
+  express.urlencoded({ extended: true, limit: '256kb' })
+);
 
 // GET /encounters — paginated list scoped to the authenticated clinic
 // Supports: q (full-text), patientId, doctorId, status, date, dateFrom, dateTo,

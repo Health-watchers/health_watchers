@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
@@ -12,6 +13,14 @@ import {
 
 const router = Router();
 router.use(authenticate);
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// Care plans contain structured goal lists and narrative text that can exceed
+// the 16 KB global default. Allow up to 256 KB on all care-plan endpoints.
+router.use(
+  express.json({ limit: '256kb' }),
+  express.urlencoded({ extended: true, limit: '256kb' })
+);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 

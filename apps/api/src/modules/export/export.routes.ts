@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { Types } from 'mongoose';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { auditLog } from '@api/modules/audit/audit.service';
@@ -40,6 +41,12 @@ function parseAnonymizeParam(
 }
 
 const router = Router();
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// FHIR bundles and bulk export payloads can be very large. Allow up to 1 MB on
+// all export endpoints. The global 16 KB default in app.ts remains in force for
+// every other endpoint.
+router.use(express.json({ limit: '1mb' }));
 
 /**
  * @swagger

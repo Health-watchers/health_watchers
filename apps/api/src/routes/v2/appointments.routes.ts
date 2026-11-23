@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from '../../modules/appointments/appointment.model';
 import { authenticate } from '../../middlewares/auth.middleware';
@@ -17,6 +18,15 @@ import { NotificationModel, NOTIFICATION_TYPES } from '../../modules/notificatio
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// Bulk appointment operations (e.g. slot imports, batch status updates) can
+// carry hundreds of records. Allow up to 512 KB to handle realistic bulk
+// payloads while keeping the global 16 KB cap on all other endpoints.
+appointmentRoutes.use(
+  express.json({ limit: '512kb' }),
+  express.urlencoded({ extended: true, limit: '512kb' })
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
