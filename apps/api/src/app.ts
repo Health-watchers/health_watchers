@@ -41,7 +41,6 @@ import cookieParser from 'cookie-parser';
 import { csrfMiddleware } from './middlewares/csrf.middleware';
 import federationRouter from './modules/federation/federation.router';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
-import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { responseFilterMiddleware } from './middlewares/response-filter.middleware';
 import { migrationStatusRouter } from './modules/migrations/migration-status.controller';
 import { errorAnalyticsRouter } from './modules/monitoring/error-analytics.controller';
@@ -161,13 +160,11 @@ app.use(
 app.use(createRequestLoggerMiddleware);
 
 // ── Request ID correlation & propagation ──────────────────────────────────────
-// requestIdPropagationMiddleware: generates or passes through X-Request-ID, stores it
-// in AsyncLocalStorage for downstream services (stellar-service outbound calls, logs).
+// requestIdPropagationMiddleware is the single request-ID middleware (#1802).
+// It honours an incoming X-Request-ID header (or generates a UUID v4), stamps
+// req.requestId, echoes the value on the response header, and stores it in
+// AsyncLocalStorage so downstream services and log entries carry the same ID.
 app.use(requestIdPropagationMiddleware);
-// correlationMiddleware: stamps req.requestId, echoes X-Request-ID on the response and
-// correlates it with the active OpenTelemetry trace ID. Runs after propagation so the
-// ID is available to every subsequent middleware, route and error handler.
-app.use(correlationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(cookieParser());

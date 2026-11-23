@@ -4,6 +4,7 @@
  * Issue #1234
  */
 
+import { randomUUID } from 'crypto';
 import { emitToClinic, emitToUser } from './socket';
 
 export interface NotificationEvent {
@@ -40,7 +41,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `notif_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'data_change',
       resourceType: data.resourceType,
       resourceId: data.resourceId,
@@ -77,7 +78,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `notif_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'appointment_update',
       resourceType: 'appointment',
       resourceId: data.appointmentId,
@@ -121,7 +122,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `alert_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'alert',
       resourceType: data.resourceType || 'system',
       resourceId: data.resourceId || '',
@@ -157,7 +158,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `reminder_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'alert',
       resourceType: 'appointment',
       resourceId: data.appointmentId,
@@ -195,7 +196,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `lab_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'alert',
       resourceType: 'lab_result',
       resourceId: data.patientId,
@@ -234,7 +235,7 @@ export class NotificationHandler {
     }
   ): void {
     const notification: NotificationEvent = {
-      id: `preauth_${Date.now()}_${Math.random()}`,
+      id: randomUUID(),
       type: 'data_change',
       resourceType: 'pre_auth',
       resourceId: data.preAuthId,
