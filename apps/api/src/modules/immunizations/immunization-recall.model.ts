@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type RecallSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type RecallStatus = 'active' | 'resolved';
@@ -44,6 +45,7 @@ const ImmunizationRecallSchema = new Schema<IImmunizationRecall>(
   { timestamps: true, versionKey: false }
 );
 
+ImmunizationRecallSchema.add(baseSchema);
 ImmunizationRecallSchema.index({ clinicId: 1, lotNumber: 1, status: 1 });
 
 export const ImmunizationRecallModel = (mongoose.models.ImmunizationRecall ||

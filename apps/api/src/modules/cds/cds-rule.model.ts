@@ -1,4 +1,5 @@
 import { Schema, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type RuleCategory = 'drug_interaction' | 'screening' | 'vital_sign' | 'care_gap' | 'allergy';
 export type RuleTrigger = 'encounter_create' | 'prescription_add' | 'vital_sign_record';
@@ -63,11 +64,11 @@ const cdsRuleSchema = new Schema<CDSRule>(
         required: true,
       },
     },
-    isActive: { type: Boolean, default: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', index: true },
   },
   { timestamps: true, versionKey: false }
 );
+
+cdsRuleSchema.add(baseSchema);
 
 export const CDSRuleModel = (models.CDSRule ||
   model<CDSRule>('CDSRule', cdsRuleSchema)) as import('mongoose').Model<CDSRule>;

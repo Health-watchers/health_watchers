@@ -1,4 +1,5 @@
 import { Schema, model, models, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 /**
  * Notification delivery channels (#1250).
@@ -48,11 +49,11 @@ const notificationTemplateSchema = new Schema<INotificationTemplate>(
     body: { type: String, required: true },
     description: { type: String, trim: true },
     version: { type: Number, default: 1, min: 1 },
-    isActive: { type: Boolean, default: true, index: true },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true, versionKey: false, collection: 'notification_templates' }
 );
+
+notificationTemplateSchema.add(baseSchema);
 
 // One active template per (scope, key, channel, locale). A clinic override and
 // the global default coexist because `clinicId` differs.

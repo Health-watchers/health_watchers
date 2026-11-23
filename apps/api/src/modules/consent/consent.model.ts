@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type ConsentType = 'treatment' | 'data_sharing' | 'ai_analysis' | 'research' | 'marketing';
 export type ConsentStatus = 'granted' | 'withdrawn' | 'pending';
@@ -51,6 +52,7 @@ const consentSchema = new Schema<IConsent>(
   { timestamps: true, versionKey: false }
 );
 
+consentSchema.add(baseSchema);
 consentSchema.index({ patientId: 1, clinicId: 1, type: 1 }, { unique: true });
 
 export const ConsentModel = (models.Consent ||

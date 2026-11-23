@@ -1,4 +1,5 @@
 import { Schema, model, models, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface IWaitlist {
   patientId: Types.ObjectId;
@@ -43,6 +44,7 @@ const waitlistSchema = new Schema<IWaitlist>(
   { timestamps: false, versionKey: false }
 );
 
+waitlistSchema.add(baseSchema);
 waitlistSchema.index({ clinicId: 1, status: 1, priority: -1, addedAt: 1 });
 waitlistSchema.index({ clinicId: 1, doctorId: 1, status: 1 });
 

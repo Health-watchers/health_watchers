@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface Reimbursement extends Document {
   claimId: string;
@@ -33,6 +34,8 @@ const reimbursementSchema = new Schema<Reimbursement>(
   },
   { timestamps: true }
 );
+
+reimbursementSchema.add(baseSchema);
 
 export const ReimbursementModel = mongoose.model<Reimbursement>(
   'Reimbursement',

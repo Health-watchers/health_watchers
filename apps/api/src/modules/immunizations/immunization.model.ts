@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 /**
  * CVX vaccine code lookup table (subset of CDC CVX codes)
@@ -168,10 +169,11 @@ const immunizationSchema = new Schema<IImmunization>(
     },
     adverseReaction: { type: adverseReactionSchema },
     notes: { type: String, trim: true },
-    isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );
+
+immunizationSchema.add(baseSchema);
 
 // Compound indexes for efficient queries
 immunizationSchema.index({ patientId: 1, clinicId: 1, administeredDate: -1 });

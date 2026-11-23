@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 const triageQueueSchema = new Schema(
   {
@@ -30,6 +31,8 @@ const triageQueueSchema = new Schema(
   },
   { timestamps: true }
 );
+
+triageQueueSchema.add(baseSchema);
 
 triageQueueSchema.index({ clinicId: 1, urgencyLevel: 1, arrivalTime: 1 });
 

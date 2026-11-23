@@ -1,4 +1,5 @@
 import { Schema, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface ISurveyResponses {
   overallSatisfaction: number; // 1-5
@@ -40,7 +41,6 @@ const surveySchema = new Schema<ISurvey>(
   {
     encounterId: { type: Schema.Types.ObjectId, ref: 'Encounter', required: true, index: true },
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     doctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     token: { type: String, required: true, unique: true, index: true },
     sentAt: { type: Date, default: () => new Date() },
@@ -57,6 +57,7 @@ const surveySchema = new Schema<ISurvey>(
   { timestamps: true, versionKey: false }
 );
 
+surveySchema.add(baseSchema);
 surveySchema.index({ status: 1, expiresAt: 1 });
 surveySchema.index({ clinicId: 1, doctorId: 1, completedAt: 1 });
 

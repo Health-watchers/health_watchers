@@ -42,6 +42,15 @@ export async function up(db: Db): Promise<void> {
     'cpt_codes',
     'triage_queue',
     'ai_population_health',
+    'surveys',
+    'staff_schedules',
+    'vaccine_lots',
+    'vaccine_adverse_events',
+    'portal_documents',
+    'immunization_recalls',
+    'reimbursements',
+    'waitlists',
+    'medical_histories',
   ];
 
   for (const collectionName of collections) {
@@ -93,6 +102,15 @@ export async function down(db: Db): Promise<void> {
     'cpt_codes',
     'triage_queue',
     'ai_population_health',
+    'surveys',
+    'staff_schedules',
+    'vaccine_lots',
+    'vaccine_adverse_events',
+    'portal_documents',
+    'immunization_recalls',
+    'reimbursements',
+    'waitlists',
+    'medical_histories',
   ];
 
   for (const collectionName of collections) {
