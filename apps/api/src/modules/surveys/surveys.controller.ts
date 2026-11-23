@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import crypto from 'crypto';
 import { SurveyModel } from './survey.model';
 import { surveyResponseSchema } from './survey.validation';
@@ -9,6 +10,15 @@ import logger from '@api/utils/logger';
 import { UserModel } from '../auth/models/user.model';
 
 const router = Router();
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// Survey responses contain free-text comment fields. Allow up to 64 KB to
+// accommodate lengthy patient feedback while remaining well below the global
+// limit for clinical endpoints.
+router.use(
+  express.json({ limit: '64kb' }),
+  express.urlencoded({ extended: true, limit: '64kb' })
+);
 
 // Generate unique survey token
 function generateSurveyToken(): string {

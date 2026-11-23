@@ -72,8 +72,9 @@ if (process.env.TRUST_PROXY !== undefined) {
   app.set('trust proxy', 1);
 }
 
-// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
-const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '10kb';
+// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 16kb per issue #1800)
+// Per-route overrides for large clinical payloads are applied in each module's router.
+const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '16kb';
 
 // ── Security & performance ────────────────────────────────────────────────────
 app.use(
@@ -286,6 +287,25 @@ app.use('*', (req, res) =>
     },
   })
 );
+
+// ── 413 Request Entity Too Large ──────────────────────────────────────────────
+// express.json() calls next(err) with err.type === 'entity.too.large' when the
+// body exceeds the configured limit. We surface a structured error envelope so
+// the web UI can show a human-readable message rather than an empty response.
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      error: 'PayloadTooLarge',
+      code: 'PAYLOAD_TOO_LARGE',
+      message:
+        'The request body is too large. ' +
+        'If you are saving clinical notes or attachments, please reduce the payload size or ' +
+        'contact support to request a higher limit for this endpoint.',
+      requestId: (req as any).requestId,
+    });
+  }
+  return next(err);
+});
 app.use(errorHandler);
 
 export default app;
