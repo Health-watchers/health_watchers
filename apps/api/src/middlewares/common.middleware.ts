@@ -18,6 +18,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 import { Types } from 'mongoose';
 import { z, ZodSchema } from 'zod';
 
@@ -454,7 +455,7 @@ export function composeMiddleware(
  */
 export function ensureRequestId(req: Request, res: Response, next: NextFunction): void {
   if (!req.requestId) {
-    req.requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    req.requestId = randomUUID();
   }
   next();
 }
