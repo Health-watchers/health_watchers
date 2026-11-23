@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -27,7 +28,9 @@
   },
   "devDependencies": {
     "typescript": "^5.4.0",
-    "@types/node": "^20.11.0"
+    "@types/node": "^20.11.0",
+    "vitest": "^1.6.0",
+    "@vitest/coverage-v8": "^1.6.0"
   },
   "engines": {
     "node": ">=18"

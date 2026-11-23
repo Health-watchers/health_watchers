@@ -1,6 +1,87 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, SafeAreaView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  SafeAreaView,
+  ActivityIndicator,
+} from 'react-native';
 import type { AppointmentData } from './types';
+
+/**
+ * Shape of an appointment as returned by the appointments API
+ * (`routes/v2/appointments.routes.ts`). Field names differ from the
+ * presentation-oriented `AppointmentData` type, so we normalise them.
+ */
+export interface ApiAppointment {
+  id: string;
+  patientId?: string;
+  providerId?: string;
+  providerName?: string;
+  doctorName?: string;
+  title?: string;
+  reason?: string;
+  startTime?: string;
+  endTime?: string;
+  date?: string;
+  time?: string;
+  location?: string;
+  status?: string;
+  type?: string;
+  telehealthUrl?: string;
+  checkInCode?: string;
+}
+
+export type AppointmentInput = AppointmentData | ApiAppointment;
+
+function isApiAppointment(appointment: AppointmentInput): appointment is ApiAppointment {
+  return (
+    (appointment as ApiAppointment).startTime !== undefined ||
+    (appointment as ApiAppointment).providerName !== undefined ||
+    (appointment as ApiAppointment).reason !== undefined
+  );
+}
+
+function formatTime(value?: string): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * Maps an API appointment onto the `AppointmentData` shape used by the
+ * calendar UI. Already-normalised appointments are returned unchanged.
+ */
+export function normalizeAppointment(appointment: AppointmentInput): AppointmentData {
+  if (!isApiAppointment(appointment)) {
+    return appointment;
+  }
+
+  const start = appointment.startTime ?? appointment.date;
+  const parsedStart = start ? new Date(start) : undefined;
+  const date =
+    parsedStart && !Number.isNaN(parsedStart.getTime())
+      ? parsedStart.toISOString()
+      : start ?? new Date().toISOString();
+  const time =
+    appointment.time ??
+    (parsedStart && !Number.isNaN(parsedStart.getTime())
+      ? formatTime(start)
+      : formatTime(appointment.startTime));
+
+  return {
+    id: appointment.id,
+    title: appointment.title ?? appointment.reason ?? appointment.type ?? 'Appointment',
+    doctorName: appointment.doctorName ?? appointment.providerName ?? '',
+    location: appointment.location ?? (appointment.telehealthUrl ? 'Telehealth' : ''),
+    date,
+    time,
+    status: (appointment.status as AppointmentData['status']) ?? 'scheduled',
+  };
+}
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
@@ -19,18 +100,32 @@ const MONTHS = [
 ];
 
 interface AppointmentCalendarProps {
-  appointments: AppointmentData[];
+  appointments: AppointmentInput[];
   onSelectDate?: (date: Date) => void;
   onSelectAppointment?: (appointment: AppointmentData) => void;
+  /** Shows a loading indicator in place of the appointment list. */
+  loading?: boolean;
+  /** Custom message shown when the selected day has no appointments. */
+  emptyMessage?: string;
+  /** Id of the appointment to visually highlight (e.g. from a deep link). */
+  selectedAppointmentId?: string;
 }
 
 export function AppointmentCalendar({
   appointments,
   onSelectDate,
   onSelectAppointment,
+  loading = false,
+  emptyMessage = 'No appointments scheduled',
+  selectedAppointmentId,
 }: AppointmentCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+
+  const normalizedAppointments = useMemo(
+    () => appointments.map(normalizeAppointment),
+    [appointments]
+  );
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -41,7 +136,7 @@ export function AppointmentCalendar({
   };
 
   const appointmentsForDate = (date: Date) => {
-    return appointments.filter((apt) => {
+    return normalizedAppointments.filter((apt) => {
       const aptDate = new Date(apt.date);
       return (
         aptDate.getDate() === date.getDate() &&
@@ -133,13 +228,18 @@ export function AppointmentCalendar({
           })}
         </Text>
 
-        {selectedAppointments.length > 0 ? (
+        {loading ? (
+          <ActivityIndicator style={styles.loading} color="#2563eb" />
+        ) : selectedAppointments.length > 0 ? (
           <FlatList
             data={selectedAppointments}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={styles.appointmentCard}
+                style={[
+                  styles.appointmentCard,
+                  item.id === selectedAppointmentId && styles.highlightedAppointmentCard,
+                ]}
                 onPress={() => onSelectAppointment?.(item)}
                 activeOpacity={0.7}
               >
@@ -165,7 +265,7 @@ export function AppointmentCalendar({
             scrollEnabled={false}
           />
         ) : (
-          <Text style={styles.noAppointments}>No appointments scheduled</Text>
+          <Text style={styles.noAppointments}>{emptyMessage}</Text>
         )}
       </View>
     </SafeAreaView>
@@ -272,6 +372,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#2563eb',
+  },
+  highlightedAppointmentCard: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#2563eb',
+  },
+  loading: {
+    marginTop: 20,
   },
   appointmentTime: {
     marginRight: 12,

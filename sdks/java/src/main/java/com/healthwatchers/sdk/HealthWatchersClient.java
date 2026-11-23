@@ -212,6 +212,40 @@ public class HealthWatchersClient {
     return RequestBody.create(gson.toJson(payload), JSON);
   }
 
+  /**
+   * Extracts the payload from a successful response body, accepting both envelope variants
+   * returned by the API:
+   *
+   * <ul>
+   *   <li>{@code { "status": "success", "data": ... }}</li>
+   *   <li>{@code { "success": true, "data": ... }}</li>
+   * </ul>
+   *
+   * <p>Success itself is decided by the HTTP status code (see the callers), not by the body.
+   * When neither wrapper is present, the whole object is returned as the payload.
+   */
+  private JsonElement unwrap(JsonObject json) {
+    if (json == null) {
+      return null;
+    }
+    boolean hasStatusSuccess =
+        json.has("status")
+            && !json.get("status").isJsonNull()
+            && "success".equals(json.get("status").getAsString());
+    boolean hasSuccessTrue =
+        json.has("success")
+            && !json.get("success").isJsonNull()
+            && json.get("success").isJsonPrimitive()
+            && json.get("success").getAsJsonPrimitive().isBoolean()
+            && json.get("success").getAsBoolean();
+
+    if (hasStatusSuccess || hasSuccessTrue) {
+      return json.has("data") ? json.get("data") : json;
+    }
+    // No recognised wrapper: if a data field exists, prefer it; otherwise return the object.
+    return json.has("data") ? json.get("data") : json;
+  }
+
   /** Executes a request whose response envelope is {@code { status, data: <T> }}. */
   <T> T execute(Request request, Type dataType) throws IOException, HealthWatchersApiException {
     try (Response response = httpClient.newCall(request).execute()) {
@@ -219,7 +253,7 @@ public class HealthWatchersClient {
       if (!response.isSuccessful()) {
         throw HealthWatchersApiException.fromErrorBody(response.code(), json);
       }
-      return gson.fromJson(json.get("data"), dataType);
+      return gson.fromJson(unwrap(json), dataType);
     }
   }
 
@@ -234,7 +268,7 @@ public class HealthWatchersClient {
       if (!response.isSuccessful()) {
         throw HealthWatchersApiException.fromErrorBody(response.code(), json);
       }
-      List<T> data = gson.fromJson(json.get("data"), listType);
+      List<T> data = gson.fromJson(unwrap(json), listType);
       com.healthwatchers.sdk.model.PaginationMeta pagination =
           json.has("pagination")
               ? gson.fromJson(

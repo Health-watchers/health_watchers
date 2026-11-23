@@ -17,8 +17,8 @@ import {
   isSslPinningAvailable,
   type PinningOptions,
 } from 'react-native-ssl-public-key-pinning';
+import { API_URL } from '../config';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 const MIN_PINS = 2;
 const PIN_FORMAT = /^[A-Za-z0-9+/]{43}=$/; // base64 of a 32-byte SHA-256 digest
 

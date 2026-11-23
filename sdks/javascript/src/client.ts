@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   ApiSuccess,
   Appointment,
@@ -12,6 +12,36 @@ import {
   Patient,
   PaymentIntent,
 } from './types';
+
+/**
+ * Shape of a successful API response body. The API is not fully consistent:
+ * some handlers return `{ status: 'success', data }` while others return
+ * `{ success: true, data }`. Both are accepted here.
+ */
+export type ApiEnvelope<T> =
+  | { status: 'success'; data: T }
+  | { success: true; data: T }
+  | T;
+
+/**
+ * Unwrap an API response body, accepting both envelope variants.
+ *
+ * The HTTP status is the source of truth for success: axios only resolves for
+ * 2xx responses, so by the time this runs the request has already succeeded.
+ * If the body carries a recognised envelope the payload is returned, otherwise
+ * the body itself is returned unchanged.
+ */
+export function unwrapResponse<T>(body: unknown): T {
+  if (body !== null && typeof body === 'object') {
+    const record = body as Record<string, unknown>;
+    const isSuccessEnvelope =
+      record.status === 'success' || record.success === true;
+    if (isSuccessEnvelope && 'data' in record) {
+      return record.data as T;
+    }
+  }
+  return body as T;
+}
 
 export interface HealthWatchersClientOptions {
   /**
@@ -98,10 +128,24 @@ export class HealthWatchersClient {
   async login(email: string, password: string): Promise<LoginResponse> {
     const res = await this.http.post<LoginResponse>('/auth/login', { email, password });
     const body = res.data;
-    if (body.status === 'success') {
-      this.accessToken = body.data.accessToken;
+    // HTTP status is the source of truth; accept both envelope variants.
+    if (body && (body.status === 'success' || (body as { success?: boolean }).success === true)) {
+      const data = this.unwrap<LoginResponse['data']>(res);
+      if (data && data.accessToken) {
+        this.accessToken = data.accessToken;
+      }
     }
     return body;
+  }
+
+  /**
+   * Unwrap a successful response body, accepting both `{ status: 'success', data }`
+   * and `{ success: true, data }` envelopes. HTTP status is the source of truth:
+   * axios only resolves for 2xx responses, so reaching this point means success.
+   * If the body has no recognised envelope, the body itself is returned.
+   */
+  private unwrap<T>(response: AxiosResponse<unknown>): T {
+    return unwrapResponse<T>(response.data);
   }
 }
 
@@ -110,17 +154,17 @@ class PatientsResource {
 
   async create(data: CreatePatientInput): Promise<Patient> {
     const res = await this.http.post<ApiSuccess<Patient>>('/patients', data);
-    return res.data.data;
+    return unwrapResponse<Patient>(res.data);
   }
 
   async list(params?: ListPatientsParams): Promise<PaginatedResponse<Patient>> {
     const res = await this.http.get<PaginatedResponse<Patient>>('/patients', { params });
-    return res.data;
+    return unwrapResponse<PaginatedResponse<Patient>>(res.data);
   }
 
   async get(id: string): Promise<Patient> {
     const res = await this.http.get<ApiSuccess<Patient>>(`/patients/${encodeURIComponent(id)}`);
-    return res.data.data;
+    return unwrapResponse<Patient>(res.data);
   }
 }
 
@@ -129,19 +173,19 @@ class AppointmentsResource {
 
   async create(data: CreateAppointmentInput): Promise<Appointment> {
     const res = await this.http.post<ApiSuccess<Appointment>>('/appointments', data);
-    return res.data.data;
+    return unwrapResponse<Appointment>(res.data);
   }
 
   async list(params?: ListAppointmentsParams): Promise<PaginatedResponse<Appointment>> {
     const res = await this.http.get<PaginatedResponse<Appointment>>('/appointments', { params });
-    return res.data;
+    return unwrapResponse<PaginatedResponse<Appointment>>(res.data);
   }
 
   async get(id: string): Promise<Appointment> {
     const res = await this.http.get<ApiSuccess<Appointment>>(
       `/appointments/${encodeURIComponent(id)}`
     );
-    return res.data.data;
+    return unwrapResponse<Appointment>(res.data);
   }
 }
 
@@ -151,7 +195,7 @@ class PaymentsResource {
   /** POST /payments/intent — create a pending payment intent for a Stellar transaction. */
   async createIntent(data: CreatePaymentIntentInput): Promise<PaymentIntent> {
     const res = await this.http.post<ApiSuccess<PaymentIntent>>('/payments/intent', data);
-    return res.data.data;
+    return unwrapResponse<PaymentIntent>(res.data);
   }
 
   /** PATCH /payments/:intentId/confirm — confirm a payment intent with its Stellar tx hash. */
@@ -160,7 +204,7 @@ class PaymentsResource {
       `/payments/${encodeURIComponent(intentId)}/confirm`,
       { txHash }
     );
-    return res.data.data;
+    return unwrapResponse<PaymentIntent>(res.data);
   }
 }
 
