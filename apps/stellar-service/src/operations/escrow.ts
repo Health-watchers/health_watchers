@@ -7,6 +7,14 @@ import {
   SorobanSimulationError,
 } from '../soroban/client.js';
 
+export {
+  startEscrowEventPoller,
+  stopEscrowEventPoller,
+  type EscrowEventPollerOptions,
+  type EscrowEventPollerHandle,
+  type EscrowPaymentStateUpdate,
+} from './escrow-events.js';
+
 export interface EscrowParams {
   sourceAccount: StellarSdk.Account;
   amount: string;

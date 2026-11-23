@@ -18,7 +18,7 @@
       },
       "env": {
         "APP_ENV": "development",
-        "API_URL": "http://localhost:3001",
+        "EXPO_PUBLIC_API_URL": "http://localhost:3001/api/v1",
         "STELLAR_NETWORK": "testnet"
       }
     },
@@ -36,7 +36,7 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "https://api-staging.healthwatchers.example.com",
+        "EXPO_PUBLIC_API_URL": "https://api-staging.healthwatchers.example.com/api/v1",
         "STELLAR_NETWORK": "testnet"
       }
     },
@@ -62,7 +62,7 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.healthwatchers.example.com",
+        "EXPO_PUBLIC_API_URL": "https://api.healthwatchers.example.com/api/v1",
         "STELLAR_NETWORK": "mainnet"
       }
     },

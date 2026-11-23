@@ -88,6 +88,7 @@ import { inboxRoutes } from '../../modules/inbox/inbox.controller';
 // ── Payments ──────────────────────────────────────────────────────────────────
 import paymentsRouter from '../../modules/payments/payments.routes';
 import { reimbursementRoutes } from '../../modules/payments/reimbursement.controller';
+import { escrowEventsRouter } from '../../modules/payments/escrow-events.routes';
 import { invoiceRoutes } from '../../modules/invoices/invoices.controller';
 import { subscriptionRoutes } from '../../modules/subscriptions/subscriptions.controller';
 import { billingRoutes } from '../../modules/billing/billing.routes';
@@ -211,6 +212,10 @@ v1Router.use('/dashboard', dashboardRoutes);
 v1Router.post('/payments', paymentLimiter, idempotency({ scope: 'payments' }));
 v1Router.post('/payments/batch', paymentLimiter, idempotency({ scope: 'payments' }));
 v1Router.post('/payments/recurring', paymentLimiter, idempotency({ scope: 'payments' }));
+// #1834 — Internal escrow event ingestion from stellar-service (Soroban RPC
+// getEvents). Guarded by the internal shared-secret middleware; idempotent on
+// txHash so replayed events are safe.
+v1Router.use('/payments/escrow', escrowEventsRouter);
 v1Router.use('/payments', paymentLimiter, paymentsRouter);
 v1Router.use('/payments', reimbursementRoutes);
 // Stellar DEX trading (#1427) — submit and review DEX trade offers

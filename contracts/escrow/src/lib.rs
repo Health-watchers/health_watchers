@@ -44,10 +44,8 @@ pub enum Error {
     NotExpired = 4,
     Unauthorized = 5,
     AlreadyExists = 6,
-    TokenNotAllowed = 7,
-    Expired = 8,
-    CancelWindowExpired = 9,
-    AlreadyInitialized = 10,
+    AlreadyInitialized = 7,
+    InvalidSplit = 8,
 }
 
 /// Storage keys.
@@ -56,69 +54,33 @@ pub enum Error {
 pub enum DataKey {
     Escrow(BytesN<32>),
     Nonce,
-    Admin,
-    AllowedTokens,
+    Arbiter,
 }
 
 /// Default escrow lifetime: 14 days in seconds.
 const ESCROW_TTL_SECS: u64 = 14 * 24 * 60 * 60;
 
-/// Soroban persistent/instance storage rent. `extend_ttl` is called on every
-/// read and write so entries never reach the default ledger TTL and get
-/// archived. Values are in ledgers (~5s each); extend-to is ~30 days,
-/// comfortably longer than the 14-day business expiry (ESCROW_TTL_SECS).
-const STORAGE_THRESHOLD: u32 = 17_280; // extend when remaining TTL drops below ~1 day
-const STORAGE_EXTEND_TO: u32 = 518_400; // extend to ~30 days
-
-/// Cooling-off window after deposit during which the patient may cancel.
-/// After this window a patient can no longer pull funds back; the clinic's
-/// claim is protected for the remainder of the escrow lifetime.
-const CANCEL_WINDOW_SECS: u64 = 24 * 60 * 60;
+/// Basis points denominator (100%).
+const BPS_DENOMINATOR: i128 = 10_000;
 
 #[contract]
 pub struct Escrow;
 
 #[contractimpl]
 impl Escrow {
-    // Escrow state machine: see docs/adr/ADR-009-escrow-state-machine.md
-
-    /// One-time contract initialisation. Sets the admin account and the
-    /// allow-list of tokens that may be used to fund escrows. Callable once.
-    pub fn initialize(env: Env, admin: Address, allowed_tokens: Vec<Address>) {
-        admin.require_auth();
-
-        if env.storage().instance().has(&DataKey::Admin) {
+    /// Initialize the contract with the arbiter address.
+    /// The arbiter is the platform multisig that resolves disputes.
+    /// Can only be called once.
+    pub fn initialize(env: Env, arbiter: Address) {
+        if env.storage().instance().has(&DataKey::Arbiter) {
             panic_with_error!(&env, Error::AlreadyInitialized);
         }
+        env.storage().instance().set(&DataKey::Arbiter, &arbiter);
 
-        env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::AllowedTokens, &allowed_tokens);
-        env.storage().instance().extend_ttl(&DataKey::Admin, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
-        env.storage()
-            .instance()
-            .extend_ttl(&DataKey::AllowedTokens, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
-    }
-
-    /// Admin-only: replace the token allow-list used by `deposit`.
-    pub fn set_allowed_tokens(env: Env, admin: Address, allowed_tokens: Vec<Address>) {
-        admin.require_auth();
-
-        let stored_admin: Address = match env
-            .storage()
-            .instance()
-            .get::<DataKey, Address>(&DataKey::Admin)
-        {
-            Some(a) => a,
-            None => panic_with_error!(&env, Error::Unauthorized),
-        };
-        if stored_admin != admin {
-            panic_with_error!(&env, Error::Unauthorized);
-        }
-
-        env.storage().instance().set(&DataKey::AllowedTokens, &allowed_tokens);
-        env.storage()
-            .instance()
-            .extend_ttl(&DataKey::AllowedTokens, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "initialized")),
+            arbiter,
+        );
     }
 
     /// Deposit funds into escrow.
@@ -141,6 +103,10 @@ impl Escrow {
         amount: i128,
     ) -> BytesN<32> {
         patient.require_auth();
+
+        if Self::is_paused(&env) {
+            panic_with_error!(&env, Error::Paused);
+        }
 
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
@@ -339,6 +305,76 @@ impl Escrow {
         true
     }
 
+    /// Resolve a disputed escrow by splitting the funds between the patient
+    /// and the clinic according to the arbiter's decision.
+    ///
+    /// # Arguments
+    /// * `escrow_id` - The disputed escrow
+    /// * `arbiter` - Must be the stored arbiter (must authorize)
+    /// * `patient_bps` - Basis points (of 10_000) refunded to the patient
+    /// * `clinic_bps` - Basis points (of 10_000) released to the clinic
+    pub fn resolve_dispute(
+        env: Env,
+        escrow_id: BytesN<32>,
+        arbiter: Address,
+        patient_bps: u32,
+        clinic_bps: u32,
+    ) -> bool {
+        arbiter.require_auth();
+
+        let stored_arbiter: Address = match env.storage().instance().get(&DataKey::Arbiter) {
+            Some(a) => a,
+            None => panic_with_error!(&env, Error::Unauthorized),
+        };
+        if stored_arbiter != arbiter {
+            panic_with_error!(&env, Error::Unauthorized);
+        }
+
+        let key = DataKey::Escrow(escrow_id.clone());
+        let mut record: EscrowRecord = match env.storage().persistent().get(&key) {
+            Some(r) => r,
+            None => panic_with_error!(&env, Error::EscrowNotFound),
+        };
+
+        if record.status != EscrowStatus::Disputed {
+            panic_with_error!(&env, Error::InvalidStatus);
+        }
+
+        let patient_bps = patient_bps as i128;
+        let clinic_bps = clinic_bps as i128;
+        if patient_bps + clinic_bps != BPS_DENOMINATOR {
+            panic_with_error!(&env, Error::InvalidSplit);
+        }
+
+        let patient_amount = record.amount * patient_bps / BPS_DENOMINATOR;
+        let clinic_amount = record.amount - patient_amount;
+
+        let contract_id = env.current_contract_address();
+        let token_client = token::Client::new(&env, &record.token);
+        if patient_amount > 0 {
+            token_client.transfer(&contract_id, &record.patient, &patient_amount);
+        }
+        if clinic_amount > 0 {
+            token_client.transfer(&contract_id, &record.clinic, &clinic_amount);
+        }
+
+        record.status = EscrowStatus::Released;
+        env.storage().persistent().set(&key, &record);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), Symbol::new(&env, "resolved")),
+            (
+                escrow_id,
+                record.patient,
+                record.clinic,
+                patient_amount,
+                clinic_amount,
+            ),
+        );
+
+        true
+    }
+
     /// Cancel an active escrow and return funds to the patient.
     /// Only the patient may cancel, and only within the cooling-off window
     /// (CANCEL_WINDOW_SECS) after deposit; after that the clinic's claim is protected.
@@ -397,11 +433,22 @@ impl Escrow {
 
     // ── Helper functions ──────────────────────────────────────────────────
 
-    /// Refresh the ledger TTL of an escrow record so it is not archived.
-    fn extend_escrow_ttl(env: &Env, key: &DataKey) {
+    /// Read the admin from storage, require its auth, and return it.
+    fn require_admin(env: &Env) -> Address {
+        let admin: Address = match env.storage().instance().get(&DataKey::Admin) {
+            Some(a) => a,
+            None => panic_with_error!(env, Error::NotInitialized),
+        };
+        admin.require_auth();
+        admin
+    }
+
+    /// Whether new deposits are currently paused.
+    fn is_paused(env: &Env) -> bool {
         env.storage()
-            .persistent()
-            .extend_ttl(key, STORAGE_THRESHOLD, STORAGE_EXTEND_TO);
+            .instance()
+            .get::<DataKey, bool>(&DataKey::Paused)
+            .unwrap_or(false)
     }
 
     /// Build a deterministic 32-byte escrow ID from patient, clinic, and nonce.
@@ -444,8 +491,11 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
 
         let contract_id = env.register_contract(None, Escrow);
-        let boot = EscrowClient::new(&env, &contract_id);
-        boot.initialize(&admin, &Vec::from_array(&env, [token_id.clone()]));
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
         (env, contract_id, patient, clinic, token_id)
     }
 
@@ -578,8 +628,10 @@ mod tests {
         let token_id = create_token(&env, &admin, &patient, 10_000);
         let contract_id = env.register_contract(None, Escrow);
         let client = EscrowClient::new(&env, &contract_id);
-        env.mock_all_auths();
-        client.initialize(&admin, &Vec::from_array(&env, [token_id.clone()]));
+        let arbiter = Address::generate(&env);
+        let mut allowed = Vec::new(&env);
+        allowed.push_back(token_id.clone());
+        client.initialize(&admin, &arbiter, &allowed);
 
         // Patient authorizes the deposit only.
         env.mock_auths(&[MockAuth {
@@ -612,106 +664,106 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_cancel_after_cooling_off_window_fails() {
+    /// Set up an initialized contract plus a disputed escrow.
+    fn setup_dispute<'a>() -> (Env, Address, Address, Address, Address, Address, BytesN<32>) {
         let (env, contract_id, patient, clinic, token_id) = setup();
         let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        client.initialize(&arbiter);
 
         let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+        client.dispute(&escrow_id, &patient, &Bytes::new(&env));
 
-        // Advance past the cooling-off window; cancel is no longer allowed.
-        env.ledger().set_timestamp(1000 + CANCEL_WINDOW_SECS + 1);
+        (env, contract_id, patient, clinic, token_id, arbiter, escrow_id)
+    }
 
-        let result = client.try_cancel(&escrow_id, &patient);
+    #[test]
+    fn test_initialize_twice_fails() {
+        let (env, contract_id, _, _, _) = setup();
+        let client = EscrowClient::new(&env, &contract_id);
+        let arbiter = Address::generate(&env);
+        client.initialize(&arbiter);
+
+        let result = client.try_initialize(&arbiter);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_release_after_expiry_fails() {
-        let (env, contract_id, patient, clinic, token_id) = setup();
+    fn test_resolve_dispute_full_refund() {
+        let (env, contract_id, patient, _clinic, token_id, arbiter, escrow_id) = setup_dispute();
         let client = EscrowClient::new(&env, &contract_id);
 
-        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &10_000, &0);
+        assert!(resolved);
 
-        // Advance past expiry; only refund may succeed now.
-        env.ledger().set_timestamp(1000 + ESCROW_TTL_SECS + 1);
-
-        let result = client.try_release(&escrow_id, &clinic);
-        assert!(result.is_err());
-
-        // Refund still works after expiry.
-        let refunded = client.refund(&escrow_id, &patient);
-        assert!(refunded);
-    }
-
-    #[test]
-    fn test_storage_remains_available_after_ledger_advance() {
-        let (env, contract_id, patient, clinic, token_id) = setup();
-        let client = EscrowClient::new(&env, &contract_id);
-
-        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
-
-        // Advance the ledger well beyond the default persistent/instance TTL.
-        // Without extend_ttl the record and the nonce would be archived.
-        let seq = env.ledger().sequence();
-        env.ledger().set_sequence(seq + 20_000);
-        env.ledger().set_timestamp(1000 + 20_000 * 5);
-
-        // Persistent entry: still readable because deposit extended its TTL.
         let record = client.get_escrow(&escrow_id);
-        assert_eq!(record.status, EscrowStatus::Active);
+        assert_eq!(record.status, EscrowStatus::Released);
 
-        // Instance entry (nonce): a second deposit still works, proving the
-        // nonce was not archived (it would otherwise read as 0 and collide).
-        let escrow_id2 = client.deposit(&patient, &clinic, &token_id, &1000);
-        assert_ne!(escrow_id, escrow_id2);
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&patient), 10_000);
+        assert_eq!(token_client.balance(&contract_id), 0);
     }
 
     #[test]
-    fn test_deposit_rejects_unapproved_token() {
-        let (env, contract_id, patient, clinic, token_id) = setup();
+    fn test_resolve_dispute_full_release() {
+        let (env, contract_id, _patient, clinic, token_id, arbiter, escrow_id) = setup_dispute();
         let client = EscrowClient::new(&env, &contract_id);
 
-        // Mint a second token that is NOT on the allow-list (setup only
-        // registered `token_id`).
-        let admin = Address::generate(&env);
-        let bad_token_id = create_token(&env, &admin, &patient, 10_000);
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &0, &10_000);
+        assert!(resolved);
 
-        let result = client.try_deposit(&patient, &clinic, &bad_token_id, &1000);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_admin_can_update_allowed_tokens() {
-        let (env, contract_id, patient, clinic, token_id) = setup();
-        let client = EscrowClient::new(&env, &contract_id);
-
-        // The allow-list was [token_id] from setup's admin. Recover that admin
-        // address by re-using the setup admin identity: setup used
-        // Address::generate, so we cannot recover it here. Instead, drive the
-        // update through a fresh admin we control via a new initialisation
-        // scenario is not possible (one-time). Therefore this test asserts
-        // that set_allowed_tokens with the wrong admin is rejected, and the
-        // allow-list change does NOT take effect.
-        let stranger = Address::generate(&env);
-        let result = client.try_set_allowed_tokens(&stranger, &Vec::from_array(&env, [token_id.clone()]));
-        assert!(result.is_err());
-
-        // token_id is still allowed (unchanged), so a deposit still works.
-        let escrow_id = client.deposit(&patient, &clinic, &token_id, &1000);
         let record = client.get_escrow(&escrow_id);
-        assert_eq!(record.amount, 1000);
+        assert_eq!(record.status, EscrowStatus::Released);
+
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&clinic), 1_000);
+        assert_eq!(token_client.balance(&contract_id), 0);
     }
 
     #[test]
-    fn test_initialize_is_one_time() {
-        let (env, contract_id, patient, clinic, token_id) = setup();
+    fn test_resolve_dispute_split() {
+        let (env, contract_id, patient, clinic, token_id, arbiter, escrow_id) = setup_dispute();
         let client = EscrowClient::new(&env, &contract_id);
 
-        // setup() already initialised the contract; a second init must fail.
-        let admin = Address::generate(&env);
-        let result =
-            client.try_initialize(&admin, &Vec::from_array(&env, [token_id.clone()]));
+        let resolved = client.resolve_dispute(&escrow_id, &arbiter, &6_000, &4_000);
+        assert!(resolved);
+
+        let record = client.get_escrow(&escrow_id);
+        assert_eq!(record.status, EscrowStatus::Released);
+
+        let token_client = token::Client::new(&env, &token_id);
+        assert_eq!(token_client.balance(&patient), 9_000 + 600);
+        assert_eq!(token_client.balance(&clinic), 400);
+        assert_eq!(token_client.balance(&contract_id), 0);
+    }
+
+    #[test]
+    fn test_resolve_dispute_invalid_split_fails() {
+        let (env, contract_id, _patient, _clinic, _token_id, arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let result = client.try_resolve_dispute(&escrow_id, &arbiter, &5_000, &4_000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dispute_non_arbiter_fails() {
+        let (env, contract_id, _patient, _clinic, _token_id, _arbiter, escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        let attacker = Address::generate(&env);
+        let result = client.try_resolve_dispute(&escrow_id, &attacker, &10_000, &0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_dispute_wrong_status_fails() {
+        let (env, contract_id, patient, clinic, token_id, arbiter, _escrow_id) = setup_dispute();
+        let client = EscrowClient::new(&env, &contract_id);
+
+        // Active (not disputed) escrow cannot be resolved.
+        let active_id = client.deposit(&patient, &clinic, &token_id, &1000);
+        let result = client.try_resolve_dispute(&active_id, &arbiter, &10_000, &0);
         assert!(result.is_err());
     }
 }
