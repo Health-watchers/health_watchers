@@ -31,7 +31,6 @@ const securityHeaders = [
 const nextConfig = {
   transpilePackages: ['@health-watchers/types'],
   experimental: {
-    missingSuspenseWithCSRBailout: false,
     optimizePackageImports: ['recharts', '@tanstack/react-query', 'lucide-react'],
   },
   // CDN Configuration
@@ -55,8 +54,6 @@ const nextConfig = {
   },
   // Enable compression
   compress: true,
-  // Powering down optimizations in production
-  swcMinify: true,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
