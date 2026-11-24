@@ -30,7 +30,12 @@ function makeReq(overrides: Partial<Request> = {}): Request {
   } as unknown as Request;
 }
 
-function makeRes(): { res: Response; json: jest.Mock; status: jest.Mock; locals: Record<string, unknown> } {
+function makeRes(): {
+  res: Response;
+  json: jest.Mock;
+  status: jest.Mock;
+  locals: Record<string, unknown>;
+} {
   const locals: Record<string, unknown> = {};
   const json = jest.fn();
   const status = jest.fn().mockReturnValue({ json });
@@ -208,7 +213,13 @@ describe('requireResourceOwner()', () => {
   it('allows when field matches user', () => {
     const req = makeReq({
       params: { patientId: VALID_OBJECT_ID },
-      user: { userId: VALID_OBJECT_ID, clinicId: VALID_OBJECT_ID, role: 'PATIENT', isSuperAdmin: false, patientId: VALID_OBJECT_ID },
+      user: {
+        userId: VALID_OBJECT_ID,
+        clinicId: VALID_OBJECT_ID,
+        role: 'PATIENT',
+        isSuperAdmin: false,
+        patientId: VALID_OBJECT_ID,
+      },
     });
     const { res } = makeRes();
     requireResourceOwner('params', 'patientId', 'patientId')(req, res, next);
@@ -218,7 +229,13 @@ describe('requireResourceOwner()', () => {
   it('rejects when field does not match user', () => {
     const req = makeReq({
       params: { patientId: '507f1f77bcf86cd799439099' },
-      user: { userId: VALID_OBJECT_ID, clinicId: VALID_OBJECT_ID, role: 'PATIENT', isSuperAdmin: false, patientId: VALID_OBJECT_ID },
+      user: {
+        userId: VALID_OBJECT_ID,
+        clinicId: VALID_OBJECT_ID,
+        role: 'PATIENT',
+        isSuperAdmin: false,
+        patientId: VALID_OBJECT_ID,
+      },
     });
     const { res, status } = makeRes();
     requireResourceOwner('params', 'patientId', 'patientId')(req, res, next);

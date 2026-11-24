@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import type { DocumentEncryption } from './document.model';
 
 export type DocumentType =
   | 'lab_result'
@@ -21,6 +22,9 @@ export interface DocumentVersion {
   isCurrentVersion: boolean;
   replacedAt?: Date;
   replacedBy?: Types.ObjectId;
+  /** At-rest envelope-encryption metadata for this version's bytes (#1247). */
+  encryption?: DocumentEncryption;
+  contentSha256?: string;
 }
 
 const documentVersionSchema = new Schema<DocumentVersion>(
@@ -47,6 +51,19 @@ const documentVersionSchema = new Schema<DocumentVersion>(
     isCurrentVersion: { type: Boolean, required: true, default: true },
     replacedAt: { type: Date },
     replacedBy: { type: Schema.Types.ObjectId, ref: 'DocumentVersion' },
+    encryption: {
+      type: new Schema<DocumentEncryption>(
+        {
+          algorithm: { type: String, enum: ['aes-256-gcm'], required: true },
+          iv: { type: String, required: true },
+          authTag: { type: String, required: true },
+          wrappedKey: { type: String, required: true },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+    contentSha256: { type: String },
   },
   { timestamps: true, versionKey: false }
 );

@@ -34,11 +34,11 @@ interface PaginatedResponse<T> {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  open: 'bg-blue-100 text-blue-700',
-  closed: 'bg-green-100 text-green-700',
-  'follow-up': 'bg-yellow-100 text-yellow-700',
-  cancelled: 'bg-red-100 text-red-700',
-  pending_cosignature: 'bg-purple-100 text-purple-700',
+  open: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  closed: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  'follow-up': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  pending_cosignature: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
 };
 
 export default function PortalEncountersPage() {
@@ -91,52 +91,52 @@ export default function PortalEncountersPage() {
     }
   };
 
-  if (loading) return <p className="text-gray-500">Loading…</p>;
+  if (loading) return <p className="text-gray-500 dark:text-gray-400">Loading…</p>;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">My Encounter History</h1>
+      <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">My Encounter History</h1>
 
       {encounters.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-gray-400">No encounters on record yet.</p>
+        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-gray-400 dark:text-gray-500">No encounters on record yet.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {encounters.map((encounter) => (
             <article
               key={encounter._id}
-              className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
+              className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
             >
               {/* Header row */}
               <button
-                className="flex w-full items-start justify-between gap-4 p-5 text-left transition-colors hover:bg-gray-50"
+                className="flex w-full items-start justify-between gap-4 p-5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 onClick={() =>
                   setExpandedId((prev) => (prev === encounter._id ? null : encounter._id))
                 }
                 aria-expanded={expandedId === encounter._id}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-gray-800">{encounter.chiefComplaint}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="truncate font-semibold text-gray-800 dark:text-gray-100">{encounter.chiefComplaint}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                     {new Date(encounter.createdAt).toLocaleDateString(undefined, {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
                     })}
                     {encounter.type && (
-                      <span className="ml-2 text-gray-400 capitalize">· {encounter.type}</span>
+                      <span className="ml-2 capitalize text-gray-400 dark:text-gray-500">· {encounter.type}</span>
                     )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[encounter.status] ?? 'bg-gray-100 text-gray-600'}`}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[encounter.status] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
                   >
                     {encounter.status.replace('_', ' ')}
                   </span>
                   <svg
-                    className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === encounter._id ? 'rotate-180' : ''}`}
+                    className={`h-4 w-4 text-gray-400 transition-transform dark:text-gray-500 ${expandedId === encounter._id ? 'rotate-180' : ''}`}
                     viewBox="0 0 20 20"
                     fill="currentColor"
                     aria-hidden="true"
@@ -152,25 +152,25 @@ export default function PortalEncountersPage() {
 
               {/* Expanded content */}
               {expandedId === encounter._id && (
-                <div className="space-y-4 border-t border-gray-100 px-5 pt-4 pb-5">
+                <div className="space-y-4 border-t border-gray-100 px-5 pb-5 pt-4 dark:border-gray-700">
                   {/* AI summary */}
-                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-900/20">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-white">
+                      <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-white dark:bg-blue-500">
                         AI
                       </span>
-                      <span className="text-sm font-medium text-gray-700">Visit Summary</span>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Visit Summary</span>
                     </div>
                     {encounter.patientFriendlySummary ? (
-                      <p className="text-sm leading-relaxed text-gray-600">
+                      <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                         {encounter.patientFriendlySummary}
                       </p>
                     ) : (
-                      <p className="text-sm text-gray-400 italic">
+                      <p className="text-sm italic text-gray-400 dark:text-gray-500">
                         Summary not yet available for this visit.
                       </p>
                     )}
-                    <p className="mt-2 text-xs text-gray-400">
+                    <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
                       AI-generated summary for informational purposes only.
                     </p>
                   </div>
@@ -178,14 +178,14 @@ export default function PortalEncountersPage() {
                   {/* Diagnosis */}
                   {encounter.diagnosis && encounter.diagnosis.length > 0 && (
                     <div>
-                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                         Diagnosis
                       </p>
                       <ul className="space-y-1">
                         {encounter.diagnosis.map((d) => (
-                          <li key={d.code} className="text-sm text-gray-700">
+                          <li key={d.code} className="text-sm text-gray-700 dark:text-gray-300">
                             {d.description}{' '}
-                            <span className="text-xs text-gray-400">({d.code})</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">({d.code})</span>
                           </li>
                         ))}
                       </ul>
@@ -195,10 +195,10 @@ export default function PortalEncountersPage() {
                   {/* Follow-up */}
                   {encounter.followUpDate && (
                     <div>
-                      <p className="mb-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                         Follow-up Date
                       </p>
-                      <p className="text-sm text-gray-700">
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
                         {new Date(encounter.followUpDate).toLocaleDateString(undefined, {
                           year: 'numeric',
                           month: 'long',
@@ -210,7 +210,7 @@ export default function PortalEncountersPage() {
 
                   {/* Patient notes */}
                   <div>
-                    <p className="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       My Notes & Questions
                     </p>
                     {encounter.patientNotes.length > 0 ? (
@@ -218,17 +218,17 @@ export default function PortalEncountersPage() {
                         {encounter.patientNotes.map((n) => (
                           <li
                             key={n._id}
-                            className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                            className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40"
                           >
-                            <p className="text-sm text-gray-700">{n.note}</p>
-                            <p className="mt-0.5 text-xs text-gray-400">
+                            <p className="text-sm text-gray-700 dark:text-gray-300">{n.note}</p>
+                            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                               {new Date(n.createdAt).toLocaleString()}
                             </p>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="mb-3 text-sm text-gray-400">No notes yet.</p>
+                      <p className="mb-3 text-sm text-gray-400 dark:text-gray-500">No notes yet.</p>
                     )}
 
                     {/* Add note form */}
@@ -241,7 +241,7 @@ export default function PortalEncountersPage() {
                         placeholder="Add a note or question about this visit…"
                         maxLength={1000}
                         rows={2}
-                        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:ring-blue-400"
                         aria-label="Add a note or question"
                       />
                       <button
@@ -249,7 +249,7 @@ export default function PortalEncountersPage() {
                         disabled={
                           submitting === encounter._id || !noteInputs[encounter._id]?.trim()
                         }
-                        className="self-end rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="self-end rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
                       >
                         {submitting === encounter._id ? 'Saving…' : 'Save'}
                       </button>
@@ -265,21 +265,21 @@ export default function PortalEncountersPage() {
       {/* Pagination */}
       {meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Page {meta.page} of {meta.totalPages} · {meta.total} total
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => setPage((p) => p - 1)}
               disabled={!meta.hasPrevPage}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700/50"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => p + 1)}
               disabled={!meta.hasNextPage}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700/50"
             >
               Next
             </button>

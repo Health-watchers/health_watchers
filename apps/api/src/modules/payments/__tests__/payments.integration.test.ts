@@ -70,7 +70,7 @@ jest.mock('@api/modules/payments/services/stellar-client', () => ({
 }));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import express from 'express';
 import request from 'supertest';
@@ -94,11 +94,15 @@ function buildApp() {
 const SECRET = 'test-access-secret-32-chars-long!!';
 
 function makeToken(clinicId: string, role = 'CLINIC_ADMIN'): string {
-  return jwt.sign({ userId: new mongoose.Types.ObjectId().toString(), role, clinicId }, SECRET, {
-    expiresIn: '15m',
-    issuer: 'health-watchers-api',
-    audience: 'health-watchers-client',
-  });
+  return jwt.sign(
+    { userId: new mongoose.Types.ObjectId().toString(), role, clinicId, jti: 'test-jti' },
+    SECRET,
+    {
+      expiresIn: '15m',
+      issuer: 'health-watchers-api',
+      audience: 'health-watchers-client',
+    }
+  );
 }
 
 const CLINIC_A = 'clinic-aaa';
@@ -129,18 +133,21 @@ function validTx(
 }
 
 // ── MongoDB Memory Server lifecycle ──────────────────────────────────────────
-let mongod: MongoMemoryServer;
+// Payment confirmation runs in a transaction, which requires a replica set.
+let replSet: MongoMemoryReplSet;
 let app: express.Express;
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
+  replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  await mongoose.connect(replSet.getUri());
   app = buildApp();
 });
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongod.stop();
+  await replSet.stop();
 });
 
 afterEach(async () => {

@@ -10,7 +10,8 @@
     "appointments_list_duration": 200,
     "single_patient_duration": 150,
     "encounters_list_duration": 200,
-    "payments_list_duration": 200
+    "payments_list_duration": 200,
+    "patients_search_duration": 150
   },
   "regression_threshold_percent": 20
 }

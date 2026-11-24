@@ -26,3 +26,33 @@ logging.level:
 
 # Dead Letter Queue
 dead_letter_queue.enable: false
+
+# ============================================================
+# Standardized JSON log format
+# ============================================================
+# All services emit newline-delimited JSON with the mandatory
+# fields: timestamp, level, service, requestId, message
+# and the request-scoped fields: clinicId, userId.
+#
+# The pipeline (see pipeline/logstash.conf) uses the json codec
+# on input and a json filter to map these fields into
+# Elasticsearch documents. Field mappings are defined below so
+# the standardized format is parsed consistently.
+#
+# Expected document shape:
+#   timestamp : ISO-8601 date (indexed as @timestamp)
+#   level     : string (debug|info|warn|error)
+#   service   : string (service name)
+#   requestId : string (request correlation id)
+#   clinicId  : string (request-scoped, optional)
+#   userId    : string (request-scoped, optional)
+#   message   : string (log message)
+# ============================================================
+
+# Path to the pipeline definition that applies the JSON codec/filter
+path.config: /usr/share/logstash/pipeline
+
+# Ensure the standardized fields are treated as strings for
+# reliable parsing and aggregation in Elasticsearch.
+# (Applied via the json filter / mutate in the pipeline config.)
+pipeline.ecs_compatibility: disabled

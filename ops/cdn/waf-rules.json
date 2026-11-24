@@ -1,0 +1,152 @@
+{
+  "$comment": "Provider-agnostic WAF / firewall description for Health Watchers. Rendered to AWS WAFv2 (web ACL, scope=CLOUDFRONT) or a Cloudflare ruleset by scripts/cdn tooling. DDoS L3/L4 is handled by AWS Shield Advanced or Cloudflare's always-on mitigation and is not expressed here.",
+  "name": "health-watchers-cdn-waf",
+  "scope": "CLOUDFRONT",
+  "default_action": "allow",
+  "managed_rule_groups": [
+    {
+      "vendor": "AWS",
+      "name": "AWSManagedRulesCommonRuleSet",
+      "priority": 10,
+      "override_action": "none"
+    },
+    {
+      "vendor": "AWS",
+      "name": "AWSManagedRulesKnownBadInputsRuleSet",
+      "priority": 20,
+      "override_action": "none"
+    },
+    {
+      "vendor": "AWS",
+      "name": "AWSManagedRulesAmazonIpReputationList",
+      "priority": 30,
+      "override_action": "none"
+    },
+    {
+      "vendor": "AWS",
+      "name": "AWSManagedRulesAnonymousIpList",
+      "priority": 40,
+      "override_action": "none",
+      "$comment": "count-only on marketing paths; block on /api/v1/auth via the scoped rule below"
+    },
+    {
+      "vendor": "AWS",
+      "name": "AWSManagedRulesSQLiRuleSet",
+      "priority": 50,
+      "override_action": "none"
+    }
+  ],
+  "rate_based_rules": [
+    {
+      "name": "global-per-ip",
+      "priority": 100,
+      "action": "block",
+      "limit": 2000,
+      "evaluation_window_sec": 300,
+      "aggregate_key": "IP",
+      "scope_down": { "match": "all" }
+    },
+    {
+      "name": "auth-endpoints-per-ip",
+      "priority": 110,
+      "action": "block",
+      "limit": 100,
+      "evaluation_window_sec": 300,
+      "aggregate_key": "IP",
+      "scope_down": { "uri_path_starts_with": "/api/v1/auth/" }
+    },
+    {
+      "name": "login-per-ip",
+      "priority": 120,
+      "action": "challenge",
+      "limit": 20,
+      "evaluation_window_sec": 60,
+      "aggregate_key": "IP",
+      "scope_down": { "uri_path_equals": "/api/v1/auth/login" }
+    },
+    {
+      "name": "cache-invalidation-api-per-ip",
+      "priority": 130,
+      "action": "block",
+      "limit": 30,
+      "evaluation_window_sec": 300,
+      "aggregate_key": "IP",
+      "scope_down": { "uri_path_starts_with": "/api/v1/cdn/cache-invalidation" }
+    }
+  ],
+  "custom_rules": [
+    {
+      "name": "block-datacenter-asn-on-auth",
+      "priority": 200,
+      "action": "block",
+      "condition": {
+        "and": [
+          { "uri_path_starts_with": "/api/v1/auth/" },
+          {
+            "asn_in": [16509, 14618, 15169, 8075, 14061, 20473, 63949],
+            "$comment": "major cloud/hosting ASNs — legit clinical users are not on these for auth"
+          }
+        ]
+      }
+    },
+    {
+      "name": "challenge-bots-on-marketing",
+      "priority": 210,
+      "action": "challenge",
+      "condition": {
+        "and": [
+          { "uri_path_in": ["/", "/about", "/pricing", "/contact"] },
+          {
+            "not": {
+              "header_matches": {
+                "name": "user-agent",
+                "regex": "(?i)(mozilla|safari|chrome|firefox|edg)"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "require-origin-verify-header",
+      "priority": 220,
+      "action": "block",
+      "$comment": "defence in depth: the ALB also enforces this. Requests that reach the origin must carry the shared secret injected by the CDN.",
+      "condition": { "and": [{ "not": { "header_present": "X-CDN-Origin-Verify" } }] },
+      "applies_at": "origin_alb_listener_rule_only"
+    },
+    {
+      "name": "block-known-scanner-paths",
+      "priority": 230,
+      "action": "block",
+      "condition": {
+        "or": [
+          { "uri_path_regex": "(?i)\\.(php|asp|aspx|env|git|sql|bak)$" },
+          { "uri_path_regex": "(?i)/(wp-admin|wp-login|xmlrpc|phpmyadmin|\\.git/)" }
+        ]
+      }
+    },
+    {
+      "name": "size-restriction-body",
+      "priority": 240,
+      "action": "block",
+      "condition": {
+        "and": [
+          { "http_method_in": ["POST", "PUT", "PATCH"] },
+          { "body_size_gt": 5242880 },
+          { "not": { "uri_path_starts_with": "/api/v1/attachments" } }
+        ]
+      }
+    }
+  ],
+  "logging": {
+    "destination": "s3://health-watchers-cdn-logs/waf/",
+    "redacted_fields": ["authorization", "cookie", "x-cdn-origin-verify"],
+    "sampled_requests": true
+  },
+  "alarms": {
+    "$comment": "surface to Prometheus via the CDN exporter; see monitoring/alerts-cdn.yml",
+    "blocked_request_spike": { "threshold_per_5min": 5000 },
+    "rate_rule_triggered": { "rules": ["auth-endpoints-per-ip", "login-per-ip"] }
+  }
+}

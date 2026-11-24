@@ -61,9 +61,7 @@ export function HealthMetricTrendChart({
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
         <YAxis tick={{ fontSize: 11 }} />
-        <Tooltip
-          formatter={(value: number) => [`${value} ${currentUnit}`, currentLabel]}
-        />
+        <Tooltip formatter={(value: number) => [`${value} ${currentUnit}`, currentLabel]} />
         <Legend />
         <Line
           type="monotone"

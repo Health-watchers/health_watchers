@@ -25,6 +25,9 @@ export interface ILabResult {
   criticalReason?: string;
   criticalAcknowledgedBy?: Schema.Types.ObjectId;
   criticalAcknowledgedAt?: Date;
+  reviewedBy?: Schema.Types.ObjectId;
+  reviewedAt?: Date;
+  reviewComment?: string;
 }
 
 const labResultEntrySchema = new Schema<LabResultEntry>(
@@ -61,6 +64,9 @@ const labResultSchema = new Schema<ILabResult>(
     criticalReason: { type: String },
     criticalAcknowledgedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     criticalAcknowledgedAt: { type: Date },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date, index: true },
+    reviewComment: { type: String },
   },
   { timestamps: true, versionKey: false }
 );

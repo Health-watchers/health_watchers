@@ -395,7 +395,7 @@ gh run watch --workflow=backup-verify.yml
 
 ### Documentation
 
-- Backup strategy documented in `docs/disaster-recovery.md`
+- Backup strategy documented in `docs/DISASTER_RECOVERY.md`
 - Verification procedures documented in this file
 - Metrics tracked in Prometheus
 - Logs stored in GitHub Actions artifacts

@@ -1,20 +1,34 @@
 /**
  * Middleware barrel — single entry point for all shared API middlewares.
  *
- * Issue #929: common patterns extracted into common.middleware.ts.
+ * Issue #929, #1053: common patterns extracted into common.middleware.ts.
  *
  * Import examples:
  *   import { authenticate, requireRoles } from '@api/middlewares';
  *   import { validateObjectId, requireClinicMatch } from '@api/middlewares';
+ *   import { composeMiddleware, conditionalMiddleware } from '@api/middlewares';
  */
 
 // Auth & RBAC
 export { authenticate, requireRoles } from './auth.middleware';
 
+// Clinic scoping (issue #1676)
+export { clinicScope } from './clinic-scope.middleware';
+
 // Request validation
 export { validateRequest } from './validate.middleware';
+export { validate } from './validate.middleware';
 
-// Common shared middleware (issue #929)
+// Idempotency key support for payment endpoints (issue #1600)
+export { idempotency, type IdempotencyOptions } from './idempotency.middleware';
+
+// Incoming webhook signature verification (issue #1601)
+export {
+  verifyWebhookSignature,
+  type WebhookSignatureOptions,
+} from './webhook-signature.middleware';
+
+// Common shared middleware (issue #929, #1053)
 export {
   // ObjectId helpers
   OBJECT_ID_REGEX,
@@ -33,6 +47,14 @@ export {
   // Inline validation shortcuts
   validateBody,
   validateQuery,
+  // Auth utilities
+  requireAuthentication,
+  requireAnyRole,
+  // Middleware composition utilities
+  conditionalMiddleware,
+  composeMiddleware,
+  // Request ID utilities
+  ensureRequestId,
 } from './common.middleware';
 
 // Rate limiting
@@ -53,9 +75,18 @@ export { errorHandler, errorMiddleware } from './error.middleware';
 // Async handler wrapper
 export { asyncHandler } from './async.handler';
 
+// Response optimization
+export { optimizeResponsePayload } from './response-optimization.middleware';
+
+// Lazy loading
+export { parseLazyLoadQuery, attachLazyLoadQuery } from './lazy-load.middleware';
+
+// Auth barrel (legacy re-exports for backwards compatibility)
+export { protect, authorize } from './auth-barrel';
+
 // Other
 export { cacheResponse } from './cache.middleware';
 export { correlationMiddleware } from './correlation.middleware';
 export { traceIdHeader } from './trace-id.middleware';
 export { metricsMiddleware } from './metrics.middleware';
-export { paginationMiddleware } from '../middleware/pagination.middleware';
+export { paginationMiddleware } from './pagination.middleware';

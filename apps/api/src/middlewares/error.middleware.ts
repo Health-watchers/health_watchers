@@ -6,8 +6,59 @@ import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 import { ApiErrorCode } from '@health-watchers/types';
+import { sendApiError } from '../utils/api-response';
+import { errorAnalytics, ErrorCategory } from '../utils/error-analytics';
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+const GENERIC_INTERNAL_MESSAGE =
+  'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.';
+
+const REDACTED = '[REDACTED]';
+
+// Keys whose values may contain PHI, credentials or other sensitive data.
+const SENSITIVE_KEY_PATTERN =
+  /(password|passwd|secret|token|authorization|cookie|api[-_]?key|ssn|social[-_]?security|dob|date[-_]?of[-_]?birth|phone|email|address|name|diagnosis|medication|prescription|notes?|patient|phi|mrn|insurance)/i;
+
+/**
+ * Recursively redact sensitive values from an object before it is logged.
+ * Guards against circular references and caps recursion depth.
+ */
+function redact(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value === null || value === undefined) return value;
+  if (depth > 6) return '[Truncated]';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return value;
+
+  const obj = value as object;
+  if (seen.has(obj)) return '[Circular]';
+  seen.add(obj);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redact(item, depth + 1, seen));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    result[key] = SENSITIVE_KEY_PATTERN.test(key) ? REDACTED : redact(val, depth + 1, seen);
+  }
+  return result;
+}
+
+/**
+ * Build a safe, loggable representation of an unknown error.
+ */
+function serializeError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    return redact({
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      ...(Object.keys(err).length ? { props: { ...err } } : {}),
+    }) as Record<string, unknown>;
+  }
+  return redact({ value: err }) as Record<string, unknown>;
+}
 
 interface MongoServerError extends Error {
   code?: number;
@@ -70,61 +121,98 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // AppError — structured application errors with severity and category
   if (err instanceof AppError) {
     trackError(err.severity, err.category);
+    errorAnalytics.recordError(
+      err.code ?? 'UNKNOWN_ERROR',
+      err.category as unknown as ErrorCategory,
+      err.severity,
+      req.user?.userId,
+      0
+    );
     logBySeverity(
       err.severity,
       { ...ctx, category: err.category, ...(err.context ?? {}) },
       err,
       err.message
     );
-    res.status(err.statusCode).json({
-      error: err.category,
-      code: err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
-      message: err.message,
-      requestId: req.requestId,
-      ...(isDev && err.stack ? { stack: err.stack } : {}),
-    });
+    sendApiError(
+      res,
+      err.statusCode,
+      err.category,
+      err.code ?? ApiErrorCode.INTERNAL_SERVER_ERROR,
+      err.message,
+      {
+        requestId: req.requestId,
+        ...(err.context ? { details: err.context } : {}),
+        ...(isDev && err.stack ? { stack: err.stack } : {}),
+      }
+    );
     return;
   }
 
   // Zod validation errors → 400
   if (err instanceof ZodError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError(
+      'VALIDATION_ERROR',
+      ErrorCategory.VALIDATION,
+      'low',
+      req.user?.userId
+    );
     logger.info({ ...ctx, details: err.errors }, 'Request validation failed');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: 'Request validation failed',
-      details: err.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
-      requestId: req.requestId,
-    });
+    const details = err.errors.map((e) => ({ path: e.path.join('.'), message: e.message }));
+    const fieldList = details.map((d) => `"${d.path}"`).join(', ');
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.VALIDATION_ERROR,
+      `Request validation failed. Please check the following field(s): ${fieldList}.`,
+      { requestId: req.requestId, details }
+    );
     return;
   }
 
   // Mongoose validation error → 400
   if (err instanceof MongooseError.ValidationError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError(
+      'VALIDATION_ERROR',
+      ErrorCategory.VALIDATION,
+      'low',
+      req.user?.userId
+    );
     const details = Object.values(err.errors).map((e) => ({ path: e.path, message: e.message }));
+    const fieldList = details.map((d) => `"${d.path}"`).join(', ');
     logger.info({ ...ctx, details }, 'Mongoose validation error');
-    res.status(400).json({
-      error: 'ValidationError',
-      code: ApiErrorCode.VALIDATION_ERROR,
-      message: err.message,
-      details,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.VALIDATION_ERROR,
+      `One or more fields are invalid. Please check: ${fieldList}.`,
+      { requestId: req.requestId, details }
+    );
     return;
   }
 
   // Mongoose bad ObjectId → 400
   if (err instanceof MongooseError.CastError) {
     trackError('low', 'validation');
+    errorAnalytics.recordError(
+      'INVALID_REQUEST',
+      ErrorCategory.VALIDATION,
+      'low',
+      req.user?.userId
+    );
     logger.info({ ...ctx, path: err.path }, 'Invalid ObjectId cast');
-    res.status(400).json({
-      error: 'BadRequest',
-      code: ApiErrorCode.BAD_REQUEST,
-      message: `Invalid value for field: ${err.path}`,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      400,
+      'validation',
+      ApiErrorCode.BAD_REQUEST,
+      `"${err.path}" is not a valid ID. IDs must be 24-character hexadecimal strings.`,
+      { requestId: req.requestId }
+    );
     return;
   }
 
@@ -132,61 +220,105 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   const mongoErr = err as MongoServerError;
   if (mongoErr?.code === 11000) {
     trackError('low', 'conflict');
+    errorAnalytics.recordError('DUPLICATE_ENTRY', ErrorCategory.CONFLICT, 'low', req.user?.userId);
     const field = mongoErr.keyValue ? Object.keys(mongoErr.keyValue)[0] : 'field';
+    const value = mongoErr.keyValue?.[field];
+    const valueHint = value ? ` ("${value}")` : '';
     logger.warn({ ...ctx, field }, 'Duplicate key conflict');
-    res.status(409).json({
-      error: 'Conflict',
-      code: ApiErrorCode.CONFLICT,
-      message: `Duplicate value for field: ${field}`,
-      field,
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      409,
+      'conflict',
+      ApiErrorCode.CONFLICT,
+      `A record with this ${field}${valueHint} already exists. Please use a unique value.`,
+      { requestId: req.requestId, details: { field } }
+    );
     return;
   }
 
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
     trackError('low', 'authentication');
+    errorAnalytics.recordError(
+      'TOKEN_EXPIRED',
+      ErrorCategory.AUTHENTICATION,
+      'low',
+      req.user?.userId
+    );
     logger.info({ ...ctx }, 'JWT token expired');
-    res.status(401).json({
-      error: 'TokenExpired',
-      code: ApiErrorCode.TOKEN_EXPIRED,
-      message: 'Token has expired',
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      401,
+      'authentication',
+      ApiErrorCode.TOKEN_EXPIRED,
+      'Your session has expired. Please log in again to continue.',
+      { requestId: req.requestId }
+    );
     return;
   }
 
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
     trackError('low', 'authentication');
+    errorAnalytics.recordError(
+      'INVALID_TOKEN',
+      ErrorCategory.AUTHENTICATION,
+      'low',
+      req.user?.userId
+    );
     logger.info({ ...ctx }, 'Invalid JWT token');
-    res.status(401).json({
-      error: 'InvalidToken',
-      code: ApiErrorCode.INVALID_TOKEN,
-      message: 'Invalid token',
-      requestId: req.requestId,
-    });
+    sendApiError(
+      res,
+      401,
+      'authentication',
+      ApiErrorCode.INVALID_TOKEN,
+      'The authentication token is invalid. Please log in again.',
+      { requestId: req.requestId }
+    );
     return;
   }
 
   trackError('high', 'internal');
-  if (isDev) {
-    logger.error({ err }, 'Unhandled error');
-  }
+  errorAnalytics.recordError(
+    'INTERNAL_SERVER_ERROR',
+    ErrorCategory.INTERNAL,
+    'high',
+    req.user?.userId
+  );
+
+  // Log the full error server-side, with sensitive values redacted.
+  logger.error({ ...ctx, err: serializeError(err) }, 'Unhandled error');
 
   // Report unexpected errors to Sentry (skips 4xx — those are expected)
   Sentry.captureException(err);
 
+  // Never leak internal error details to clients in production.
+  // The response envelope is limited to { error, message, requestId }.
   const stack = isDev && err instanceof Error ? err.stack : undefined;
-  res.status(500).json({
-    error: 'InternalServerError',
-    code: ApiErrorCode.INTERNAL_SERVER_ERROR,
-    message: 'An unexpected error occurred',
-    requestId: req.requestId,
-    ...(stack ? { stack } : {}),
-  });
+  sendApiError(
+    res,
+    500,
+    'internal',
+    ApiErrorCode.INTERNAL_SERVER_ERROR,
+    GENERIC_INTERNAL_MESSAGE,
+    { requestId: req.requestId, ...(stack ? { stack } : {}) }
+  );
 }
 
 // Alias for backward compatibility
 export const errorMiddleware = errorHandler;
+
+/**
+ * 404 fallback — emits the standard error envelope
+ * `{ error: { code, message, details?, requestId } }`.
+ */
+export function notFoundHandler(req: Request, res: Response): void {
+  sendApiError(
+    res,
+    404,
+    'not_found',
+    ApiErrorCode.NOT_FOUND,
+    `Route ${req.method} ${req.path} not found.`,
+    { requestId: req.requestId }
+  );
+}

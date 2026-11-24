@@ -6,34 +6,7 @@ import { sendMail } from '@api/utils/mailer';
 import { emitToUser } from '@api/realtime/socket';
 import logger from '@api/utils/logger';
 
-let reminderJobInterval: NodeJS.Timeout | null = null;
-
-export function startAppointmentReminderJob() {
-  if (reminderJobInterval) return;
-
-  logger.info('Starting appointment reminder job (runs every 15 minutes)');
-
-  // Run immediately on start
-  sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
-
-  // Then run every 15 minutes
-  reminderJobInterval = setInterval(
-    () => {
-      sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
-    },
-    15 * 60 * 1000
-  );
-}
-
-export function stopAppointmentReminderJob() {
-  if (reminderJobInterval) {
-    clearInterval(reminderJobInterval);
-    reminderJobInterval = null;
-    logger.info('Stopped appointment reminder job');
-  }
-}
-
-async function sendAppointmentReminders() {
+export async function sendAppointmentReminders() {
   const now = new Date();
   const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const in1h = new Date(now.getTime() + 60 * 60 * 1000);

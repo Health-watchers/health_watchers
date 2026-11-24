@@ -85,6 +85,23 @@ function buildWelcomeEmail(name: string, language?: string): EmailContent {
   };
 }
 
+function buildClinicOnboardingCompleteEmail(clinicName: string, language?: string): EmailContent {
+  const dashboardUrl = `${APP_BASE_URL()}/dashboard`;
+  if (resolveLanguage(language) === 'fr') {
+    return {
+      subject: 'Configuration de votre clinique terminée — Health Watchers',
+      text: `Bonjour ${clinicName},\n\nFélicitations ! La configuration de votre clinique sur Health Watchers est terminée. Vous pouvez maintenant accéder à votre tableau de bord : ${dashboardUrl}`,
+      html: `<h3>Configuration de votre clinique terminée</h3><p>Bonjour <strong>${clinicName}</strong>,</p><p>Félicitations ! La configuration de votre clinique sur Health Watchers est terminée. Vous pouvez maintenant commencer à gérer vos patients et vos paiements.</p><p><a href="${dashboardUrl}">Accéder au tableau de bord</a></p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Clinic Onboarding Is Complete — Health Watchers',
+    text: `Hi ${clinicName},\n\nCongratulations! Your clinic's onboarding on Health Watchers is complete. You can now access your dashboard: ${dashboardUrl}`,
+    html: `<h3>Your Clinic Onboarding Is Complete</h3><p>Hi <strong>${clinicName}</strong>,</p><p>Congratulations! Your clinic's onboarding on Health Watchers is complete. You can now start managing your patients and payments.</p><p><a href="${dashboardUrl}">Go to Dashboard</a></p>`,
+  };
+}
+
 function buildPasswordResetEmail(token: string, language?: string): EmailContent {
   const resetUrl = `${APP_BASE_URL()}/reset-password?token=${token}`;
   if (resolveLanguage(language) === 'fr') {
@@ -208,6 +225,21 @@ export function sendVerificationEmail(to: string, token: string, language?: stri
 
 export function sendWelcomeEmail(to: string, name: string, language?: string): void {
   const rendered = renderTemplate('welcome', language, buildWelcomeEmail, name, language);
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+export function sendClinicOnboardingCompleteEmail(
+  to: string,
+  clinicName: string,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'clinicOnboardingComplete',
+    language,
+    buildClinicOnboardingCompleteEmail,
+    clinicName,
+    language
+  );
   enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
@@ -429,20 +461,46 @@ export function sendDisputeEvidenceSubmittedEmail(
   enqueue(to, 'Dispute Evidence Submitted — Health Watchers', text, html);
 }
 
+function buildDataExportReadyEmail(
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): EmailContent {
+  const expiryStr = expiresAt.toUTCString();
+  if (resolveLanguage(language) === 'fr') {
+    return {
+      subject: 'Votre export de données de santé est prêt — Health Watchers',
+      text: `Votre export de données de santé est prêt.\n\nTéléchargez-le en toute sécurité ici (le lien expire le ${expiryStr}) :\n${downloadUrl}\n\nPour votre sécurité, ce lien est à usage unique et limité dans le temps. Ne le partagez pas.`,
+      html: `<h3>Votre export de données de santé est prêt</h3><p>Vous avez demandé une copie de votre dossier de santé. Elle est maintenant prête à être téléchargée.</p><p><a href="${downloadUrl}">Télécharger vos données en toute sécurité</a></p><p>Ce lien expire le <strong>${expiryStr}</strong> (30 jours). Pour votre sécurité, ne le partagez pas.</p>`,
+    };
+  }
+
+  return {
+    subject: 'Your Health Record Export Is Ready — Health Watchers',
+    text: `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`,
+    html: `<h3>Your Health Record Export Is Ready</h3><p>You requested a copy of your health record. It is now ready to download.</p><p><a href="${downloadUrl}">Download your records securely</a></p><p>This link expires <strong>${expiryStr}</strong> (30 days). For your security, do not share it.</p>`,
+  };
+}
+
 /**
  * Data export ready — sends a SECURE DOWNLOAD LINK (never the data as an
  * attachment) for a patient's HIPAA Right of Access export.
  */
-export function sendDataExportReadyEmail(to: string, downloadUrl: string, expiresAt: Date): void {
-  const expiryStr = expiresAt.toUTCString();
-  const text = `Your health record export is ready.\n\nDownload it securely here (link expires ${expiryStr}):\n${downloadUrl}\n\nFor your security this link is single-purpose and time-limited. Do not share it.`;
-  const html = `
-    <h3>Your Health Record Export Is Ready</h3>
-    <p>You requested a copy of your health record. It is now ready to download.</p>
-    <p><a href="${downloadUrl}">Download your records securely</a></p>
-    <p>This link expires <strong>${expiryStr}</strong>. For your security, do not share it.</p>
-  `;
-  enqueue(to, 'Your Health Record Export Is Ready — Health Watchers', text, html);
+export function sendDataExportReadyEmail(
+  to: string,
+  downloadUrl: string,
+  expiresAt: Date,
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'dataExportReady',
+    language,
+    buildDataExportReadyEmail,
+    downloadUrl,
+    expiresAt,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
 }
 
 /** Low balance warning sent when XLM balance drops below the warning threshold */
@@ -555,6 +613,36 @@ export function sendAccountLockedEmail(
   const html = isFrench
     ? `<h3>Compte temporairement verrouillé</h3><p>Bonjour <strong>${fullName}</strong>,</p><p>Votre compte a été verrouillé temporairement en raison de plusieurs tentatives de connexion infructueuses.</p><p><strong>Réessayez dans ${lockDurationMinutes} minutes.</strong></p><p style="color:#dc2626">Si vous n'êtes pas à l'origine de ces tentatives, contactez votre administrateur immédiatement.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
     : `<h3>Account Temporarily Locked</h3><p>Hello <strong>${fullName}</strong>,</p><p>Your Health Watchers account has been temporarily locked due to too many failed login attempts.</p><p><strong>Please try again in ${lockDurationMinutes} minutes.</strong></p><p style="color:#dc2626">If you did not attempt to log in, please contact your administrator immediately.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
+/**
+ * New-device / new-country sign-in alert (#1497). Only the device description and
+ * the country are included — never the raw IP address.
+ */
+export function sendNewLoginAlertEmail(
+  to: string,
+  fullName: string,
+  details: {
+    deviceLabel: string;
+    location: string | null;
+    occurredAt: Date;
+    newDevice: boolean;
+    newCountry: boolean;
+    revokeUrl: string;
+  }
+): void {
+  const what =
+    details.newDevice && details.newCountry
+      ? 'a new device in a new location'
+      : details.newCountry
+        ? 'a new location'
+        : 'a new device';
+  const when = details.occurredAt.toUTCString();
+  const where = details.location ?? 'Unknown location';
+  const subject = 'New sign-in to your account — Health Watchers';
+  const text = `Hello ${fullName},\n\nYour Health Watchers account was just signed in to from ${what}.\n\nDevice: ${details.deviceLabel}\nLocation (approximate): ${where}\nTime: ${when}\n\nIf this was you, no action is needed.\n\nIf this wasn't you, sign out every session immediately and then reset your password:\n${details.revokeUrl}\n\nThis link expires in 7 days.`;
+  const html = `<h3>New sign-in to your account</h3><p>Hello <strong>${fullName}</strong>,</p><p>Your Health Watchers account was just signed in to from ${what}.</p><table style="border-collapse:collapse"><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Device</td><td>${details.deviceLabel}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Location (approximate)</td><td>${where}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280">Time</td><td>${when}</td></tr></table><p>If this was you, no action is needed.</p><p><a href="${details.revokeUrl}" style="display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px">This wasn't me</a></p><p style="color:#6b7280">This signs out every session on your account. Reset your password afterwards. The link expires in 7 days.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
   enqueue(to, subject, text, html);
 }
 
@@ -753,6 +841,202 @@ export function sendKeypairRotationEmail(
     ? `<h3>Rotation des clés Stellar effectuée — ${clinicName}</h3><p>La rotation des clés Stellar de votre clinique a été effectuée avec succès.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Nouvelle clé publique</td><td style="padding:8px;font-family:monospace;font-size:12px">${newPublicKey}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Version</td><td style="padding:8px">${keyVersion}</td></tr></table><p style="color:#dc2626"><strong>Si vous n'avez pas initié cette action, contactez le support immédiatement.</strong></p>`
     : `<h3>Stellar Keypair Rotated — ${clinicName}</h3><p>Your clinic's Stellar keypair has been successfully rotated.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">New Public Key</td><td style="padding:8px;font-family:monospace;font-size:12px">${newPublicKey}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Key Version</td><td style="padding:8px">${keyVersion}</td></tr></table><p style="color:#dc2626"><strong>If you did not initiate this action, please contact support immediately.</strong></p>`;
   enqueue(to, subject, text, html);
+}
+
+/** Multi-signature approval request sent to each pending signer when a payment enters awaiting_signatures */
+export function sendMultisigApprovalRequestEmail(
+  to: string,
+  signerName: string,
+  payment: {
+    paymentId: string;
+    amount: string;
+    assetCode: string;
+    destination: string;
+    requiredSignatures: number;
+    collectedSignatures: number;
+    expiresAt: Date;
+  },
+  language?: string
+): void {
+  const approvalUrl = `${APP_BASE_URL()}/payments/${payment.paymentId}/approve`;
+  const isFrench = resolveLanguage(language) === 'fr';
+  const expiryStr =
+    payment.expiresAt.toLocaleString(isFrench ? 'fr-FR' : 'en-US', {
+      timeZone: 'UTC',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }) + ' UTC';
+  const subject = isFrench
+    ? `Approbation requise — paiement ${payment.amount} ${payment.assetCode}`
+    : `Approval Required — ${payment.amount} ${payment.assetCode} Payment`;
+  const text = isFrench
+    ? `Bonjour ${signerName},\n\nUn paiement de ${payment.amount} ${payment.assetCode} vers ${payment.destination} nécessite votre signature.\n\nSignatures : ${payment.collectedSignatures}/${payment.requiredSignatures}\nExpire le : ${expiryStr}\n\nApprouver : ${approvalUrl}`
+    : `Hello ${signerName},\n\nA payment of ${payment.amount} ${payment.assetCode} to ${payment.destination} requires your signature.\n\nSignatures: ${payment.collectedSignatures}/${payment.requiredSignatures}\nExpires at: ${expiryStr}\n\nApprove: ${approvalUrl}`;
+  const html = isFrench
+    ? `<h3>Approbation requise — paiement multi-signature</h3><p>Bonjour <strong>${signerName}</strong>,</p><p>Un paiement nécessite votre signature pour être soumis au réseau Stellar.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Montant</td><td style="padding:8px">${payment.amount} ${payment.assetCode}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Destination</td><td style="padding:8px;font-family:monospace;font-size:12px">${payment.destination}</td></tr><tr><td style="padding:8px;font-weight:bold">Signatures</td><td style="padding:8px">${payment.collectedSignatures}/${payment.requiredSignatures}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Expire le</td><td style="padding:8px;color:#dc2626">${expiryStr}</td></tr></table><p>Si le seuil de signatures n'est pas atteint avant l'expiration, le paiement sera automatiquement annulé.</p><p><a href="${approvalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Approuver le paiement</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Approval Required — Multi-Signature Payment</h3><p>Hello <strong>${signerName}</strong>,</p><p>A payment requires your signature before it can be submitted to the Stellar network.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Amount</td><td style="padding:8px">${payment.amount} ${payment.assetCode}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Destination</td><td style="padding:8px;font-family:monospace;font-size:12px">${payment.destination}</td></tr><tr><td style="padding:8px;font-weight:bold">Signatures</td><td style="padding:8px">${payment.collectedSignatures}/${payment.requiredSignatures}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Expires At</td><td style="padding:8px;color:#dc2626">${expiryStr}</td></tr></table><p>If the signature threshold is not reached before expiry, the payment will be automatically voided.</p><p><a href="${approvalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Approve Payment</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
+/** Multi-signature payment voided notification sent to all signers when the 24h window elapses */
+export function sendMultisigVoidedEmail(
+  to: string,
+  signerName: string,
+  payment: { paymentId: string; amount: string; assetCode: string; collectedSignatures: number; requiredSignatures: number },
+  language?: string
+): void {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const subject = isFrench
+    ? `Paiement multi-signature annulé — ${payment.amount} ${payment.assetCode}`
+    : `Multi-Signature Payment Voided — ${payment.amount} ${payment.assetCode}`;
+  const text = isFrench
+    ? `Bonjour ${signerName},\n\nLe paiement ${payment.paymentId} de ${payment.amount} ${payment.assetCode} a été automatiquement annulé car le seuil de signatures (${payment.collectedSignatures}/${payment.requiredSignatures}) n'a pas été atteint dans les 24 heures.`
+    : `Hello ${signerName},\n\nThe payment ${payment.paymentId} of ${payment.amount} ${payment.assetCode} was automatically voided because the signature threshold (${payment.collectedSignatures}/${payment.requiredSignatures}) was not reached within 24 hours.`;
+  const html = isFrench
+    ? `<h3>Paiement multi-signature annulé</h3><p>Bonjour <strong>${signerName}</strong>,</p><p>Le paiement <strong>${payment.paymentId}</strong> de <strong>${payment.amount} ${payment.assetCode}</strong> a été automatiquement annulé car le seuil de signatures (${payment.collectedSignatures}/${payment.requiredSignatures}) n'a pas été atteint dans les 24 heures.</p><p>Vous pouvez initier un nouveau paiement si nécessaire.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Multi-Signature Payment Voided</h3><p>Hello <strong>${signerName}</strong>,</p><p>The payment <strong>${payment.paymentId}</strong> of <strong>${payment.amount} ${payment.assetCode}</strong> was automatically voided because the signature threshold (${payment.collectedSignatures}/${payment.requiredSignatures}) was not reached within 24 hours.</p><p>You may initiate a new payment if needed.</p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  enqueue(to, subject, text, html);
+}
+
+/** Aging reminder sent to a patient (or payer) for an overdue invoice at 30/60/90 days */
+export function sendAgingReminderEmail(
+  to: string,
+  patientName: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    daysOverdue: number;
+    stellarPayURI: string;
+  },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'agingReminder',
+    language,
+    buildAgingReminderEmail,
+    patientName,
+    invoice,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+/** Survey assigned notification sent to a patient when a new survey is assigned */
+export function sendSurveyAssignedEmail(
+  to: string,
+  patientName: string,
+  survey: { title: string; surveyId: string; dueDate?: Date | null },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'surveyAssigned',
+    language,
+    buildSurveyAssignedEmail,
+    patientName,
+    survey,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+/** Trial expiry notification sent to a clinic admin when the subscription trial is ending soon */
+export function sendTrialExpiryEmail(
+  to: string,
+  clinicName: string,
+  trial: { planName: string; trialEndsAt: Date; daysRemaining: number },
+  language?: string
+): void {
+  const rendered = renderTemplate(
+    'trialExpiry',
+    language,
+    buildTrialExpiryEmail,
+    clinicName,
+    trial,
+    language
+  );
+  enqueue(to, rendered.subject, rendered.text, rendered.html);
+}
+
+function buildAgingReminderEmail(
+  patientName: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    daysOverdue: number;
+    stellarPayURI: string;
+  },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const dueDateStr = invoice.dueDate.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const subject = isFrench
+    ? `Rappel de facture en retard (${invoice.daysOverdue} jours) — ${invoice.invoiceNumber}`
+    : `Overdue Invoice Reminder (${invoice.daysOverdue} days) — ${invoice.invoiceNumber}`;
+  const text = isFrench
+    ? `Bonjour ${patientName},\n\nLa facture ${invoice.invoiceNumber} d'un montant de ${invoice.total} ${invoice.currency} est en retard de ${invoice.daysOverdue} jours (échéance : ${dueDateStr}).\n\nVeuillez régler le montant dû dès que possible : ${invoice.stellarPayURI}`
+    : `Hello ${patientName},\n\nThe invoice ${invoice.invoiceNumber} for ${invoice.total} ${invoice.currency} is ${invoice.daysOverdue} days overdue (due date: ${dueDateStr}).\n\nPlease settle the outstanding amount as soon as possible: ${invoice.stellarPayURI}`;
+  const html = isFrench
+    ? `<h3>Rappel de facture en retard</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>La facture <strong>${invoice.invoiceNumber}</strong> est en retard de <strong>${invoice.daysOverdue} jours</strong>.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Montant dû</td><td style="padding:8px">${invoice.total} ${invoice.currency}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Date d'échéance</td><td style="padding:8px">${dueDateStr}</td></tr><tr><td style="padding:8px;font-weight:bold">Jours de retard</td><td style="padding:8px;color:#dc2626">${invoice.daysOverdue}</td></tr></table><p><a href="${invoice.stellarPayURI}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Payer maintenant</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Overdue Invoice Reminder</h3><p>Hello <strong>${patientName}</strong>,</p><p>The invoice <strong>${invoice.invoiceNumber}</strong> is <strong>${invoice.daysOverdue} days overdue</strong>.</p><table style="border-collapse:collapse;width:100%;margin:16px 0"><tr><td style="padding:8px;font-weight:bold">Amount Due</td><td style="padding:8px">${invoice.total} ${invoice.currency}</td></tr><tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Due Date</td><td style="padding:8px">${dueDateStr}</td></tr><tr><td style="padding:8px;font-weight:bold">Days Overdue</td><td style="padding:8px;color:#dc2626">${invoice.daysOverdue}</td></tr></table><p><a href="${invoice.stellarPayURI}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Pay Now</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
+}
+
+function buildSurveyAssignedEmail(
+  patientName: string,
+  survey: { title: string; surveyId: string; dueDate?: Date | null },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const surveyUrl = `${APP_BASE_URL()}/portal/surveys/${survey.surveyId}`;
+  const dueDateStr = survey.dueDate
+    ? survey.dueDate.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+  const subject = isFrench
+    ? 'Nouveau questionnaire à remplir — Health Watchers'
+    : 'New Survey to Complete — Health Watchers';
+  const text = isFrench
+    ? `Bonjour ${patientName},\n\nUn nouveau questionnaire vous a été assigné : ${survey.title}.${dueDateStr ? `\n\nÀ remplir avant le : ${dueDateStr}` : ''}\n\nRemplir le questionnaire : ${surveyUrl}`
+    : `Hello ${patientName},\n\nA new survey has been assigned to you: ${survey.title}.${dueDateStr ? `\n\nPlease complete it by: ${dueDateStr}` : ''}\n\nComplete the survey: ${surveyUrl}`;
+  const html = isFrench
+    ? `<h3>Nouveau questionnaire à remplir</h3><p>Bonjour <strong>${patientName}</strong>,</p><p>Un nouveau questionnaire vous a été assigné : <strong>${survey.title}</strong>.</p>${dueDateStr ? `<p><strong>À remplir avant le :</strong> ${dueDateStr}</p>` : ''}<p><a href="${surveyUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Remplir le questionnaire</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>New Survey to Complete</h3><p>Hello <strong>${patientName}</strong>,</p><p>A new survey has been assigned to you: <strong>${survey.title}</strong>.</p>${dueDateStr ? `<p><strong>Please complete it by:</strong> ${dueDateStr}</p>` : ''}<p><a href="${surveyUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete Survey</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
+}
+
+function buildTrialExpiryEmail(
+  clinicName: string,
+  trial: { planName: string; trialEndsAt: Date; daysRemaining: number },
+  language?: string
+): EmailContent {
+  const isFrench = resolveLanguage(language) === 'fr';
+  const billingUrl = `${APP_BASE_URL()}/settings/billing`;
+  const endsAtStr = trial.trialEndsAt.toLocaleDateString(isFrench ? 'fr-FR' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const subject = isFrench
+    ? `Votre essai ${trial.planName} se termine bientôt — Health Watchers`
+    : `Your ${trial.planName} Trial Is Ending Soon — Health Watchers`;
+  const text = isFrench
+    ? `Bonjour ${clinicName},\n\nVotre essai gratuit du plan ${trial.planName} se termine le ${endsAtStr} (${trial.daysRemaining} jour(s) restant(s)).\n\nAjoutez un moyen de paiement pour continuer à utiliser Health Watchers sans interruption : ${billingUrl}`
+    : `Hello ${clinicName},\n\nYour free trial of the ${trial.planName} plan ends on ${endsAtStr} (${trial.daysRemaining} day(s) remaining).\n\nAdd a payment method to keep using Health Watchers without interruption: ${billingUrl}`;
+  const html = isFrench
+    ? `<h3>Votre essai ${trial.planName} se termine bientôt</h3><p>Bonjour <strong>${clinicName}</strong>,</p><p>Votre essai gratuit du plan <strong>${trial.planName}</strong> se termine le <strong>${endsAtStr}</strong> (${trial.daysRemaining} jour(s) restant(s)).</p><p>Ajoutez un moyen de paiement pour continuer à utiliser Health Watchers sans interruption.</p><p><a href="${billingUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Gérer l'abonnement</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`
+    : `<h3>Your ${trial.planName} Trial Is Ending Soon</h3><p>Hello <strong>${clinicName}</strong>,</p><p>Your free trial of the <strong>${trial.planName}</strong> plan ends on <strong>${endsAtStr}</strong> (${trial.daysRemaining} day(s) remaining).</p><p>Add a payment method to keep using Health Watchers without interruption.</p><p><a href="${billingUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Manage Subscription</a></p><hr style="margin-top:32px"><small style="color:#6b7280">Health Watchers</small>`;
+  return { subject, text, html };
 }
 
 /** Claimable balance expiry notification sent to patient */

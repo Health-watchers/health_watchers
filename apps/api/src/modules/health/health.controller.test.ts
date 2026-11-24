@@ -47,6 +47,11 @@ jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
     lastSuccessfulRunAt: null,
     consecutiveFailures: 0,
   }),
+  getClusterJobStatus: jest.fn().mockResolvedValue({
+    running: true,
+    lastSuccessfulRunAt: null,
+    consecutiveFailures: 0,
+  }),
   CHECK_INTERVAL_MS: 60_000,
 }));
 

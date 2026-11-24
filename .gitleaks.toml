@@ -29,6 +29,7 @@ paths = [
   '''\.spec\.(ts|js)$''',
   '''factories/''',
   '''seeds?/''',
+  '''jest\.setup\.ts$''',
 
   # Example / template files
   '''\.env\.example$''',
@@ -45,8 +46,18 @@ paths = [
   '''build/''',
   '''\.next/''',
 
-  # Kubernetes placeholder secrets (base64-encoded dummy values)
+  # Kubernetes and Docker configuration files with placeholder credentials
   '''k8s/secrets\.yaml$''',
+  '''k8s/mongodb-replica-set-init\.js$''',
+  '''k8s/mongodb-replica-set-statefulset\.yaml$''',
+  '''docker-compose\..*\.yml$''',
+  '''docker-compose\.yml$''',
+
+  # Scripts with environment variable references
+  '''scripts/.*\.sh$''',
+
+  # CI/CD configuration files (contain only test fixtures and env vars)
+  '''\.github/workflows/.*\.yml$''',
 ]
 
 # Regex patterns that are safe to ignore globally

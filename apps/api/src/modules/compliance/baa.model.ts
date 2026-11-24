@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface BAA extends Document {
   clinicId: mongoose.Types.ObjectId;
@@ -7,6 +8,8 @@ export interface BAA extends Document {
   signedDate?: Date;
   expiryDate?: Date;
   documentUrl?: string;
+  documentStorageKey?: string;
+  documentFileName?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -20,9 +23,13 @@ const baaSchema = new Schema<BAA>(
     signedDate: Date,
     expiryDate: Date,
     documentUrl: String,
+    documentStorageKey: String,
+    documentFileName: String,
     notes: String,
   },
   { timestamps: true }
 );
+
+baaSchema.add(baseSchema);
 
 export const BAAModel = mongoose.model<BAA>('BAA', baaSchema);

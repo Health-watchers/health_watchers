@@ -21,10 +21,12 @@ export async function up(db: Db): Promise<void> {
   );
 
   // Compound index for fast signature verification lookups
-  await db.collection('consents').createIndex(
-    { patientId: 1, clinicId: 1, signatureHash: 1 },
-    { background: true, sparse: true, name: 'patientId_1_clinicId_1_signatureHash_1' }
-  );
+  await db
+    .collection('consents')
+    .createIndex(
+      { patientId: 1, clinicId: 1, signatureHash: 1 },
+      { background: true, sparse: true, name: 'patientId_1_clinicId_1_signatureHash_1' }
+    );
 }
 
 export async function down(db: Db): Promise<void> {
@@ -33,8 +35,10 @@ export async function down(db: Db): Promise<void> {
     .dropIndex('patientId_1_clinicId_1_signatureHash_1')
     .catch(() => {});
 
-  await db.collection('consents').updateMany(
-    {},
-    { $unset: { signatureData: '', signedAt: '', signatureHash: '', userAgent: '' } }
-  );
+  await db
+    .collection('consents')
+    .updateMany(
+      {},
+      { $unset: { signatureData: '', signedAt: '', signatureHash: '', userAgent: '' } }
+    );
 }

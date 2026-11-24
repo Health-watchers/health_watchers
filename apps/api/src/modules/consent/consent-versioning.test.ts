@@ -31,18 +31,36 @@ jest.mock('@health-watchers/config', () => ({
   },
 }));
 
-jest.mock('@api/modules/patients/patients.controller', () => ({ patientRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
+jest.mock('@api/modules/patients/patients.controller', () => ({
+  patientRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -73,8 +91,16 @@ jest.mock('@api/modules/consent/consent.model', () => ({
   },
   CONSENT_TEMPLATES: {
     treatment: { version: '1.0', title: 'Consent for Treatment', text: 'I consent to treatment.' },
-    data_sharing: { version: '1.0', title: 'Consent for Data Sharing', text: 'I consent to data sharing.' },
-    ai_analysis: { version: '1.0', title: 'Consent for AI Analysis', text: 'I consent to AI analysis.' },
+    data_sharing: {
+      version: '1.0',
+      title: 'Consent for Data Sharing',
+      text: 'I consent to data sharing.',
+    },
+    ai_analysis: {
+      version: '1.0',
+      title: 'Consent for AI Analysis',
+      text: 'I consent to AI analysis.',
+    },
     research: { version: '1.0', title: 'Consent for Research', text: 'I consent to research.' },
     marketing: { version: '1.0', title: 'Consent for Marketing', text: 'I consent to marketing.' },
   },
@@ -98,8 +124,11 @@ jest.mock('@api/modules/patients/models/patient.model', () => ({
 jest.mock('@api/middlewares/rate-limit.middleware', () => {
   const pass = (_req: unknown, _res: unknown, next: () => void) => next();
   return {
-    authLimiter: pass, forgotPasswordLimiter: pass, aiLimiter: pass,
-    paymentLimiter: pass, generalLimiter: pass,
+    authLimiter: pass,
+    forgotPasswordLimiter: pass,
+    aiLimiter: pass,
+    paymentLimiter: pass,
+    generalLimiter: pass,
   };
 });
 
@@ -114,10 +143,12 @@ jest.mock('@api/middlewares/auth.middleware', () => ({
     };
     next();
   },
-  requireRoles: (...roles: string[]) => (req: any, res: any, next: () => void) => {
-    if (roles.includes(req.user?.role)) return next();
-    return res.status(403).json({ error: 'Forbidden' });
-  },
+  requireRoles:
+    (...roles: string[]) =>
+    (req: any, res: any, next: () => void) => {
+      if (roles.includes(req.user?.role)) return next();
+      return res.status(403).json({ error: 'Forbidden' });
+    },
 }));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -146,13 +177,25 @@ beforeEach(() => {
 // ── POST /api/v1/consent/forms ────────────────────────────────────────────────
 describe('POST /api/v1/consent/forms', () => {
   it('creates a new consent form version', async () => {
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated content.', effectiveDate: new Date() };
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated content.',
+      effectiveDate: new Date(),
+    };
     (ConsentFormModel.create as jest.Mock).mockResolvedValue(form);
     (ConsentModel.find as jest.Mock).mockResolvedValue([]);
 
     const res = await request(app)
       .post('/api/v1/consent/forms')
-      .send({ type: 'treatment', version: '2.0', content: 'Updated content.', effectiveDate: new Date().toISOString() });
+      .send({
+        type: 'treatment',
+        version: '2.0',
+        content: 'Updated content.',
+        effectiveDate: new Date().toISOString(),
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('success');
@@ -162,7 +205,14 @@ describe('POST /api/v1/consent/forms', () => {
   });
 
   it('notifies existing patients when a new version is published', async () => {
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date() };
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+      effectiveDate: new Date(),
+    };
     (ConsentFormModel.create as jest.Mock).mockResolvedValue(form);
     (ConsentModel.find as jest.Mock).mockResolvedValue([{ patientId: PATIENT_ID }]);
     (PatientModel.find as jest.Mock).mockResolvedValue([
@@ -171,22 +221,42 @@ describe('POST /api/v1/consent/forms', () => {
 
     await request(app)
       .post('/api/v1/consent/forms')
-      .send({ type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date().toISOString() });
+      .send({
+        type: 'treatment',
+        version: '2.0',
+        content: 'Updated.',
+        effectiveDate: new Date().toISOString(),
+      });
 
     expect(sendConsentVersionNotificationEmail).toHaveBeenCalledWith(
-      'patient@clinic.com', 'John Doe', 'treatment', '2.0'
+      'patient@clinic.com',
+      'John Doe',
+      'treatment',
+      '2.0'
     );
   });
 
   it('does not notify patients without email addresses', async () => {
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date() };
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+      effectiveDate: new Date(),
+    };
     (ConsentFormModel.create as jest.Mock).mockResolvedValue(form);
     (ConsentModel.find as jest.Mock).mockResolvedValue([{ patientId: PATIENT_ID }]);
     (PatientModel.find as jest.Mock).mockResolvedValue([]); // no patients with email
 
     await request(app)
       .post('/api/v1/consent/forms')
-      .send({ type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date().toISOString() });
+      .send({
+        type: 'treatment',
+        version: '2.0',
+        content: 'Updated.',
+        effectiveDate: new Date().toISOString(),
+      });
 
     expect(sendConsentVersionNotificationEmail).not.toHaveBeenCalled();
   });
@@ -195,15 +265,18 @@ describe('POST /api/v1/consent/forms', () => {
     testRole = 'DOCTOR';
     const res = await request(app)
       .post('/api/v1/consent/forms')
-      .send({ type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date().toISOString() });
+      .send({
+        type: 'treatment',
+        version: '2.0',
+        content: 'Updated.',
+        effectiveDate: new Date().toISOString(),
+      });
 
     expect(res.status).toBe(403);
   });
 
   it('returns 400 for missing required fields', async () => {
-    const res = await request(app)
-      .post('/api/v1/consent/forms')
-      .send({ type: 'treatment' }); // missing version, content, effectiveDate
+    const res = await request(app).post('/api/v1/consent/forms').send({ type: 'treatment' }); // missing version, content, effectiveDate
 
     expect(res.status).toBe(400);
   });
@@ -212,7 +285,13 @@ describe('POST /api/v1/consent/forms', () => {
 // ── GET /api/v1/consent/current-version ───────────────────────────────────────
 describe('GET /api/v1/consent/current-version', () => {
   it('returns the latest consent form version', async () => {
-    const form = { _id: FORM_ID, type: 'treatment', version: '2.0', content: 'Updated.', effectiveDate: new Date() };
+    const form = {
+      _id: FORM_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+      effectiveDate: new Date(),
+    };
     (ConsentFormModel.findOne as jest.Mock).mockReturnValue({
       sort: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(form) }),
     });
@@ -248,9 +327,23 @@ describe('POST /api/v1/consent/re-consent', () => {
   });
 
   it('records re-consent and links to the form version', async () => {
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated.' };
-    const consent = { _id: 'consent1', patientId: PATIENT_ID, type: 'treatment', version: '2.0', formVersion: FORM_ID };
-    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({ lean: jest.fn().mockResolvedValue(form) });
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+    };
+    const consent = {
+      _id: 'consent1',
+      patientId: PATIENT_ID,
+      type: 'treatment',
+      version: '2.0',
+      formVersion: FORM_ID,
+    };
+    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({
+      lean: jest.fn().mockResolvedValue(form),
+    });
     (ConsentModel.findOneAndUpdate as jest.Mock).mockResolvedValue(consent);
 
     const res = await request(app)
@@ -267,9 +360,17 @@ describe('POST /api/v1/consent/re-consent', () => {
   });
 
   it('records an audit log on re-consent', async () => {
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated.' };
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+    };
     const consent = { _id: 'consent1', patientId: PATIENT_ID };
-    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({ lean: jest.fn().mockResolvedValue(form) });
+    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({
+      lean: jest.fn().mockResolvedValue(form),
+    });
     (ConsentModel.findOneAndUpdate as jest.Mock).mockResolvedValue(consent);
 
     await request(app)
@@ -283,7 +384,9 @@ describe('POST /api/v1/consent/re-consent', () => {
   });
 
   it('returns 404 when form version does not exist', async () => {
-    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({ lean: jest.fn().mockResolvedValue(null) });
+    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
 
     const res = await request(app)
       .post('/api/v1/consent/re-consent')
@@ -295,8 +398,16 @@ describe('POST /api/v1/consent/re-consent', () => {
   it('returns 403 when the user has no patientId (non-patient)', async () => {
     testRole = 'DOCTOR';
     testPatientId = undefined;
-    const form = { _id: FORM_ID, clinicId: CLINIC_ID, type: 'treatment', version: '2.0', content: 'Updated.' };
-    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({ lean: jest.fn().mockResolvedValue(form) });
+    const form = {
+      _id: FORM_ID,
+      clinicId: CLINIC_ID,
+      type: 'treatment',
+      version: '2.0',
+      content: 'Updated.',
+    };
+    (ConsentFormModel.findOne as jest.Mock).mockReturnValue({
+      lean: jest.fn().mockResolvedValue(form),
+    });
 
     const res = await request(app)
       .post('/api/v1/consent/re-consent')

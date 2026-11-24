@@ -1,6 +1,8 @@
-import { Router, Request, Response } from 'express';
-import { authenticate } from '@/middleware/auth';
-import { authorize } from '@/middleware/authorization';
+import { Router, Request, Response, NextFunction } from 'express';
+import { authenticate } from '@/middlewares/auth.middleware';
+import { requirePermission } from '@/middlewares/rbac.middleware';
+import { authorize } from '@/middlewares/rbac.middleware';
+import { asyncHandler } from '@/middlewares/error.middleware';
 import {
   getReplicationLagMetrics,
   monitorConsistency,
@@ -9,14 +11,25 @@ import {
   READ_PREFERENCES,
 } from '@/config/db-replication';
 
+/**
+ * Internal admin router for replication operations.
+ *
+ * Mounted under `/internal/replication` on the internal admin surface only —
+ * never on the public `/api/v1` prefix. All routes require an authenticated
+ * SUPER_ADMIN; mutating routes additionally require an MFA-verified session.
+ */
 const router = Router();
 
 /**
- * GET /api/v1/replication/status
+ * GET /internal/replication/status
  * Get comprehensive replication health status
  */
-router.get('/status', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/status',
+  authenticate,
+  requirePermission('replication:read'),
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const healthStatus = await getReplicationHealthStatus();
 
     res.json({
@@ -24,21 +37,19 @@ router.get('/status', authenticate, authorize(['admin']), async (req: Request, r
       data: healthStatus,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication status',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
- * GET /api/v1/replication/lag
+ * GET /internal/replication/lag
  * Get replication lag metrics
  */
-router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/lag',
+  authenticate,
+  requirePermission('replication:read'),
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const lagMetrics = await getReplicationLagMetrics();
 
     if (!lagMetrics) {
@@ -53,21 +64,19 @@ router.get('/lag', authenticate, authorize(['admin']), async (req: Request, res:
       data: lagMetrics,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get replication lag',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
- * GET /api/v1/replication/consistency
+ * GET /internal/replication/consistency
  * Get replication consistency metrics
  */
-router.get('/consistency', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/consistency',
+  authenticate,
+  requirePermission('replication:read'),
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const consistency = await monitorConsistency();
 
     if (!consistency) {
@@ -82,21 +91,22 @@ router.get('/consistency', authenticate, authorize(['admin']), async (req: Reque
       data: consistency,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get consistency metrics',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
- * POST /api/v1/replication/test-failover
- * Test failover procedures
+ * POST /internal/replication/test-failover
+ * Test failover procedures (mutating — requires SUPER_ADMIN + MFA)
+ *
+ * NOTE: This is a candidate to move to an internal admin service or CLI.
+ * Exposing failover testing on the public API is a safety concern (#1773).
  */
-router.post('/test-failover', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.post(
+  '/test-failover',
+  authenticate,
+  requirePermission('replication:write'),
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const testResult = await testFailover();
 
     res.json({
@@ -104,43 +114,47 @@ router.post('/test-failover', authenticate, authorize(['admin']), async (req: Re
       data: testResult,
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failover test failed',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 /**
- * GET /api/v1/replication/read-preferences
+ * GET /internal/replication/read-preferences
  * Get available read preference configurations
  */
-router.get('/read-preferences', authenticate, authorize(['admin']), (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      available: Object.keys(READ_PREFERENCES),
-      configurations: READ_PREFERENCES,
-      description: {
-        consistent: 'Critical operations requiring consistent reads from primary',
-        highPriority: 'High-priority operations with primary preference',
-        balanced: 'General purpose - balance consistency and scalability',
-        analytics: 'Read-heavy analytics - tolerates staleness',
-        lowest_latency: 'Nearest node - lowest latency',
+router.get(
+  '/read-preferences',
+  authenticate,
+  requirePermission('replication:read'),
+  authorize(['super_admin']),
+  (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        available: Object.keys(READ_PREFERENCES),
+        configurations: READ_PREFERENCES,
+        description: {
+          consistent: 'Critical operations requiring consistent reads from primary',
+          highPriority: 'High-priority operations with primary preference',
+          balanced: 'General purpose - balance consistency and scalability',
+          analytics: 'Read-heavy analytics - tolerates staleness',
+          lowest_latency: 'Nearest node - lowest latency',
+        },
       },
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
+      timestamp: new Date().toISOString(),
+    });
+  }
+);
 
 /**
- * GET /api/v1/replication/metrics
+ * GET /internal/replication/metrics
  * Get detailed replication metrics
  */
-router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/metrics',
+  authenticate,
+  requirePermission('replication:read'),
+  authorize(['admin']),
+  asyncHandler(async (req: Request, res: Response) => {
     const [lagMetrics, consistency] = await Promise.all([
       getReplicationLagMetrics(),
       monitorConsistency(),
@@ -156,13 +170,7 @@ router.get('/metrics', authenticate, authorize(['admin']), async (req: Request, 
       success: true,
       data: metrics,
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Failed to get metrics',
-      message: errorMessage,
-    });
-  }
-});
+  })
+);
 
 export default router;

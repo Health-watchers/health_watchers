@@ -27,6 +27,25 @@ export const API_VERSIONS: ApiVersion[] = [
   },
 ];
 
+/** Documented v1 sunset date (see API_VERSIONS and docs/api-versioning-strategy.md). */
+export const V1_SUNSET_DATE = API_VERSIONS.find((v) => v.version === 'v1')!.sunsetDate!;
+
+/**
+ * v1 route prefixes that have a working v2 equivalent.
+ * Only these routes are marked as deprecated — everything else on v1 has no
+ * migration target yet, so advertising a Sunset date for it would be misleading.
+ * Keep in sync with apps/api/src/routes/v2/ and docs/API_MIGRATION_GUIDE.md.
+ */
+export const V1_ROUTES_WITH_V2_EQUIVALENT: readonly string[] = ['/patients', '/appointments'];
+
+/** Returns true when the given v1 path (relative to /api/v1) has a v2 replacement. */
+export function hasV2Equivalent(v1Path: string): boolean {
+  const normalized = v1Path.split('?')[0].replace(/\/+$/, '') || '/';
+  return V1_ROUTES_WITH_V2_EQUIVALENT.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`)
+  );
+}
+
 /**
  * Middleware to add API-Version header to all responses.
  */
@@ -53,18 +72,23 @@ export const deprecated =
   };
 
 /**
- * Middleware to add deprecation warnings for v1 endpoints
+ * Middleware to add deprecation warnings for v1 endpoints that have a v2
+ * equivalent. Routes without a v2 replacement are passed through untouched so
+ * clients are not told to migrate to an endpoint that does not exist yet.
+ *
+ * The Sunset date is the documented v1 sunset date (at least six months after
+ * v2 reaches parity), not a rolling date computed per request.
  */
-export const v1DeprecationWarning: RequestHandler = (_req, res, next) => {
-  const sunsetDate = new Date();
-  sunsetDate.setMonth(sunsetDate.getMonth() + 6); // 6 months from now
+export const v1DeprecationWarning: RequestHandler = (req, res, next) => {
+  const v1Path = req.originalUrl.replace(/^\/api\/v1/, '').split('?')[0] || '/';
+  if (!hasV2Equivalent(v1Path)) return next();
 
   res.set('Deprecation', 'true');
-  res.set('Sunset', sunsetDate.toISOString().split('T')[0]);
+  res.set('Sunset', V1_SUNSET_DATE);
   res.set('Link', '</api/v2>; rel="successor-version"');
   res.set(
     'Warning',
-    '299 - "API v1 is deprecated. Please migrate to v2. See /api/versions for details."'
+    '299 - "This API v1 endpoint is deprecated. Please migrate to v2. See /api/versions for details."'
   );
 
   next();

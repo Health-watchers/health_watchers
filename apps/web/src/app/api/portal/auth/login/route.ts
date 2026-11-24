@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_URL } from '@/lib/api';
+import { clientContextHeaders } from '@/lib/clientContextHeaders';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const res = await fetch(`${API_URL}/api/v1/portal/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...clientContextHeaders(request) },
       body: JSON.stringify(body),
     });
 

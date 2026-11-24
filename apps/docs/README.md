@@ -1,15 +1,14 @@
 # Health Watchers Documentation
 
-Comprehensive documentation site built with Docusaurus.
+Documentation site built with [Docusaurus](https://docusaurus.io/).
 
 ## Getting Started
 
 ```bash
-npm install
-npm run dev
+npm ci
+npm start                 # http://localhost:3000
+npm start -- --locale fr  # French preview
 ```
-
-Documentation will be available at `http://localhost:3000`.
 
 ## Building
 
@@ -17,62 +16,20 @@ Documentation will be available at `http://localhost:3000`.
 npm run build
 ```
 
-## Deployment
-
-### GitHub Pages
-
-```bash
-npm run deploy
-```
-
-### Vercel
-
-Connect the repository to Vercel and set:
-- Build command: `npm run build --workspace=docs`
-- Output directory: `build`
+The build fails on broken links, broken Markdown links, or broken anchors. The [Docs workflow](../../.github/workflows/docs.yml) runs it on every PR and deploys `main` to GitHub Pages.
 
 ## Documentation Structure
 
-- **Getting Started**: Quick start, installation, configuration
-- **Architecture**: System design, service communication, data flow
-- **Features**: Patient management, encounters, payments, AI
-- **Stellar Integration**: Payment flow, wallet setup, testnet guide
-- **Security**: Authentication, RBAC, HIPAA compliance
-- **Deployment**: Docker, Kubernetes, environment variables
-- **Contributing**: Development setup, coding standards, PR process
-- **API Reference**: Auto-generated from OpenAPI spec
-
-## Adding Documentation
-
-1. Create markdown file in appropriate directory
-2. Add to `sidebars.ts`
-3. Run `npm run dev` to preview
-4. Commit and push
+- **Getting Started** and **Architecture**: quick start, architecture overview, API reference
+- **Clinical Modules**, **Payments**, **Platform**: one page per mounted API module (purpose, data model, key endpoints, roles)
+- **Operations**: deployment, monitoring, disaster recovery, health checks, admin endpoints
+- **Contributing**: workflow, writing docs, and an index of the engineering docs in [`docs/`](../../docs/README.md)
+- **User Guide**: task-oriented guides for clinic administrators and front-desk staff (English, with French in progress)
 
 ## Search
 
-Documentation includes Algolia DocSearch for full-text search.
+Full-text search uses [`@easyops-cn/docusaurus-search-local`](https://github.com/easyops-cn/docusaurus-search-local). The index is generated at build time and needs no external service.
 
-Configure in `docusaurus.config.ts`:
-```typescript
-algolia: {
-  appId: process.env.ALGOLIA_APP_ID,
-  apiKey: process.env.ALGOLIA_API_KEY,
-  indexName: 'health-watchers',
-}
-```
+## Adding Documentation
 
-## Versioning
-
-To create a new documentation version:
-
-```bash
-npm run docusaurus docs:version 2.0.0
-```
-
-This creates a versioned copy of the documentation.
-
-## See Also
-
-- [Docusaurus Documentation](https://docusaurus.io/)
-- [OpenAPI Plugin](https://github.com/PaloAltoNetworks/docusaurus-openapi-docs)
+See [`docs/contributing/writing-docs.md`](docs/contributing/writing-docs.md).

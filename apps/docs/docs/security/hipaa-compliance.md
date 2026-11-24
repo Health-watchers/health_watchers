@@ -164,6 +164,8 @@ Do not open public issues for security vulnerabilities.
 
 ## See Also
 
-- [Authentication](./authentication.md)
-- [RBAC](./rbac.md)
-- [Data Encryption](./data-encryption.md)
+- [Authentication](../platform/auth.md)
+- [Users & Staff](../platform/users.md)
+- [Audit Logs](../platform/audit.md)
+- [Data Encryption at Rest](https://github.com/Health-watchers/health_watchers/blob/main/docs/DATA_ENCRYPTION_AT_REST.md)
+- [Vulnerability reporting policy](https://github.com/Health-watchers/health_watchers/blob/main/SECURITY.md)

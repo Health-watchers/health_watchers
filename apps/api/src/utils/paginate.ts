@@ -5,8 +5,8 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
+  hasNext: boolean;
+  hasPrev: boolean;
   nextCursor: string | null;
 }
 
@@ -42,31 +42,47 @@ function sanitizeQuery<T>(query: FilterQuery<T>): FilterQuery<T> {
   return sanitize(query) as FilterQuery<T>;
 }
 
+export interface PaginateOptions {
+  sort?: Record<string, 1 | -1>;
+  /** Selective field projection — pass only the fields you need (1 = include, 0 = exclude). */
+  projection?: Record<string, 0 | 1>;
+  /** MongoDB query hint — name of the index to force (e.g. 'clinicId_1_isActive_1'). */
+  hint?: string | Record<string, unknown>;
+}
+
 export async function paginate<T>(
   model: Model<T>,
   query: FilterQuery<T>,
   page: number,
   limit: number,
-  sort: Record<string, 1 | -1> = { createdAt: -1 }
-): Promise<{ data: T[]; meta: PaginationMeta }> {
+  sort: Record<string, 1 | -1> = { createdAt: -1 },
+  options?: PaginateOptions
+): Promise<{ data: T[]; pagination: PaginationMeta }> {
   const safeQuery = sanitizeQuery(query);
+  const effectiveSort = options?.sort ?? sort;
+  const projection = options?.projection;
+  const hint = options?.hint;
+
+  let findQuery = model.find(safeQuery);
+  if (projection) findQuery = findQuery.select(projection as Record<string, 0 | 1>);
+  if (hint) findQuery = findQuery.hint(hint as any);
+
   const [total, data] = await Promise.all([
     model.countDocuments(safeQuery),
-    model
-      .find(safeQuery)
-      .sort(sort)
+    findQuery
+      .sort(effectiveSort)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean() as Promise<T[]>,
   ]);
   const totalPages = Math.ceil(total / limit);
-  const hasNextPage = page < totalPages;
-  const hasPrevPage = page > 1;
+  const hasNext = page < totalPages;
+  const hasPrev = page > 1;
   const lastDoc = data[data.length - 1] as (T & { _id?: Types.ObjectId }) | undefined;
-  const nextCursor = hasNextPage && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
+  const nextCursor = hasNext && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
   return {
     data,
-    meta: { total, page, limit, totalPages, hasNextPage, hasPrevPage, nextCursor },
+    pagination: { total, page, limit, totalPages, hasNext, hasPrev, nextCursor },
   };
 }
 
@@ -74,18 +90,16 @@ export function parsePagination(
   query: Record<string, unknown>
 ): { page: number; limit: number } | null {
   const page = Math.max(1, parseInt(query.page as string) || 1);
-  const limit = parseInt(query.limit as string) || 20;
-  if (limit > 100) return null;
+  // Default and max page size are defined in constants.ts (#1063)
+  const limit = parseInt(query.limit as string) || 20; // DEFAULT_PAGE_SIZE = 20
+  if (limit > 100) return null; // MAX_PAGE_SIZE = 100
   return { page, limit: Math.max(1, limit) };
 }
 
 export interface CursorPaginationResult<T> {
   data: T[];
-  meta: {
-    limit: number;
-    hasNextPage: boolean;
-    nextCursor: string | null;
-  };
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 /** Cursor-based pagination using _id as the cursor (O(1) regardless of depth). */
@@ -111,11 +125,11 @@ export async function paginateCursor<T>(
     .sort(sort)
     .limit(limit + 1)
     .lean()) as (T & { _id?: Types.ObjectId })[];
-  const hasNextPage = data.length > limit;
-  if (hasNextPage) data.pop();
+  const hasMore = data.length > limit;
+  if (hasMore) data.pop();
   const lastDoc = data[data.length - 1];
-  const nextCursor = hasNextPage && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
-  return { data: data as T[], meta: { limit, hasNextPage, nextCursor } };
+  const nextCursor = hasMore && lastDoc?._id ? encodeCursor(lastDoc._id) : null;
+  return { data: data as T[], nextCursor, hasMore };
 }
 
 export function parseCursorPagination(query: Record<string, unknown>): {

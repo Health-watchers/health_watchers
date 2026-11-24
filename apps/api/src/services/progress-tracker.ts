@@ -63,7 +63,12 @@ class ProgressTracker {
 
     const event: ProgressEvent = {
       jobId,
-      type: progress.status === 'completed' ? 'completed' : progress.status === 'failed' ? 'failed' : 'progress',
+      type:
+        progress.status === 'completed'
+          ? 'completed'
+          : progress.status === 'failed'
+            ? 'failed'
+            : 'progress',
       data: progress,
       timestamp: Date.now(),
     };

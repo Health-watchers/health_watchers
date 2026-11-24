@@ -1,0 +1,290 @@
+name: API Breaking Change Detection
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'packages/types/**'
+
+env:
+  NODE_VERSION: 20
+
+permissions:
+  contents: read
+
+jobs:
+  detect-breaking-changes:
+    name: Detect API Breaking Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # Need full history to compare with base branch
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate OpenAPI spec from current branch
+        run: |
+          cd apps/api
+          npm run generate:openapi
+
+      - name: Save current spec
+        run: |
+          if [ -f apps/api/docs/openapi.json ]; then
+            cp apps/api/docs/openapi.json /tmp/openapi-new.json
+            echo "✅ Current branch spec saved"
+          else
+            echo "❌ No OpenAPI spec found after generation."
+            exit 1
+          fi
+
+      - name: Checkout base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          git checkout "origin/$BASE_REF"
+
+      - name: Install base branch dependencies
+        run: npm ci
+
+      - name: Generate OpenAPI spec from base branch
+        run: |
+          cd apps/api
+          npm run generate:openapi
+
+      - name: Save base spec
+        run: |
+          if [ -f apps/api/docs/openapi.json ]; then
+            cp apps/api/docs/openapi.json /tmp/openapi-base.json
+            echo "✅ Base branch spec saved"
+          else
+            echo "❌ No OpenAPI spec found in base branch."
+            exit 1
+          fi
+
+      - name: Check for spec drift
+        id: drift
+        run: |
+          if diff -q /tmp/openapi-base.json /tmp/openapi-new.json > /dev/null 2>&1; then
+            echo "has_drift=false" >> "$GITHUB_OUTPUT"
+            echo "✅ No spec drift detected"
+          else
+            echo "has_drift=true" >> "$GITHUB_OUTPUT"
+            echo "❌ Spec drift detected — generated openapi.json differs from committed version"
+            diff /tmp/openapi-base.json /tmp/openapi-new.json || true
+          fi
+
+      - name: Fail on spec drift
+        if: steps.drift.outputs.has_drift == 'true'
+        run: |
+          echo "❌ The generated OpenAPI spec does not match the committed version."
+          echo "   Run 'npm run generate:openapi' in apps/api/ and commit the updated docs/openapi.json."
+          exit 1
+
+      - name: Install oasdiff
+        if: steps.drift.outputs.has_drift == 'false'
+        run: |
+          curl -L https://github.com/Tufin/oasdiff/releases/latest/download/oasdiff_linux_amd64.tar.gz | tar -xz
+          chmod +x oasdiff
+          sudo mv oasdiff /usr/local/bin/
+
+      - name: Compare OpenAPI specs for breaking changes
+        if: steps.drift.outputs.has_drift == 'false'
+        id: diff
+        run: |
+          oasdiff breaking /tmp/openapi-base.json /tmp/openapi-new.json \
+            --format json \
+            --output /tmp/breaking-changes.json \
+            || echo "Breaking changes detected"
+
+          oasdiff diff /tmp/openapi-base.json /tmp/openapi-new.json \
+            --format markdown \
+            --output /tmp/api-diff.md
+        continue-on-error: true
+
+      - name: Check for breaking changes
+        id: check
+        if: steps.drift.outputs.has_drift == 'false'
+        run: |
+          if [ -f /tmp/breaking-changes.json ] && [ -s /tmp/breaking-changes.json ]; then
+            BREAKING_COUNT=$(jq 'length' /tmp/breaking-changes.json || echo "0")
+            if [ "$BREAKING_COUNT" -gt 0 ]; then
+              echo "has_breaking=true" >> "$GITHUB_OUTPUT"
+              echo "breaking_count=$BREAKING_COUNT" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+              echo "breaking_count=0" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            echo "breaking_count=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload diff reports
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1b7faa438b2069b0a1e7c59 # v4.3.3
+        with:
+          name: api-diff-reports
+          path: |
+            /tmp/breaking-changes.json
+            /tmp/api-diff.md
+          if-no-files-found: ignore
+
+      - name: Comment PR with API changes
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        with:
+          script: |
+            const fs = require('fs');
+            let breakingChanges = [];
+            let diffMarkdown = 'No changes detected.';
+
+            try {
+              if (fs.existsSync('/tmp/breaking-changes.json')) {
+                const content = fs.readFileSync('/tmp/breaking-changes.json', 'utf8');
+                if (content.trim()) {
+                  breakingChanges = JSON.parse(content);
+                }
+              }
+            } catch (e) {
+              console.log('Could not parse breaking changes:', e.message);
+            }
+
+            try {
+              if (fs.existsSync('/tmp/api-diff.md')) {
+                diffMarkdown = fs.readFileSync('/tmp/api-diff.md', 'utf8');
+              }
+            } catch (e) {
+              console.log('Could not read diff markdown:', e.message);
+            }
+
+            const hasBreaking = breakingChanges.length > 0;
+            const hasDrift = '${{ steps.drift.outputs.has_drift }}' === 'true';
+            const emoji = hasBreaking ? '🔴' : '✅';
+            const status = hasBreaking ? 'BREAKING CHANGES DETECTED' : 'No Breaking Changes';
+
+            let body = `## ${emoji} API Change Report\n\n`;
+            body += `**Status:** ${status}\n`;
+            body += `**Base Branch:** \`${process.env.BASE_REF}\`\n`;
+            body += `**PR Branch:** \`${process.env.HEAD_REF}\`\n\n`;
+
+            if (hasDrift) {
+              body += `### ⚠️ Spec Drift Detected\n\n`;
+              body += `The generated \`openapi.json\` does not match the committed version.\n`;
+              body += `Please run \`npm run generate:openapi\` in \`apps/api/\` and commit the updated spec.\n\n`;
+            }
+
+            if (hasBreaking) {
+              body += `### ⚠️ Breaking Changes Found (${breakingChanges.length})\n\n`;
+              body += '**Action Required:**\n';
+              body += '1. Review the breaking changes below\n';
+              body += '2. Ensure a changeset is included with this PR\n';
+              body += '3. Update API documentation\n';
+              body += '4. Consider backward compatibility\n\n';
+
+              breakingChanges.slice(0, 10).forEach((change, index) => {
+                body += `${index + 1}. **${change.operation || change.type}**: ${change.message || change.description || 'Breaking change detected'}\n`;
+              });
+
+              if (breakingChanges.length > 10) {
+                body += `\n... and ${breakingChanges.length - 10} more. See artifacts for full report.\n`;
+              }
+            } else {
+              body += '✅ No breaking changes detected in this PR.\n';
+            }
+
+            body += '\n<details>\n<summary>📋 Full API Diff</summary>\n\n';
+            body += diffMarkdown;
+            body += '\n</details>';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Add breaking-api-change label
+        if: steps.check.outputs.has_breaking == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['breaking-api-change']
+            });
+
+      - name: Check for changeset
+        if: steps.check.outputs.has_breaking == 'true'
+        id: changeset
+        run: |
+          if [ -n "$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit 2>/dev/null)" ]; then
+            echo "has_changeset=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Changeset found"
+          else
+            echo "has_changeset=false" >> "$GITHUB_OUTPUT"
+            echo "❌ No changeset found"
+          fi
+
+      - name: Fail if breaking changes without changeset
+        if: steps.check.outputs.has_breaking == 'true' && steps.changeset.outputs.has_changeset == 'false'
+        run: |
+          echo "❌ Breaking API changes detected but no changeset found!"
+          echo "Please add a changeset documenting the breaking changes:"
+          echo "  npx changeset add"
+          exit 1
+
+      - name: Generate summary
+        if: always()
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HAS_BREAKING: ${{ steps.check.outputs.has_breaking }}
+          BREAKING_COUNT: ${{ steps.check.outputs.breaking_count }}
+          HAS_CHANGESET: ${{ steps.changeset.outputs.has_changeset }}
+          HAS_DRIFT: ${{ steps.drift.outputs.has_drift }}
+        run: |
+          {
+            echo "## 🔄 API Breaking Change Analysis"
+            echo ""
+            echo "**Base:** $BASE_REF"
+            echo "**Head:** $HEAD_REF"
+            echo ""
+
+            if [ "$HAS_DRIFT" == "true" ]; then
+              echo "⚠️ **Spec Drift Detected** — the generated openapi.json does not match the committed version."
+              echo ""
+            fi
+
+            if [ "$HAS_BREAKING" == "true" ]; then
+              echo "🔴 **Breaking Changes:** $BREAKING_COUNT"
+              echo ""
+
+              if [ "$HAS_CHANGESET" == "true" ]; then
+                echo "✅ Changeset present"
+              else
+                echo "❌ Changeset missing"
+              fi
+            else
+              echo "✅ **No breaking changes detected**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,17 +1,19 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { config } from '@health-watchers/config';
 import { z } from 'zod';
-
-let clientInstance: GoogleGenerativeAI | null = null;
-
-function getGeminiClient(): GoogleGenerativeAI {
-  if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
-  if (!clientInstance) clientInstance = new GoogleGenerativeAI(config.geminiApiKey);
-  return clientInstance;
-}
+import {
+  generateText,
+  generateJson,
+  isLLMConfigured,
+  AIUnavailableError,
+} from '../../lib/llm';
 
 export function isAIServiceAvailable(): boolean {
-  return !!config.geminiApiKey;
+  return isLLMConfigured();
+}
+
+function wrapLLMError(operation: string, error: unknown): Error {
+  if (error instanceof AIUnavailableError) return error;
+  const msg = error instanceof Error ? error.message : 'Unknown error';
+  return new Error(`Failed to ${operation}: ${msg}`);
 }
 
 export const AI_DISCLAIMER =
@@ -44,8 +46,6 @@ export interface ClinicalNotesInput {
 }
 
 export async function generateClinicalSummary(clinicalNotes: ClinicalNotesInput): Promise<string> {
-  const client = getGeminiClient();
-
   const rawText = [
     `Chief Complaint: ${clinicalNotes.chiefComplaint}`,
     clinicalNotes.notes ? `Clinical Notes: ${clinicalNotes.notes}` : '',
@@ -60,27 +60,20 @@ export async function generateClinicalSummary(clinicalNotes: ClinicalNotesInput)
   const prompt = `Summarize the following clinical encounter in 2-3 sentences for a medical professional. Include chief complaint, key findings, and recommended follow-up:\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate AI summary: ${msg}`);
+    throw wrapLLMError('generate AI summary', error);
   }
 }
 
 export async function generateRawTextSummary(text: string): Promise<string> {
-  const client = getGeminiClient();
   const safeText = stripPII(text);
   const prompt = `Summarize the following clinical notes in 2-3 sentences for a medical professional. Include chief complaint, key findings, and recommended follow-up:\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate AI summary: ${msg}`);
+    throw wrapLLMError('generate AI summary', error);
   }
 }
 
@@ -108,8 +101,6 @@ export interface PatientFriendlySummaryInput {
 export async function generatePatientFriendlySummary(
   input: PatientFriendlySummaryInput
 ): Promise<string> {
-  const client = getGeminiClient();
-
   const parts: string[] = [`Chief Complaint: ${input.chiefComplaint}`];
   if (input.soapNotes?.assessment) parts.push(`Assessment: ${input.soapNotes.assessment}`);
   if (input.soapNotes?.plan) parts.push(`Plan: ${input.soapNotes.plan}`);
@@ -127,18 +118,13 @@ export async function generatePatientFriendlySummary(
   const prompt = `You are a patient-friendly health assistant. Summarize the following clinical encounter in plain, easy-to-understand language (no medical jargon) in 2-4 sentences. Focus on: what the visit was about, what was found, and what the patient should do next. Do not include any personally identifiable information.\n\n${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient-friendly summary: ${msg}`);
+    throw wrapLLMError('generate patient-friendly summary', error);
   }
 }
 
 export async function generatePatientInsights(encounters: EncounterSummary[]): Promise<string> {
-  const client = getGeminiClient();
-
   const encounterText = encounters
     .map((e, i) => {
       const date = new Date(e.createdAt).toLocaleDateString();
@@ -156,12 +142,9 @@ export async function generatePatientInsights(encounters: EncounterSummary[]): P
   const prompt = `You are a medical AI assistant. Based on the following ${encounters.length} clinical encounters for a single patient, provide a longitudinal health trend summary in 3-5 sentences. Identify recurring conditions, patterns, or areas of concern:\n\n${encounterText}`;
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    return await generateText(prompt);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient insights: ${msg}`);
+    throw wrapLLMError('generate patient insights', error);
   }
 }
 
@@ -213,8 +196,6 @@ export interface PatientHealthSummary {
 export async function generatePatientHealthSummary(
   input: PatientHealthSummaryInput
 ): Promise<PatientHealthSummary> {
-  const client = getGeminiClient();
-
   const promptPayload = {
     demographics: {
       age: input.age ?? null,
@@ -267,18 +248,10 @@ Patient context:
 ${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     return patientHealthSummarySchema.parse(parsed);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate patient health summary: ${msg}`);
+    throw wrapLLMError('generate patient health summary', error);
   }
 }
 
@@ -368,20 +341,10 @@ Rules:
 export async function generateDifferentialDiagnosis(
   input: DifferentialDiagnosisInput
 ): Promise<DifferentialDiagnosisResponse> {
-  const client = getGeminiClient();
   const prompt = buildDifferentialDiagnosisPrompt(input);
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-
-    // The model might still return markdown code fences even with responseMimeType
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = differentialDiagnosisResponseSchema.parse(parsed);
 
     return {
@@ -389,8 +352,7 @@ export async function generateDifferentialDiagnosis(
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to generate differential diagnosis: ${msg}`);
+    throw wrapLLMError('generate differential diagnosis', error);
   }
 }
 
@@ -432,8 +394,6 @@ const dosageResponseSchema = z.object({
 export async function calculateDosage(
   input: DosageCalculatorInput
 ): Promise<DosageCalculatorResponse> {
-  const client = getGeminiClient();
-
   const context = [
     `Drug: ${input.drugName}`,
     `Indication: ${input.indication}`,
@@ -471,14 +431,7 @@ Rules:
 5. If the drug is contraindicated for this patient, still return the structure but include the contraindication.`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = dosageResponseSchema.parse(parsed);
 
     return {
@@ -486,24 +439,25 @@ Rules:
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to calculate dosage: ${msg}`);
+    throw wrapLLMError('calculate dosage', error);
   }
 }
 
 // ── Drug Interactions ─────────────────────────────────────────────────────────
 
+export type DrugInteractionSeverity = 'mild' | 'moderate' | 'severe' | 'contraindicated';
+
 export interface DrugInteraction {
   drug1: string;
   drug2: string;
-  severity: 'none' | 'minor' | 'moderate' | 'major' | 'contraindicated';
+  severity: DrugInteractionSeverity;
   description: string;
   recommendation: string;
 }
 
 export interface DrugInteractionResult {
   interactions: DrugInteraction[];
-  severity: 'none' | 'minor' | 'moderate' | 'major' | 'contraindicated';
+  severity: DrugInteractionSeverity | 'none';
   summary: string;
   disclaimer: string;
 }
@@ -516,6 +470,214 @@ export const DRUG_INTERACTION_FALLBACK: DrugInteractionResult = {
   disclaimer:
     'AI drug interaction check is unavailable. This result should NOT be used for clinical decisions. Consult a pharmacist or clinical decision support tool.',
 };
+
+// Severity ranking used to pick the highest severity across interactions.
+const SEVERITY_RANK: Record<DrugInteractionSeverity | 'none', number> = {
+  none: 0,
+  mild: 1,
+  moderate: 2,
+  severe: 3,
+  contraindicated: 4,
+};
+
+// Map legacy / external severity labels onto the canonical four-level scale.
+const LEGACY_SEVERITY_MAP: Record<string, DrugInteractionSeverity> = {
+  none: 'mild',
+  minor: 'mild',
+  mild: 'mild',
+  low: 'mild',
+  moderate: 'moderate',
+  medium: 'moderate',
+  major: 'severe',
+  severe: 'severe',
+  high: 'severe',
+  contraindicated: 'contraindicated',
+  contraindication: 'contraindicated',
+  critical: 'contraindicated',
+};
+
+export function normalizeSeverity(value: string | undefined | null): DrugInteractionSeverity {
+  if (!value) return 'mild';
+  return LEGACY_SEVERITY_MAP[value.trim().toLowerCase()] ?? 'mild';
+}
+
+/**
+ * Classify a free-text interaction description into a canonical severity level.
+ * Exported for unit testing of severity classification.
+ */
+export function classifySeverity(description: string): DrugInteractionSeverity {
+  const text = (description || '').toLowerCase();
+
+  if (
+    /\b(contraindicat|fatal|life[- ]threaten|do not (use|co-?administer)|never (use|combine)|absolute)\b/.test(
+      text
+    )
+  ) {
+    return 'contraindicated';
+  }
+
+  if (
+    /\b(severe|major|serious|significant|dangerous|hemorrhage|bleeding|arrhythmia|qt prolong|serotonin syndrome|toxicity|respiratory depression|cardiotox)\b/.test(
+      text
+    )
+  ) {
+    return 'severe';
+  }
+
+  if (
+    /\b(moderate|caution|monitor|increase[sd]? (the )?(risk|effect)|reduce[sd]? (the )?(effect|absorption)|adjust|interfere)\b/.test(
+      text
+    )
+  ) {
+    return 'moderate';
+  }
+
+  return 'mild';
+}
+
+export function highestSeverity(
+  interactions: Array<{ severity: DrugInteractionSeverity }>
+): DrugInteractionSeverity | 'none' {
+  let highest: DrugInteractionSeverity | 'none' = 'none';
+  for (const interaction of interactions) {
+    if (SEVERITY_RANK[interaction.severity] > SEVERITY_RANK[highest]) {
+      highest = interaction.severity;
+    }
+  }
+  return highest;
+}
+
+// ── Interaction cache ─────────────────────────────────────────────────────────
+const INTERACTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const interactionCache = new Map<string, { value: DrugInteractionResult; expiresAt: number }>();
+
+function normalizeDrugName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export function buildInteractionCacheKey(drugs: string[]): string {
+  const sorted = drugs.map(normalizeDrugName).filter(Boolean).sort();
+  return `drug-interactions:${sorted.join('+')}`;
+}
+
+function getCachedInteraction(key: string): DrugInteractionResult | null {
+  const entry = interactionCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    interactionCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedInteraction(key: string, value: DrugInteractionResult): void {
+  interactionCache.set(key, { value, expiresAt: Date.now() + INTERACTION_CACHE_TTL_MS });
+}
+
+export function clearDrugInteractionCache(): void {
+  interactionCache.clear();
+}
+
+// ── OpenFDA / RxNorm lookup ───────────────────────────────────────────────────
+interface OpenFDAResult {
+  drug_interactions?: string[];
+}
+
+async function fetchOpenFDAInteractions(drug: string): Promise<string[]> {
+  const { fetchWithCorrelation } = await import('../../utils/fetch-with-correlation');
+  const url = `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(
+    drug
+  )}"&limit=1`;
+  try {
+    const response = await fetchWithCorrelation(url, { method: 'GET' });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { results?: OpenFDAResult[] };
+    const results = body.results ?? [];
+    return results.flatMap((r) => r.drug_interactions ?? []);
+  } catch {
+    return [];
+  }
+}
+
+async function lookupExternalInteractions(
+  medications: string[]
+): Promise<DrugInteraction[]> {
+  const interactions: DrugInteraction[] = [];
+  for (const drug of medications) {
+    const snippets = await fetchOpenFDAInteractions(drug);
+    for (const snippet of snippets) {
+      for (const other of medications) {
+        if (normalizeDrugName(other) === normalizeDrugName(drug)) continue;
+        if (snippet.toLowerCase().includes(normalizeDrugName(other))) {
+          interactions.push({
+            drug1: drug,
+            drug2: other,
+            severity: classifySeverity(snippet),
+            description: snippet.slice(0, 500),
+            recommendation: 'Review the interaction and consider alternative therapy.',
+          });
+        }
+      }
+    }
+  }
+  return interactions;
+}
+
+// ── CDS alerting ─────────────────────────────────────────────────────────────
+async function emitCDSAlert(
+  result: DrugInteractionResult,
+  medications: string[],
+  context?: DrugInteractionContext
+): Promise<void> {
+  if (result.severity !== 'severe' && result.severity !== 'contraindicated') return;
+
+  const { default: logger } = await import('../../utils/logger');
+  try {
+    const { NotificationHandler } = await import('../notifications/notification.handler');
+    const handler = new NotificationHandler();
+    await handler.send({
+      type: 'cds_alert',
+      severity: 'critical',
+      title: `Drug interaction alert (${result.severity})`,
+      message: result.summary,
+      metadata: {
+        medications,
+        interactions: result.interactions,
+        encounterId: context?.encounterId,
+        patientId: context?.patientId,
+      },
+    });
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      '[ai] failed to emit CDS notification'
+    );
+  }
+
+  try {
+    const cds = await import('../cds/cds.service');
+    if (typeof (cds as { createCDSAlert?: unknown }).createCDSAlert === 'function') {
+      await (cds as { createCDSAlert: (input: unknown) => Promise<unknown> }).createCDSAlert({
+        severity: 'critical',
+        category: 'drug_interaction',
+        message: result.summary,
+        medications,
+        encounterId: context?.encounterId,
+        patientId: context?.patientId,
+      });
+    }
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      '[ai] failed to emit CDS alert'
+    );
+  }
+}
+
+export interface DrugInteractionContext {
+  encounterId?: string;
+  patientId?: string;
+}
 
 export function extractJSON(text: string): string {
   // Strip markdown code fences: ```json ... ``` or ``` ... ```
@@ -535,14 +697,14 @@ export function extractJSON(text: string): string {
 const drugInteractionSchema = z.object({
   drug1: z.string().trim().min(1),
   drug2: z.string().trim().min(1),
-  severity: z.enum(['none', 'minor', 'moderate', 'major', 'contraindicated']),
+  severity: z.string().trim().min(1),
   description: z.string().trim().min(1),
   recommendation: z.string().trim().min(1),
 });
 
 const drugInteractionResultSchema = z.object({
   interactions: z.array(drugInteractionSchema),
-  severity: z.enum(['none', 'minor', 'moderate', 'major', 'contraindicated']),
+  severity: z.string().trim().min(1),
   summary: z.string().trim().min(1),
 });
 
@@ -574,31 +736,27 @@ Rules:
 4. Base recommendations on established clinical guidelines.${strictNote}`;
 }
 
-export async function checkDrugInteractions(medications: string[]): Promise<DrugInteractionResult> {
-  const client = getGeminiClient();
-
-  const model = client.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
+async function checkViaGemini(medications: string[]): Promise<DrugInteractionResult | null> {
+  if (!isAIServiceAvailable()) return null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const prompt = buildDrugInteractionPrompt(medications, attempt > 0);
-    let rawText = '';
     try {
-      const result = await model.generateContent(prompt);
-      rawText = result.response.text().trim();
-
-      // Log raw output at debug level only — never expose to client
-      const { default: logger } = await import('../../utils/logger');
-      logger.debug({ attempt, rawText }, '[ai] drug interaction raw LLM response');
-
-      const jsonStr = extractJSON(rawText);
-      const parsed = JSON.parse(jsonStr);
+      const parsed = await generateJson(prompt);
       const validated = drugInteractionResultSchema.parse(parsed);
 
+      const interactions: DrugInteraction[] = validated.interactions.map((interaction) => ({
+        drug1: interaction.drug1,
+        drug2: interaction.drug2,
+        severity: normalizeSeverity(interaction.severity),
+        description: interaction.description,
+        recommendation: interaction.recommendation,
+      }));
+
       return {
-        ...validated,
+        interactions,
+        severity: highestSeverity(interactions),
+        summary: validated.summary,
         disclaimer: AI_DISCLAIMER,
       };
     } catch (err) {
@@ -611,7 +769,59 @@ export async function checkDrugInteractions(medications: string[]): Promise<Drug
     }
   }
 
-  return DRUG_INTERACTION_FALLBACK;
+  return null;
+}
+
+export async function checkDrugInteractions(
+  medications: string[],
+  context?: DrugInteractionContext
+): Promise<DrugInteractionResult> {
+  const drugs = medications.map((m) => m.trim()).filter(Boolean);
+  if (drugs.length < 2) {
+    return {
+      interactions: [],
+      severity: 'none',
+      summary: 'At least two medications are required to check for interactions.',
+      disclaimer: AI_DISCLAIMER,
+    };
+  }
+
+  const cacheKey = buildInteractionCacheKey(drugs);
+  const cached = getCachedInteraction(cacheKey);
+  if (cached) {
+    await emitCDSAlert(cached, drugs, context);
+    return cached;
+  }
+
+  let result: DrugInteractionResult | null = null;
+
+  // Prefer the open drug database (OpenFDA) when available.
+  try {
+    const externalInteractions = await lookupExternalInteractions(drugs);
+    if (externalInteractions.length > 0) {
+      const severity = highestSeverity(externalInteractions);
+      result = {
+        interactions: externalInteractions,
+        severity,
+        summary: `${externalInteractions.length} potential interaction(s) found via OpenFDA.`,
+        disclaimer: AI_DISCLAIMER,
+      };
+    }
+  } catch {
+    // fall through to Gemini
+  }
+
+  if (!result) {
+    result = await checkViaGemini(drugs);
+  }
+
+  if (!result) {
+    return DRUG_INTERACTION_FALLBACK;
+  }
+
+  setCachedInteraction(cacheKey, result);
+  await emitCDSAlert(result, drugs, context);
+  return result;
 }
 
 // ── Clinical Coding (ICD-10 & CPT) ────────────────────────────────────────────
@@ -646,8 +856,6 @@ export async function suggestClinicalCodes(input: {
   clinicalNotes: string;
   procedures?: string[];
 }): Promise<ClinicalCodingResponse> {
-  const client = getGeminiClient();
-
   const safeNotes = stripPII(input.clinicalNotes);
   const procedureList = input.procedures?.length ? input.procedures.join(', ') : 'None documented';
 
@@ -689,14 +897,7 @@ Rules:
 7. Codes must be valid ICD-10 or CPT codes.`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = await generateJson(prompt);
     const validated = clinicalCodingResponseSchema.parse(parsed);
 
     return {
@@ -704,8 +905,7 @@ Rules:
       disclaimer: AI_DISCLAIMER,
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to suggest clinical codes: ${msg}`);
+    throw wrapLLMError('suggest clinical codes', error);
   }
 }
 
@@ -725,7 +925,6 @@ export async function transcribeAndCorrect(text: string): Promise<TranscriptionR
     throw new Error('Text input is required');
   }
 
-  const client = getGeminiClient();
   const safeText = stripPII(text);
 
   const prompt = `You are a medical scribe. Given raw voice transcription, correct medical terminology, expand abbreviations (e.g. SOB → shortness of breath), add punctuation, and structure the note into SOAP format.
@@ -745,14 +944,10 @@ Raw transcription:
 ${safeText}`;
 
   try {
-    const model = client.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = (await generateJson(prompt)) as {
+      corrected?: string;
+      soap?: { S?: string; O?: string; A?: string; P?: string };
+    };
 
     return {
       corrected: parsed.corrected || '',
@@ -764,7 +959,49 @@ ${safeText}`;
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to transcribe and correct: ${msg}`);
+    throw wrapLLMError('transcribe and correct', error);
+  }
+}
+
+const TRANSCRIBABLE_AUDIO_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+]);
+
+export function isTranscribableAudioType(mimeType: string): boolean {
+  return TRANSCRIBABLE_AUDIO_TYPES.has(mimeType.split(';')[0].trim().toLowerCase());
+}
+
+/**
+ * Verbatim speech-to-text for clinician dictation. Unlike transcribeAndCorrect this does not
+ * restructure the text — the editor inserts it where the clinician's cursor is, and shorthand
+ * expansion happens client-side.
+ */
+export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<string> {
+  try {
+    return await generateText({
+      parts: [
+        {
+          inlineData: {
+            data: audio.toString('base64'),
+            mimeType: mimeType.split(';')[0].trim().toLowerCase(),
+          },
+        },
+        {
+          text:
+            'Transcribe this clinical dictation verbatim. Keep medical abbreviations exactly as ' +
+            'spoken, add sentence punctuation, and return only the transcript text with no ' +
+            'commentary. If there is no speech, return an empty string.',
+        },
+      ],
+    });
+  } catch (error) {
+    throw wrapLLMError('transcribe audio', error);
   }
 }

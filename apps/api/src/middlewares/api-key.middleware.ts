@@ -2,8 +2,47 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { ApiKeyModel, ApiKeyScope } from '../modules/api-keys/models/api-key.model';
 import { ApiKeyUsageModel } from '../modules/api-keys/models/api-key-usage.model';
+import {
+  scopeGrantsAccess,
+  getRequiredScopesForEndpoint,
+} from '../modules/api-keys/constants/scopes';
 
 const sha256 = (val: string) => crypto.createHash('sha256').update(val).digest('hex');
+
+export interface ApiKeyContext {
+  id: string;
+  scopes: ApiKeyScope[];
+  clinicId: string;
+  environment: 'live' | 'test';
+  rateLimitPerMin: number;
+  /** True when the request authenticated with a superseded (grace-window) secret. */
+  viaPreviousKey: boolean;
+}
+
+/** Record one API-key request against the daily rollup (fire-and-forget). */
+export function trackApiKeyUsage(
+  apiKeyId: string,
+  clinicId: string,
+  endpoint: string,
+  kind: 'request' | 'rejected' | 'error' = 'request'
+): void {
+  const today = new Date().toISOString().slice(0, 10);
+  const inc: Record<string, number> = {};
+  if (kind === 'request') inc.requestCount = 1;
+  if (kind === 'rejected') {
+    inc.requestCount = 1;
+    inc.rejectedCount = 1;
+  }
+  if (kind === 'error') inc.errorCount = 1;
+
+  Promise.resolve(
+    ApiKeyUsageModel.findOneAndUpdate(
+      { apiKeyId, date: today },
+      { $inc: inc, $set: { lastEndpoint: endpoint, clinicId } },
+      { upsert: true }
+    ).exec()
+  ).catch(() => undefined);
+}
 
 export const authenticateApiKey = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -17,7 +56,14 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
   }
 
   const keyHash = sha256(rawKey);
-  const apiKey = await ApiKeyModel.findOne({ keyHash, isActive: true }).select('+keyHash').lean();
+
+  // Match either the current secret or a still-valid superseded secret
+  // (rotation grace window, #1252).
+  const apiKey = await ApiKeyModel.findOne({
+    $or: [{ keyHash }, { previousKeyHash: keyHash }],
+  })
+    .select('+keyHash +previousKeyHash')
+    .lean();
 
   if (!apiKey) {
     return res
@@ -25,8 +71,30 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
       .json({ error: 'Unauthorized', message: 'Invalid or deactivated API key' });
   }
 
+  if (apiKey.revokedAt) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'API key has been revoked' });
+  }
+
+  if (!apiKey.isActive) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'API key is deactivated' });
+  }
+
   if (apiKey.expiresAt && new Date() > new Date(apiKey.expiresAt)) {
     return res.status(401).json({ error: 'Unauthorized', message: 'API key has expired' });
+  }
+
+  const storedHash = (apiKey as any).keyHash as string | undefined;
+  const viaPreviousKey = storedHash != null && storedHash !== keyHash;
+  if (viaPreviousKey) {
+    const graceOk =
+      apiKey.previousKeyExpiresAt && new Date() < new Date(apiKey.previousKeyExpiresAt);
+    if (!graceOk) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'This API key was rotated and the grace period has ended',
+      });
+    }
+    res.setHeader('X-Api-Key-Rotated', 'true');
   }
 
   // Attach clinic context (same shape as JWT user)
@@ -35,26 +103,28 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
     role: 'READ_ONLY',
     clinicId: String(apiKey.clinicId),
   };
-  (req as any).apiKey = { id: String(apiKey._id), scopes: apiKey.scopes };
+  const context: ApiKeyContext = {
+    id: String(apiKey._id),
+    scopes: apiKey.scopes,
+    clinicId: String(apiKey.clinicId),
+    environment: apiKey.environment ?? 'live',
+    rateLimitPerMin: apiKey.rateLimitPerMin ?? 0,
+    viaPreviousKey,
+  };
+  (req as any).apiKey = context;
 
   // Update lastUsedAt + usage tracking (fire-and-forget)
-  const today = new Date().toISOString().slice(0, 10);
-  ApiKeyModel.findByIdAndUpdate(apiKey._id, { lastUsedAt: new Date() }).exec();
-  ApiKeyUsageModel.findOneAndUpdate(
-    { apiKeyId: String(apiKey._id), date: today },
-    {
-      $inc: { requestCount: 1 },
-      $set: { lastEndpoint: req.path, clinicId: String(apiKey.clinicId) },
-    },
-    { upsert: true }
-  ).exec();
+  Promise.resolve(
+    ApiKeyModel.findByIdAndUpdate(apiKey._id, { lastUsedAt: new Date() }).exec()
+  ).catch(() => undefined);
+  trackApiKeyUsage(context.id, context.clinicId, req.path, 'request');
 
   return next();
 };
 
 export const requireScope =
   (scope: ApiKeyScope) => (req: Request, res: Response, next: NextFunction) => {
-    const apiKey = (req as any).apiKey as { scopes: ApiKeyScope[] } | undefined;
+    const apiKey = (req as any).apiKey as ApiKeyContext | undefined;
     if (!apiKey) {
       return res
         .status(403)
@@ -67,3 +137,37 @@ export const requireScope =
     }
     return next();
   };
+
+/** Full request path including the router mount prefix (query string stripped). */
+function fullPath(req: Request): string {
+  const raw = req.originalUrl || `${req.baseUrl || ''}${req.path || ''}`;
+  return raw.split('?')[0];
+}
+
+/**
+ * #1667 — endpoint-level scope enforcement.
+ *
+ * Requests that did not authenticate with an API key pass through untouched
+ * (JWT-authenticated traffic is governed by role checks). API-key requests
+ * must carry at least one scope that grants access to the requested
+ * endpoint + method; otherwise the request is rejected with 403.
+ */
+export const validateApiKeyScopes = (req: Request, res: Response, next: NextFunction) => {
+  const apiKey = (req as any).apiKey as ApiKeyContext | undefined;
+  if (!apiKey) return next();
+
+  const path = fullPath(req);
+  const method = req.method;
+  const scopes = apiKey.scopes ?? [];
+
+  const allowed = scopes.some((scope) => scopeGrantsAccess(scope, path, method));
+  if (allowed) return next();
+
+  trackApiKeyUsage(apiKey.id, apiKey.clinicId, path, 'rejected');
+
+  return res.status(403).json({
+    error: 'Forbidden',
+    message: 'API key does not have permission to access this endpoint',
+    requiredScopes: getRequiredScopesForEndpoint(path, method),
+  });
+};

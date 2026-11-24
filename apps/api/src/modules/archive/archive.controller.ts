@@ -34,7 +34,7 @@ export const getArchivedRecords = asyncHandler(async (req: Request, res: Respons
 
 export const restoreArchivedRecord = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = req.user?.clinicId;
-  const userId = req.user?.id;
+  const userId = req.user?.userId;
 
   if (!clinicId || !userId) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -42,7 +42,11 @@ export const restoreArchivedRecord = asyncHandler(async (req: Request, res: Resp
 
   const { archiveId } = restoreArchivedRecordSchema.parse(req.body);
 
-  const restored = await archiveService.restoreArchivedRecord(archiveId, clinicId.toString(), userId);
+  const restored = await archiveService.restoreArchivedRecord(
+    archiveId,
+    clinicId.toString(),
+    userId
+  );
 
   return res.status(200).json({
     message: 'Record restored successfully',
@@ -63,7 +67,7 @@ export const getArchiveStats = asyncHandler(async (req: Request, res: Response) 
 
 export const triggerArchival = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = req.user?.clinicId;
-  const userId = req.user?.id;
+  const userId = req.user?.userId;
 
   if (!clinicId || !userId) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -73,7 +77,9 @@ export const triggerArchival = asyncHandler(async (req: Request, res: Response) 
 
   const policy = getPolicyForCollection(collectionName);
   if (!policy) {
-    return res.status(400).json({ error: `No archival policy found for collection: ${collectionName}` });
+    return res
+      .status(400)
+      .json({ error: `No archival policy found for collection: ${collectionName}` });
   }
 
   const result = await archiveService.archiveOldRecords(

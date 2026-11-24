@@ -1,4 +1,4 @@
-# Security Policy
+# Security Guidelines & Threat Model
 
 ## Table of Contents
 
@@ -9,6 +9,8 @@
 - [Security Checklist](#security-checklist)
 
 ## Threat Model
+
+> The full STRIDE threat model for PHI and payment flows, with per-boundary risk ratings, is in [`security/THREAT_MODEL.md`](security/THREAT_MODEL.md).
 
 ### Assets
 
@@ -31,6 +33,21 @@
    - Database servers
    - Application servers
    - Message queues
+
+### Risk Register
+
+| Threat | Likelihood | Impact | Residual Risk | Primary Control |
+|--------|-----------|--------|---------------|-----------------|
+| PHI data breach via API | Medium | Critical | Low | Field-level AES-256-GCM encryption + RBAC |
+| Credential theft | Medium | High | Low | MFA enforcement + JWT short expiry |
+| NoSQL injection | Low | Critical | Very Low | `express-mongo-sanitize` + Joi validation |
+| Insider threat (staff access to PHI) | Low | High | Low | Clinic-scoped RBAC + audit logging |
+| Stolen Stellar keypair | Low | Critical | Very Low | HSM-backed encrypted keypairs + multi-sig |
+| API key exfiltration | Medium | High | Low | Short-lived keys + scope restriction |
+| DDoS | Medium | Medium | Low | Rate limiting + AWS Shield |
+| Ransomware | Very Low | Critical | Low | Encrypted backups + DR plan |
+| Dependency supply chain attack | Medium | High | Medium | npm audit + Snyk + Dependabot |
+| JWT secret compromise | Very Low | Critical | Very Low | Quarterly rotation + AWS Secrets Manager |
 
 ### Threats
 
@@ -62,11 +79,34 @@
 - Automatic session expiration
 - Rotate service credentials regularly
 - Secrets management (AWS Secrets Manager)
+- Account lockout after repeated failed attempts
 
 **Detection:**
 - Alert on failed login spikes
 - Monitor geographic anomalies
 - Track privilege escalation attempts
+
+**Password Complexity Requirements**
+
+Enforced server-side (`apps/api/src/modules/auth/auth.validation.ts`, `passwordSchema`) on registration, password reset, and change-password, and mirrored in the web client UI:
+
+- Minimum 8 characters
+- At least one uppercase letter (A-Z)
+- At least one lowercase letter (a-z)
+- At least one digit (0-9)
+- At least one special character (non-alphanumeric)
+- Must not match a list of common/breached passwords
+
+**Account Lockout**
+
+Enforced server-side in `apps/api/src/modules/auth/auth.controller.ts`:
+
+- After 5 consecutive failed login attempts (`failedLoginAttempts`), the account is locked for 15 minutes (`lockedUntil`).
+- The same threshold and duration apply separately to failed MFA challenge attempts (`failedMfaAttempts`).
+- While locked, login/MFA-challenge requests return `423 Locked` with a `Retry-After` header.
+- A `SUPER_ADMIN` can manually unlock an account via `POST /auth/unlock`, which resets the failed-attempt counter.
+- The account holder receives an email notification when their account is locked.
+- Successful authentication resets the failed-attempt counters.
 
 #### Injection Attacks
 
@@ -215,23 +255,34 @@ async function canAccessPatient(userId: string, patientId: string) {
 
 **Database:**
 - MongoDB encryption at rest enabled
-- Separate encryption key per collection
-- Key rotation quarterly
+- Field-level AES-256-GCM encryption for PHI, independent of the database's own encryption at rest
+- Key rotation supported via versioned keys (see below)
 
 **Backups:**
 - Encrypted with separate key
 - Stored in secure S3 bucket
 - Key in AWS Secrets Manager
 
-**Code:**
-```typescript
-// Encrypt PHI before storage
-const encrypted = encryptPHI(patientData, encryptionKey);
-await db.collection('patients').insertOne(encrypted);
+**Field-level encryption (`apps/api/src/lib/encrypt.ts`):**
 
-// Decrypt when needed
-const decrypted = decryptPHI(patient, encryptionKey);
+`encrypt()`/`decrypt()` implement AES-256-GCM with a versioned key prefix (`v<n>:iv:ciphertext:tag`) so old ciphertext keeps decrypting after a key rotation. The active key comes from `FIELD_ENCRYPTION_KEY` (32-byte/64-char hex) with `FIELD_ENCRYPTION_KEY_VERSION`; prior key versions are kept available via `FIELD_ENCRYPTION_KEY_V<n>` for as long as data encrypted under them may still need to be read.
+
+```typescript
+import { encrypt, decrypt } from '@api/lib/encrypt';
+
+// Encrypt a PHI field before storage
+patient.contactNumber = encrypt(rawContactNumber);
+await patient.save();
+
+// Decrypt when read back
+const rawContactNumber = decrypt(patient.contactNumber);
 ```
+
+Currently applied to (`apps/api/src/modules/patients/models/patient.model.ts`, `PHI_FIELDS` / `INSURANCE_PHI_FIELDS`): `contactNumber`, `address`, `dateOfBirth`, `insurance.policyNumber`, `insurance.groupNumber` — encrypted/decrypted transparently via Mongoose hooks. Also used for the MFA TOTP secret (`user.mfaSecret`) in the auth module.
+
+`firstName`/`lastName` and encounter diagnosis fields are not currently in this list — they are used in patient search (`searchName` index) and diagnosis-code filtering (aggregation pipelines), so encrypting them requires a separate, dedicated change (e.g. blind-index/tokenization for searchable PHI) rather than the direct field-swap used above.
+
+Performance of the encryption path is covered by `apps/api/src/lib/encrypt.perf.test.ts`.
 
 #### Encryption in Transit
 
@@ -254,6 +305,69 @@ app.use(helmet.hsts({
   preload: true
 }));
 ```
+
+### Content Security Policy (CSP)
+
+The Next.js app (`apps/web`) ships a strict, nonce-based CSP. The policy is defined in `apps/web/next.config.js` and applied to every response via the `Content-Security-Policy` header.
+
+#### Directives
+
+| Directive | Value | Notes |
+|-----------|-------|-------|
+| `default-src` | `'self'` | Fallback for all fetch directives |
+| `script-src` | `'self' 'nonce-<nonce>' 'strict-dynamic'` | No `unsafe-inline`, no `unsafe-eval` |
+| `style-src` | `'self' 'nonce-<nonce>'` | No `unsafe-inline` |
+| `img-src` | `'self' data: https:` | Allows data URIs and HTTPS images |
+| `font-src` | `'self'` | Self-hosted fonts only |
+| `connect-src` | `'self'` + configured API origin | API calls only to known origins |
+| `object-src` | `'none'` | Blocks plugins (Flash, Java, etc.) |
+| `base-uri` | `'self'` | Prevents `<base>` tag hijacking |
+| `frame-ancestors` | `'none'` | Blocks clickjacking / framing |
+| `form-action` | `'self'` | Forms may only submit to same origin |
+| `report-uri` | `/api/csp-report` | Collects violations via `csp-report.controller.ts` |
+
+#### Nonces
+
+A fresh, cryptographically random nonce is generated per request (in `middleware.ts`) and injected into both the `Content-Security-Policy` header and the `x-nonce` request header. Next.js reads the nonce from the header and attaches it to the framework's own inline scripts automatically.
+
+- **Never** add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`/`style-src`. If a third-party library requires `eval`, replace it or isolate it in a sandboxed iframe.
+- `'strict-dynamic'` allows scripts loaded by an already-trusted (nonce-bearing) script to execute without their own nonce. This is what lets Next.js load its chunked bundles.
+
+#### Adding inline scripts with a nonce
+
+Any inline `<script>` or `<style>` you add must carry the per-request nonce. In a Server Component, read it from the headers:
+
+```tsx
+// app/example/page.tsx (Server Component)
+import { headers } from 'next/headers';
+
+export default function Page() {
+  const nonce = headers().get('x-nonce') ?? undefined;
+
+  return (
+    <>
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: '/* trusted code */' }} />
+      <style nonce={nonce}>{`/* trusted styles */`}</style>
+    </>
+  );
+}
+```
+
+Guidance:
+
+- Prefer external modules or Server Components over inline scripts whenever possible.
+- Never interpolate untrusted/user-supplied data into an inline script, even with a nonce — the nonce authorizes the script, it does not sanitize its contents.
+- If you add a new third-party origin (analytics, fonts, CDN), add it to the relevant directive in `next.config.js` and document the reason in the PR.
+
+#### Violation reporting
+
+CSP violations are POSTed to `/api/csp-report`, handled by `csp-report.controller.ts`. The controller validates the payload, logs it (without PHI), and forwards it to the security monitoring pipeline. Use these reports to catch policy regressions before tightening enforcement.
+
+#### Testing & validation
+
+- **Chrome CSP Evaluator:** paste the production `Content-Security-Policy` header value into the [CSP Evaluator](https://csp-evaluator.withgoogle.com/) and confirm there are no `unsafe-inline`/`unsafe-eval` findings.
+- **E2E test:** `e2e/security-headers.spec.ts` asserts the CSP header is present, contains a nonce, and does not contain `unsafe-inline` or `unsafe-eval`.
+- **Manual check:** load the app, open DevTools → Console, and confirm there are no CSP violation errors. Check the Network tab for the `Content-Security-Policy` response header.
 
 ### API Security
 
@@ -491,44 +605,7 @@ Resources:
 
 ## Vulnerability Reporting
 
-### Report Security Issues
-
-**DO NOT:**
-- Create public GitHub issues
-- Post on social media
-- Share with competitors
-- Publicly disclose the vulnerability
-
-**DO:**
-- Email: security@healthwatchers.com
-- Include: steps to reproduce, impact assessment, suggested fix
-- Sign with PGP key (optional)
-
-### Responsible Disclosure Policy
-
-1. **Report** vulnerability to security@healthwatchers.com
-2. **Wait** for acknowledgment (within 24 hours)
-3. **Work with us** to develop a fix (typically 30 days)
-4. **Coordinate** public disclosure date
-5. **Receive** credit and swag
-
-### Scope
-
-**In Scope:**
-- Authentication bypass
-- Authorization flaws
-- Injection attacks
-- Data exposure
-- Cryptographic weaknesses
-- Server-side vulnerabilities
-
-**Out of Scope:**
-- Social engineering
-- Physical security issues
-- XSRF on public forms
-- Publicly disclosed vulnerabilities
-- Issues with dependencies
-- Performance issues
+Vulnerability reporting, response timelines, and the responsible disclosure policy are defined in the root [`SECURITY.md`](../SECURITY.md).
 
 ## Security Checklist
 
@@ -560,7 +637,8 @@ Resources:
 - [ ] Input validation enabled
 - [ ] Output encoding applied
 - [ ] CSRF protection active
-- [ ] CSP headers set
+- [ ] CSP headers set (nonce-based, no `unsafe-inline`/`unsafe-eval`)
+- [ ] CSP violations reporting to `/api/csp-report` verified
 - [ ] Session timeout configured
 - [ ] Password policy enforced
 - [ ] Audit logging working

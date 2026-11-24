@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
@@ -12,6 +13,14 @@ import {
 
 const router = Router();
 router.use(authenticate);
+
+// ── #1800 Per-route body-size limit ───────────────────────────────────────────
+// Care plans contain structured goal lists and narrative text that can exceed
+// the 16 KB global default. Allow up to 256 KB on all care-plan endpoints.
+router.use(
+  express.json({ limit: '256kb' }),
+  express.urlencoded({ extended: true, limit: '256kb' })
+);
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 
@@ -28,7 +37,7 @@ router.get(
     const filter: Record<string, unknown> = { patientId, clinicId: req.user!.clinicId };
     if (status) filter.status = status;
 
-    const pageNum  = Math.max(1, parseInt(page, 10));
+    const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
 
     const [plans, total] = await Promise.all([
@@ -40,7 +49,11 @@ router.get(
       CarePlanModel.countDocuments(filter),
     ]);
 
-    return res.json({ status: 'success', data: plans, meta: { page: pageNum, limit: limitNum, total } });
+    return res.json({
+      status: 'success',
+      data: plans,
+      meta: { page: pageNum, limit: limitNum, total },
+    });
   })
 );
 

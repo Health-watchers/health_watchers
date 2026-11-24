@@ -6,6 +6,9 @@ export interface CDSRulesListProps {
   onTest: (rule: CDSRule) => void;
   onDelete: (ruleId: string) => void;
   isDeleting: boolean;
+  conflicts?: Record<string, string[]>;
+  onViewHistory?: (rule: CDSRule) => void;
+  canManage?: boolean;
 }
 
 const categoryColors: Record<RuleCategory, string> = {
@@ -22,7 +25,16 @@ const severityColors: Record<AlertSeverity, string> = {
   critical: 'text-red-600',
 };
 
-export function CDSRulesList({ rules, onEdit, onTest, onDelete, isDeleting }: CDSRulesListProps) {
+export function CDSRulesList({
+  rules,
+  onEdit,
+  onTest,
+  onDelete,
+  isDeleting,
+  conflicts = {},
+  onViewHistory,
+  canManage = true,
+}: CDSRulesListProps) {
   if (rules.length === 0) {
     return (
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center">
@@ -33,7 +45,9 @@ export function CDSRulesList({ rules, onEdit, onTest, onDelete, isDeleting }: CD
 
   return (
     <div className="space-y-4">
-      {rules.map((rule) => (
+      {rules.map((rule) => {
+        const ruleConflicts = conflicts[rule.ruleId] ?? [];
+        return (
         <div
           key={rule.ruleId}
           className="rounded-lg border border-neutral-200 bg-white p-6 transition-shadow hover:shadow-md"
@@ -42,6 +56,17 @@ export function CDSRulesList({ rules, onEdit, onTest, onDelete, isDeleting }: CD
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-neutral-900">{rule.name}</h3>
               <p className="mt-1 text-sm text-neutral-600">{rule.description}</p>
+              {ruleConflicts.length > 0 && (
+                <div
+                  className="mt-2 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800"
+                  title={`Conflicts with: ${ruleConflicts.join(', ')}`}
+                >
+                  <span aria-hidden="true">⚠</span>
+                  <span>
+                    Conflict with {ruleConflicts.length} rule{ruleConflicts.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="ml-4 flex gap-2">
               <span
@@ -78,28 +103,41 @@ export function CDSRulesList({ rules, onEdit, onTest, onDelete, isDeleting }: CD
           </div>
 
           <div className="flex gap-2">
-            <button
-              onClick={() => onEdit(rule)}
-              className="bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-md px-3 py-2 text-sm font-medium"
-            >
-              Edit
-            </button>
+            {canManage && (
+              <button
+                onClick={() => onEdit(rule)}
+                className="rounded-md bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
+              >
+                Edit
+              </button>
+            )}
             <button
               onClick={() => onTest(rule)}
               className="rounded-md bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
             >
               Test
             </button>
-            <button
-              onClick={() => onDelete(rule.ruleId)}
-              disabled={isDeleting}
-              className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-            >
-              Delete
-            </button>
+            {onViewHistory && (
+              <button
+                onClick={() => onViewHistory(rule)}
+                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-200"
+              >
+                History
+              </button>
+            )}
+            {canManage && (
+              <button
+                onClick={() => onDelete(rule.ruleId)}
+                disabled={isDeleting}
+                className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                Delete
+              </button>
+            )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

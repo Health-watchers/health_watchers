@@ -71,7 +71,8 @@ export function OtpInput({ value, onChange, disabled, error }: OtpInputProps) {
   }
 
   return (
-    <div>
+    <fieldset className="border-0 p-0 m-0">
+      <legend className="sr-only">One-time password – enter 6 digits</legend>
       <div className="flex gap-2">
         {cells.map((cell, i) => (
           <input
@@ -83,7 +84,8 @@ export function OtpInput({ value, onChange, disabled, error }: OtpInputProps) {
             pattern="[0-9]"
             value={cell}
             disabled={disabled}
-            aria-label={`Digit ${i + 1}`}
+            aria-label={`Digit ${i + 1} of 6`}
+            autoComplete={i === 0 ? 'one-time-code' : 'off'}
             className={[
               'h-12 w-10 rounded-md border text-center text-sm font-medium',
               'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
@@ -101,6 +103,6 @@ export function OtpInput({ value, onChange, disabled, error }: OtpInputProps) {
           {error}
         </p>
       )}
-    </div>
+    </fieldset>
   );
 }

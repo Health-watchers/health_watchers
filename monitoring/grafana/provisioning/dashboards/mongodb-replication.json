@@ -189,7 +189,10 @@
       ],
       "transformations": [
         { "id": "labelsToFields", "options": {} },
-        { "id": "organize", "options": { "renameByName": { "member": "Member", "Value": "Health (1=OK)" } } }
+        {
+          "id": "organize",
+          "options": { "renameByName": { "member": "Member", "Value": "Health (1=OK)" } }
+        }
       ]
     },
     {

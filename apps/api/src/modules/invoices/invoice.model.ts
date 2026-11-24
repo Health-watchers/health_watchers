@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface ILineItem {
   description: string;
@@ -23,6 +24,8 @@ export interface IInvoice extends Document {
   paymentIntentId?: string;
   paidAt?: Date;
   paidTxHash?: string;
+  /** Total value of credit notes applied to this invoice (decimal string). */
+  creditsApplied?: string;
 }
 
 const LineItemSchema = new Schema<ILineItem>(
@@ -52,10 +55,12 @@ const InvoiceSchema = new Schema<IInvoice>(
     paymentIntentId: { type: String },
     paidAt: { type: Date },
     paidTxHash: { type: String },
+    creditsApplied: { type: String, default: '0' },
   },
   { timestamps: true, versionKey: false }
 );
 
+InvoiceSchema.add(baseSchema);
 InvoiceSchema.index({ clinicId: 1, createdAt: -1 });
 InvoiceSchema.index({ patientId: 1, createdAt: -1 });
 InvoiceSchema.index({ status: 1 });

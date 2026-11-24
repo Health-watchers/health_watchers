@@ -110,7 +110,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
 
             {current.riskFactors && current.riskFactors.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold text-gray-500 uppercase dark:text-neutral-400">
+                <p className="mb-2 text-xs font-semibold uppercase text-gray-500 dark:text-neutral-400">
                   Contributing Factors
                 </p>
                 <ul className="space-y-1">
@@ -137,7 +137,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
             <button
               type="button"
               onClick={() => setShowExplanation((v) => !v)}
-              className="text-primary-600 dark:text-primary-400 mt-1 text-xs font-medium hover:underline focus:outline-none"
+              className="dark:text-primary-400 mt-1 text-xs font-medium text-primary-600 hover:underline focus:outline-none"
             >
               {showExplanation ? '▲ Hide explanation' : '▼ Show factor breakdown & recommendations'}
             </button>
@@ -191,7 +191,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
                   <div className="flex items-center gap-2">
                     <Badge variant={riskVariant(h.riskLevel)}>{h.riskLevel}</Badge>
                     <span className="font-semibold dark:text-neutral-200">{h.riskScore}/100</span>
-                    <span className="text-xs text-gray-400 capitalize dark:text-neutral-500">
+                    <span className="text-xs capitalize text-gray-400 dark:text-neutral-500">
                       {h.source}
                     </span>
                   </div>
@@ -205,7 +205,7 @@ export default function RiskTab({ patient, patientId, apiV1 }: Props) {
                   </p>
                 )}
                 {h.recommendations && (
-                  <p className="mt-1 text-xs text-gray-600 italic dark:text-neutral-400">
+                  <p className="mt-1 text-xs italic text-gray-600 dark:text-neutral-400">
                     {h.recommendations}
                   </p>
                 )}

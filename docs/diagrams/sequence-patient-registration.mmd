@@ -1,0 +1,19 @@
+%% POST /patients sequence
+sequenceDiagram
+    actor Client
+    participant Gateway as API Gateway (NGINX)
+    participant API as Express API
+    participant DB as MongoDB
+    participant MQ as RabbitMQ
+
+    Client->>Gateway: POST /patients
+    Gateway->>API: Forward request
+    API->>API: Validate data
+    API->>API: Hash PII
+    API->>DB: Insert patient record
+    DB-->>API: Acknowledge insert
+    API->>MQ: Publish "patient.created" event
+    MQ->>MQ: Send email notification
+    MQ->>MQ: Write audit log
+    API-->>Gateway: 201 Created
+    Gateway-->>Client: 201 Created

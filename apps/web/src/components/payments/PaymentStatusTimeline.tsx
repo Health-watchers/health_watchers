@@ -64,9 +64,7 @@ export function PaymentStatusTimeline({ events, currentStatus }: PaymentStatusTi
             return (
               <div key={index} className="flex gap-4">
                 <div className="flex flex-col items-center">
-                  <div
-                    className={`rounded-full p-2 ${statusBgColors[event.status]}`}
-                  >
+                  <div className={`rounded-full p-2 ${statusBgColors[event.status]}`}>
                     <Icon className={`h-5 w-5 ${statusColors[event.status]}`} />
                   </div>
                   {index < events.length - 1 && (
@@ -106,7 +104,9 @@ export function PaymentStatusTimeline({ events, currentStatus }: PaymentStatusTi
       </div>
 
       {currentStatus && (
-        <div className={`mt-6 rounded-lg border ${statusBorderColors[currentStatus]} ${statusBgColors[currentStatus]} p-4`}>
+        <div
+          className={`mt-6 rounded-lg border ${statusBorderColors[currentStatus]} ${statusBgColors[currentStatus]} p-4`}
+        >
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
             Current Status:{' '}
             <span className={`font-semibold ${statusColors[currentStatus]}`}>

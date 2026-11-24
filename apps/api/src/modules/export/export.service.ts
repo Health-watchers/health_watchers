@@ -7,7 +7,7 @@ import { PaymentRecordModel } from '@api/modules/payments/models/payment-record.
 import { UserModel } from '@api/modules/auth/models/user.model';
 import { Types } from 'mongoose';
 import logger from '@api/utils/logger';
-import { anonymizeBatch } from '@health-watchers/anonymize';
+import { anonymize, anonymizeBatch, AnonymizationLevel } from '@health-watchers/anonymize';
 
 // ─── Sanitization ──────────────────────────────────────────────────────────
 
@@ -46,21 +46,34 @@ export async function buildPatientRecord(patientId: string): Promise<any> {
 /** Stream a sanitized JSON response for a patient record */
 export function sendPatientJson(
   res: Response,
-  rawData: NonNullable<Awaited<ReturnType<typeof buildPatientRecord>>>
+  rawData: NonNullable<Awaited<ReturnType<typeof buildPatientRecord>>>,
+  anonymizeLevel?: AnonymizationLevel
 ) {
+  const patientForExport = anonymizeLevel
+    ? anonymize(rawData.patient as any, { level: anonymizeLevel, purpose: 'export' })
+    : rawData.patient;
+
   const data = {
-    patient: sanitize(rawData.patient as any),
+    patient: sanitize(patientForExport as any),
     encounters: sanitizeAll(rawData.encounters as any[]),
     payments: sanitizeAll(rawData.payments as any[]),
   };
 
-  const patientSystemId = (rawData.patient as any).systemId || 'unknown';
+  // Never leak the real systemId in the filename once anonymization was requested
+  const patientSystemId = anonymizeLevel
+    ? 'anonymized'
+    : (rawData.patient as any).systemId || 'unknown';
   res.setHeader('Content-Type', 'application/json');
   res.setHeader(
     'Content-Disposition',
     `attachment; filename="patient-${patientSystemId}-export.json"`
   );
-  res.json({ status: 'success', exportedAt: new Date().toISOString(), data });
+  res.json({
+    status: 'success',
+    exportedAt: new Date().toISOString(),
+    anonymized: !!anonymizeLevel,
+    data,
+  });
 }
 
 /** Stream a PDF response for a patient record */
@@ -176,7 +189,8 @@ export async function buildClinicRecord(clinicId: string): Promise<any> {
 export function sendClinicZip(
   res: Response,
   clinicId: string,
-  record: Awaited<ReturnType<typeof buildClinicRecord>>
+  record: Awaited<ReturnType<typeof buildClinicRecord>>,
+  anonymizeLevel?: AnonymizationLevel
 ) {
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="clinic-${clinicId}-export.zip"`);
@@ -190,7 +204,14 @@ export function sendClinicZip(
 
   archive.pipe(res);
 
-  archive.append(JSON.stringify(sanitizeAll(record.patients as any[]), null, 2), {
+  const patientsForExport = anonymizeLevel
+    ? (anonymizeBatch(record.patients as any[], {
+        level: anonymizeLevel,
+        purpose: 'export',
+      }) as any[])
+    : (record.patients as any[]);
+
+  archive.append(JSON.stringify(sanitizeAll(patientsForExport), null, 2), {
     name: 'patients.json',
   });
   archive.append(JSON.stringify(sanitizeAll(record.encounters as any[]), null, 2), {
@@ -202,7 +223,7 @@ export function sendClinicZip(
   archive.append(JSON.stringify(sanitizeAll(record.staff as any[]), null, 2), {
     name: 'staff.json',
   });
-  archive.append(buildPatientCsv(record.patients as any[]), { name: 'patients-summary.csv' });
+  archive.append(buildPatientCsv(patientsForExport), { name: 'patients-summary.csv' });
 
   archive.finalize();
 }
@@ -228,6 +249,19 @@ function field(doc: PDFKit.PDFDocument, label: string, value: string) {
     .text(value);
 }
 
+/**
+ * Format a date field for CSV. Anonymization (e.g. de-identification) can replace
+ * `dateOfBirth` with a non-date string like "45-49 years" — pass those through as-is
+ * instead of feeding them back into `Date()`, which produced `Invalid Date` and threw
+ * on `.toISOString()`.
+ */
+function formatDateField(value: unknown, dateOnly: boolean): string {
+  if (!value) return '';
+  const date = new Date(value as string);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return dateOnly ? date.toISOString().split('T')[0]! : date.toISOString();
+}
+
 function buildPatientCsv(patients: any[]): string {
   const header =
     'systemId,firstName,lastName,dateOfBirth,sex,contactNumber,address,isActive,createdAt';
@@ -236,14 +270,14 @@ function buildPatientCsv(patients: any[]): string {
       p.systemId,
       p.firstName,
       p.lastName,
-      p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().split('T')[0] : '',
+      formatDateField(p.dateOfBirth, true),
       p.sex,
       p.contactNumber || '',
       p.address || '',
       p.isActive,
-      p.createdAt ? new Date(p.createdAt).toISOString() : '',
+      formatDateField(p.createdAt, false),
     ]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+      .map((v) => `"${(v == null ? '' : String(v)).replace(/"/g, '""')}"`)
       .join(',')
   );
   return [header, ...rows].join('\n');

@@ -1,5 +1,6 @@
 import { EncounterTemplateModel } from './encounter-template.model';
 import logger from '@api/utils/logger';
+import { escapeRegex } from '@api/utils/regex';
 
 interface TemplateImportInput {
   templateId: string;
@@ -73,13 +74,14 @@ export class TemplateMarketplaceService {
   }
 
   async searchMarketplace(query: string, tags?: string[], limit: number = 20, offset: number = 0) {
+    const safeQuery = escapeRegex(query);
     const searchQuery: Record<string, unknown> = {
       visibility: 'public',
       isApproved: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { category: { $regex: query, $options: 'i' } },
+        { name: { $regex: safeQuery, $options: 'i' } },
+        { description: { $regex: safeQuery, $options: 'i' } },
+        { category: { $regex: safeQuery, $options: 'i' } },
       ],
     };
 

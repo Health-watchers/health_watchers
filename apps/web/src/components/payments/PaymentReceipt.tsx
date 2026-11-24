@@ -77,7 +77,7 @@ export function PaymentReceipt({ intentId, onClose }: PaymentReceiptProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="border-t-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-neutral-200" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-primary-500" />
       </div>
     );
   }

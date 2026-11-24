@@ -239,7 +239,7 @@ export default function PhotoUpload({
       <button
         type="button"
         onClick={handleAvatarClick}
-        className="rounded-full focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         aria-label={`${patientName} profile photo`}
         title={photoUrl ? 'View photo' : 'No photo'}
       >

@@ -6,44 +6,104 @@ on:
     - cron: '0 2 * * *'
     # Incremental backup every 6 hours
     - cron: '0 2,8,14,20 * * *'
+    # Oplog archive for PITR every 5 minutes
+    - cron: '*/5 * * * *'
+    # Weekly E2E verification on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
       verify:
         description: 'Run restore verification after backup'
         type: boolean
         default: false
+      backup_type:
+        description: 'Backup type to run'
+        type: choice
+        options:
+          - full
+          - oplog
+          - both
+        default: both
+      legacy_backup:
+        description: 'Run the legacy GitHub Actions backup (primary backups run as k8s CronJobs)'
+        type: boolean
+        default: false
+
+# Primary backups (full + oplog/PITR) now run as Kubernetes CronJobs in
+# k8s/backup/backup-cronjobs.yaml. GitHub Actions is retained for verification
+# only. The legacy backup jobs below are gated behind `legacy_backup` and are
+# skipped by default so they no longer fail on schedule.
+
+env:
+  # MongoDB Database Tools version installed from the official apt repo.
+  MONGODB_TOOLS_VERSION: '100.9.4'
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
 
 jobs:
-  backup:
-    name: Backup MongoDB
+  preflight:
+    name: Preflight (required secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check required secrets
+        id: check
+        env:
+          # Secrets are passed via env indirection so they are never evaluated
+          # directly inside `if:` expressions (which cannot access `secrets`).
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          AWS_ROLE_ARN: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+        run: |
+          missing=()
+          [[ -z "${MONGO_URI}" ]] && missing+=("MONGO_URI")
+          [[ -z "${BACKUP_BUCKET}" ]] && missing+=("BACKUP_BUCKET")
+          [[ -z "${BACKUP_ENCRYPTION_KEY}" ]] && missing+=("BACKUP_ENCRYPTION_KEY")
+          [[ -z "${AWS_ROLE_ARN}" ]] && missing+=("AWS_BACKUP_ROLE_ARN")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::warning::Backup secrets not configured (${missing[*]}); skipping backup jobs."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  full-backup:
+    name: Full MongoDB Backup (legacy)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: preflight
+    if: |
+      needs.preflight.outputs.ready == 'true' &&
+      (github.event.inputs.legacy_backup == 'true' || github.event.inputs.backup_type == 'full' || github.event.inputs.backup_type == 'both')
 
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install mongodump
+      - name: Install MongoDB Database Tools
         run: |
-          wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
-          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+          curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+          echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
             sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
           sudo apt-get update -qq
-          sudo apt-get install -y mongodb-database-tools
+          sudo apt-get install -y "mongodb-database-tools=${MONGODB_TOOLS_VERSION}"
+          mongodump --version
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          role-session-name: gha-mongodb-full-backup
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Run backup
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
           BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
           BACKUP_RETENTION_DAYS: 30
         run: |
           ARGS=""
@@ -54,28 +114,93 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🚨 Backup failed on ${new Date().toISOString().split('T')[0]}`,
-              body: `The scheduled MongoDB backup failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              labels: ['backup', 'incident'],
-            });
+        continue-on-error: false
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
+            echo "::error::BACKUP_ALERT_WEBHOOK_URL secret is not set; cannot send failure notification."
+            exit 1
+          fi
+          payload=$(jq -n --arg text "🚨 Full MongoDB backup failed: ${RUN_URL}" '{text: $text}')
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL"
 
-  weekly-verify:
-    name: Weekly Backup Verification
+  oplog-backup:
+    name: MongoDB Oplog Archive (PITR, legacy)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: github.event_name == 'schedule' && startsWith(github.event.schedule, '0 2 * * 0')
+    timeout-minutes: 10
+    needs: preflight
+    if: |
+      needs.preflight.outputs.ready == 'true' &&
+      (github.event.inputs.legacy_backup == 'true' || github.event.inputs.backup_type == 'oplog' || github.event.inputs.backup_type == 'both')
 
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install mongodump
+      - name: Install MongoDB Database Tools
+        run: |
+          curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+          echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y "mongodb-database-tools=${MONGODB_TOOLS_VERSION}"
+          mongodump --version
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          role-session-name: gha-mongodb-oplog-backup
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Archive oplog segment
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          OPLOG_INTERVAL_SECONDS: 300
+        run: bash scripts/backup-mongodb-oplog.sh
+
+      - name: Notify on failure
+        if: failure()
+        continue-on-error: false
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
+            echo "::error::BACKUP_ALERT_WEBHOOK_URL secret is not set; cannot send failure notification."
+            exit 1
+          fi
+          payload=$(jq -n --arg text "🚨 MongoDB oplog archive (PITR) failed: ${RUN_URL}" '{text: $text}')
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL"
+
+  backup-restore-e2e:
+    name: Backup → Transfer → Verify → Restore (E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Run weekly on schedule (Sundays) or manually via workflow_dispatch
+    if: (github.event_name == 'schedule' && startsWith(github.event.schedule, '0 2 * * 0')) || github.event_name == 'workflow_dispatch'
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install mongodump / mongorestore
         run: |
           wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
           echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
@@ -83,17 +208,149 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y mongodb-database-tools
 
-      - name: Configure AWS credentials
+      - name: Seed test data
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e
+        run: |
+          mongosh "$MONGO_URI" --quiet --eval '
+            db.widgets.drop();
+            db.widgets.insertMany([
+              { _id: 1, name: "alpha", qty: 10 },
+              { _id: 2, name: "beta",  qty: 20 },
+              { _id: 3, name: "gamma", qty: 30 }
+            ]);
+            print("Seeded " + db.widgets.countDocuments() + " documents");
+          '
+
+      - name: Prepare local S3 mock and encryption key
+        run: |
+          mkdir -p "$RUNNER_TEMP/s3-mock"
+          # Generate a throwaway AES-256 key for this test run only
+          openssl rand -base64 32 > "$RUNNER_TEMP/backup.key"
+          chmod 600 "$RUNNER_TEMP/backup.key"
+          echo "BACKUP_KEY_FILE=$RUNNER_TEMP/backup.key" >> "$GITHUB_ENV"
+          echo "BACKUP_BUCKET=file://$RUNNER_TEMP/s3-mock" >> "$GITHUB_ENV"
+
+      - name: Run backup (encrypt + checksum + transfer)
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          AWS_REGION: us-east-1
+          BACKUP_RETENTION_DAYS: 1
+        run: |
+          # Use the test key file when no CI secret is configured
+          if [[ -z "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
+            export BACKUP_ENCRYPTION_KEY="$(cat "$BACKUP_KEY_FILE")"
+          fi
+          bash scripts/backup-mongodb.sh
+
+      - name: Download backup from mock S3
+        run: |
+          mkdir -p "$RUNNER_TEMP/download"
+          cp -v "$RUNNER_TEMP"/s3-mock/* "$RUNNER_TEMP/download/"
+          ls -la "$RUNNER_TEMP/download"
+
+      - name: Verify SHA-256 checksum
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          checksums=(*.sha256)
+          if [[ ${#checksums[@]} -eq 0 ]]; then
+            echo "::error::No .sha256 checksum file found alongside backup"
+            exit 1
+          fi
+          for sum in "${checksums[@]}"; do
+            echo "Verifying $sum"
+            sha256sum -c "$sum"
+          done
+
+      - name: Decrypt backup
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          encrypted=(*.enc)
+          if [[ ${#encrypted[@]} -eq 0 ]]; then
+            echo "::error::No encrypted backup (.enc) found"
+            exit 1
+          fi
+          for f in "${encrypted[@]}"; do
+            out="${f%.enc}"
+            openssl enc -d -aes-256-cbc -pbkdf2 -in "$f" -out "$out" -pass "file:$BACKUP_KEY_FILE"
+            echo "Decrypted $f -> $out"
+          done
+
+      - name: Restore to temporary database
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e_restore
+        run: |
+          cd "$RUNNER_TEMP/download"
+          shopt -s nullglob
+          archives=(*.archive *.gz)
+          if [[ ${#archives[@]} -eq 0 ]]; then
+            echo "::error::No decrypted archive found to restore"
+            exit 1
+          fi
+          for a in "${archives[@]}"; do
+            mongorestore --uri "$MONGO_URI" --archive="$a" --nsFrom='backup_e2e.*' --nsTo='backup_e2e_restore.*'
+          done
+
+      - name: Assert restored data matches source
+        env:
+          MONGO_URI: mongodb://localhost:27017/backup_e2e_restore
+        run: |
+          count=$(mongosh "$MONGO_URI" --quiet --eval 'db.widgets.countDocuments()')
+          echo "Restored document count: $count"
+          if [[ "$count" != "3" ]]; then
+            echo "::error::Restored document count mismatch (expected 3, got $count)"
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Backup E2E verification failed on ${new Date().toISOString().split('T')[0]}`,
+              body: `The backup → transfer → verify → restore E2E cycle failed.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['backup', 'incident'],
+            });
+
+  weekly-verify:
+    name: Weekly Backup Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: preflight
+    if: |
+      needs.preflight.outputs.ready == 'true' &&
+      github.event_name == 'schedule' && startsWith(github.event.schedule, '0 2 * * 0')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install MongoDB Database Tools
+        run: |
+          curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+          echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y "mongodb-database-tools=${MONGODB_TOOLS_VERSION}"
+          mongodump --version
+
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          role-session-name: gha-mongodb-backup-verify
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Run backup with verification
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
           BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
         run: bash scripts/backup-mongodb.sh --verify

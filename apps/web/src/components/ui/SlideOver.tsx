@@ -92,7 +92,7 @@ export function SlideOver({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="focus:ring-primary-500 rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:ring-2 focus:outline-none"
+            className="rounded-md p-1 text-neutral-500 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             <svg
               className="h-5 w-5"

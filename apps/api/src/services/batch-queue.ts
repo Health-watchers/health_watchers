@@ -1,6 +1,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import logger from '@api/utils/logger';
+import config from '@packages/config';
 
 const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
@@ -35,19 +36,75 @@ export interface BatchProgress {
   processed: number;
   percentage: number;
   estimatedTimeRemainingMs: number;
+  /** Throughput in records/second over the last sampling window. */
+  throughputPerSecond: number;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   error?: string;
+}
+
+// ── ETA helper ────────────────────────────────────────────────────────────────
+/**
+ * Calculate an ETA (ms) and throughput (records/s) from a sliding window of
+ * checkpoint timestamps.  Using the last N checkpoints produces a more accurate
+ * ETA than a simple start-time average for workloads whose speed changes over time.
+ */
+export interface ProgressCheckpoint {
+  processed: number;
+  ts: number; // Date.now()
+}
+
+const progressCheckpoints = new Map<string, ProgressCheckpoint[]>();
+
+const MAX_CHECKPOINTS = 10;
+
+export function recordProgressCheckpoint(jobId: string, processed: number): void {
+  if (!progressCheckpoints.has(jobId)) progressCheckpoints.set(jobId, []);
+  const checkpoints = progressCheckpoints.get(jobId)!;
+  checkpoints.push({ processed, ts: Date.now() });
+  // Keep only the last MAX_CHECKPOINTS entries to bound memory use
+  if (checkpoints.length > MAX_CHECKPOINTS) checkpoints.shift();
+}
+
+export function computeEta(
+  jobId: string,
+  processed: number,
+  total: number
+): { estimatedTimeRemainingMs: number; throughputPerSecond: number } {
+  const checkpoints = progressCheckpoints.get(jobId);
+  if (!checkpoints || checkpoints.length < 2 || total <= 0) {
+    return { estimatedTimeRemainingMs: 0, throughputPerSecond: 0 };
+  }
+
+  const first = checkpoints[0];
+  const last = checkpoints[checkpoints.length - 1];
+  const elapsedMs = last.ts - first.ts;
+  const delta = last.processed - first.processed;
+
+  if (elapsedMs <= 0 || delta <= 0) {
+    return { estimatedTimeRemainingMs: 0, throughputPerSecond: 0 };
+  }
+
+  const throughputPerSecond = (delta / elapsedMs) * 1000;
+  const remaining = total - processed;
+  const estimatedTimeRemainingMs =
+    throughputPerSecond > 0 ? Math.round((remaining / throughputPerSecond) * 1000) : 0;
+
+  return { estimatedTimeRemainingMs, throughputPerSecond: Math.round(throughputPerSecond) };
+}
+
+export function cleanupJobCheckpoints(jobId: string): void {
+  progressCheckpoints.delete(jobId);
 }
 
 const exportQueue = new Queue('export-jobs', {
   connection,
   defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 3,
+    removeOnComplete: config.batchQueue.removeOnComplete,
+    removeOnFail: config.batchQueue.removeOnFail,
+    attempts: config.batchQueue.attempts,
     backoff: {
       type: 'exponential',
-      delay: 5000,
+      delay: config.batchQueue.backoffDelayMs,
     },
   },
 });
@@ -65,6 +122,7 @@ export const exportWorker = new Worker(
       processed: 0,
       percentage: 0,
       estimatedTimeRemainingMs: 0,
+      throughputPerSecond: 0,
       status: 'processing',
     });
 
@@ -95,9 +153,12 @@ export const exportWorker = new Worker(
         ...progressMap.get(job.id!)!,
         processed: result.recordCount,
         percentage: 100,
+        throughputPerSecond: 0,
         status: 'completed',
         estimatedTimeRemainingMs: 0,
       });
+      // Clean up sliding-window checkpoints to free memory
+      cleanupJobCheckpoints(job.id!);
 
       logger.info(
         {
@@ -116,6 +177,7 @@ export const exportWorker = new Worker(
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      cleanupJobCheckpoints(job.id!);
 
       logger.error({ jobId: job.id, error }, 'Export job failed');
       throw error;
@@ -123,10 +185,10 @@ export const exportWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5,
+    concurrency: config.batchQueue.concurrency,
     limiter: {
-      max: 10,
-      duration: 60000,
+      max: config.batchQueue.limiterMax,
+      duration: config.batchQueue.limiterDurationMs,
     },
   }
 );
@@ -149,6 +211,7 @@ export async function addExportJob(data: ExportJobData): Promise<string> {
     processed: 0,
     percentage: 0,
     estimatedTimeRemainingMs: 0,
+    throughputPerSecond: 0,
     status: 'queued',
   });
 
@@ -159,14 +222,23 @@ export function getJobProgress(jobId: string): BatchProgress | undefined {
   return progressMap.get(jobId);
 }
 
-export function updateJobProgress(
-  jobId: string,
-  progress: Partial<BatchProgress>
-): void {
+export function updateJobProgress(jobId: string, progress: Partial<BatchProgress>): void {
   const current = progressMap.get(jobId);
-  if (current) {
-    progressMap.set(jobId, { ...current, ...progress });
+  if (!current) return;
+
+  const merged = { ...current, ...progress };
+
+  // #1072 — Auto-compute ETA using sliding-window checkpoints whenever
+  //          processed count is available and the job is still running.
+  if (progress.processed !== undefined && merged.total > 0 && merged.status === 'processing') {
+    recordProgressCheckpoint(jobId, merged.processed);
+    const eta = computeEta(jobId, merged.processed, merged.total);
+    merged.estimatedTimeRemainingMs = eta.estimatedTimeRemainingMs;
+    merged.throughputPerSecond = eta.throughputPerSecond;
+    merged.percentage = Math.round((merged.processed / merged.total) * 100);
   }
+
+  progressMap.set(jobId, merged);
 }
 
 export async function getQueueStats() {

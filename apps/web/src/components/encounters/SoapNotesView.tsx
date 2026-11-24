@@ -1,5 +1,7 @@
 'use client';
 
+import { SafeHtml } from '@/components/common/SafeHtml';
+
 interface SoapNotes {
   subjective?: string;
   objective?: string;
@@ -26,13 +28,12 @@ export function SoapNotesView({ soapNotes }: { soapNotes?: SoapNotes }) {
         if (!html) return null;
         return (
           <div key={key} className={`border-l-4 pl-4 ${color}`}>
-            <p className="text-secondary-500 mb-1 text-xs font-semibold tracking-wide uppercase">
+            <p className="text-secondary-500 mb-1 text-xs font-semibold uppercase tracking-wide">
               {label}
             </p>
-            {/* Safe — HTML was sanitized server-side before storage */}
-            <div
+            <SafeHtml
+              html={html}
               className="prose prose-sm text-secondary-800 max-w-none"
-              dangerouslySetInnerHTML={{ __html: html }}
             />
           </div>
         );

@@ -25,9 +25,23 @@ jobs:
         run: npm ci
 
       - name: Check for changesets
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
+          # The automated "Version Packages" PR opened by changesets/action
+          # consumes the pending changesets and must not be blocked by this check.
+          if [ "$PR_BRANCH" = "changeset-release/main" ] || [ "$PR_TITLE" = "Version Packages" ]; then
+            echo "✅ Skipping changeset check for the automated 'Version Packages' release PR"
+            exit 0
+          fi
+
           if ! find .changeset/ -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit 2>/dev/null | grep -q .; then
             echo "⚠️ No changeset found. If this PR includes user-facing changes, please run 'npm run changeset' to create one."
+            echo ""
+            echo "Changesets are consumed by the release workflow (.github/workflows/release.yml),"
+            echo "which opens a 'Version Packages' PR and publishes dated versions and release notes."
+            echo "Without a changeset, your change will not appear in the changelog or a release."
             echo ""
             echo "Skip this check if:"
             echo "  - This is a documentation-only change"

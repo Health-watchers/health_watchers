@@ -46,7 +46,9 @@ jest.mock('@api/utils/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.mock('pino-http', () => () => (_req: unknown, _res: unknown, next: () => void) => next());
-jest.mock('@api/config/db', () => ({ connectDB: jest.fn().mockReturnValue(new Promise(() => {})) }));
+jest.mock('@api/config/db', () => ({
+  connectDB: jest.fn().mockReturnValue(new Promise(() => {})),
+}));
 jest.mock('@api/docs/swagger', () => ({ setupSwagger: jest.fn() }));
 jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
   startPaymentExpirationJob: jest.fn(),
@@ -55,13 +57,27 @@ jest.mock('@api/modules/payments/services/payment-expiration-job', () => ({
 
 // Mock unused route modules
 jest.mock('@api/modules/auth/auth.controller', () => ({ authRoutes: require('express').Router() }));
-jest.mock('@api/modules/encounters/encounters.controller', () => ({ encounterRoutes: require('express').Router() }));
-jest.mock('@api/modules/payments/payments.controller', () => ({ paymentRoutes: require('express').Router() }));
-jest.mock('@api/modules/appointments/appointments.controller', () => ({ appointmentRoutes: require('express').Router() }));
-jest.mock('@api/modules/clinics/clinics.controller', () => ({ clinicRoutes: require('express').Router() }));
-jest.mock('@api/modules/users/users.controller', () => ({ userRoutes: require('express').Router() }));
-jest.mock('@api/modules/webhooks/webhooks.controller', () => ({ webhookRoutes: require('express').Router() }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({ auditLogRoutes: require('express').Router() }));
+jest.mock('@api/modules/encounters/encounters.controller', () => ({
+  encounterRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/payments/payments.controller', () => ({
+  paymentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/appointments/appointments.controller', () => ({
+  appointmentRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/clinics/clinics.controller', () => ({
+  clinicRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/users/users.controller', () => ({
+  userRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
+  webhookRoutes: require('express').Router(),
+}));
+jest.mock('@api/modules/audit/audit-logs.controller', () => ({
+  auditLogRoutes: require('express').Router(),
+}));
 jest.mock('@api/modules/ai/ai.routes', () => require('express').Router());
 jest.mock('@api/modules/dashboard/dashboard.routes', () => require('express').Router());
 
@@ -178,9 +194,7 @@ describe('Benchmark: /health endpoint', () => {
 describe(`Benchmark: GET /api/v1/patients (${SEED_PATIENTS} records)`, () => {
   it(`first page list completes in < ${BUDGET.listEndpoint}ms`, async () => {
     const elapsed = await timed(() =>
-      request(app)
-        .get('/api/v1/patients?page=1&limit=25')
-        .set('Authorization', `Bearer ${token}`)
+      request(app).get('/api/v1/patients?page=1&limit=25').set('Authorization', `Bearer ${token}`)
     );
     console.log(`[bench] GET /patients page 1: ${elapsed}ms`);
     expect(elapsed).toBeLessThan(BUDGET.listEndpoint);
@@ -226,9 +240,7 @@ describe('Benchmark: GET /api/v1/patients/:id', () => {
 
   it(`single record read completes in < ${BUDGET.singleRead}ms`, async () => {
     const elapsed = await timed(() =>
-      request(app)
-        .get(`/api/v1/patients/${patientId}`)
-        .set('Authorization', `Bearer ${token}`)
+      request(app).get(`/api/v1/patients/${patientId}`).set('Authorization', `Bearer ${token}`)
     );
     console.log(`[bench] GET /patients/:id: ${elapsed}ms`);
     expect(elapsed).toBeLessThan(BUDGET.singleRead);
@@ -257,9 +269,7 @@ describe(`Load test: ${CONCURRENT_REQUESTS} concurrent GET /api/v1/patients`, ()
   it('all requests succeed under concurrent load', async () => {
     const responses = await Promise.all(
       Array.from({ length: CONCURRENT_REQUESTS }, () =>
-        request(app)
-          .get('/api/v1/patients?page=1&limit=10')
-          .set('Authorization', `Bearer ${token}`)
+        request(app).get('/api/v1/patients?page=1&limit=10').set('Authorization', `Bearer ${token}`)
       )
     );
 
@@ -297,9 +307,7 @@ describe('Cache baseline: warm vs cold', () => {
     jest.spyOn(cache, 'set').mockResolvedValueOnce(undefined);
 
     const elapsed = await timed(() =>
-      request(app)
-        .get('/api/v1/patients?page=1&limit=10')
-        .set('Authorization', `Bearer ${token}`)
+      request(app).get('/api/v1/patients?page=1&limit=10').set('Authorization', `Bearer ${token}`)
     );
     console.log(`[bench] cold request: ${elapsed}ms`);
     jest.restoreAllMocks();
@@ -325,23 +333,21 @@ describe('Query performance: index coverage', () => {
   it('clinicId index is present on PatientModel', async () => {
     const indexes = await PatientModel.collection.indexes();
     const hasClinicIndex = indexes.some(
-      (idx) => idx.key && ('clinicId' in idx.key || 'clinicId_1' in idx.key || idx.key['clinicId'] !== undefined)
+      (idx) =>
+        idx.key &&
+        ('clinicId' in idx.key || 'clinicId_1' in idx.key || idx.key['clinicId'] !== undefined)
     );
     expect(hasClinicIndex).toBe(true);
   });
 
   it('fetching patients by clinicId uses an index (fast under 200ms)', async () => {
-    const elapsed = await timed(() =>
-      PatientModel.find({ clinicId: CLINIC_ID }).limit(50).lean()
-    );
+    const elapsed = await timed(() => PatientModel.find({ clinicId: CLINIC_ID }).limit(50).lean());
     console.log(`[bench] direct Mongoose clinicId query: ${elapsed}ms`);
     expect(elapsed).toBeLessThan(200);
   });
 
   it('counting patients by clinic is fast', async () => {
-    const elapsed = await timed(() =>
-      PatientModel.countDocuments({ clinicId: CLINIC_ID })
-    );
+    const elapsed = await timed(() => PatientModel.countDocuments({ clinicId: CLINIC_ID }));
     console.log(`[bench] countDocuments by clinicId: ${elapsed}ms`);
     expect(elapsed).toBeLessThan(200);
   });

@@ -1,0 +1,75 @@
+{
+  "$comment": "Monthly cloud budgets for Health Watchers. Consumed by scripts/cost/cost-report.sh and applied to AWS Budgets via `aws budgets create-budget`. Alert thresholds fire to #cost-alerts and the Finance partner. At 100% of a NON-prod budget, ops/cost automation scales non-prod workloads to zero overnight; prod never auto-actions.",
+  "currency": "USD",
+  "notificationSubscribers": [
+    { "type": "SNS", "address": "arn:aws:sns:us-east-1:ACCOUNT_ID:cost-alerts" },
+    { "type": "EMAIL", "address": "platform@health-watchers.io" },
+    { "type": "EMAIL", "address": "finance@health-watchers.io" }
+  ],
+  "thresholds_percent": [80, 100, 120],
+  "budgets": [
+    {
+      "name": "production",
+      "monthly_limit_usd": 9000,
+      "auto_throttle": false,
+      "tags": { "env": "production" },
+      "notes": "Breach pages Platform on-call. No automatic remediation on prod."
+    },
+    {
+      "name": "staging",
+      "monthly_limit_usd": 1800,
+      "auto_throttle": true,
+      "tags": { "env": "staging" }
+    },
+    {
+      "name": "dev",
+      "monthly_limit_usd": 900,
+      "auto_throttle": true,
+      "tags": { "env": "dev" }
+    },
+    {
+      "name": "dr",
+      "monthly_limit_usd": 1400,
+      "auto_throttle": false,
+      "tags": { "env": "dr" },
+      "notes": "Warm-standby capacity. Do not throttle — it is the recovery target."
+    },
+    {
+      "name": "shared-services",
+      "monthly_limit_usd": 1200,
+      "auto_throttle": false,
+      "tags": { "env": "shared" },
+      "notes": "CI, monitoring, logging, registry."
+    },
+    {
+      "name": "account-total",
+      "monthly_limit_usd": 15000,
+      "auto_throttle": false,
+      "tags": {},
+      "notes": "Roll-up guardrail across every environment."
+    }
+  ],
+  "budget_actions": [
+    {
+      "applies_to": ["staging", "dev"],
+      "trigger_percent": 100,
+      "action": "SCALE_DOWN_NON_PROD",
+      "description": "kubectl scale deploy --all --replicas=0 in non-prod namespaces via the cost-guardrails CronJob; restored next business morning.",
+      "approval_required": false
+    },
+    {
+      "applies_to": ["staging", "dev"],
+      "trigger_percent": 120,
+      "action": "DENY_EXPENSIVE_RESOURCES",
+      "description": "SCP/OPA policy blocks new NAT gateways, GPU instances, and >x-large nodes until a human clears the alert.",
+      "approval_required": false
+    },
+    {
+      "applies_to": ["production"],
+      "trigger_percent": 100,
+      "action": "PAGE_ONLY",
+      "description": "PagerDuty notify Platform; manual review in the cost channel.",
+      "approval_required": true
+    }
+  ]
+}

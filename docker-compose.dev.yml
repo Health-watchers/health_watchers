@@ -1,47 +1,137 @@
 version: '3.8'
 
-# Minimal dev dependency stack — MongoDB only.
-# Eliminates the need for a local MongoDB installation.
-# Usage: docker-compose -f docker-compose.dev.yml up -d
+# ============================================================
+# Health Watchers — Development Docker Compose Configuration
+#
+# This compose file provides a minimal development environment
+# with core services: MongoDB, Redis, API, and Web.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+#
+# See README.md for quick-start guide.
+# ============================================================
 
 services:
-  jaeger:
-    image: jaegertracing/all-in-one:1.57
-    container_name: health-watchers-jaeger
-    restart: unless-stopped
-    ports:
-      - '16686:16686' # Jaeger UI — http://localhost:16686
-      - '4318:4318' # OTLP HTTP receiver
-    environment:
-      COLLECTOR_OTLP_ENABLED: 'true'
+  # ══════════════════════════════════════════════════════════════════════════
+  # DATABASE SERVICES
+  # ══════════════════════════════════════════════════════════════════════════
 
-  mongo:
-    image: mongo:7
-    container_name: health-watchers-mongo
+  mongodb:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb-dev
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: health_watchers
     ports:
       - '27017:27017'
     volumes:
-      - mongo_data:/data/db
+      - mongodb_dev_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers --quiet
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - health-watchers-dev
 
-  mongo-express:
-    image: mongo-express:latest
-    container_name: health-watchers-mongo-express
+  redis:
+    image: redis:7.2-alpine
+    container_name: health-watchers-redis-dev
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - health-watchers-dev
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # APPLICATION SERVICES
+  # ══════════════════════════════════════════════════════════════════════════
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: health-watchers-api-dev
     restart: unless-stopped
     depends_on:
-      mongo:
+      mongodb:
         condition: service_healthy
-    ports:
-      - '8081:8081'
+      redis:
+        condition: service_healthy
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
-      ME_CONFIG_BASICAUTH: 'false'
+      NODE_ENV: development
+      API_PORT: 3001
+      MONGO_URI: mongodb://admin:password123@mongodb:27017/health_watchers?authSource=admin
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_TOKEN_SECRET: dev-access-token-secret-change-in-production
+      JWT_REFRESH_TOKEN_SECRET: dev-refresh-token-secret-change-in-production
+      STELLAR_NETWORK: testnet
+      STELLAR_SECRET_KEY: ${STELLAR_SECRET_KEY:-}
+      STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LOG_LEVEL: info
+    ports:
+      - '3001:3001'
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: npm run dev --workspace=api
+    networks:
+      - health-watchers-dev
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: health-watchers-web-dev
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_STELLAR_NETWORK: testnet
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    command: npm run dev --workspace=web
+    networks:
+      - health-watchers-dev
+
+# ══════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ══════════════════════════════════════════════════════════════════════════
 
 volumes:
-  mongo_data:
+  mongodb_dev_data:
     driver: local
+  redis_dev_data:
+    driver: local
+
+# ══════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ══════════════════════════════════════════════════════════════════════════
+
+networks:
+  health-watchers-dev:
+    driver: bridge

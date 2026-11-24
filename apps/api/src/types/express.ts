@@ -31,6 +31,9 @@ declare global {
       user?: AuthenticatedUser;
       requestId?: string;
       tokenJti?: string;
+      clinicId?: string;
+      /** Raw request body captured by express.json verify callback */
+      rawBody?: Buffer;
       apiKey?: {
         id: string;
         userId: string;
@@ -38,6 +41,14 @@ declare global {
         scopes: string[];
       };
       lazyLoadQuery?: LazyLoadQuery;
+    }
+
+    interface Response {
+      getOptimizationMetrics?: () => {
+        originalSize: string | number | undefined;
+        optimizedSize: string | number | undefined;
+        compressionRatio: string | number | undefined;
+      };
     }
   }
 }

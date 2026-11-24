@@ -28,6 +28,14 @@
           "allocate": { "require": { "data": "cold" } }
         }
       },
+      "frozen": {
+        "min_age": "60d",
+        "actions": {
+          "searchable_snapshot": {
+            "snapshot_repository": "health-watchers-archive"
+          }
+        }
+      },
       "delete": {
         "min_age": "90d",
         "actions": {

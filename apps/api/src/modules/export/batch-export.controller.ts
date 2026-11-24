@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
 import { addExportJob, getJobProgress } from '@api/services/batch-queue';
 import { streamProgress } from '@api/services/progress-tracker';
-import { streamPatientExport, streamPaymentExport, streamResearchExport } from '@api/services/streaming-export';
+import {
+  streamPatientExport,
+  streamPaymentExport,
+  streamResearchExport,
+} from '@api/services/streaming-export';
 import logger from '@api/utils/logger';
 
 export class BatchExportController {
@@ -65,10 +69,22 @@ export class BatchExportController {
 
       switch (type) {
         case 'patient':
-          await streamPatientExport(res, { jobId, clinicId, format: format as any, dateFrom, dateTo });
+          await streamPatientExport(res, {
+            jobId,
+            clinicId,
+            format: format as any,
+            dateFrom,
+            dateTo,
+          });
           break;
         case 'payment':
-          await streamPaymentExport(res, { jobId, clinicId, format: format as any, dateFrom, dateTo });
+          await streamPaymentExport(res, {
+            jobId,
+            clinicId,
+            format: format as any,
+            dateFrom,
+            dateTo,
+          });
           break;
         case 'research':
           await streamResearchExport(res, { jobId });

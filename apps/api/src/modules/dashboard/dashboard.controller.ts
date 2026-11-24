@@ -20,7 +20,9 @@ export async function getStats(req: Request, res: Response) {
   try {
     const clinicId = req.user?.clinicId;
     if (!clinicId) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Clinic ID not found in user context' });
+      return res
+        .status(400)
+        .json({ error: 'Bad Request', message: 'Clinic ID not found in user context' });
     }
 
     const forceRefresh = req.query.refresh === 'true';
@@ -65,8 +67,14 @@ export async function getStats(req: Request, res: Response) {
       PaymentRecordModel.countDocuments({ clinicId, status: 'pending' }),
       UserModel.countDocuments({ clinicId, role: 'DOCTOR', isActive: true }),
       PatientModel.find({ clinicId }).sort({ createdAt: -1 }).limit(5).lean(),
-      EncounterModel.find({ clinicId, createdAt: { $gte: today } }).sort({ createdAt: -1 }).limit(5).lean(),
-      PaymentRecordModel.find({ clinicId, status: 'pending' }).sort({ createdAt: -1 }).limit(5).lean(),
+      EncounterModel.find({ clinicId, createdAt: { $gte: today } })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      PaymentRecordModel.find({ clinicId, status: 'pending' })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
       EncounterModel.find(followUpFilter).sort({ followUpDate: 1 }).limit(5).lean(),
       EncounterModel.countDocuments(followUpFilter),
     ]);

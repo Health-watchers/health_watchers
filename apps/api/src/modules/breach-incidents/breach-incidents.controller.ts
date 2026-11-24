@@ -2,12 +2,18 @@ import { Router, Request, Response } from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { validateRequest } from '@api/middlewares/validate.middleware';
-import { createBreachIncidentSchema } from './breach-incidents.validation';
+import {
+  createBreachIncidentSchema,
+  updateBreachIncidentSchema,
+  updateBreachIncidentStatusSchema,
+} from './breach-incidents.validation';
 import {
   createBreachIncident,
   findBreachIncidents,
   findOverdueBreachIncidents,
   generateHhsReport,
+  transitionBreachIncidentStatus,
+  updateBreachIncident,
 } from './breach-incidents.service';
 
 const router = Router();
@@ -47,6 +53,36 @@ router.get(
       return res.status(404).json({ error: 'NotFound', message: 'Breach incident not found' });
     }
     return res.json({ status: 'success', data: report });
+  })
+);
+
+router.patch(
+  '/:id',
+  validateRequest({ body: updateBreachIncidentSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const incident = await updateBreachIncident(req.params.id, req.body);
+    if (!incident) {
+      return res.status(404).json({ error: 'NotFound', message: 'Breach incident not found' });
+    }
+    return res.json({ status: 'success', data: incident });
+  })
+);
+
+router.patch(
+  '/:id/status',
+  validateRequest({ body: updateBreachIncidentStatusSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await transitionBreachIncidentStatus(req.params.id, req.body.notificationStatus);
+    if (result.notFound) {
+      return res.status(404).json({ error: 'NotFound', message: 'Breach incident not found' });
+    }
+    if (result.invalidTransition) {
+      return res.status(409).json({
+        error: 'InvalidStatusTransition',
+        message: `Cannot move incident from ${result.invalidTransition} to ${req.body.notificationStatus}`,
+      });
+    }
+    return res.json({ status: 'success', data: result.incident });
   })
 );
 

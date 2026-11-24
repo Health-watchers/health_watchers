@@ -1,0 +1,34 @@
+%% Authentication flow: login, MFA, token issuance, refresh
+%% Based on apps/api/src/modules/auth/auth.controller.ts
+sequenceDiagram
+    actor Client
+    participant API as Express API
+    participant DB as MongoDB (users)
+    participant MQ as RabbitMQ
+
+    Client->>API: POST /auth/login (email, password)
+    API->>DB: Find user by email
+    DB-->>API: User record
+    API->>API: bcrypt.compare(password, hash)
+
+    alt MFA enabled
+        API-->>Client: 200 { status: "mfa_required", tempToken }
+        Client->>API: POST /auth/mfa/verify (tempToken, TOTP code)
+        API->>API: Verify TOTP code
+    end
+
+    API->>API: signAccessToken (15m) + signRefreshToken (7d, family/jti)
+    API->>DB: Store refresh token record
+    API->>MQ: Publish audit log entry
+    API-->>Client: 200 { accessToken, refreshToken }
+
+    Client->>API: GET /patients (Authorization: Bearer accessToken)
+    API->>API: Verify JWT signature + expiry
+    API-->>Client: 200 OK
+
+    Note over Client,API: accessToken expires after 15 minutes
+    Client->>API: POST /auth/refresh { refreshToken }
+    API->>DB: Verify + rotate refresh token (jti/family)
+    DB-->>API: OK
+    API->>API: Issue new accessToken + refreshToken
+    API-->>Client: 200 { accessToken, refreshToken }

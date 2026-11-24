@@ -49,6 +49,59 @@ export const stellarStreamHealth = new client.Gauge({
   registers: [register],
 });
 
+// ---------------------------------------------------------------------------
+// Batch payment metrics
+// ---------------------------------------------------------------------------
+
+export const stellarBatchSubmittedTotal = new client.Counter({
+  name: 'stellar_batch_submitted_total',
+  help: 'Total number of Stellar payment batches submitted for processing',
+  labelNames: ['status'] as const,
+  registers: [register],
+});
+
+export const stellarBatchPaymentsTotal = new client.Counter({
+  name: 'stellar_batch_payments_total',
+  help: 'Total number of individual payments processed within batches',
+  labelNames: ['status'] as const,
+  registers: [register],
+});
+
+export const stellarBatchPaymentsPerBatch = new client.Histogram({
+  name: 'stellar_batch_payments_per_batch',
+  help: 'Number of payments contained in each processed batch',
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000],
+  registers: [register],
+});
+
+export const stellarBatchFailuresTotal = new client.Counter({
+  name: 'stellar_batch_failures_total',
+  help: 'Total number of batch payment failures, labelled by reason',
+  labelNames: ['reason'] as const,
+  registers: [register],
+});
+
+export const stellarBatchPaymentRetriesTotal = new client.Counter({
+  name: 'stellar_batch_payment_retries_total',
+  help: 'Total number of retry attempts for failed payments within batches',
+  labelNames: ['reason'] as const,
+  registers: [register],
+});
+
+export const stellarBatchDurationSeconds = new client.Histogram({
+  name: 'stellar_batch_duration_seconds',
+  help: 'Wall-clock duration of batch processing in seconds',
+  labelNames: ['status'] as const,
+  buckets: [0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300],
+  registers: [register],
+});
+
+export const stellarBatchFailureRate = new client.Gauge({
+  name: 'stellar_batch_failure_rate',
+  help: 'Ratio of failed payments to total payments processed in batches (0-1)',
+  registers: [register],
+});
+
 function normalisePath(path: string): string {
   return path
     .replace(/\/[A-Z0-9]{56}/gi, '/:publicKey') // Stellar public keys

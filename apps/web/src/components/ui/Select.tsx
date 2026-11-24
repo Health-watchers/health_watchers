@@ -14,7 +14,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, helperText, error, options, placeholder, className, id, ...props }, ref) => {
+  ({ label, helperText, error, options, placeholder, className, id, required, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
     const hasError = Boolean(error);
 
@@ -26,19 +26,28 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
           >
             {label}
+            {required && (
+              <>
+                <span aria-hidden="true" className="text-danger-600 ml-1">
+                  *
+                </span>
+                <span className="sr-only"> required</span>
+              </>
+            )}
           </label>
         )}
         <div className="relative">
           <select
             ref={ref}
             id={inputId}
+            required={required}
             aria-invalid={hasError}
             aria-describedby={
               hasError ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             className={[
               'bg-neutral-0 w-full appearance-none rounded-md border px-3 py-2 pr-8 text-sm text-neutral-900',
-              'focus:ring-primary-500 focus:border-primary-500 transition-colors focus:ring-2 focus:outline-none',
+              'focus:border-primary-500 focus:ring-primary-500 transition-colors focus:ring-2 focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
               hasError ? 'border-danger-500' : 'border-neutral-200 dark:border-neutral-600',
               className ?? '',
@@ -71,7 +80,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           </span>
         </div>
         {hasError && (
-          <p id={`${inputId}-error`} className="text-danger-500 text-xs">
+          <p id={`${inputId}-error`} role="alert" className="text-danger-500 text-xs">
             {error}
           </p>
         )}

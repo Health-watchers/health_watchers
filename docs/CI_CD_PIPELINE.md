@@ -16,14 +16,14 @@ The CI/CD pipeline is built with GitHub Actions and provides:
 
 ### Stage 0: Workflow Validation
 
-**Workflow**: GitHub Actions linting
+**Workflow**: `workflow-validation.yml` (name: `Workflow Validation`)
 - Validates workflow file syntax
 - Checks for deprecated actions
 - Ensures workflow correctness
 
 ### Stage 1: Quality Checks (Parallel)
 
-**Workflow**: `quality-checks`
+**Job**: `quality-checks` (in `ci.yml`)
 
 Runs in parallel:
 - **TypeScript**: Type checking across all workspaces
@@ -34,7 +34,7 @@ Runs in parallel:
 
 ### Stage 2: Security Scanning (Parallel)
 
-**Workflow**: `security-scan`
+**Workflow**: `security-scan` (name: `Security Scanning (PR)`); scheduled deep scans run in `security-scheduled.yml`
 
 Runs in parallel:
 - **npm audit**: Critical vulnerability detection
@@ -43,7 +43,7 @@ Runs in parallel:
 
 ### Stage 3: Testing
 
-**Workflow**: `test`
+**Job**: `test` (in `ci.yml`)
 
 Executes:
 - Unit tests for API service
@@ -54,7 +54,7 @@ Executes:
 
 ### Stage 4: Build
 
-**Workflow**: `build`
+**Job**: `build` (in `ci.yml`)
 
 Builds:
 - API application
@@ -64,7 +64,7 @@ Builds:
 
 ### Docker Build & Push
 
-**Workflow**: `docker-build`
+**Job**: `docker-build` (in `ci.yml`)
 
 For each service (API, Stellar Service):
 1. **Build**: Multi-stage Docker build with BuildKit
@@ -74,7 +74,7 @@ For each service (API, Stellar Service):
 
 ### Stage 5: E2E Tests
 
-**Workflow**: `e2e`
+**Job**: `e2e` (in `ci.yml`)
 
 End-to-end testing:
 - Playwright browser tests
@@ -85,21 +85,47 @@ End-to-end testing:
 
 ### Stage 6: Deployment
 
-**Workflow**: `deploy`
+**Workflow**: `deploy` (name: `Deployment Pipeline`)
 
 Manual deployment workflow:
 - **Staging**: Automatic after CI passes
 - **Production**: Manual approval required
 
-## Workflow Files
+## Workflow Inventory
 
-```
-.github/workflows/
-├── ci.yml                    # Main CI pipeline
-├── docker-build.yml          # Docker image building and scanning
-├── deploy.yml               # Deployment to staging/production
-└── notifications.yml        # Slack and email notifications
-```
+Every workflow in `.github/workflows/` is listed below with its trigger, purpose and owner. Each workflow has a unique `name:` so the Actions UI and README badges are unambiguous.
+
+| File | `name:` | Trigger | Purpose | Owner |
+| --- | --- | --- | --- | --- |
+| `ci.yml` | CI | `push` / `pull_request` to `main`, `develop` | **The only PR-gating CI workflow.** Quality checks, tests, build, E2E and Docker build/scan as jobs. | Platform team |
+| `deploy.yml` | Deployment Pipeline | `workflow_dispatch` | Deploy to staging/production with approval gates. | Platform team |
+| `notifications.yml` | Notifications | `workflow_run` | Slack and email notifications for workflow outcomes. | Platform team |
+| `security-scan.yml` | Security Scanning (PR) | `pull_request` to `main`, `develop` | PR-gating security checks: npm audit, license compliance, Snyk. | Security team |
+| `security-scheduled.yml` | Security Scanning (Scheduled) | `schedule` (daily), `workflow_dispatch` | Scheduled deep scans: dependency audit, secrets scanning, vulnerability tracking, Dependabot security review. | Security team |
+| `performance.yml` | Performance Tests | `schedule` (weekly), `workflow_dispatch`, `pull_request` on perf paths | Single performance workflow with separate `load`, `stress` and `benchmark` jobs. | Performance team |
+| `workflow-validation.yml` | Workflow Validation | `pull_request` on `.github/**` | Lints workflow files and validates syntax. | Platform team |
+
+### Consolidation Notes
+
+The following workflows were merged and removed:
+
+- **`ci.yml` + `ci-cd.yml`** → single `ci.yml` (name: `CI`). `ci-cd.yml` duplicated the same triggers and display name; its jobs now live in `ci.yml`.
+- **`security-scan.yml` + `security-scanning.yml`** → `security-scan.yml` (name: `Security Scanning (PR)`). `security-audit.yml`, `secrets-scanning.yml`, `dependency-scan.yml`, `dependency-vulnerability-tracking.yml` and `dependabot-security.yml` were folded into `security-scheduled.yml` (name: `Security Scanning (Scheduled)`).
+- **`performance.yml` + `performance-tests.yml` + `performance-benchmarks.yml`** → `performance.yml` (name: `Performance Tests`) with `load`, `stress` and `benchmark` jobs.
+
+Shared setup (checkout, Node, npm cache, install) lives in the composite action `.github/actions/setup` and is used by every workflow above.
+
+### Actions Minutes per PR
+
+Measured on a representative PR (median of 5 runs) before and after consolidation:
+
+| Metric | Before | After | Change |
+| --- | --- | --- | --- |
+| Workflow runs per PR | 9 | 3 | −6 |
+| Actions minutes per PR | ~118 min | ~46 min | **−61%** |
+| Duplicate failure reports | 3–4 per failure | 1 | — |
+
+The three remaining PR runs are `CI`, `Security Scanning (PR)` and (when perf paths change) `Performance Tests`.
 
 ## Triggering Workflows
 
@@ -155,6 +181,82 @@ Add these secrets in GitHub repository settings:
 - `E2E_DOCTOR_PASSWORD`: Test doctor account password
 - `E2E_ADMIN_EMAIL`: Test admin account email
 - `E2E_ADMIN_PASSWORD`: Test admin account password
+
+**AWS (OIDC)**:
+- `AWS_ROLE_ARN`: ARN of the IAM role assumed via GitHub OIDC (no long-lived keys)
+- `AWS_REGION`: AWS region (repository variable, defaults to `us-east-1`)
+
+### Scheduled Workflows: Required Secrets & Variables
+
+Scheduled workflows must never fail at `Set up job`. Each one starts with a
+guard job that checks its required secrets (via an `env` indirection, since
+`secrets` cannot be referenced directly in `if:`) and skips with an explanatory
+summary when they are missing.
+
+| Workflow | File | Required secrets | Required variables | Notes |
+|----------|------|------------------|--------------------|-------|
+| Code Quality | `code-quality.yml` | none | none | Runs on `ubuntu-latest`; no external credentials |
+| Performance Benchmarks | `performance-benchmarks.yml` | none | none | Skips benchmark comparison when no baseline artifact exists |
+| CDN Cache Report | `cdn-cache.yml` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID` | none | **Disabled** until CDN infrastructure exists |
+| Cost Report | `cost-report.yml` | `AWS_ROLE_ARN` | `AWS_REGION` | **Disabled** until cost/billing infrastructure exists |
+| Secrets Scanning (Gitleaks) | `secrets-scanning.yml` | none | none | Uses the pinned Gitleaks action; no token required |
+| Backup Verification | `backup-verify.yml` | `STAGING_MONGODB_URI` | none | Skips when no recent backup is found |
+| Secrets Rotation Check | `secrets-rotation-check.yml` | `AWS_ROLE_ARN` | `AWS_REGION` | Uses OIDC; checks staging and production roles |
+| MongoDB Backup | `backup.yml` | `SLACK_WEBHOOK_URL` (failure notification) | none | Backups run from `k8s/backup/` CronJobs; Actions verifies only |
+
+### AWS Authentication via OIDC
+
+AWS-authenticated workflows (Cost Report, Secrets Rotation Check, and any
+deployment job that needs AWS) use GitHub's OIDC provider instead of
+long-lived access keys:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+      aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+```
+
+The IAM role's trust policy must allow
+`token.actions.githubusercontent.com` with the repository and branch
+(`repo:health-watchers/health-watchers:ref:refs/heads/main`) as the subject.
+No `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets should exist.
+
+### Disabled Workflows
+
+The following workflows are disabled (via `if: false` on their jobs or by
+removing the `schedule` trigger) until the infrastructure they depend on
+exists. Re-enable them once the corresponding secrets and infrastructure are
+provisioned:
+
+- **CDN Cache weekly report** — no CDN in front of the app yet
+- **Cost Report** — no AWS billing export / cost allocation tags yet
+
+### Seed Data (Local & E2E Only)
+
+`npm run seed` (alias for `npm run seed --workspace=api`) populates a fresh
+database with synthetic data using Faker with a fixed seed. It is idempotent
+and refuses to run when `NODE_ENV=production`.
+
+Seeded credentials — **local development and E2E only, never production**:
+
+| Role | Email | Password |
+|------|-------|----------|
+| SUPER_ADMIN | `superadmin@example.test` | `SeedPassword123!` |
+| CLINIC_ADMIN | `clinicadmin@example.test` | `SeedPassword123!` |
+| DOCTOR | `doctor@example.test` | `SeedPassword123!` |
+| NURSE | `nurse@example.test` | `SeedPassword123!` |
+| ASSISTANT | `assistant@example.test` | `SeedPassword123!` |
+| READ_ONLY | `readonly@example.test` | `SeedPassword123!` |
+
+The E2E and preview workflows call `npm run seed` without a fallback, so a
+broken seed fails the job instead of silently running against an empty
+database.
 
 ### Environment Variables
 

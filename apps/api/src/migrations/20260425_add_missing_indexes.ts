@@ -40,6 +40,20 @@ export async function up(db: Db): Promise<void> {
   await db
     .collection('paymentrecords')
     .createIndex({ txHash: 1 }, { background: true, sparse: true, name: 'txHash_1_sparse' });
+  await db
+    .collection('paymentrecords')
+    .createIndex(
+      { idempotencyKey: 1 },
+      { background: true, unique: true, sparse: true, name: 'idempotencyKey_1_unique_sparse' }
+    );
+
+  // ── AuditLogModel indexes ───────────────────────────────────────────────────
+  await db
+    .collection('audit_logs')
+    .createIndex(
+      { clinicId: 1, createdAt: -1, _id: -1 },
+      { background: true, name: 'clinicId_1_createdAt_-1__id_-1' }
+    );
 
   // ── UserModel indexes ───────────────────────────────────────────────────────
   await db
@@ -78,6 +92,14 @@ export async function down(db: Db): Promise<void> {
   await db
     .collection('paymentrecords')
     .dropIndex('txHash_1_sparse')
+    .catch(() => {});
+  await db
+    .collection('paymentrecords')
+    .dropIndex('idempotencyKey_1_unique_sparse')
+    .catch(() => {});
+  await db
+    .collection('audit_logs')
+    .dropIndex('clinicId_1_createdAt_-1__id_-1')
     .catch(() => {});
   await db
     .collection('users')

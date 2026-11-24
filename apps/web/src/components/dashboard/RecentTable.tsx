@@ -11,6 +11,12 @@ interface RecentTableProps<T extends Record<string, unknown>> {
   columns: Column<T>[];
   rows: T[];
   emptyMessage: string;
+  /**
+   * Optional stable key resolver for each row. When provided, rows are keyed by
+   * this value so that newly prepended entries (e.g. arriving via WebSocket)
+   * mount/unmount correctly instead of being re-rendered by index.
+   */
+  getRowKey?: (row: T, index: number) => string | number;
 }
 
 export function RecentTable<T extends Record<string, unknown>>({
@@ -18,6 +24,7 @@ export function RecentTable<T extends Record<string, unknown>>({
   columns,
   rows,
   emptyMessage,
+  getRowKey,
 }: RecentTableProps<T>) {
   return (
     <Card padding="none">
@@ -43,7 +50,7 @@ export function RecentTable<T extends Record<string, unknown>>({
           </TableHead>
           <TableBody>
             {rows.map((row, i) => (
-              <TableRow key={i}>
+              <TableRow key={getRowKey ? getRowKey(row, i) : i}>
                 {columns.map((col) => (
                   <TableTd key={String(col.key)}>
                     {col.render ? col.render(row) : String(row[col.key as keyof T] ?? '—')}

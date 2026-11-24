@@ -2,8 +2,19 @@
  * Jest configuration used exclusively by Stryker for mutation testing.
  * Must be CJS (not ESM) so that Stryker's jest-runner can require() it.
  *
- * Mirrors jest.config.ts but omits coverage and runs only the auth module
- * tests to keep mutation runs fast and focused.
+ * Mirrors jest.config.ts but omits coverage and runs only the modules
+ * under mutation to keep runs fast and focused.
+ *
+ * Modules covered (matching stryker.config.json `mutate` array):
+ *   - auth/token.service
+ *   - auth/jwt-claim-validator
+ *   - services/token-denylist.service
+ *   - auth/services/backup-code.service
+ *   - utils/paginate
+ *   - utils/sanitize
+ *   - lib/encrypt
+ *   - modules/patients/duplicate-detection.service
+ *   - utils/app-error
  */
 const path = require('path');
 
@@ -27,7 +38,17 @@ module.exports = {
     path.resolve(__dirname, '../../node_modules'),
   ],
 
-  testMatch: ['**/modules/auth/**/*.test.ts', '**/services/token-denylist.service.test.ts'],
+  testMatch: [
+    // Auth module — original coverage
+    '**/modules/auth/**/*.test.ts',
+    '**/services/token-denylist.service.test.ts',
+    // Utility modules — newly added
+    '**/utils/paginate.test.ts',
+    '**/utils/sanitize.test.ts',
+    '**/lib/encrypt.test.ts',
+    '**/lib/encrypt.perf.test.ts',
+    '**/modules/patients/duplicate-detection.service.test.ts',
+  ],
 
   testPathIgnorePatterns: ['/node_modules/'],
 

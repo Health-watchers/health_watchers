@@ -13,7 +13,7 @@ export default async function Navbar() {
     { href: '/encounters', label: t('encounters') },
     { href: '/payments', label: t('payments') },
     { href: '/wallet', label: t('wallet') },
-    { href: '/settings', label: 'Settings' },
+    { href: '/settings', label: t('settings') },
   ];
 
   return <NavbarClient links={links} locale={locale} />;

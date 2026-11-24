@@ -1,0 +1,91 @@
+{
+  "title": "Cost Tracking",
+  "uid": "hw-cost-tracking",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5m",
+  "tags": ["health-watchers", "cost"],
+  "time": { "from": "now-7d", "to": "now" },
+  "description": "CPU/memory request totals are shown as a resource-allocation proxy. For actual dollar cost figures, deploy an OpenCost or Kubecost exporter and repoint these panels at its opencost_*/kubecost_* metrics — none is currently deployed in this repo, so treat this dashboard as capacity/allocation tracking until one is added.",
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "About This Dashboard",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "**CPU/memory request totals are shown as a resource-allocation proxy.** For actual dollar cost figures, deploy an OpenCost or Kubecost exporter and repoint these panels at its `opencost_*`/`kubecost_*` metrics — none is currently deployed in this repo, so treat this dashboard as capacity/allocation tracking until one is added.\n\nAll panels below also depend on **kube-state-metrics** being deployed and scraped by Prometheus (not currently a configured scrape job in `monitoring/prometheus.yml`)."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "CPU Requests Total by Namespace",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"}) by (namespace)",
+          "legendFormat": "{{ namespace }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory Requests Total by Namespace",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) by (namespace)",
+          "legendFormat": "{{ namespace }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "piechart",
+      "title": "CPU Request Allocation by Service",
+      "description": "Resource-allocation proxy, not a dollar cost breakdown. See dashboard description.",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "{{ container }}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "pie"
+      }
+    },
+    {
+      "id": 5,
+      "type": "piechart",
+      "title": "Memory Request Allocation by Service",
+      "description": "Resource-allocation proxy, not a dollar cost breakdown. See dashboard description.",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\", container=~\"api|stellar-service|web\"}) by (container)",
+          "legendFormat": "{{ container }}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "pie"
+      }
+    }
+  ]
+}

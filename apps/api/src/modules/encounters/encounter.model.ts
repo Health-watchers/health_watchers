@@ -1,5 +1,8 @@
 import { Schema, model, models } from 'mongoose';
 import { sanitizeText, sanitizeHtml } from '../../utils/sanitize';
+import { ENCOUNTER_STATUSES, type EncounterStatus } from '@health-watchers/types';
+import { baseSchema } from '@api/shared';
+import { logger } from '../../utils/logger';
 
 export interface VitalSigns {
   bloodPressure?: string;
@@ -65,7 +68,6 @@ export interface Attachment {
 }
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
-  clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
   type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
@@ -73,7 +75,7 @@ export interface Encounter {
   /** The specific template version used when creating this encounter. */
   templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
+  status: EncounterStatus;
   notes?: string;
   soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
@@ -84,7 +86,6 @@ export interface Encounter {
   aiSummary?: string;
   patientFriendlySummary?: string;
   patientNotes?: Array<{ note: string; createdAt: Date }>;
-  isActive?: boolean;
   billing?: BillingInfo;
   attachments?: Attachment[];
   requiresCoSignature?: boolean;
@@ -100,8 +101,6 @@ export interface Encounter {
   followUpCompleted?: boolean;
   followUpEncounterId?: Schema.Types.ObjectId;
   patientAdherence?: 'full' | 'partial' | 'none' | 'unknown';
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -202,7 +201,6 @@ const attachmentSchema = new Schema<Attachment>(
 const encounterSchema = new Schema<Encounter>(
   {
     patientId: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     encounteredBy: { type: Schema.Types.ObjectId, ref: 'User' },
     type: {
@@ -215,7 +213,7 @@ const encounterSchema = new Schema<Encounter>(
     chiefComplaint: { type: String, required: true },
     status: {
       type: String,
-      enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'],
+      enum: ENCOUNTER_STATUSES,
       default: 'open',
       index: true,
     },
@@ -237,7 +235,6 @@ const encounterSchema = new Schema<Encounter>(
       ],
       default: [],
     },
-    isActive: { type: Boolean, default: true, index: true },
     billing: { type: billingInfoSchema },
     attachments: { type: [attachmentSchema], default: [] },
     // Outcome tracking fields
@@ -253,6 +250,8 @@ const encounterSchema = new Schema<Encounter>(
   },
   { timestamps: true, versionKey: false }
 );
+
+encounterSchema.add(baseSchema);
 
 // Compound index for paginated clinic-scoped queries
 encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
@@ -273,21 +272,26 @@ const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
 
 encounterSchema.pre('save', function () {
+  // Cast to a record type so dynamic field access type-checks without `as any`.
+  const doc = this as unknown as Record<string, unknown>;
   for (const field of FREE_TEXT_FIELDS) {
-    const val = this[field];
-    if (val) (this as any)[field] = sanitizeText(val);
+    const val = doc[field];
+    if (val) doc[field] = sanitizeText(val);
   }
   // Sanitize SOAP rich-text HTML fields (strip dangerous tags/attrs)
   if (this.soapNotes) {
+    const soapNotes = this.soapNotes as unknown as Record<string, string | undefined>;
     for (const field of SOAP_FIELDS) {
-      const val = (this.soapNotes as any)[field];
-      if (val) (this.soapNotes as any)[field] = sanitizeHtml(val);
+      const val = soapNotes[field];
+      if (val) soapNotes[field] = sanitizeHtml(val);
     }
   }
 });
 
 encounterSchema.pre('findOneAndUpdate', function () {
-  const update = this.getUpdate() as any;
+  const update = this.getUpdate() as unknown as Record<string, unknown> & {
+    $set?: Record<string, unknown>;
+  };
   if (!update) return;
 
   for (const field of FREE_TEXT_FIELDS) {
@@ -311,3 +315,49 @@ encounterSchema.pre('findOneAndUpdate', function () {
 
 export const EncounterModel = (models.Encounter ||
   model<Encounter>('Encounter', encounterSchema)) as import('mongoose').Model<Encounter>;
+
+/**
+ * Re-sanitise all stored SOAP rich-text fields with the current `sanitizeHtml`
+ * implementation. Idempotent: fields whose sanitised value is unchanged are
+ * not written, so re-running the migration is a no-op.
+ *
+ * Returns the number of encounters that were actually updated.
+ */
+export async function resanitizeEncounterSoapNotes(): Promise<{
+  scanned: number;
+  updated: number;
+}> {
+  let scanned = 0;
+  let updated = 0;
+
+  const cursor = EncounterModel.find({
+    $or: SOAP_FIELDS.map((field) => ({ [`soapNotes.${field}`]: { $exists: true, $ne: null } })),
+  })
+    .select({ soapNotes: 1 })
+    .cursor();
+
+  for await (const doc of cursor) {
+    scanned += 1;
+    const soap = doc.soapNotes as SoapNotes | undefined;
+    if (!soap) continue;
+
+    const cleaned: SoapNotes = {};
+    let changed = false;
+
+    for (const field of SOAP_FIELDS) {
+      const val = soap[field];
+      if (typeof val !== 'string' || val.length === 0) continue;
+      const sanitized = sanitizeHtml(val);
+      cleaned[field] = sanitized;
+      if (sanitized !== val) changed = true;
+    }
+
+    if (!changed) continue;
+
+    await EncounterModel.updateOne({ _id: doc._id }, { $set: { soapNotes: cleaned } });
+    updated += 1;
+  }
+
+  logger.info({ scanned, updated }, 'Re-sanitised encounter SOAP notes');
+  return { scanned, updated };
+}

@@ -1,11 +1,16 @@
 import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
-import { defaultLocale, type Locale } from './i18n.config';
+import { enabledLocales, defaultLocale } from './i18n.config';
 
 export { locales, defaultLocale, type Locale } from './i18n.config';
 
+function isEnabledLocale(value: string | undefined): value is string {
+  return !!value && enabledLocales.includes(value);
+}
+
 export default getRequestConfig(async () => {
-  const locale = ((await cookies()).get('locale')?.value as Locale) ?? defaultLocale;
+  const cookieLocale = (await cookies()).get('locale')?.value;
+  const locale = isEnabledLocale(cookieLocale) ? cookieLocale : defaultLocale;
   return {
     locale,
     messages: (await import(`./messages/${locale}.json`)).default,

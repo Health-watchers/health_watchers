@@ -1,0 +1,68 @@
+# ============================================================
+# Escalation policies (#1257)
+#
+# Maps AlertManager routes (monitoring/alertmanager.yml) to on-call schedules
+# (rotation.yaml) and defines how an un-acknowledged page climbs the ladder.
+# ============================================================
+apiVersion: oncall/v1
+kind: EscalationPolicy
+metadata:
+  name: platform-critical
+  labels:
+    team: platform
+spec:
+  # Matches AlertManager receiver `pagerduty-critical`.
+  match:
+    severity: critical
+    team: platform
+  steps:
+    - notify: schedule/platform-primary
+      via: [push, sms, call]
+    - wait: 5m
+    - notify: schedule/platform-primary
+      via: [call]
+    - wait: 5m
+    - notify: schedule/platform-secondary
+      via: [push, call]
+    - wait: 10m
+    - notify: user/platform-lead
+      via: [call]
+    - notify: slack/#incidents
+      message: "Critical page unacknowledged for 20m — engineering lead engaged."
+---
+apiVersion: oncall/v1
+kind: EscalationPolicy
+metadata:
+  name: platform-warning
+  labels:
+    team: platform
+spec:
+  # Matches AlertManager receiver `email-alerts`.
+  match:
+    severity: warning
+    team: platform
+  steps:
+    - notify: schedule/platform-primary
+      via: [push, slack]
+    - wait: 30m
+    - notify: schedule/platform-primary
+      via: [push]
+    - notify: slack/#alerts-platform
+---
+apiVersion: oncall/v1
+kind: EscalationPolicy
+metadata:
+  name: security-critical
+  labels:
+    team: security
+spec:
+  match:
+    alertname: "StellarKeypairDecryptionFailure|UnauthorisedAccess|.*Breach.*"
+  steps:
+    - notify: schedule/security-oncall
+      via: [push, sms, call]
+    - notify: schedule/platform-primary
+      via: [push]
+    - wait: 5m
+    - notify: user/security-lead
+      via: [call]

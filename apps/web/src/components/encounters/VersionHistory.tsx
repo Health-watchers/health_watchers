@@ -45,7 +45,7 @@ export function VersionHistory({ encounterId, versions, onVersionRestore }: Vers
 
   if (!versions || versions.length === 0) {
     return (
-      <div className="text-center py-8">
+      <div className="py-8 text-center">
         <p className="text-sm text-gray-500">No version history yet.</p>
       </div>
     );
@@ -56,7 +56,7 @@ export function VersionHistory({ encounterId, versions, onVersionRestore }: Vers
       {versions.map((version, index) => (
         <div
           key={version.id}
-          className="rounded-md border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors"
+          className="rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
         >
           <button
             onClick={() => setExpandedId(expandedId === version.id ? null : version.id)}
@@ -64,29 +64,29 @@ export function VersionHistory({ encounterId, versions, onVersionRestore }: Vers
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="mb-1 flex items-center gap-2">
                   <p className="text-sm font-medium text-gray-900">{version.author}</p>
-                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                  <span className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
                     v{versions.length - index}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500">{formatDate(version.updatedAt)}</p>
               </div>
-              <span className="text-gray-400 text-lg">{expandedId === version.id ? '▼' : '▶'}</span>
+              <span className="text-lg text-gray-400">{expandedId === version.id ? '▼' : '▶'}</span>
             </div>
           </button>
 
           {expandedId === version.id && (
             <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
               <div>
-                <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Summary</p>
+                <p className="mb-1 text-xs font-semibold uppercase text-gray-600">Summary</p>
                 <p className="text-sm text-gray-700">{version.summary}</p>
               </div>
 
               {version.changes && version.changes.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Changes</p>
-                  <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                  <p className="mb-1 text-xs font-semibold uppercase text-gray-600">Changes</p>
+                  <ul className="list-inside list-disc space-y-1 text-sm text-gray-700">
                     {version.changes.map((change, idx) => (
                       <li key={idx}>{change}</li>
                     ))}

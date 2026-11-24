@@ -4,7 +4,10 @@ const objectIdRegex = /^[a-f\d]{24}$/i;
 
 export const createPaymentIntentSchema = z.object({
   patientId: z.string().regex(objectIdRegex, 'Invalid patientId').optional(),
-  amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'amount must be a positive numeric string'),
+  amount: z
+    .string()
+    .regex(/^\d+(\.\d{1,7})?$/, 'amount must be a positive numeric string')
+    .refine((v) => Number(v) > 0, 'amount must be a positive numeric string'),
   destination: z.string().min(1, 'destination is required'),
   memo: z.string().optional(),
   /** 'XLM' | 'USDC' — defaults to 'XLM' */

@@ -67,7 +67,11 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
           stellarStreamHealth.set(0);
           logger.error({ err }, 'Payment stream error');
           if (closeHandle) {
-            try { closeHandle(); } catch { /* ignore */ }
+            try {
+              closeHandle();
+            } catch {
+              /* ignore */
+            }
             closeHandle = undefined;
           }
           scheduleReconnect();
@@ -88,7 +92,10 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
 
     reconnectAttempts += 1;
     const delay = RECONNECT_DELAY_MS * Math.pow(2, Math.min(reconnectAttempts - 1, 5));
-    logger.info({ attempt: reconnectAttempts, delayMs: delay }, 'Scheduling payment stream reconnect');
+    logger.info(
+      { attempt: reconnectAttempts, delayMs: delay },
+      'Scheduling payment stream reconnect'
+    );
     setTimeout(connect, delay);
   };
 
@@ -178,7 +185,13 @@ export async function notifyApiOfPayment(payment: {
       if (!response.ok) {
         const text = await response.text().catch(() => '');
         logger.warn(
-          { memo: payment.memo, txHash: payment.transactionHash, status: response.status, body: text, attempt },
+          {
+            memo: payment.memo,
+            txHash: payment.transactionHash,
+            status: response.status,
+            body: text,
+            attempt,
+          },
           'API payment notification returned non-2xx'
         );
         // Don't retry 4xx — they are permanent errors (e.g. no matching intent)

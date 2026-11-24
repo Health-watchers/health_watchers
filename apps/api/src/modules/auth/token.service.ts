@@ -77,6 +77,7 @@ export function signTempToken(userId: string): string {
 export function verifyAccessToken(token: string): (TokenPayload & { jti?: string }) | null {
   try {
     const decoded = jwt.verify(token, config.jwt.accessTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -120,6 +121,7 @@ export interface RefreshTokenPayload extends TokenPayload {
 export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
   try {
     const decoded = jwt.verify(token, config.jwt.refreshTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;
@@ -139,6 +141,7 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
 export function verifyTempToken(token: string): string | null {
   try {
     const decoded = jwt.verify(token, config.jwt.tempTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as { userId: string };

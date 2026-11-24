@@ -42,6 +42,7 @@ function signAccessToken(payload: TokenPayload): string {
 function verifyAccessToken(token: string): TokenPayload | null {
   try {
     const decoded = jwt.verify(token, mockConfig.jwt.accessTokenSecret, {
+      algorithms: ['HS256'],
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     }) as JwtPayload;

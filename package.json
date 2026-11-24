@@ -1,9 +1,14 @@
 {
   "name": "health-watchers-monorepo",
   "private": true,
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "sdks/*"
   ],
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
@@ -11,14 +16,63 @@
     "husky": "^9.0.0",
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.6.14",
-    "turbo": "latest"
+    "turbo": "2.3.3"
   },
   "scripts": {
     "prepare": "husky",
-    "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "turbo run dev --parallel",
+    "dev:infra": "docker compose --profile core up -d",
+    "clean": "rm -rf dist .next .turbo coverage apps/*/dist apps/*/.next apps/*/.turbo apps/*/coverage packages/*/dist packages/*/.turbo packages/*/coverage",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "docs:diagrams": "mkdir -p docs/diagrams/export && for f in docs/diagrams/*.mmd; do npx --yes @mermaid-js/mermaid-cli -i \"$f\" -o \"docs/diagrams/export/$(basename \"$f\" .mmd).svg\"; done",
+    "audit:secrets": "ts-node scripts/audit-secrets.ts",
+    "audit:secrets:staged": "ts-node scripts/audit-secrets.ts -- --mode=staged",
+    "audit:secrets:full": "ts-node scripts/audit-secrets.ts -- --mode=full",
+    "audit:secrets:since-main": "ts-node scripts/audit-secrets.ts -- --mode=commits",
+    "i18n:check": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' scripts/check-translations.ts",
+    "i18n:sync": "ts-node --transpile-only -O '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' scripts/sync-translations.ts",
+    "setup:hooks": "bash scripts/setup-git-hooks.sh",
+    "security:scan": "bash scripts/scan-dependencies.sh",
+    "security:track": "node scripts/track-vulnerabilities.js update",
+    "security:report": "node scripts/track-vulnerabilities.js report",
+    "security:full": "npm run security:scan && npm run security:track && npm run security:report",
+    "test:contract:consumer": "npm run test:contract --workspace=apps/web",
+    "test:contract:provider": "npm run test:contract --workspace=apps/api",
+    "seed": "npm run seed --workspace=api"
+  },
+  "overrides": {
+    "ip": "^2.0.1",
+    "semver": "^7.5.4",
+    "word-wrap": "^1.2.4",
+    "tough-cookie": "^4.1.3",
+    "@babel/traverse": "^7.23.2",
+    "axios": "^1.6.0",
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8",
+    "ws": "^8.17.1",
+    "cross-spawn": "^7.0.6",
+    "tar": "^6.2.1",
+    "node-fetch": "^2.7.0",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "overridesJustification": {
+    "ip": "CVE-2023-42282 / CVE-2024-29415: SSRF in ip <2.0.1; pinned to patched 2.x.",
+    "semver": "CVE-2022-25883: ReDoS in semver <7.5.2; pinned to patched 7.x.",
+    "word-wrap": "CVE-2023-26115: ReDoS in word-wrap <1.2.4; pinned to patched 1.2.4.",
+    "tough-cookie": "CVE-2023-26136: prototype pollution in tough-cookie <4.1.3; pinned to patched 4.x.",
+    "@babel/traverse": "CVE-2023-45133: arbitrary code execution in @babel/traverse <7.23.2; pinned to patched 7.x.",
+    "axios": "CVE-2023-45857 / CVE-2025-27152: SSRF and credential leakage in axios <1.6.0; pinned to patched 1.x.",
+    "braces": "CVE-2024-4068: uncontrolled resource consumption in braces <3.0.3; pinned to patched 3.x.",
+    "micromatch": "CVE-2024-4067: ReDoS in micromatch <4.0.8; pinned to patched 4.x.",
+    "ws": "CVE-2024-37890: DoS in ws <8.17.1; pinned to patched 8.x.",
+    "cross-spawn": "CVE-2024-21538: ReDoS in cross-spawn <7.0.5; pinned to patched 7.x.",
+    "tar": "CVE-2024-28863: DoS in tar <6.2.1; pinned to patched 6.x.",
+    "node-fetch": "CVE-2022-0235: exposure of sensitive information in node-fetch <2.6.7; pinned to patched 2.x.",
+    "jsonwebtoken": "CVE-2022-23529 / CVE-2022-23540: insecure verification in jsonwebtoken <9.0.0; pinned to patched 9.x."
   }
 }

@@ -12,11 +12,21 @@ alerting:
             - 'alertmanager:9093'
 
 rule_files:
+  - 'recording-rules.yml'
   - 'alerts.yml'
+  - 'alerts-application.yml'
   - 'alerts-payments.yml'
   - 'alerts-security.yml'
   - 'alerts-business.yml'
   - 'alerts-database-replication.yml'
+  - 'alerts-database-pool.yml'
+  - 'alerts-secrets.yml'
+  - 'alerts-disaster-recovery.yml'
+  - 'alerts-backup.yml'
+  - 'alerts-cost.yml'
+  - 'alerts-cdn.yml'
+  - 'alerts-stellar.yml'
+  - 'alerts-certificates.yml'
 
 scrape_configs:
   # Health Watchers API
@@ -76,3 +86,14 @@ scrape_configs:
         labels:
           component: 'infrastructure'
     honor_labels: true
+
+  # cert-manager controller (certificate expiry & readiness metrics)
+  - job_name: 'cert-manager'
+    static_configs:
+      - targets: ['cert-manager:9402']
+        labels:
+          component: 'certificates'
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance

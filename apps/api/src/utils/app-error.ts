@@ -41,31 +41,70 @@ export class AppError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 
+  // ── Static factory helpers ──────────────────────────────────────────────────
+  // For richer, domain-specific error messages use the `Errors` namespace in
+  // `utils/errors.ts` (issue #1064). These factories remain for convenience
+  // and backward compatibility.
+
   static badRequest(message: string, context?: Record<string, unknown>): AppError {
-    return new AppError(message, 400, { severity: 'low', category: 'validation', context, code: ApiErrorCode.BAD_REQUEST });
+    return new AppError(message, 400, {
+      severity: 'low',
+      category: 'validation',
+      context,
+      code: ApiErrorCode.BAD_REQUEST,
+    });
   }
 
-  static unauthorized(message = 'Unauthorized'): AppError {
-    return new AppError(message, 401, { severity: 'low', category: 'authentication', code: ApiErrorCode.UNAUTHORIZED });
+  static unauthorized(
+    message = 'Authentication required. Please log in to access this resource.'
+  ): AppError {
+    return new AppError(message, 401, {
+      severity: 'low',
+      category: 'authentication',
+      code: ApiErrorCode.UNAUTHORIZED,
+    });
   }
 
-  static forbidden(message = 'Forbidden'): AppError {
-    return new AppError(message, 403, { severity: 'medium', category: 'authorization', code: ApiErrorCode.FORBIDDEN });
+  static forbidden(
+    message = 'You do not have permission to perform this action. Contact your administrator if you believe this is a mistake.'
+  ): AppError {
+    return new AppError(message, 403, {
+      severity: 'medium',
+      category: 'authorization',
+      code: ApiErrorCode.FORBIDDEN,
+    });
   }
 
   static notFound(resource: string): AppError {
-    return new AppError(`${resource} not found`, 404, { severity: 'low', category: 'not_found', code: ApiErrorCode.NOT_FOUND });
+    return new AppError(
+      `${resource} was not found. Please verify the ID and ensure you have access to this resource.`,
+      404,
+      { severity: 'low', category: 'not_found', code: ApiErrorCode.NOT_FOUND }
+    );
   }
 
   static conflict(message: string): AppError {
-    return new AppError(message, 409, { severity: 'low', category: 'conflict', code: ApiErrorCode.CONFLICT });
+    return new AppError(message, 409, {
+      severity: 'low',
+      category: 'conflict',
+      code: ApiErrorCode.CONFLICT,
+    });
   }
 
-  static tooManyRequests(message = 'Too many requests'): AppError {
-    return new AppError(message, 429, { severity: 'medium', category: 'rate_limit', code: ApiErrorCode.RATE_LIMITED });
+  static tooManyRequests(
+    message = 'Too many requests. Please slow down and try again shortly.'
+  ): AppError {
+    return new AppError(message, 429, {
+      severity: 'medium',
+      category: 'rate_limit',
+      code: ApiErrorCode.RATE_LIMITED,
+    });
   }
 
-  static internal(message = 'Internal server error', context?: Record<string, unknown>): AppError {
+  static internal(
+    message = 'An unexpected error occurred. Our team has been notified. Please try again or contact support if the problem persists.',
+    context?: Record<string, unknown>
+  ): AppError {
     return new AppError(message, 500, {
       severity: 'high',
       category: 'internal',
@@ -76,6 +115,10 @@ export class AppError extends Error {
   }
 
   static external(message: string, context?: Record<string, unknown>): AppError {
-    return new AppError(message, 502, { severity: 'high', category: 'external', context });
+    return new AppError(message, 502, {
+      severity: 'high',
+      category: 'external',
+      context,
+    });
   }
 }

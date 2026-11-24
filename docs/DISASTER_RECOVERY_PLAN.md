@@ -1,195 +1,261 @@
-# Disaster Recovery Plan - Health Watchers
+# Disaster Recovery Plan
 
-## Executive Summary
+## Overview
 
-This document outlines the Disaster Recovery (DR) procedures for the Health Watchers healthcare management platform. It defines Recovery Time Objectives (RTO), Recovery Point Objectives (RPO), backup strategies, and recovery procedures.
+This document describes the disaster recovery (DR) strategy for the platform, including multi-region failover procedures, recovery targets, and validation steps. It is intended for on-call engineers, SREs, and incident commanders responding to a regional outage or data-integrity incident.
 
-## 1. Recovery Objectives
+For data residency requirements and the multi-region architecture, see the deployment guide. This document focuses on the operational runbook for failover and failback.
 
-### 1.1 Recovery Time Objective (RTO)
+---
 
-| Component | RTO | Priority |
-|-----------|-----|----------|
-| API Server | 15 minutes | Critical |
-| Web Application | 30 minutes | High |
-| MongoDB Database | 30 minutes | Critical |
-| Redis Cache | 5 minutes | Medium |
-| Stellar Service | 60 minutes | Medium |
+## Recovery Targets
 
-### 1.2 Recovery Point Objective (RPO)
+| Metric | Target | Description |
+|--------|--------|-------------|
+| **RPO** (Recovery Point Objective) | **5 minutes** | Maximum acceptable data loss measured in time. Cross-region replication lag must stay under this threshold. |
+| **RTO** (Recovery Time Objective) | **15 minutes** | Maximum acceptable time to restore service in the secondary region after a declared disaster. |
 
-| Component | RPO | Backup Frequency |
-|-----------|-----|------------------|
-| MongoDB (Production) | 5 minutes | Every 5 minutes (incremental) |
-| MongoDB (Staging) | 1 hour | Daily full backup |
-| Application Code | N/A | On every commit (Git) |
-| Configuration | 30 minutes | On every deploy |
-| Secrets | Real-time | Centralized secret manager |
+These targets apply to the production environment. Staging and development environments have no formal DR targets.
 
-## 2. Backup Strategy
+---
 
-### 2.1 Database Backups
+## Region Definitions
 
-**MongoDB Production**
-- Type: Continuous incremental backups with daily full backups
-- Retention: 7 full backups (7 days), continuous incremental
-- Storage: AWS S3 (cross-region replication)
-- Frequency: Daily full + hourly incremental
+| Role | Region | Purpose |
+|------|--------|---------|
+| **Primary** | `us-east-1` | Serves all production traffic under normal operation. Authoritative write region. |
+| **Secondary (DR)** | `us-west-2` | Warm standby. Receives replicated data continuously. Promoted to primary during a failover. |
 
-**Backup Command:**
+Both regions are within the United States to satisfy patient data residency requirements. No patient data is replicated outside the US.
+
+---
+
+## Prerequisites
+
+Before executing any failover, confirm the following tooling is available and configured:
+
+- `scripts/dr/failover.sh` — orchestrates cross-region promotion
+- `scripts/dr/dr-drill.sh` — runs scheduled DR drills
+- `scripts/dr/rpo-monitor.sh` — monitors replication lag against the RPO target
+- `scripts/dr/rto-test.sh` — measures end-to-end recovery time
+- `scripts/dr/verify-data-integrity.sh` — validates data consistency post-failover
+
+All scripts require AWS credentials with cross-region permissions and access to the DR configuration (see `scripts/dr/README.md`).
+
+---
+
+## Monitoring and Pre-Failover Checks
+
+### Continuous RPO Monitoring
+
+`rpo-monitor.sh` runs continuously and alerts when replication lag approaches the 5-minute RPO. Before declaring a disaster, check current lag:
+
 ```bash
-mongodump --uri="mongodb://connection-string" --archive="health-watchers-$(date +%Y%m%d-%H%M%S).archive"
+./scripts/dr/rpo-monitor.sh --status
 ```
 
-**Restore Command:**
+If the primary region is degraded but reachable, allow replication to drain before failover to minimize data loss. If the primary is unreachable, proceed directly to failover — expect data loss up to the last confirmed replication point.
+
+### Disaster Declaration Criteria
+
+Declare a disaster and initiate failover when **any** of the following is true:
+
+- Primary region is unavailable (AWS regional outage) for more than 5 minutes with no ETA.
+- Primary database is corrupted or unrecoverable.
+- A security incident requires isolating the primary region.
+- Sustained replication lag indicates the secondary cannot meet RPO and the primary is at risk.
+
+The incident commander makes the declaration. Document the decision and timestamp in the incident channel.
+
+---
+
+## Cross-Region Failover Procedure
+
+### Step 1 — Declare and Communicate
+
+1. Incident commander declares the disaster in the incident channel (`#incident-response`).
+2. Notify stakeholders using the communication template below.
+3. Assign a scribe to log every action with timestamps.
+
+### Step 2 — Freeze and Snapshot
+
+If the primary region is reachable:
+
 ```bash
-mongorestore --archive="health-watchers-backup.archive" --drop
+# Stop writes to prevent divergence (put app in maintenance mode)
+./scripts/dr/failover.sh --freeze-primary
 ```
 
-### 2.2 Application Code
+If the primary is unreachable, skip this step.
 
-- Primary: Git repository with protected main branch
-- Secondary: Automated tags on each production deploy
-- Retention: All commits indefinitely
+### Step 3 — Execute Failover to DR Region
 
-### 2.3 Configuration Backups
+Promote the secondary region to primary:
 
-- EBS snapshots for instance configurations
-- Version control for IaC (Helm, Kubernetes manifests)
-- AWS Secrets Manager for sensitive data
-
-### 2.4 Verification
-
-All backups are verified automatically:
 ```bash
-npm run backup:verify --workspace=api
+./scripts/dr/failover.sh --to dr
 ```
 
-Verification includes:
-- Backup file integrity check
-- Size validation
-- Recovery test on staging environment
+This script performs, in order:
 
-## 3. Failure Scenarios & Recovery Procedures
+1. Verifies the secondary region's health and replication state.
+2. Promotes the secondary database to a writable primary.
+3. Updates DNS / traffic routing to direct traffic to the secondary region.
+4. Scales up application capacity in the secondary region.
+5. Runs a smoke test against the promoted region.
 
-### 3.1 Database Corruption (RTO: 30 minutes)
+Monitor output for errors. If the script fails partway, do **not** re-run blindly — follow the rollback guidance printed by the script and escalate.
 
-**Detection:**
-- MongoDB replication lag exceeds 10 seconds
-- Backup integrity checks fail
-- Data consistency errors in logs
+### Step 4 — Verify Data Integrity
 
-**Recovery Steps:**
-1. Stop all write operations: `kubectl scale deployment api --replicas=0`
-2. List available backups: `aws s3 ls s3://backups/mongodb/`
-3. Restore from latest clean backup: `mongorestore --archive=latest.archive --drop`
-4. Run database integrity checks
-5. Resume API: `kubectl scale deployment api --replicas=3`
-6. Validate application health checks pass
+After promotion, validate data consistency:
 
-### 3.2 API Server Failure (RTO: 15 minutes)
+```bash
+./scripts/dr/verify-data-integrity.sh --region us-west-2
+```
 
-**Detection:**
-- Health check endpoint returns 503
-- Pod crashes or restarts repeatedly
-- High error rate (>5% of requests)
+Confirm:
+- Row counts and checksums match the last known-good snapshot within expected replication lag.
+- No orphaned or partially replicated records.
+- Critical tables (patient records, audit logs) pass referential integrity checks.
 
-**Recovery Steps:**
-1. Check pod status: `kubectl get pods -l app=api`
-2. View logs: `kubectl logs deployment/api --tail=200`
-3. Trigger rollback: `kubectl rollout undo deployment/api`
-4. Or redeploy: `helm upgrade health-watchers ./helm/health-watchers`
-5. Verify endpoints: `curl https://api.health-watchers.app/health`
+### Step 5 — Measure RTO
 
-### 3.3 Complete Data Center Failure (RTO: 60 minutes)
+Record actual recovery time:
 
-**Detection:**
-- All services unreachable
-- Regional AWS outage confirmed
+```bash
+./scripts/dr/rto-test.sh --report
+```
 
-**Recovery Steps:**
-1. Activate secondary region
-2. Restore databases from cross-region backup
-3. Deploy applications to secondary region
-4. Update DNS/Route53 to secondary region
-5. Verify critical paths functioning
-6. Communicate outage to users
+Compare against the 15-minute RTO target and note any deviation in the incident record.
 
-### 3.4 Secrets Compromise (RTO: 5 minutes)
+### Step 6 — Post-Failover Validation
 
-**Detection:**
-- Unauthorized access logs detected
-- Secret exposure in logs/git history
+Complete the following checklist before declaring service restored:
 
-**Recovery Steps:**
-1. Rotate all secrets in AWS Secrets Manager
-2. Redeploy all pods to pick up new secrets: `kubectl rollout restart deployment/api`
-3. Update external integrations (Stellar, email services)
-4. Audit access logs and revoke compromised tokens
-5. Review commit history for accidental secret exposure
+- [ ] Health checks green in the promoted region.
+- [ ] Authentication and authorization functioning.
+- [ ] Read and write paths verified with synthetic transactions.
+- [ ] Audit logging confirmed writing to the new primary.
+- [ ] Backups re-enabled and pointed at the new primary.
+- [ ] Monitoring and alerting re-targeted to the promoted region.
+- [ ] `rpo-monitor.sh` reconfigured to track replication from the new primary to the (now standby) old region.
+- [ ] Data integrity verification passed.
 
-## 4. Disaster Recovery Tests
+### Step 7 — Communication
 
-### 4.1 Monthly Test Schedule
+Send status updates at declaration, failover start, failover completion, and service restoration. Use the template:
 
-- **Week 1:** Database restoration test
-- **Week 2:** API failover test
-- **Week 3:** Configuration rollback test
-- **Week 4:** Full application restore test
+```
+[DR INCIDENT] <severity>
+Status: <Investigating | Failover in progress | Service restored>
+Primary region: us-east-1 (DOWN) → us-west-2 (ACTIVE)
+Impact: <description>
+RPO status: <within target | exceeded by X min>
+RTO status: <within target | exceeded by X min>
+Next update: <time>
+```
 
-### 4.2 Annual Comprehensive Test
+---
 
-Complete test of all systems simulating total failure:
-- Restore database from archive
-- Deploy all services from scratch
-- Run full test suite
-- Validate data integrity
-- Test failover procedures
+## Failback Procedure
 
-### 4.3 Test Results
+Failback returns traffic to the original primary region once it is healthy. Failback is a planned operation and should **not** be rushed during an active incident.
 
-Results are tracked in `/docs/disaster-recovery-tests.log`
+### Preconditions
 
-## 5. Runbooks
+- Original primary region is fully restored and stable for at least 1 hour.
+- Replication from the current primary (secondary) back to the original primary is established and lag is under RPO.
+- Change advisory approval obtained.
 
-Detailed runbooks for common scenarios:
-- [MongoDB Primary Down](../monitoring/runbooks/MONGODB_PRIMARY_DOWN.md)
-- [API Down](../monitoring/runbooks/API_DOWN.md)
-- [Replication Lag](../monitoring/runbooks/MONGODB_REPLICATION_LAG.md)
+### Steps
 
-## 6. Communication Plan
+1. Announce the planned failback window to stakeholders.
+2. Confirm reverse replication is healthy:
+   ```bash
+   ./scripts/dr/rpo-monitor.sh --direction reverse --status
+   ```
+3. Execute failback:
+   ```bash
+   ./scripts/dr/failover.sh --failback
+   ```
+   This reverses the promotion: demotes the current primary, promotes the original region, and re-points traffic.
+4. Verify data integrity in the restored primary:
+   ```bash
+   ./scripts/dr/verify-data-integrity.sh --region us-east-1
+   ```
+5. Run post-failover validation checklist (Step 6 above) against the restored primary.
+6. Re-establish forward replication to the secondary region.
+7. Confirm `rpo-monitor.sh` shows healthy forward replication.
+8. Close the incident and schedule a post-incident review.
 
-**RTO Exceeded:**
-- Alert PagerDuty → notify on-call engineer
-- Update status page: https://status.health-watchers.app
-- Email notification to stakeholders
+---
 
-**Data Loss Risk:**
-- Escalate to VP Engineering
-- Consider breach notification requirements
-- Prepare customer communication
+## DR Drills
 
-**Recovery Success:**
-- Post-incident review within 24 hours
-- Update runbooks based on learnings
-- Share lessons with team
+Regular drills validate that RTO/RPO targets are achievable and that the runbook is current.
 
-## 7. Responsibilities
+### Monthly Drills
+
+```bash
+./scripts/dr/dr-drill.sh --scope monthly
+```
+
+Monthly drills cover:
+- Replication lag verification against RPO.
+- Read-only failover simulation (no traffic cutover).
+- Validation of backup restore in the secondary region.
+
+### Quarterly Drills
+
+```bash
+./scripts/dr/dr-drill.sh --scope quarterly
+```
+
+Quarterly drills are full-scale and include:
+- Complete failover to the secondary region with traffic cutover.
+- Full RTO measurement via `rto-test.sh`.
+- Data integrity verification via `verify-data-integrity.sh`.
+- Failback to the primary region.
+- Review and update of this runbook based on findings.
+
+Document drill results and any runbook gaps. File follow-up issues for any target misses.
+
+---
+
+## Roles and Responsibilities
 
 | Role | Responsibility |
-|------|-----------------|
-| On-Call Engineer | Execute recovery procedures |
-| Platform Lead | Oversee recovery, communicate status |
-| DevOps Lead | Manage infrastructure recovery |
-| DBA | Database recovery and validation |
-| Security Lead | Investigate compromise scenarios |
+|------|----------------|
+| Incident Commander | Declares disaster, approves failover/failback, owns communication. |
+| DR Operator | Executes scripts, monitors output, reports status. |
+| Scribe | Logs all actions and timestamps. |
+| Data Integrity Lead | Runs and interprets integrity verification. |
+| Communications Lead | Sends stakeholder updates. |
 
-## 8. Change Management
+---
 
-DR plan reviews:
-- Quarterly: Full plan review
-- Post-incident: Updates based on findings
-- On-demand: After infrastructure changes
+## Appendix: Quick Reference
 
-Latest review: [DATE]
-Next review: [DATE + 3 MONTHS]
+```bash
+# Check replication lag / RPO status
+./scripts/dr/rpo-monitor.sh --status
+
+# Freeze primary writes (if reachable)
+./scripts/dr/failover.sh --freeze-primary
+
+# Fail over to DR region
+./scripts/dr/failover.sh --to dr
+
+# Verify data integrity in promoted region
+./scripts/dr/verify-data-integrity.sh --region us-west-2
+
+# Measure RTO
+./scripts/dr/rto-test.sh --report
+
+# Fail back to original primary
+./scripts/dr/failover.sh --failback
+
+# Run drills
+./scripts/dr/dr-drill.sh --scope monthly
+./scripts/dr/dr-drill.sh --scope quarterly

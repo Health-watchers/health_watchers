@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface PopulationHealthInsight extends Document {
   clinicId: mongoose.Types.ObjectId;
@@ -66,6 +67,8 @@ const populationHealthSchema = new Schema<PopulationHealthInsight>(
   },
   { timestamps: true }
 );
+
+populationHealthSchema.add(baseSchema);
 
 export const PopulationHealthModel = mongoose.model<PopulationHealthInsight>(
   'PopulationHealth',

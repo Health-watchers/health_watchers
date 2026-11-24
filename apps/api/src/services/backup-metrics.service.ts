@@ -48,6 +48,24 @@ export const backupOrphanedRecords = new Gauge({
   registers: [register],
 });
 
+export const backupJobLastSuccessTimestamp = new Gauge({
+  name: 'backup_job_last_success_timestamp',
+  help: 'Timestamp of last successful daily backup job (Unix epoch seconds)',
+  registers: [register],
+});
+
+export const backupJobStatus = new Gauge({
+  name: 'backup_job_status',
+  help: 'Status of last daily backup job (1=success, 0=failure)',
+  registers: [register],
+});
+
+export const backupJobLastRunTimestamp = new Gauge({
+  name: 'backup_job_last_run_timestamp',
+  help: 'Timestamp of last daily backup job run, success or failure (Unix epoch seconds)',
+  registers: [register],
+});
+
 // ── Counters ──────────────────────────────────────────────────────────────────
 
 export const backupVerificationAttempts = new Counter({
@@ -126,6 +144,15 @@ export async function loadBackupMetricsFromFile(filePath: string): Promise<void>
         case 'backup_extracted_size_bytes':
           backupExtractedSizeBytes.set(numValue);
           break;
+        case 'backup_job_last_success_timestamp':
+          backupJobLastSuccessTimestamp.set(numValue);
+          break;
+        case 'backup_job_status':
+          backupJobStatus.set(numValue);
+          break;
+        case 'backup_job_last_run_timestamp':
+          backupJobLastRunTimestamp.set(numValue);
+          break;
       }
     }
 
@@ -162,6 +189,21 @@ export function recordVerificationFailure(durationSeconds: number): void {
 }
 
 /**
+ * Record the outcome of a daily backup job run.
+ * Updates the last-run timestamp unconditionally and, on success, the
+ * last-success timestamp. The status gauge reflects the latest outcome so
+ * Prometheus can alert when the daily backup job fails.
+ */
+export function recordBackupJobResult(success: boolean, runTimestamp?: number): void {
+  const nowSeconds = runTimestamp ?? Math.floor(Date.now() / 1000);
+  backupJobLastRunTimestamp.set(nowSeconds);
+  backupJobStatus.set(success ? 1 : 0);
+  if (success) {
+    backupJobLastSuccessTimestamp.set(nowSeconds);
+  }
+}
+
+/**
  * Record backup download duration
  */
 export function recordDownloadDuration(durationSeconds: number): void {
@@ -192,11 +234,19 @@ export function updateOrphanedRecords(collection: string, count: number): void {
 }
 
 /**
+ * Synchronously read an unlabeled gauge's current value.
+ * prom-client's public get() is async, so we use the internal _getValue().
+ */
+function gaugeValue(metric: Gauge<string>): number {
+  return (metric as unknown as { _getValue(labels: Record<string, string>): number })._getValue({});
+}
+
+/**
  * Check if backup verification is stale (hasn't run in 8 days)
  */
 export function isBackupVerificationStale(thresholdDays: number = 8): boolean {
-  const lastVerified = backupLastVerifiedTimestamp.get();
-  if (!lastVerified || typeof lastVerified !== 'number') {
+  const lastVerified = gaugeValue(backupLastVerifiedTimestamp);
+  if (!lastVerified) {
     return true; // Never verified
   }
 
@@ -217,10 +267,11 @@ export function getBackupVerificationStatus(): {
   isStale: boolean;
   daysSinceVerification: number | null;
 } {
-  const lastVerifiedValue = backupLastVerifiedTimestamp.get();
-  const statusValue = backupVerificationStatus.get();
+  // prom-client's get() returns { value } for gauges, not a bare number
+  const lastVerifiedValue = gaugeValue(backupLastVerifiedTimestamp);
+  const statusValue = gaugeValue(backupVerificationStatus);
 
-  if (!lastVerifiedValue || typeof lastVerifiedValue !== 'number') {
+  if (!lastVerifiedValue) {
     return {
       lastVerified: null,
       status: 'unknown',
@@ -238,6 +289,59 @@ export function getBackupVerificationStatus(): {
     status: (statusValue as any) === 1 ? 'success' : 'failure',
     isStale: daysSinceVerification > 8,
     daysSinceVerification,
+  };
+}
+
+/**
+ * Check if the daily backup job is stale (no successful run within threshold).
+ * Defaults to 26 hours so a single missed daily run triggers an alert.
+ */
+export function isBackupJobStale(thresholdHours: number = 26): boolean {
+  const lastSuccess = gaugeValue(backupJobLastSuccessTimestamp);
+  if (!lastSuccess) {
+    return true; // Never succeeded
+  }
+
+  const hoursSinceSuccess = (Date.now() / 1000 - lastSuccess) / (60 * 60);
+  return hoursSinceSuccess > thresholdHours;
+}
+
+/**
+ * Get daily backup job status summary
+ */
+export function getBackupJobStatus(): {
+  lastSuccess: Date | null;
+  lastRun: Date | null;
+  status: 'success' | 'failure' | 'unknown';
+  isStale: boolean;
+  hoursSinceSuccess: number | null;
+} {
+  const lastSuccessValue = gaugeValue(backupJobLastSuccessTimestamp);
+  const lastRunValue = gaugeValue(backupJobLastRunTimestamp);
+  const statusValue = gaugeValue(backupJobStatus);
+
+  if (!lastRunValue) {
+    return {
+      lastSuccess: null,
+      lastRun: null,
+      status: 'unknown',
+      isStale: true,
+      hoursSinceSuccess: null,
+    };
+  }
+
+  const lastSuccess = lastSuccessValue ? new Date(lastSuccessValue * 1000) : null;
+  const lastRun = new Date(lastRunValue * 1000);
+  const hoursSinceSuccess = lastSuccessValue
+    ? (Date.now() / 1000 - lastSuccessValue) / (60 * 60)
+    : null;
+
+  return {
+    lastSuccess,
+    lastRun,
+    status: statusValue === 1 ? 'success' : 'failure',
+    isStale: hoursSinceSuccess === null || hoursSinceSuccess > 26,
+    hoursSinceSuccess,
   };
 }
 

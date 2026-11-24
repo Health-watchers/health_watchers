@@ -1,4 +1,6 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
+import { sanitizeText } from '@api/utils/sanitize';
 
 export type CommunicationChannel = 'sms' | 'whatsapp' | 'email' | 'phone_call' | 'in_person';
 export type CommunicationDirection = 'outbound' | 'inbound';
@@ -55,6 +57,12 @@ const communicationLogSchema = new Schema<ICommunicationLog>(
     collection: 'communication_logs',
   }
 );
+
+communicationLogSchema.add(baseSchema);
+
+communicationLogSchema.pre('save', function () {
+  if (this.content) this.content = sanitizeText(this.content);
+});
 
 // Indexes for efficient querying
 communicationLogSchema.index({ patientId: 1, clinicId: 1, sentAt: -1 });

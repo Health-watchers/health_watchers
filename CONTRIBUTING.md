@@ -13,6 +13,8 @@ Thank you for your interest in contributing to Health Watchers! This document pr
 - [Testing](#testing)
 - [Commit Messages](#commit-messages)
 - [Dependency Update Guidelines](#dependency-update-guidelines)
+- [Useful Commands](#useful-commands)
+- [Troubleshooting](#troubleshooting)
 
 ## Code of Conduct
 
@@ -24,8 +26,8 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** (check with `node --version`)
-- **npm** or **yarn** package manager
+- **Node.js 20+** (check with `node --version`) — the repo standardises on Node 20 LTS (see `.nvmrc`)
+- **npm** package manager (the version pinned in `packageManager`)
 - **MongoDB** (local installation or MongoDB Atlas account)
 - **Git** for version control
 - **Docker** (optional, for containerized development)
@@ -67,18 +69,35 @@ Before you begin, ensure you have the following installed:
    mongod --dbpath /path/to/data
    ```
 
-7. **Start development servers**:
+7. **Start the whole stack with one command**:
    ```bash
-   npm run dev
+   npm run dev:infra   # MongoDB + Redis via Docker Compose (core profile)
+   npm run dev         # API, worker, web and stellar-service via Turbo
    ```
    This will start:
    - API server on http://localhost:3001
    - Web frontend on http://localhost:3000
    - Stellar service on http://localhost:3002
+   - Background worker (jobs run locally, not just in production)
 
 8. **Verify setup**:
    - Open http://localhost:3000 in your browser
    - Check that the API is responding at http://localhost:3001/health
+
+### Quick Start (five steps)
+
+On a fresh clone, the full local stack is:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/health_watchers.git && cd health_watchers
+cp .env.example .env            # fill in MongoDB URI, JWT secrets, Stellar keys
+npm ci                          # install dependencies (Node 20+)
+npm run dev:infra               # start MongoDB and Redis only
+npm run dev                     # start API, worker, web and stellar-service
+```
+
+Then open http://localhost:3000 (web) and http://localhost:3001/health (API).
+Use `npm run clean` to remove `dist`, `.next`, `.turbo` and coverage output.
 
 ## Development Workflow
 
@@ -283,6 +302,7 @@ Brief description of the changes
 - [ ] No new warnings generated
 - [ ] Tests pass locally
 - [ ] Dependent changes merged
+- [ ] If this PR changes system architecture, the relevant diagram(s) under `docs/diagrams/` (and their embeds in `docs/ARCHITECTURE.md`) are updated
 
 ## Related Issues
 Closes #(issue number)
@@ -301,6 +321,12 @@ Closes #(issue number)
 - Use **interfaces** for object shapes
 - Use **enums** or **union types** for fixed sets of values
 
+### ES Modules
+
+- **ES module syntax (`import`/`export`) is the standard** for all new and updated code. CommonJS `require()` / `module.exports` should not be used in new code.
+- Existing `.js` configuration files that still use `require()` have been migrated to `.ts` with `import`/`export default` (e.g., `jest.config.ts`, `migrate-mongo-config.ts`).
+- The `.cjs` extension is reserved for files that must remain CommonJS (e.g., `jest.mutation.config.cjs` for Stryker compatibility).
+
 #### TypeScript Configuration
 
 The monorepo uses a shared base config (`tsconfig.base.json`) extended by each app:
@@ -315,6 +341,16 @@ The monorepo uses a shared base config (`tsconfig.base.json`) extended by each a
 | `noImplicitReturns` | `true` | All code paths must return a value |
 
 Run `npm run typecheck` locally before pushing. CI fails on any TypeScript error.
+
+#### Strictness progression plan (Issue #1644)
+
+The compiler-level flags above (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) are already enabled project-wide. The next increment is type-aware ESLint rules, which catch patterns the compiler alone doesn't flag (unsafe `any` flow, floating promises, unnecessary conditionals):
+
+1. **Done** — `@typescript-eslint`'s type-checked rule set (`flat/recommended-type-checked`) is added in `packages/config/eslint-config`, wired to each package's own `tsconfig.json` via `projectService`.
+2. **Next** — run `npm run lint` across the monorepo, triage the findings per package, and either fix them or, where a rule is too noisy to fix immediately, turn that specific rule down to `warn` (the same gradual-adoption pattern already used for `no-explicit-any` and friends) rather than disabling the whole rule set.
+3. **Later** — once a package's type-checked findings reach zero, flip its remaining `warn`-level type-checked rules to `error` so it can't regress.
+
+Work through packages in dependency order (`packages/` first, then `apps/`) so a fix in a shared package doesn't get re-flagged by every app that depends on it.
 
 Example:
 ```typescript
@@ -382,6 +418,76 @@ apps/
           users.model.ts
           users.validation.ts
           users.test.ts
+```
+
+### Component Standards (React/Next.js)
+
+- Use functional components
+- Prefer hooks over class components
+- Memoize components that receive props
+- Add prop type validation
+
+**Example:**
+```typescript
+interface PatientCardProps {
+  patient: Patient;
+  onEdit?: (patient: Patient) => void;
+}
+
+export const PatientCard: React.FC<PatientCardProps> = React.memo(({ patient, onEdit }) => {
+  return (
+    <div className="card">
+      <h2>{patient.firstName} {patient.lastName}</h2>
+      {onEdit && <button onClick={() => onEdit(patient)}>Edit</button>}
+    </div>
+  );
+});
+```
+
+### API Endpoints
+
+- Use RESTful conventions (GET, POST, PUT, DELETE)
+- Return consistent response format
+- Include proper error handling
+- Add rate limiting where needed
+- Document with Swagger/OpenAPI
+
+**Example:**
+```typescript
+/**
+ * @swagger
+ * /patients/{id}:
+ *   get:
+ *     summary: Get patient by ID
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *     responses:
+ *       200: { description: Patient found }
+ *       404: { description: Patient not found }
+ */
+router.get('/patients/:id', requireAuth, async (req, res, next) => {
+  try {
+    const patient = await patientService.getPatient(req.params.id);
+    res.json({ data: patient });
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+### Error Handling
+
+Always include proper error handling:
+
+```typescript
+try {
+  // operation
+} catch (error) {
+  logger.error('Operation failed', { error, context });
+  next(new AppError('Operation failed', 500));
+}
 ```
 
 ## Testing
@@ -514,6 +620,67 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
 
+### Type
+
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation
+- `refactor` - Code refactoring
+- `test` - Test additions/modifications
+- `chore` - Build, deps, config changes
+- `perf` - Performance improvements
+
+### Scope
+
+Module or area affected:
+```
+feat(patients): add duplicate detection
+fix(payments): resolve stellar transaction timeout
+docs(api): update authentication examples
+```
+
+### Subject
+
+- Imperative mood ("add" not "added")
+- No period at end
+- Lowercase
+- Keep under 50 characters
+
+### Body
+
+Explain what and why (not how):
+```
+Add patient duplicate detection using fuzzy matching.
+
+This prevents creating duplicate patient records by:
+- Matching on first/last name + DOB
+- Calculating similarity score >= 0.85
+- Prompting user before creation
+```
+
+### Footer
+
+Reference issues:
+```
+Closes #897
+Related-to: #896
+```
+
+### Example Commit
+
+```
+feat(patients): add duplicate detection
+
+Implement fuzzy matching algorithm to identify
+potential duplicate patient records before creation.
+
+- Use metaphone for phonetic matching
+- Calculate Jaro-Winkler similarity score
+- Show merge suggestions to user
+
+Closes #897
+```
+
 ### Pull Request Titles
 
 Because pull requests are squash-merged, **the PR title becomes the commit subject on `main`** and feeds the automated changelog/release tooling. PR titles must therefore also follow the Conventional Commits format (e.g. `feat(patients): add insurance tab`).
@@ -573,6 +740,35 @@ The main CI pipeline (`.github/workflows/ci.yml`) additionally runs `npm audit -
 
 The **Weekly Dependency Audit Report** workflow (`.github/workflows/dependency-report.yml`) runs every Monday and publishes a consolidated report (vulnerabilities, outdated packages, license breakdown) as a tracking issue labelled `dependencies, automated`. Review it weekly and remediate any **critical** findings before they block PRs.
 
+### Triaging the weekly audit report
+
+Work through the report in a consistent order so nothing critical lingers:
+
+1. **Criticals first.** Any 🔴 critical vulnerability blocks PR merges. Fix these immediately (usually a targeted `npm install <pkg>@<patched-version>` or an `overrides` entry in the root `package.json`), and confirm with `npm audit --audit-level=critical`.
+2. **Highs next.** Address 🟠 high findings in the same pass where possible; they are gated by `npm audit --audit-level=high` in CI.
+3. **Batch patch/minor upgrades.** Group the remaining outdated packages into small batches of patch/minor bumps (mirroring the Dependabot grouping) rather than upgrading everything at once.
+4. **Run the full test suite per batch.** After each batch run `npm test`, `npm run lint` and `npm run typecheck` before moving on, so a regression is attributable to a single batch.
+
+### Regenerating the lockfile
+
+The repo pins its package manager via `packageManager` in the root `package.json` (`npm@10.8.2`). **Any** change to a `package.json` dependency must be accompanied by a regenerated `package-lock.json` produced with that exact npm version:
+
+```bash
+npx npm@10.8.2 install
+```
+
+Commit `package.json` and `package-lock.json` together. A lockfile that is out of sync with `package.json` makes every `npm ci` fail, which takes the whole CI pipeline red.
+
+### Verifying the lockfile-drift guard locally
+
+CI runs a fast drift check on every pull request that fails if `package-lock.json` does not match `package.json`. Reproduce it locally before pushing:
+
+```bash
+npx npm@10.8.2 install --package-lock-only && git diff --exit-code package-lock.json
+```
+
+If the command exits non-zero, the lockfile is stale — run `npx npm@10.8.2 install`, commit the updated `package-lock.json`, and re-run the check until it passes.
+
 ## Architecture Decisions
 
 ### Adding New Modules
@@ -584,15 +780,70 @@ When adding a new feature module to the API:
    ```
    modules/
      your-module/
-       your-module.model.ts      # Mongoose schema
-       your-module.controller.ts # Express route handlers
-       your-module.service.ts    # Business logic
-       your-module.validation.ts # Zod validation schemas
-       your-module.test.ts       # Tests
-       index.ts                  # Exports
+       your-module.model.ts       # Mongoose schema
+       your-module.repository.ts  # Data access (all Mongoose queries)
+       your-module.controller.ts  # Express route handlers (HTTP only)
+       your-module.service.ts     # Business logic
+       your-module.validation.ts  # Zod validation schemas
+       your-module.test.ts        # Tests
+       index.ts                   # Exports
    ```
 3. Register routes in `apps/api/src/app.ts`
 4. Add appropriate middleware (auth, validation, rate limiting)
+
+### Service-Repository Pattern
+
+API modules are layered as **controller → service → repository**. Each layer has a single responsibility and may only call the layer directly beneath it (issue #1675):
+
+| Layer | Responsibility | Must not |
+| --- | --- | --- |
+| **Controller** (`*.controller.ts`) | Parse the HTTP request, call the service, shape the HTTP response | Contain business logic or Mongoose queries |
+| **Service** (`*.service.ts`) | Apply business rules, orchestrate repositories, throw domain errors | Import Mongoose models or build queries |
+| **Repository** (`*.repository.ts`) | All database access — every Mongoose query lives here | Contain business logic or know about HTTP |
+
+The repository exposes typed methods for each query the service needs. For example, `apps/api/src/modules/encounters/encounter.repository.ts`:
+
+```typescript
+export interface EncounterRepository {
+  findById(id: string, clinicId: string): Promise<Encounter | null>;
+  findByPatient(patientId: string, clinicId: string): Promise<Encounter[]>;
+  findByClinic(clinicId: string): Promise<Encounter[]>;
+  create(data: CreateEncounterInput): Promise<Encounter>;
+  update(id: string, clinicId: string, data: UpdateEncounterInput): Promise<Encounter | null>;
+  softDelete(id: string, clinicId: string): Promise<Encounter | null>;
+}
+```
+
+Rules:
+
+- **No Mongoose in controllers or services.** If you need a new query, add a method to the repository.
+- **Soft deletes only.** Repositories expose `softDelete` (setting `deletedAt`) rather than hard deletes.
+- **Tests mock the repository, not the database.** Unit tests for services and controllers inject a mocked repository (e.g. `jest.mock('./encounter.repository')`); only repository tests touch MongoDB Memory Server.
+
+### Clinic Scoping
+
+Every clinic-scoped request must be limited to the clinic in the caller's JWT. This is centralised in the `clinicScope` middleware (`apps/api/src/middlewares/clinicScope.ts`) — do not re-implement it (issue #1676).
+
+- The middleware runs **after** JWT verification and attaches `req.clinicId` to the request.
+- If the token has no valid clinic scope, the middleware responds with **403 Forbidden** and the request never reaches the controller.
+- Controllers must read `req.clinicId` and pass it to the service; they must **not** extract `clinicId` from the token, headers or query parameters manually.
+
+```typescript
+// ✅ Good — scope comes from the middleware
+router.get('/encounters/:id', requireAuth, clinicScope, async (req, res, next) => {
+  try {
+    const encounter = await encounterService.getById(req.params.id, req.clinicId);
+    res.json({ data: encounter });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ❌ Bad — manual extraction duplicates the middleware
+const clinicId = (req.user as JwtPayload).clinicId;
+```
+
+When adding a new clinic-scoped route, mount `clinicScope` after `requireAuth` and add a test asserting that a request without a valid clinic scope returns 403.
 
 ### Adding New Stellar Operations
 
@@ -670,6 +921,101 @@ Before adding a new npm package:
 ```bash
 # Add to specific workspace
 npm install package-name --workspace=apps/api
+```
+
+## Useful Commands
+
+```bash
+# Development
+npm run dev                      # API, worker, web and stellar-service (Turbo, parallel)
+npm run dev:infra                # MongoDB + Redis only (docker compose --profile core)
+npm run dev --workspace=api      # API only (http://localhost:3001)
+npm run dev --workspace=web      # Web app only (http://localhost:3000)
+npm run clean                    # Remove dist, .next, .turbo and coverage output
+
+# Testing
+npm test                         # Run all tests (Turbo)
+npm run test:watch --workspace=api
+npm run test:coverage --workspace=api
+
+# Code Quality
+npm run lint                     # Run linters
+npm run format                   # Auto-format code
+npm run typecheck                # TypeScript check
+
+# GitHub Actions workflow linting (see "Linting GitHub Actions workflows")
+actionlint                       # Lint all workflows in .github/workflows
+actionlint .github/workflows/ci.yml  # Lint a single workflow
+
+# Database
+npm run migrate:up --workspace=api      # Run pending migrations
+npm run migrate:down --workspace=api    # Roll back last migration
+npm run migrate:status --workspace=api  # Show migration status
+
+# Build
+npm run build                    # Build all workspaces
+```
+
+## Linting GitHub Actions workflows
+
+Workflow files under `.github/workflows/` are linted with [actionlint](https://github.com/rhysd/actionlint), which also runs `shellcheck` on inline `run:` scripts. The `Lint GitHub Actions workflows` job in `ci.yml` runs it on every pull request, so it is worth running locally before pushing.
+
+### Installing actionlint
+
+Pick whichever method fits your setup:
+
+```bash
+# macOS
+brew install actionlint
+
+# Any platform with Go installed
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+
+# Prebuilt binary (Linux/macOS) — see releases for the latest version
+bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+```
+
+`shellcheck` must be on your `PATH` for the shell-script checks to run (`brew install shellcheck`, `apt-get install shellcheck`, etc.). If it is missing, actionlint still runs but skips the shellcheck findings.
+
+### Running actionlint
+
+```bash
+# Lint every workflow in the repository
+actionlint
+
+# Lint a single workflow
+actionlint .github/workflows/ci.yml
+
+# Show the shellcheck command actionlint would run for each script
+actionlint -verbose
+```
+
+The shellcheck severity threshold is configured in `.github/actionlint.yaml`. Findings at `warning` and above fail the job; `info`/`style` findings are reported but do not fail it. Fix the reported issues (quote variables, avoid useless `cat`, group repeated redirects into `{ ...; } >> "$GITHUB_STEP_SUMMARY"` blocks, remove unused variables) rather than suppressing them.
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Find process using port 3001
+lsof -i :3001
+# Kill it
+kill -9 <PID>
+```
+
+### MongoDB Connection Failed
+```bash
+# Check MongoDB is running
+docker compose --profile core ps
+# Restart if needed
+docker compose --profile core restart mongodb
+```
+
+### Tests Failing Locally
+```bash
+# Clear cache
+npm run test -- --clearCache
+# Run with verbose output
+npm run test -- --verbose
 ```
 
 ## Questions?

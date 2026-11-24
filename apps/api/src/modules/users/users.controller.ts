@@ -1,3 +1,5 @@
+import path from 'path';
+import crypto from 'crypto';
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
@@ -8,9 +10,29 @@ import { UserModel } from '../auth/models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import { totpService } from '../auth/totp.service';
 import { addToDenylist } from '@api/services/token-denylist.service';
+import { passwordSchema } from '../auth/auth.validation';
+import {
+  countryName,
+  fingerprintDevice,
+  listKnownDevices,
+} from '../auth/services/login-alert.service';
+import { imageUpload } from '@api/middlewares/upload.middleware';
+import { uploadFile, getDownloadUrl, deleteFile } from '../documents/storage.service';
+import { generateBackupCodes, verifyBackupCode } from '../auth/services/backup-codes.service';
+import { recordMfaAuditEvent } from '../auth/services/mfa-audit.service';
+
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const updateProfileSchema = z.object({
-  fullName: z.string().min(1, 'Full name is required').max(100),
+  fullName: z.string().min(1, 'Full name is required').max(100).optional(),
+  timezone: z.string().optional(),
 });
 
 const router = Router();
@@ -66,10 +88,13 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       role: user.role,
       clinic: String(user.clinicId),
       clinicName: clinic?.name ?? null,
+      avatarUrl: user.avatarUrl ?? null,
+      timezone: user.timezone ?? null,
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? 'en',
         theme: user.preferences?.theme ?? 'system',
+        defaultView: user.preferences?.defaultView ?? 'dashboard',
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
         notificationTypes: {
@@ -120,7 +145,18 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    user.fullName = req.body.fullName;
+    const { fullName, timezone } = req.body;
+
+    if (fullName !== undefined) user.fullName = fullName;
+    if (timezone !== undefined) {
+      if (!isValidTimezone(timezone)) {
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: `Invalid timezone '${timezone}'. Use a valid IANA timezone e.g. 'Africa/Lagos'.`,
+        });
+      }
+      user.timezone = timezone;
+    }
     await user.save();
 
     return res.json({
@@ -130,6 +166,8 @@ router.patch(
         email: user.email,
         role: user.role,
         clinic: String(user.clinicId),
+        avatarUrl: user.avatarUrl ?? null,
+        timezone: user.timezone ?? null,
         mfaEnabled: user.mfaEnabled,
         preferences: {
           language: user.preferences?.language ?? 'en',
@@ -143,7 +181,7 @@ router.patch(
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  newPassword: passwordSchema,
 });
 
 /**
@@ -294,11 +332,95 @@ router.post(
     }
 
     user.mfaEnabled = true;
+    user.mfaEnrolledAt = new Date();
+    const { plainCodes, hashedCodes } = await generateBackupCodes();
+    user.mfaBackupCodes = hashedCodes;
     await user.save();
+
+    await recordMfaAuditEvent({
+      userId: String(user._id),
+      clinicId: String(user.clinicId),
+      event: 'enrolled',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
     return res.json({
       status: 'success',
       message: 'MFA enabled successfully',
+      data: { backupCodes: plainCodes },
+    });
+  }
+);
+
+const mfaRecoverySchema = z.object({
+  email: z.string().email('A valid email is required'),
+  backupCode: z.string().min(1, 'A backup code is required'),
+});
+
+/**
+ * @swagger
+ * /users/me/mfa/recover:
+ *   post:
+ *     summary: Complete an MFA challenge using a backup recovery code
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, backupCode]
+ *             properties:
+ *               email:      { type: string, format: email }
+ *               backupCode: { type: string }
+ *     responses:
+ *       200:
+ *         description: Recovery code accepted; the code is consumed
+ *       400:
+ *         description: Invalid or already-used recovery code
+ */
+router.post(
+  '/me/mfa/recover',
+  validateRequest({ body: mfaRecoverySchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findOne({ email: req.body.email.toLowerCase() }).select(
+      '+mfaBackupCodes'
+    );
+    if (!user || !user.mfaEnabled) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid or already-used recovery code',
+      });
+    }
+
+    const { matched, remainingCodes } = await verifyBackupCode(
+      req.body.backupCode,
+      user.mfaBackupCodes ?? []
+    );
+
+    if (!matched) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'Invalid or already-used recovery code',
+      });
+    }
+
+    user.mfaBackupCodes = remainingCodes;
+    await user.save();
+
+    await recordMfaAuditEvent({
+      userId: String(user._id),
+      clinicId: String(user.clinicId),
+      event: 'recovery_code_used',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Recovery code accepted',
+      data: { remainingBackupCodes: remainingCodes.length },
     });
   }
 );
@@ -333,6 +455,69 @@ router.post('/me/mfa/disable', authenticate, async (req: Request, res: Response)
   });
 });
 
+const pushTokenSchema = z.object({
+  expoPushToken: z
+    .string()
+    .regex(/^ExponentPushToken\[[^\]]+\]$|^ExpoPushToken\[[^\]]+\]$/, 'Invalid Expo push token'),
+  deviceId: z.string().max(200).optional(),
+  platform: z.enum(['ios', 'android', 'web']).optional(),
+});
+
+/**
+ * @swagger
+ * /users/me/push-token:
+ *   post:
+ *     summary: Register the device's Expo push token (#1672)
+ *     description: >
+ *       Called by the mobile app on login so appointment reminders can be
+ *       delivered to the device. Re-registering the same token is idempotent.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [expoPushToken]
+ *             properties:
+ *               expoPushToken: { type: string, example: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]' }
+ *               deviceId:      { type: string }
+ *               platform:      { type: string, enum: [ios, android, web] }
+ *     responses:
+ *       200:
+ *         description: Push token stored
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  '/me/push-token',
+  authenticate,
+  validateRequest({ body: pushTokenSchema }),
+  async (req: Request, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+    }
+
+    const { expoPushToken, deviceId, platform } = req.body;
+    const existing = (user.pushTokens ?? []).filter((t) => t.token !== expoPushToken);
+    existing.push({
+      token: expoPushToken,
+      deviceId,
+      platform,
+      updatedAt: new Date(),
+    });
+    user.pushTokens = existing;
+    await user.save();
+
+    return res.json({ status: 'success', message: 'Push token registered' });
+  }
+);
+
 const notificationTypesSchema = z
   .object({
     referral_received: z.boolean().optional(),
@@ -345,8 +530,9 @@ const notificationTypesSchema = z
   .optional();
 
 const updatePreferencesSchema = z.object({
-  language: z.enum(['en', 'fr']).optional(),
+  language: z.enum(['en', 'fr', 'pt', 'yo', 'ha']).optional(),
   theme: z.enum(['light', 'dark', 'system']).optional(),
+  defaultView: z.enum(['dashboard', 'patients', 'appointments', 'encounters']).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
   notificationTypes: notificationTypesSchema,
@@ -388,10 +574,11 @@ router.patch(
       return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
     }
 
-    const { language, theme, emailNotifications, inAppNotifications, notificationTypes } = req.body;
+    const { language, theme, defaultView, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
     if (theme !== undefined) user.preferences.theme = theme;
+    if (defaultView !== undefined) user.preferences.defaultView = defaultView;
     if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined) user.preferences.inAppNotifications = inAppNotifications;
     if (notificationTypes !== undefined) {
@@ -406,6 +593,7 @@ router.patch(
         preferences: {
           language: user.preferences.language,
           theme: user.preferences.theme,
+          defaultView: user.preferences.defaultView ?? 'dashboard',
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
           notificationTypes: user.preferences.notificationTypes,
@@ -493,6 +681,137 @@ router.delete('/sessions/:sessionId', authenticate, async (req: Request, res: Re
   return res.json({
     status: 'success',
     message: 'Session revoked',
+  });
+});
+
+/**
+ * POST /users/me/avatar — upload a profile avatar (PNG/JPEG/WebP, max 5 MB)
+ */
+router.post(
+  '/me/avatar',
+  authenticate,
+  (req: Request, res: Response, next) => {
+    imageUpload.single('avatar')(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'FileTooLarge', message: 'Avatar must be under 5 MB.' });
+      }
+      if ((err as any).code === 'INVALID_FILE_TYPE') {
+        return res.status(400).json({ error: 'InvalidFileType', message: 'Avatar must be a PNG, JPEG, or WebP image.' });
+      }
+      return next(err);
+    });
+  },
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'BadRequest', message: 'No avatar file provided.' });
+    }
+    const user = await UserModel.findById(req.user!.userId).select('+avatarStorageKey');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+    }
+
+    // Delete old avatar if it exists
+    if (user.avatarStorageKey) {
+      await deleteFile(user.avatarStorageKey).catch(() => {});
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+    const storageKey = `user-avatar/${String(user._id)}/${crypto.randomUUID()}${ext}`;
+    await uploadFile({ storageKey, buffer: req.file.buffer, mimeType: req.file.mimetype });
+    const avatarUrl = await getDownloadUrl(storageKey);
+
+    user.avatarUrl = avatarUrl;
+    user.avatarStorageKey = storageKey;
+    await user.save();
+
+    return res.json({ status: 'success', data: { avatarUrl } });
+  }
+);
+
+/**
+ * DELETE /users/me/avatar — remove the current avatar
+ */
+router.delete('/me/avatar', authenticate, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId).select('+avatarStorageKey');
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+  }
+  if (user.avatarStorageKey) {
+    await deleteFile(user.avatarStorageKey).catch(() => {});
+  }
+  user.avatarUrl = undefined;
+  user.avatarStorageKey = undefined;
+  await user.save();
+  return res.json({ status: 'success', data: { avatarUrl: null } });
+});
+
+/**
+ * POST /users/me/deactivate — soft-deactivate the current user's account
+ * Requires the current password as confirmation.
+ */
+router.post('/me/deactivate', authenticate, async (req: Request, res: Response) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: 'BadRequest', message: 'Password confirmation is required.' });
+  }
+  const user = await UserModel.findById(req.user!.userId).select('+password');
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'User not found' });
+  }
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) {
+    return res.status(403).json({ error: 'Forbidden', message: 'Incorrect password.' });
+  }
+  user.isActive = false;
+  await user.save();
+
+  // Denylist the current access token
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const rawToken = authHeader.slice(7);
+    const tokenData = jwt.decode(rawToken) as { jti?: string; exp?: number } | null;
+    if (tokenData?.jti && tokenData?.exp) {
+      const ttl = tokenData.exp - Math.floor(Date.now() / 1000);
+      await addToDenylist(tokenData.jti, ttl);
+    }
+  }
+
+  return res.json({ status: 'success', message: 'Account deactivated.' });
+});
+
+/**
+ * @swagger
+ * /users/devices:
+ *   get:
+ *     summary: Devices recognised for the current user (#1497)
+ *     description: >
+ *       Devices the account has signed in from, with the approximate (country-level)
+ *       locations seen for each. A sign-in from a device or country not on this list
+ *       triggers a security alert.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Recognised devices, most recently used first
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/devices', authenticate, async (req: Request, res: Response) => {
+  const devices = await listKnownDevices(req.user!.userId);
+  const current = fingerprintDevice(req.headers['user-agent']);
+  return res.json({
+    status: 'success',
+    data: devices.map((d) => ({
+      id: String(d._id),
+      deviceLabel: d.deviceLabel,
+      countries: (d.countries ?? []).map((code) => ({ code, name: countryName(code) })),
+      lastLocation: countryName(d.lastCountry),
+      firstSeenAt: d.firstSeenAt,
+      lastSeenAt: d.lastSeenAt,
+      isCurrent: d.fingerprint === current,
+    })),
   });
 });
 

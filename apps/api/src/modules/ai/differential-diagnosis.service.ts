@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import mongoose, { Schema, Document } from 'mongoose';
 import { config } from '@health-watchers/config';
-import { stripPII } from './ai.service';
+import { generateAnonymisedContent } from './llm-client';
 
 export const DIFFERENTIAL_DISCLAIMER =
   'AI-generated suggestions for clinical assistance only. Not a substitute for professional medical judgment. Always verify with clinical examination and appropriate investigations.';
@@ -34,27 +35,131 @@ export interface DifferentialDiagnosisResult {
   disclaimer: string;
 }
 
+export type SuggestionAction = 'accepted' | 'rejected' | 'modified';
+
+export interface DifferentialDiagnosisFeedback {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  action: SuggestionAction;
+  modifiedDiagnosis?: string;
+  feedbackFlag: boolean;
+  reason?: string;
+  createdAt: Date;
+}
+
+export interface DifferentialDiagnosisFeedbackDocument
+  extends DifferentialDiagnosisFeedback,
+    Document {}
+
+const differentialDiagnosisFeedbackSchema = new Schema<DifferentialDiagnosisFeedbackDocument>(
+  {
+    encounterId: { type: String, required: true, index: true },
+    clinicianId: { type: String, required: true, index: true },
+    suggestionIcdCode: { type: String, required: true },
+    suggestionDiagnosis: { type: String },
+    action: {
+      type: String,
+      required: true,
+      enum: ['accepted', 'rejected', 'modified'],
+    },
+    modifiedDiagnosis: { type: String },
+    feedbackFlag: { type: Boolean, default: false },
+    reason: { type: String },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { collection: 'differential_diagnosis_feedback' }
+);
+
+export const DifferentialDiagnosisFeedbackModel =
+  (mongoose.models.DifferentialDiagnosisFeedback as mongoose.Model<DifferentialDiagnosisFeedbackDocument>) ||
+  mongoose.model<DifferentialDiagnosisFeedbackDocument>(
+    'DifferentialDiagnosisFeedback',
+    differentialDiagnosisFeedbackSchema
+  );
+
+export interface LogSuggestionDecisionInput {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  action: SuggestionAction;
+  modifiedDiagnosis?: string;
+  reason?: string;
+}
+
+export async function logSuggestionDecision(
+  input: LogSuggestionDecisionInput
+): Promise<DifferentialDiagnosisFeedbackDocument> {
+  if (!input.encounterId) throw new Error('encounterId is required');
+  if (!input.clinicianId) throw new Error('clinicianId is required');
+  if (!input.suggestionIcdCode) throw new Error('suggestionIcdCode is required');
+  if (!['accepted', 'rejected', 'modified'].includes(input.action)) {
+    throw new Error(`Invalid action: ${input.action}`);
+  }
+  if (input.action === 'modified' && !input.modifiedDiagnosis) {
+    throw new Error('modifiedDiagnosis is required when action is "modified"');
+  }
+
+  return DifferentialDiagnosisFeedbackModel.create({
+    encounterId: input.encounterId,
+    clinicianId: input.clinicianId,
+    suggestionIcdCode: input.suggestionIcdCode,
+    suggestionDiagnosis: input.suggestionDiagnosis,
+    action: input.action,
+    modifiedDiagnosis: input.modifiedDiagnosis,
+    feedbackFlag: false,
+    reason: input.reason,
+    createdAt: new Date(),
+  });
+}
+
+export interface FlagIncorrectSuggestionInput {
+  encounterId: string;
+  clinicianId: string;
+  suggestionIcdCode: string;
+  suggestionDiagnosis?: string;
+  reason?: string;
+}
+
+export async function flagIncorrectSuggestion(
+  input: FlagIncorrectSuggestionInput
+): Promise<DifferentialDiagnosisFeedbackDocument> {
+  if (!input.encounterId) throw new Error('encounterId is required');
+  if (!input.clinicianId) throw new Error('clinicianId is required');
+  if (!input.suggestionIcdCode) throw new Error('suggestionIcdCode is required');
+
+  return DifferentialDiagnosisFeedbackModel.create({
+    encounterId: input.encounterId,
+    clinicianId: input.clinicianId,
+    suggestionIcdCode: input.suggestionIcdCode,
+    suggestionDiagnosis: input.suggestionDiagnosis,
+    action: 'rejected',
+    feedbackFlag: true,
+    reason: input.reason,
+    createdAt: new Date(),
+  });
+}
+
 export async function generateDifferentialDiagnosis(
-  input: DifferentialDiagnosisInput
+  input: DifferentialDiagnosisInput,
+  context: DifferentialDiagnosisContext
 ): Promise<DifferentialDiagnosisResult> {
   if (!config.geminiApiKey) throw new Error('GEMINI_API_KEY is not configured');
 
-  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-  // Build anonymised clinical context — no patient names or identifiers
-  const clinicalContext = stripPII(
-    [
-      `Chief Complaint: ${input.chiefComplaint}`,
-      `Symptoms: ${input.symptoms.join(', ')}`,
-      input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
-      input.patientAge ? `Patient Age: ${input.patientAge} years` : '',
-      input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
-      input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-  );
+  // Clinical context is anonymised centrally by the shared LLM client
+  // (@health-watchers/anonymize) before it leaves the process.
+  const clinicalContext = [
+    `Chief Complaint: ${input.chiefComplaint}`,
+    `Symptoms: ${input.symptoms.join(', ')}`,
+    input.vitalSigns ? `Vital Signs: ${JSON.stringify(input.vitalSigns)}` : '',
+    input.patientAge ? `Patient Age: ${input.patientAge} years` : '',
+    input.patientSex ? `Patient Sex: ${input.patientSex}` : '',
+    input.relevantHistory ? `Relevant History: ${input.relevantHistory}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const prompt = `You are a clinical decision support AI assisting a physician. Based on the anonymised patient presentation below, generate a differential diagnosis list.
 
@@ -82,17 +187,24 @@ Rules:
 - Do NOT include any patient-identifying information in the response.
 - Do NOT include markdown code fences or any text outside the JSON object.`;
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
+  const raw = (
+    await generateAnonymisedContent(prompt, {
+      clinicId: context.clinicId,
+      userId: context.userId,
+      patientId: context.patientId,
+      feature: 'differential-diagnosis',
+    })
+  ).trim();
 
   // Strip possible markdown fences
   const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
 
   let parsed: Omit<DifferentialDiagnosisResult, 'disclaimer'>;
   try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error(`AI returned an unparseable response: ${raw.slice(0, 200)}`);
+    parsed = await generateJson<Omit<DifferentialDiagnosisResult, 'disclaimer'>>(prompt);
+  } catch (err) {
+    if (err instanceof AIUnavailableError) throw err;
+    throw new AIUnavailableError('AI returned an unparseable response', err);
   }
 
   // Validate shape

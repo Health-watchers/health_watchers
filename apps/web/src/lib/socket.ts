@@ -75,6 +75,12 @@ class SocketManager {
       console.log('Patient arrived:', data);
       window.dispatchEvent(new CustomEvent('appointment:patient_arrived', { detail: data }));
     });
+
+    // Notification events — dispatch custom DOM event so NotificationBell can react
+    this.socket.on('notification:new', (data) => {
+      console.log('New notification:', data);
+      window.dispatchEvent(new CustomEvent('notification:new', { detail: data }));
+    });
   }
 
   // Join appointment room for real-time updates
@@ -93,6 +99,15 @@ class SocketManager {
 }
 
 export const socketManager = new SocketManager();
+
+/** Shared connection for the given token (reuses the live socket when the token matches). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
+}
 
 // React hook for using Socket.IO
 export function useSocket(token?: string) {
@@ -155,4 +170,13 @@ export function useAppointmentEvents() {
   }, []);
 
   return events;
+}
+
+/** Returns the shared socket connection for this token (used by useRealtimeUpdates). */
+export function getSocket(token: string): Socket {
+  return socketManager.connect(token);
+}
+
+export function disconnectSocket(): void {
+  socketManager.disconnect();
 }

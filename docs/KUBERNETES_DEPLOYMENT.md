@@ -23,6 +23,8 @@ k8s/
 ├── external-secrets.yaml       # External secret management
 ├── ingress.yaml                # Ingress routing configuration
 ├── monitoring.yaml             # Prometheus ServiceMonitors
+├── cert-manager-setup.yaml     # cert-manager, Issuers, Certificates, alerts
+├── test-cert-manager.sh        # cert-manager verification & renewal test script
 │
 ├── api/
 │   ├── deployment.yaml         # API deployment specification
@@ -173,6 +175,53 @@ Security headers are automatically added:
 - Referrer-Policy: strict-origin-when-cross-origin
 - Permissions-Policy: camera, microphone, geolocation disabled
 
+### Certificate Management (cert-manager)
+
+TLS certificates are issued and renewed automatically by
+[cert-manager](https://cert-manager.io/) using Let's Encrypt (ACME v02). The
+manifests live in `k8s/cert-manager-setup.yaml`.
+
+**Prerequisite:** install cert-manager and its CRDs in the cluster:
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+
+**Issuer** — `letsencrypt-prod` (namespace `health-watchers`):
+
+- ACME server: `https://acme-v02.api.letsencrypt.org/directory`
+- Solver: `http01` via ingress class `nginx`
+
+**Certificate** — `health-watchers-cert`:
+
+| Field | Value |
+| --- | --- |
+| `secretName` | `health-watchers-tls` |
+| `dnsNames` | `api.healthwatchers.com`, `healthwatchers.com`, `www.healthwatchers.com` |
+| `issuerRef` | `letsencrypt-prod` |
+| `renewBefore` | `720h` (renews 30 days before expiry) |
+
+The Ingress references the issuer via the
+`cert-manager.io/cluster-issuer: letsencrypt-prod` annotation, so cert-manager
+creates and refreshes the `health-watchers-tls` secret automatically.
+
+**Verify:**
+
+```bash
+kubectl get certificate -n health-watchers
+kubectl describe certificate health-watchers-cert -n health-watchers
+kubectl get secret health-watchers-tls -n health-watchers \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+```
+
+**Expiry alerts** — the `cert-expiry-alerts` PrometheusRule fires
+`CertificateExpiry30Days` (warning), `CertificateExpirySoon` (7 days, warning)
+and `CertificateExpiryImmediate` (24 hours, critical). The docker-compose
+monitoring stack mirrors these in `monitoring/alerts-certificates.yml`.
+
+**Renewal failure:** see
+[`monitoring/runbooks/CERTIFICATE_RENEWAL.md`](../monitoring/runbooks/CERTIFICATE_RENEWAL.md).
+
 ### Network Policies
 
 NetworkPolicies control traffic flow:
@@ -187,6 +236,163 @@ ServiceMonitors integrate with Prometheus:
 - **Endpoints**: `/metrics` on each service
 - **Scrape interval**: 30 seconds
 - **Timeout**: 10 seconds
+
+### TLS Certificates with cert-manager
+
+TLS certificates for the ingress are issued and renewed automatically by
+[cert-manager](https://cert-manager.io/). All cert-manager resources live in
+`k8s/cert-manager-setup.yaml`.
+
+#### Architecture
+
+- **cert-manager controller**: Watches `Certificate` resources and drives the
+  issuance/renewal lifecycle. Installed into the `cert-manager` namespace
+  (typically via Helm or the upstream static manifests).
+- **CRDs**: `Issuer`, `ClusterIssuer`, `Certificate`, `CertificateRequest`,
+  `Order`, `Challenge` (ACME-specific).
+- **Issuers / ClusterIssuers**: Define *how* certificates are obtained.
+  - `ClusterIssuer` is cluster-scoped and reusable across namespaces (used here).
+  - `Issuer` is namespace-scoped.
+  - We define two ACME issuers backed by Let's Encrypt:
+    - `letsencrypt-staging` — staging endpoint, untrusted certs, no rate limits.
+    - `letsencrypt-prod` — production endpoint, trusted certs, rate limited.
+
+#### Let's Encrypt staging vs production
+
+| Issuer | ACME server | Trusted by browsers | Rate limits | Use for |
+|--------|-------------|---------------------|-------------|---------|
+| `letsencrypt-staging` | `acme-staging-v02.api.letsencrypt.org` | No | Lenient | Testing, CI, renewal drills |
+| `letsencrypt-prod` | `acme-v02.api.letsencrypt.org` | Yes | Strict | Production |
+
+Always validate changes against staging first. Production has strict rate
+limits (e.g. 5 duplicate certificates per week) — repeated failed attempts can
+lock you out for a week.
+
+**AWS ACM alternative:** If the cluster is on AWS and TLS terminates at an ALB
+or CloudFront, you may instead use AWS Certificate Manager. In that case the
+ingress uses the ALB's ACM certificate ARN (via the AWS Load Balancer
+Controller annotation `service.beta.kubernetes.io/aws-load-balancer-ssl-cert`)
+and cert-manager is not required for that ingress. ACM handles renewal
+automatically. The Prometheus expiry alerts below still apply if you export ACM
+certificate metrics; otherwise rely on ACM's managed renewal and AWS Health
+notifications.
+
+#### Certificate resources and renewal
+
+The `Certificate` resources (e.g. `health-watchers-tls`) reference the
+production `ClusterIssuer` and specify:
+
+- **secretName**: `health-watchers-tls` — consumed by the ingress.
+- **dnsNames**: `app.healthwatchers.example.com`.
+- **renewBefore**: `720h` (30 days). cert-manager begins renewal 30 days before
+  expiry, retrying with backoff until it succeeds. Renewal is attempted well
+  before expiry so transient failures do not cause an outage.
+
+Renewal flow: cert-manager detects the certificate is within `renewBefore` of
+expiry → creates a new `CertificateRequest` → ACME `Order` → `Challenge`
+(HTTP01 via ingress) → on success, updates the TLS secret → ingress controller
+picks up the new secret automatically.
+
+#### Prometheus alerts
+
+`k8s/cert-manager-setup.yaml` includes a `PrometheusRule` with:
+
+- **`CertificateExpiringSoon`**: fires when any certificate expires within
+  **30 days** (`certmanager_certificate_expiration_timestamp_seconds - time() <
+  30 * 24 * 3600`). Warning severity.
+- **`CertificateNotReady`**: fires when a `Certificate` has not been `Ready`
+  for 15 minutes (`certmanager_certificate_ready_status{condition="False"} == 1`).
+  Critical severity — indicates issuance/renewal is failing.
+
+Ensure the Prometheus operator is configured to select this rule (labels match
+your `ruleSelector`).
+
+#### Testing with `k8s/test-cert-manager.sh`
+
+The script verifies the cert-manager installation and exercises the renewal
+path:
+
+```bash
+# Verify cert-manager, issuers, and certificate status
+./k8s/test-cert-manager.sh
+
+# Run the staging short-validity renewal test
+./k8s/test-cert-manager.sh --renewal-test
+```
+
+The **renewal test** creates a temporary `Certificate` against the staging
+issuer with a short `duration` (e.g. `24h`) and a `renewBefore` close to it, so
+cert-manager renews almost immediately. The script then waits for the
+certificate to become `Ready`, confirms a renewal occurred (secret updated /
+new `CertificateRequest`), and cleans up the temporary resources. Run this in a
+**staging environment only** — never against production issuers.
+
+#### Runbook: certificate renewal failure
+
+**Symptoms**
+- `CertificateNotReady` alert firing.
+- `kubectl get certificate -n health-watchers` shows `READY=False`.
+- Browser shows expired/invalid certificate; ingress serves the old cert.
+- `CertificateExpiringSoon` alert firing with no successful renewal.
+
+**Diagnosis**
+
+1. Inspect the certificate:
+   ```bash
+   kubectl describe certificate health-watchers-tls -n health-watchers
+   ```
+   Look at `Status.Conditions` and `Events` for the failure reason.
+
+2. Inspect orders and challenges:
+   ```bash
+   kubectl get orders,challenges -A
+   kubectl describe challenge <challenge-name> -n health-watchers
+   kubectl describe order <order-name> -n health-watchers
+   ```
+   A failing HTTP01 challenge usually means the ACME validation URL is not
+   reachable from the internet.
+
+3. Check cert-manager logs:
+   ```bash
+   kubectl logs -n cert-manager deploy/cert-manager --tail=200
+   kubectl logs -n cert-manager deploy/cert-manager-webhook --tail=100
+   ```
+
+4. Verify ACME HTTP01 reachability:
+   ```bash
+   # The challenge path must be served publicly over HTTP (port 80)
+   curl -v http://app.healthwatchers.example.com/.well-known/acme-challenge/<token>
+   ```
+   Common causes: DNS not pointing at the ingress, ingress class mismatch,
+   network policy blocking the ingress controller, or port 80 not exposed.
+
+5. Check rate limits — if you see `too many failed authorizations` or
+   `rateLimited`, you have hit Let's Encrypt limits. Switch to the staging
+   issuer to debug, then wait for the limit window to reset.
+
+**Remediation**
+
+1. Fix the underlying cause (DNS, ingress, network policy, port 80).
+2. Delete the stuck `CertificateRequest`/`Order`/`Challenge` so cert-manager
+   retries cleanly:
+   ```bash
+   kubectl delete certificaterequest,order,challenge -n health-watchers \
+     -l cert-manager.io/certificate-name=health-watchers-tls
+   ```
+3. If the certificate is wedged, delete and recreate it (the secret is
+   re-issued):
+   ```bash
+   kubectl delete certificate health-watchers-tls -n health-watchers
+   kubectl apply -f k8s/cert-manager-setup.yaml
+   ```
+4. Confirm recovery:
+   ```bash
+   kubectl get certificate -n health-watchers   # READY should be True
+   kubectl get secret health-watchers-tls -n health-watchers
+   ```
+5. If production rate limits are blocking recovery, temporarily switch the
+   ingress to a valid existing secret or the staging issuer to restore service,
+   then re-issue against production once the limit resets.
 
 ## Deployment Workflow
 
@@ -362,9 +568,10 @@ kubectl get ingress -n health-watchers
 kubectl describe ingress health-watchers -n health-watchers
 ```
 
-Verify cert-manager:
+Verify cert-manager (see [Certificate Management](#certificate-management-cert-manager)):
 ```bash
 kubectl get certificate -n health-watchers
+kubectl describe certificate health-watchers-cert -n health-watchers
 ```
 
 ## Production Checklist
@@ -375,6 +582,10 @@ kubectl get certificate -n health-watchers
 - [ ] All deployments running with correct replicas
 - [ ] Health checks passing
 - [ ] Ingress configured with TLS
+- [ ] cert-manager installed with staging + production ClusterIssuers
+- [ ] Certificate `renewBefore` set to 720h (30 days)
+- [ ] Certificate expiry / not-Ready Prometheus alerts configured
+- [ ] Renewal tested in staging via `k8s/test-cert-manager.sh --renewal-test`
 - [ ] Network policies enforced
 - [ ] Monitoring configured
 - [ ] Backup strategy in place
@@ -385,4 +596,7 @@ kubectl get certificate -n health-watchers
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [Deployment Best Practices](https://kubernetes.io/docs/concepts/configuration/overview/)
 - [Security in Kubernetes](https://kubernetes.io/docs/concepts/security/)
+- [cert-manager Documentation](https://cert-manager.io/docs/)
+- [Let's Encrypt Rate Limits](https://letsencrypt.org/docs/rate-limits/)
+- [AWS Certificate Manager](https://docs.aws.amazon.com/acm/)
 - [Helm Charts](../helm/README.md)

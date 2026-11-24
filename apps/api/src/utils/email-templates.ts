@@ -71,6 +71,28 @@ export function paymentReceiptTemplate(params: {
 </html>`;
 }
 
+export function clinicOnboardingCompleteTemplate(params: {
+  clinicName: string;
+  dashboardUrl: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Welcome to Health Watchers</title></head>
+<body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+  <h2>Welcome, ${params.clinicName}!</h2>
+  <p>Your clinic onboarding is complete. Your Health Watchers account is now fully set up and ready to use.</p>
+  <p>You can manage your clinic profile, staff, and appointments from your dashboard.</p>
+  <a href="${params.dashboardUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;margin:16px 0">
+    Go to Dashboard
+  </a>
+  <p>If you have any questions, our support team is happy to help.</p>
+  <hr style="margin-top:32px">
+  <small style="color:#6b7280">Health Watchers</small>
+</body>
+</html>`;
+}
+
 export function accountLockedTemplate(unlockAfterMinutes = 15): string {
   return `
 <!DOCTYPE html>

@@ -12,6 +12,11 @@ Stellar provides:
 
 ## Payment Flow
 
+Detailed sequence diagrams for every flow (intent → confirmation, claimable
+balances, Soroban escrow, multisig, disputes and refunds, recurring payments,
+reconciliation), mapped to `payment-state-machine.ts`, are in
+[Payment Lifecycle Diagrams](./payment-lifecycle.md).
+
 ```
 Patient                 API                 Stellar Network
    │                    │                        │
@@ -69,7 +74,7 @@ Daily Scheduler
     └─ Update next payment date
 ```
 
-See [Recurring Billing](./recurring-billing.md) for details.
+See [Stellar Payments](../payments/stellar-payments.md) for the recurring payment endpoints.
 
 ## Testnet Guide
 
@@ -162,5 +167,6 @@ curl https://horizon.stellar.org/accounts/YOUR_PUBLIC_KEY
 
 - [Recurring Billing](./recurring-billing.md)
 - [Payment Flow](./payment-flow.md)
+- [Payment Lifecycle Diagrams](./payment-lifecycle.md)
 - [Wallet Setup](./wallet-setup.md)
 - [Stellar Documentation](https://developers.stellar.org/)

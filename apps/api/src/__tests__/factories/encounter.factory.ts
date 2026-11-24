@@ -36,7 +36,9 @@ export function buildEncounterWithVitals(overrides: Partial<Encounter> = {}): Pa
   });
 }
 
-export function buildEncounterWithDiagnosis(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+export function buildEncounterWithDiagnosis(
+  overrides: Partial<Encounter> = {}
+): Partial<Encounter> {
   return buildEncounter({
     diagnosis: [
       { code: 'J06.9', description: 'Acute upper respiratory infection', isPrimary: true },
@@ -54,7 +56,14 @@ export function buildEncounterWithDiagnosis(overrides: Partial<Encounter> = {}):
 export function buildEncounterWithBilling(overrides: Partial<Encounter> = {}): Partial<Encounter> {
   return buildEncounter({
     billing: {
-      cptCodes: [{ code: '99213', description: 'Office visit, established patient', units: 1, fee: '150.00' }],
+      cptCodes: [
+        {
+          code: '99213',
+          description: 'Office visit, established patient',
+          units: 1,
+          fee: '150.00',
+        },
+      ],
       billingStatus: 'unbilled',
       totalFee: '150.00',
     },
@@ -62,6 +71,35 @@ export function buildEncounterWithBilling(overrides: Partial<Encounter> = {}): P
   });
 }
 
-export function buildEncounterBatch(count: number, overrides: Partial<Encounter> = {}): Partial<Encounter>[] {
+/** Closed/completed encounter — useful for reporting and archival tests. */
+export function buildClosedEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounterWithDiagnosis({
+    status: 'closed',
+    closedAt: new Date(),
+    ...overrides,
+  });
+}
+
+/** Telemedicine encounter variant. */
+export function buildTelemedicineEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounter({
+    type: 'telemedicine',
+    ...overrides,
+  });
+}
+
+/** Emergency encounter variant. */
+export function buildEmergencyEncounter(overrides: Partial<Encounter> = {}): Partial<Encounter> {
+  return buildEncounterWithVitals({
+    type: 'emergency',
+    chiefComplaint: 'Chest pain, shortness of breath',
+    ...overrides,
+  });
+}
+
+export function buildEncounterBatch(
+  count: number,
+  overrides: Partial<Encounter> = {}
+): Partial<Encounter>[] {
   return Array.from({ length: count }, () => buildEncounter(overrides));
 }

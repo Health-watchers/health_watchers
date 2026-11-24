@@ -13,6 +13,7 @@ import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
 import { paginate, parsePagination } from '@api/utils/paginate';
+import { escapeRegex } from '@api/utils/regex';
 import {
   signAccessToken,
   signRefreshToken,
@@ -24,6 +25,7 @@ import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { portalMfaService } from './portal-mfa.service';
 import { smsOtpService } from './sms-otp.service';
 import { PortalMessageModel } from './models/portal-message.model';
+import { InboxThreadModel } from '../inbox/inbox-thread.model';
 import {
   portalMessageCreateSchema,
   portalMessageQuerySchema,
@@ -38,6 +40,7 @@ import { sendMail } from '@api/utils/mailer';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
 import { sanitizeText } from '@api/utils/sanitize';
 import crypto from 'crypto';
+import { handleSuccessfulLogin } from '../auth/services/login-alert.service';
 const router = Router();
 
 const loginSchema = z.object({
@@ -181,6 +184,7 @@ router.post(
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
 
+    void handleSuccessfulLogin(user, req);
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
   })
 );
@@ -262,6 +266,7 @@ router.post(
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
     });
 
+    void handleSuccessfulLogin(user, req);
     return res.json({ status: 'success', data: { accessToken, refreshToken } });
   })
 );
@@ -374,6 +379,12 @@ router.post(
       attachments,
     });
 
+    // A new patient message re-opens a thread the care team had closed
+    await InboxThreadModel.updateOne(
+      { clinicId: message.clinicId, threadId: message.threadId, status: 'closed' },
+      { $set: { status: 'open', closedAt: null, closedBy: null } }
+    );
+
     const patientName =
       `${(patient as any).firstName || ''} ${(patient as any).lastName || ''}`.trim() || 'Patient';
     await notifyStaffAboutPatientMessage(message, patientName);
@@ -406,9 +417,10 @@ router.get(
 
     if (threadId) filter.threadId = new Types.ObjectId(threadId);
     if (q) {
+      const safeQ = escapeRegex(q);
       filter.$or = [
-        { subject: { $regex: q, $options: 'i' } },
-        { body: { $regex: q, $options: 'i' } },
+        { subject: { $regex: safeQ, $options: 'i' } },
+        { body: { $regex: safeQ, $options: 'i' } },
       ];
     }
 

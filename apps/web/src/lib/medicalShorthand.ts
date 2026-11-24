@@ -76,3 +76,26 @@ export function getSuggestions(word: string): Array<{ abbr: string; expansion: s
 export function expandShorthand(word: string): string | null {
   return MEDICAL_SHORTHANDS[word] ?? null;
 }
+
+/**
+ * Expands every known abbreviation in a run of free text (e.g. dictated speech), leaving
+ * whitespace and surrounding punctuation intact: "pt c/o SOB." → "patient complains of
+ * Shortness of breath."
+ */
+export function expandShorthandInText(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((token) => {
+      if (!token.trim()) return token;
+      const exact = expandShorthand(token);
+      if (exact) return exact;
+      // Peel trailing sentence punctuation ("SOB," / "HTN.") but keep abbreviations that end in "/"
+      const m = token.match(/^(.*?)([.,;:!?)]+)$/);
+      if (m) {
+        const expanded = expandShorthand(m[1]);
+        if (expanded) return expanded + m[2];
+      }
+      return token;
+    })
+    .join('');
+}

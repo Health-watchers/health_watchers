@@ -17,7 +17,16 @@ export function LabResultsExport({
   isLoading = false,
 }: LabResultsExportProps) {
   const generateCSV = () => {
-    const headers = ['Test Name', 'Value', 'Unit', 'Reference Min', 'Reference Max', 'Status', 'Date', 'Notes'];
+    const headers = [
+      'Test Name',
+      'Value',
+      'Unit',
+      'Reference Min',
+      'Reference Max',
+      'Status',
+      'Date',
+      'Notes',
+    ];
     const rows = results.map((r) => [
       r.testName,
       r.value,
@@ -31,11 +40,7 @@ export function LabResultsExport({
 
     const csv = [
       headers.join(','),
-      ...rows.map((row) =>
-        row
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(',')
-      ),
+      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     downloadFile(csv, `lab-results-${patientName}-${Date.now()}.csv`, 'text/csv');
@@ -132,9 +137,7 @@ startxref
   };
 
   const copyToClipboard = async () => {
-    const text = results
-      .map((r) => `${r.testName}: ${r.value} ${r.unit}`)
-      .join('\n');
+    const text = results.map((r) => `${r.testName}: ${r.value} ${r.unit}`).join('\n');
 
     try {
       await navigator.clipboard.writeText(text);
@@ -152,9 +155,7 @@ startxref
     <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Export Results
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Export Results</h3>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             Download or share your lab results in multiple formats
           </p>
@@ -205,7 +206,8 @@ startxref
 
       <div className="mt-4 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          💡 You can share your lab results with healthcare providers or use them for personal records.
+          💡 You can share your lab results with healthcare providers or use them for personal
+          records.
         </p>
       </div>
     </div>

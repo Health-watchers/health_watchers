@@ -58,7 +58,21 @@ export function useLazyRealtimeUpdates(accessToken: string | null) {
       });
 
       socket.on('notification:new', () => {
+        // Optimistically bump unread count, then invalidate to reconcile
+        queryClient.setQueryData<number>(
+          queryKeys.notifications.unreadCount(),
+          (old) => (old ?? 0) + 1
+        );
         queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      });
+
+      socket.on('lab:critical', (data: unknown) => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.labResults.all });
+        window.dispatchEvent(new CustomEvent('lab:critical', { detail: data }));
+      });
+
+      socket.on('lab:resulted', () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.labResults.all });
       });
 
       socket.on('cosignature:requested', () => {
@@ -88,6 +102,8 @@ export function useLazyRealtimeUpdates(accessToken: string | null) {
         socketRef.current.off('encounter:updated');
         socketRef.current.off('payment:confirmed');
         socketRef.current.off('notification:new');
+        socketRef.current.off('lab:critical');
+        socketRef.current.off('lab:resulted');
         socketRef.current.off('cosignature:requested');
         socketRef.current.off('cosignature:completed');
         socketRef.current.off('cosignature:rejected');

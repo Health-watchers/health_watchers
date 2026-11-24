@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { decodeCursor } from '../utils/paginate';
 
+export const DEFAULT_PAGE = 1;
+export const DEFAULT_LIMIT = 20;
+export const MAX_LIMIT = 100;
+
 export interface ParsedPagination {
   page: number;
   limit: number;
@@ -15,6 +19,10 @@ export interface PaginationMiddlewareOptions {
   allowCursor?: boolean;
 }
 
+function validationError(res: Response, message: string): void {
+  res.status(400).json({ error: 'ValidationError', message });
+}
+
 export function paginationMiddleware(
   options: PaginationMiddlewareOptions = {}
 ): (req: Request, res: Response, next: NextFunction) => void {
@@ -23,49 +31,43 @@ export function paginationMiddleware(
   return (req: Request, res: Response, next: NextFunction): void => {
     const query = req.query as Record<string, string>;
 
-    // Parse page
-    const rawPage = parseInt(query.page ?? '1', 10);
-    if (isNaN(rawPage) || rawPage < 1) {
-      res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'page must be a positive integer' });
+    // Parse page (positive integer, defaults to 1)
+    const rawPage = query.page === undefined ? DEFAULT_PAGE : Number(query.page);
+    if (!Number.isInteger(rawPage) || rawPage < 1) {
+      validationError(res, 'page must be a positive integer');
       return;
     }
 
-    // Parse limit
-    const rawLimit = parseInt(query.limit ?? '20', 10);
-    if (isNaN(rawLimit) || rawLimit < 1 || rawLimit > 100) {
-      res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'limit must be between 1 and 100' });
+    // Parse limit (integer between 1 and 100, defaults to 20)
+    const rawLimit = query.limit === undefined ? DEFAULT_LIMIT : Number(query.limit);
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > MAX_LIMIT) {
+      validationError(res, `limit must be an integer between 1 and ${MAX_LIMIT}`);
       return;
     }
 
-    // Parse sort
+    // Parse sort (field_asc | field_desc, validated against per-endpoint allowlist)
     const sortRaw = query.sort ?? defaultSort;
-    const sortMatch = /^([a-zA-Z_]+)_(asc|desc)$/.exec(sortRaw);
+    const sortMatch = /^([a-zA-Z_][a-zA-Z0-9_]*)_(asc|desc)$/.exec(sortRaw);
     if (!sortMatch) {
-      res
-        .status(400)
-        .json({ error: 'ValidationError', message: 'sort must be field_asc or field_desc' });
+      validationError(res, 'sort must be in the format field_asc or field_desc');
       return;
     }
     const [, sortField, sortDir] = sortMatch;
     if (allowedSortFields.length > 0 && !allowedSortFields.includes(sortField)) {
-      res.status(400).json({
-        error: 'ValidationError',
-        message: `sort field '${sortField}' not allowed. Allowed: ${allowedSortFields.join(', ')}`,
-      });
+      validationError(
+        res,
+        `sort field '${sortField}' not allowed. Allowed: ${allowedSortFields.join(', ')}`
+      );
       return;
     }
     const sort: Record<string, 1 | -1> = { [sortField]: sortDir === 'asc' ? 1 : -1 };
 
-    // Parse cursor (optional)
+    // Parse cursor (optional, only when enabled for the endpoint)
     let cursor: string | undefined;
-    if (allowCursor && query.cursor) {
+    if (allowCursor && query.cursor !== undefined && query.cursor !== '') {
       const decoded = decodeCursor(query.cursor);
       if (!decoded) {
-        res.status(400).json({ error: 'ValidationError', message: 'Invalid cursor value' });
+        validationError(res, 'Invalid cursor value');
         return;
       }
       cursor = decoded;

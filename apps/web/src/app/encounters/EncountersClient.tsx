@@ -62,7 +62,16 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
     queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
   };
 
-  if (isLoading) return <TableSkeleton columns={4} rows={5} />;
+  if (isLoading)
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div className="h-8 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-9 w-36 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <TableSkeleton columns={4} rows={5} />
+      </main>
+    );
   if (error)
     return (
       <ErrorMessage
@@ -80,18 +89,22 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">{labels.title}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+          {labels.title}
+        </h1>
         <button
           onClick={() => setShowForm(true)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
         >
           + New Encounter
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">New Encounter</h2>
+        <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            New Encounter
+          </h2>
           <SectionErrorBoundary name="encounter form">
             <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
           </SectionErrorBoundary>
@@ -110,23 +123,36 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
       ) : (
         <ul aria-label={labels.title} className="m-0 flex list-none flex-col gap-4 p-0">
           {encounters.map((e: Encounter) => (
-            <li key={e.id} className="rounded border border-gray-200 p-4 shadow-sm">
+            <li
+              key={e.id}
+              className="rounded border border-gray-200 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+            >
               <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
-                  <p className="font-medium break-all text-gray-900">{e.id}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {labels.id}
+                  </p>
+                  <p className="break-all font-medium text-gray-900 dark:text-gray-100">{e.id}</p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.patient}</p>
-                  <p className="font-medium break-all text-gray-900">{e.patientId}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {labels.patient}
+                  </p>
+                  <p className="break-all font-medium text-gray-900 dark:text-gray-100">
+                    {e.patientId}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.date}</p>
-                  <p className="text-gray-700">{e.date}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {labels.date}
+                  </p>
+                  <p className="text-gray-700 dark:text-gray-300">{e.date}</p>
                 </div>
                 <div>
-                  <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.notes}</p>
-                  <p className="text-gray-700">{e.notes}</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {labels.notes}
+                  </p>
+                  <p className="text-gray-700 dark:text-gray-300">{e.notes}</p>
                 </div>
               </div>
             </li>

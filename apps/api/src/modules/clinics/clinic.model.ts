@@ -1,4 +1,5 @@
 import { Schema, Types, model, models } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface SplitRatio {
   clinic: number; // percentage (0-100)
@@ -24,15 +25,11 @@ export interface IClinic {
   stellarPublicKey?: string;
   federationAddress?: string;
   subscriptionTier: 'free' | 'basic' | 'premium';
-  isActive: boolean;
-  createdBy: Types.ObjectId;
   onboardingStep: number;
   onboardingCompleted: boolean;
   onboardingCompletedAt?: Date;
   paymentSplitConfig?: PaymentSplitConfig;
   contactNumber?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 const clinicSchema = new Schema<IClinic>(
@@ -44,8 +41,6 @@ const clinicSchema = new Schema<IClinic>(
     stellarPublicKey: { type: String, sparse: true, index: true },
     federationAddress: { type: String, sparse: true, unique: true, index: true },
     subscriptionTier: { type: String, enum: ['free', 'basic', 'premium'], default: 'free' },
-    isActive: { type: Boolean, default: true, index: true },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     onboardingStep: { type: Number, default: 1, min: 1, max: 5 },
     onboardingCompleted: { type: Boolean, default: false, index: true },
     onboardingCompletedAt: { type: Date },
@@ -68,6 +63,8 @@ const clinicSchema = new Schema<IClinic>(
   },
   { timestamps: true, versionKey: false }
 );
+
+clinicSchema.add(baseSchema);
 
 export const ClinicModel = (models.Clinic ||
   model<IClinic>('Clinic', clinicSchema)) as import('mongoose').Model<IClinic>;

@@ -105,3 +105,62 @@ groups:
           summary: 'Stellar keypair decryption failure detected'
           description: 'One or more Stellar keypair decryption failures occurred in the last 5 minutes'
           runbook: 'monitoring/runbooks/STELLAR_KEYPAIR_DECRYPTION_FAILURE.md'
+
+  - name: health-watchers-secrets
+    interval: 1h
+    rules:
+      # Secret is past its rotation date — rotation is overdue
+      - alert: SecretRotationOverdue
+        expr: |
+          health_watchers_secret_age_days{job="health-watchers-secret-rotation"}
+            > on (secret_name)
+          health_watchers_secret_rotation_interval_days{job="health-watchers-secret-rotation"}
+        for: 5m
+        labels:
+          severity: critical
+          service: secrets
+          component: secret-rotation
+        annotations:
+          summary: 'Secret {{ $labels.secret_name }} rotation is overdue'
+          description: 'Secret {{ $labels.secret_name }} is {{ $value | humanize }} days old and has exceeded its rotation interval'
+          runbook: 'monitoring/runbooks/SECRET_ROTATION.md'
+          dashboard: 'http://grafana:3100/d/hw-secret-rotation'
+
+      # Secret is nearing its rotation date (within 20% of its interval)
+      - alert: SecretRotationDueSoon
+        expr: |
+          (
+            health_watchers_secret_age_days{job="health-watchers-secret-rotation"}
+              / on (secret_name)
+            health_watchers_secret_rotation_interval_days{job="health-watchers-secret-rotation"}
+          ) > 0.8
+          and on (secret_name)
+          (
+            health_watchers_secret_age_days{job="health-watchers-secret-rotation"}
+              <= on (secret_name)
+            health_watchers_secret_rotation_interval_days{job="health-watchers-secret-rotation"}
+          )
+        for: 1h
+        labels:
+          severity: warning
+          service: secrets
+          component: secret-rotation
+        annotations:
+          summary: 'Secret {{ $labels.secret_name }} is nearing its rotation date'
+          description: 'Secret {{ $labels.secret_name }} is {{ $value | humanizePercentage }} through its rotation interval'
+          runbook: 'monitoring/runbooks/SECRET_ROTATION.md'
+          dashboard: 'http://grafana:3100/d/hw-secret-rotation'
+
+      # Rotation job has not reported secret age metrics recently
+      - alert: SecretRotationMetricsStale
+        expr: |
+          time() - max by (job) (timestamp(health_watchers_secret_age_days{job="health-watchers-secret-rotation"})) > 86400
+        for: 1h
+        labels:
+          severity: warning
+          service: secrets
+          component: secret-rotation
+        annotations:
+          summary: 'Secret rotation metrics are stale'
+          description: 'No secret age metrics have been reported for more than 24 hours — the rotation job may be failing'
+          runbook: 'monitoring/runbooks/SECRET_ROTATION.md'

@@ -39,7 +39,7 @@ export function mutationAuditMiddleware(req: Request, res: Response, next: NextF
           outcome: 'SUCCESS',
           metadata: { method: req.method, path: req.path },
         },
-        req,
+        req
       ).catch((err) => {
         logger.error({ err }, 'mutation audit log failed');
       });

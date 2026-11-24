@@ -1,0 +1,78 @@
+{
+  "title": "Real-Time Alerts",
+  "uid": "hw-real-time-alerts",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["health-watchers", "alerts", "real-time"],
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Active Alerts",
+      "description": "Count of all alert rules currently in the firing state, across all severities and services.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"})",
+          "legendFormat": "Active Alerts",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Currently Firing Alerts",
+      "description": "All alerts currently in the firing state, with severity and service labels as defined on each alert rule.",
+      "gridPos": { "x": 6, "y": 0, "w": 18, "h": 8 },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{ alertname }}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        { "id": "merge", "options": {} }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Alert Count Over Time by Severity",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) by (severity)",
+          "legendFormat": "{{ severity }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    }
+  ]
+}

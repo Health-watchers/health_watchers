@@ -1,4 +1,5 @@
 // Offline form submission and sync utility
+import React from 'react';
 
 interface PendingForm {
   id: string;
@@ -7,7 +8,11 @@ interface PendingForm {
   headers: Record<string, string>;
   body: string;
   timestamp: number;
+  /** Human-readable label shown in SyncQueueStatus, e.g. "Patient Registration" */
+  label?: string;
 }
+
+export type { PendingForm };
 
 export class OfflineSync {
   private static db: IDBDatabase | null = null;
@@ -121,17 +126,17 @@ export function useOnlineStatus() {
 // Hook for listening to service worker messages
 export function useServiceWorkerMessage(callback: (data: any) => void) {
   React.useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      const handleMessage = (event: MessageEvent) => {
-        callback(event.data);
-      };
+    if (!('serviceWorker' in navigator)) return;
 
-      navigator.serviceWorker.addEventListener('message', handleMessage);
+    const handleMessage = (event: MessageEvent) => {
+      callback(event.data);
+    };
 
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', handleMessage);
-      };
-    }
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
   }, [callback]);
 }
 
@@ -143,8 +148,12 @@ export function usePendingSync() {
 
   React.useEffect(() => {
     const updatePendingCount = async () => {
-      const pending = await OfflineSync.getPendingForms();
-      setPendingCount(pending.length);
+      try {
+        const pending = await OfflineSync.getPendingForms();
+        setPendingCount(pending.length);
+      } catch {
+        // IndexedDB may not be available (SSR / private browsing)
+      }
     };
 
     updatePendingCount();

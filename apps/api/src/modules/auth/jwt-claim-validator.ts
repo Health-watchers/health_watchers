@@ -20,8 +20,20 @@ export interface JwtValidationResult {
 
 /**
  * Validates all required JWT claims explicitly.
- * Checks iss, aud, exp, and signature independently
- * so failures can be diagnosed with a specific error code.
+ *
+ * Checks iss, aud, exp, jti, and signature independently so failures can
+ * be diagnosed with a specific error code.
+ *
+ * Validation order:
+ *   1. Decode (MALFORMED_TOKEN)
+ *   2. Issuer  (MISSING_ISSUER / INVALID_ISSUER)
+ *   3. Audience (MISSING_AUDIENCE / INVALID_AUDIENCE)
+ *   4. Expiry presence (MISSING_EXPIRY)
+ *   5. Expiry value (TOKEN_EXPIRED)
+ *   6. JTI presence (MISSING_JTI)
+ *   7. Signature (INVALID_SIGNATURE)
+ *
+ * Closes #1037 — JWT Token Validation Enhancement
  */
 export function validateJwtClaims(
   token: string,
@@ -29,7 +41,7 @@ export function validateJwtClaims(
   expectedIssuer: string,
   expectedAudience: string
 ): JwtValidationResult {
-  // First decode without verification to inspect claims before signature check
+  // Step 1: Decode without verification to inspect claims before signature check
   let decoded: jwt.Jwt | null;
   try {
     decoded = jwt.decode(token, { complete: true });
@@ -43,7 +55,7 @@ export function validateJwtClaims(
 
   const payload = decoded.payload as jwt.JwtPayload;
 
-  // Validate issuer claim
+  // Step 2: Validate issuer claim
   if (!payload.iss) {
     return { valid: false, error: 'MISSING_ISSUER' };
   }
@@ -51,7 +63,7 @@ export function validateJwtClaims(
     return { valid: false, error: 'INVALID_ISSUER' };
   }
 
-  // Validate audience claim
+  // Step 3: Validate audience claim
   const aud = Array.isArray(payload.aud) ? payload.aud : payload.aud ? [payload.aud] : [];
   if (aud.length === 0) {
     return { valid: false, error: 'MISSING_AUDIENCE' };
@@ -60,20 +72,26 @@ export function validateJwtClaims(
     return { valid: false, error: 'INVALID_AUDIENCE' };
   }
 
-  // Validate expiry claim presence
+  // Step 4: Validate expiry claim presence
   if (payload.exp === undefined || payload.exp === null) {
     return { valid: false, error: 'MISSING_EXPIRY' };
   }
 
-  // Validate expiry (exp)
+  // Step 5: Validate expiry value
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (payload.exp <= nowSeconds) {
     return { valid: false, error: 'TOKEN_EXPIRED' };
   }
 
-  // Verify signature (this also re-checks iss, aud, exp via the library)
+  // Step 6: Validate JTI (JWT ID) — required for replay-attack prevention
+  if (!payload.jti) {
+    return { valid: false, error: 'MISSING_JTI' };
+  }
+
+  // Step 7: Verify signature (also re-checks iss, aud, exp via the library)
   try {
     const verified = jwt.verify(token, secret, {
+      algorithms: ['HS256'],
       issuer: expectedIssuer,
       audience: expectedAudience,
     }) as jwt.JwtPayload;

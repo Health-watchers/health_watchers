@@ -76,3 +76,27 @@ declare module 'react-query' {
   export const QueryClient: any;
   export const QueryClientProvider: any;
 }
+declare module 'react-native-ssl-public-key-pinning' {
+  export type DomainOptions = {
+    includeSubdomains?: boolean;
+    publicKeyHashes: string[];
+    expirationDate?: string;
+  };
+  export type PinningOptions = { [domain: string]: DomainOptions };
+  export type PinningError = { serverHostname: string; message?: string };
+  export function isSslPinningAvailable(): boolean;
+  export function initializeSslPinning(options: PinningOptions): Promise<void>;
+  export function disableSslPinning(): Promise<void>;
+  export function addSslPinningErrorListener(callback: (error: PinningError) => void): {
+    remove(): void;
+  };
+}
+declare module 'jail-monkey' {
+  const JailMonkey: {
+    isJailBroken(): boolean;
+    hookDetected(): boolean;
+    trustFall(): boolean;
+  };
+  export default JailMonkey;
+}
+declare const __DEV__: boolean;

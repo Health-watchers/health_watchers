@@ -9,9 +9,15 @@
 .env.staging
 .env.test.local
 .env.development.local
+.env.save
+.env.*.save
 # Keep .env.example tracked (it's a template)
 !.env.example
 !.env.cdn.example
+
+# Reject any file containing merge conflict markers (should never be committed)
+*.orig
+*.rej
 
 # =============================================================================
 # Dependencies
@@ -62,18 +68,41 @@ jest-results.json
 
 # Jest snapshot files (auto-generated, should not be committed)
 **/__snapshots__/
+*.snap
+
+# Jest test result JSON files
+jest-results*.json
+test-results*.json
 
 # Playwright test artifacts
 playwright-report/
+playwright-visual-report/
+pseudo-locale-report/
 test-results/
 blob-report/
 playwright/.cache/
 .playwright/
 
+# NOTE: Playwright visual-regression baseline screenshots live in
+# `<specfile>-snapshots/` directories (e.g. apps/web/e2e/visual-regression.spec.ts-snapshots/).
+# These golden baselines are intentionally NOT ignored — they are committed to
+# version control as the reference for visual regression tests. Only the
+# `**/__snapshots__/` (Jest) pattern above is ignored.
+
+# Dev-only pseudo-locale generated from en.json (apps/web/scripts/generate-pseudo-locale.mjs)
+apps/web/messages/en-XA.json
+
 # Stryker mutation testing output
 .stryker-tmp/
 stryker-report/
-reports/
+# Scope to known generated-report directories only — do NOT use bare `reports/`
+# which would accidentally ignore apps/api/src/modules/reports/
+apps/api/reports/
+apps/api/stryker-reports/
+
+# Generated performance & quality pipeline reports
+performance/reports/
+scripts/quality/reports/
 
 # Pact contract test artifacts
 pacts/*.json
@@ -150,7 +179,6 @@ docker-volumes/
 .stylelintcache
 *.tgz
 *.tar.gz
-apps/api/reports/
 
 # =============================================================================
 # Runtime / Debug artifacts
@@ -175,6 +203,18 @@ apps/docs/build/
 # =============================================================================
 *.local
 docker-compose.override.yml
+
+# =============================================================================
+# Editor / tool-specific working folders (kept local, never committed)
+# =============================================================================
+# Kiro editor specs and steering files (one-off tool specs, not project docs)
+.kiro/
+# Cursor editor rules
+.cursor/
+# Windsurf editor rules
+.windsurf/
+# JetBrains AI assistant local state
+.aidea/
 
 # =============================================================================
 # Security Scan Reports (generated artefacts — not source files)
@@ -228,3 +268,28 @@ sbom-*.xml
 
 # GitHub Actions local run artifacts (act)
 .act/
+
+# =============================================================================
+# Additional exclusions — issues #1061-#1064 (feature branch cleanup)
+# =============================================================================
+
+# k6 test result artifacts
+k6-results.json
+k6-summary.json
+
+# Query optimisation profiling output
+query-profile-*.json
+slow-queries-*.json
+
+# Benchmark result snapshots (generated at CI run time, not source)
+benchmark-results/
+benchmark-*.json
+
+# Local migration lock files
+.migrate
+
+# Temporary REPL / debug files
+*.repl.ts
+*.debug.ts
+scratch.*
+scripts/translation-report.json

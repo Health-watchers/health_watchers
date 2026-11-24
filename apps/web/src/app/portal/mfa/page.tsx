@@ -52,7 +52,10 @@ export default function PortalMFAVerification() {
       localStorage.setItem('portalRefreshToken', data.data.refreshToken);
       localStorage.removeItem('portalMfaTempToken');
 
-      router.push('/portal/dashboard');
+      // Redirect to the originally requested URL (deep link) or default to dashboard
+      const returnTo = localStorage.getItem('portalReturnTo') ?? '/portal/dashboard';
+      localStorage.removeItem('portalReturnTo');
+      router.push(returnTo);
     } catch (err) {
       setError('An error occurred. Please try again.');
       console.error(err);
@@ -101,7 +104,7 @@ export default function PortalMFAVerification() {
               }}
               placeholder={useBackupCode ? 'Enter backup code' : '000000'}
               maxLength={useBackupCode ? 32 : 6}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-center font-mono text-2xl tracking-widest focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-center font-mono text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
               disabled={loading}
             />

@@ -18,12 +18,7 @@ interface AsyncErrorState {
 }
 
 export function useAsyncError(options: UseAsyncErrorOptions = {}) {
-  const {
-    maxRetries = 3,
-    retryDelay = 1000,
-    onError,
-    onRetry,
-  } = options;
+  const { maxRetries = 3, retryDelay = 1000, onError, onRetry } = options;
 
   const [state, setState] = useState<AsyncErrorState>({
     error: null,
@@ -33,7 +28,7 @@ export function useAsyncError(options: UseAsyncErrorOptions = {}) {
   });
 
   const execute = useCallback(
-    async <T,>(
+    async <T>(
       asyncFn: () => Promise<T>,
       shouldRetry?: (error: Error, attempt: number) => boolean
     ): Promise<T | null> => {
@@ -52,8 +47,7 @@ export function useAsyncError(options: UseAsyncErrorOptions = {}) {
           attempt++;
 
           const canRetry =
-            attempt < maxRetries &&
-            (!shouldRetry || shouldRetry(lastError, attempt));
+            attempt < maxRetries && (!shouldRetry || shouldRetry(lastError, attempt));
 
           if (canRetry) {
             setState((prev) => ({
@@ -109,7 +103,7 @@ export function useAsyncError(options: UseAsyncErrorOptions = {}) {
   }, []);
 
   const retry = useCallback(
-    async <T,>(asyncFn: () => Promise<T>) => {
+    async <T>(asyncFn: () => Promise<T>) => {
       return execute(asyncFn);
     },
     [execute]

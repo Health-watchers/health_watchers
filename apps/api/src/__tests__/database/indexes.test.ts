@@ -56,7 +56,9 @@ describe('Database Indexes', () => {
       const clinicId = new mongoose.Types.ObjectId();
       const base = buildPatientBatch(1, { clinicId })[0]!;
       await PatientModel.create(base);
-      await expect(PatientModel.create({ ...buildPatientBatch(1, { clinicId })[0]!, systemId: base.systemId })).rejects.toThrow();
+      await expect(
+        PatientModel.create({ ...buildPatientBatch(1, { clinicId })[0]!, systemId: base.systemId })
+      ).rejects.toThrow();
     });
 
     it('clinicId query uses an index (not COLLSCAN)', async () => {
@@ -64,7 +66,10 @@ describe('Database Indexes', () => {
       await PatientModel.insertMany(buildPatientBatch(5, { clinicId }));
 
       const plan = await explainFind(PatientModel, { clinicId });
-      const stage: string = plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
+      const stage: string =
+        plan?.executionStats?.executionStages?.stage ??
+        plan?.queryPlanner?.winningPlan?.stage ??
+        '';
       expect(stage).not.toBe('COLLSCAN');
     });
 
@@ -108,7 +113,10 @@ describe('Database Indexes', () => {
       );
 
       const plan = await explainFind(EncounterModel, { clinicId, status: 'open' });
-      const stage: string = plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
+      const stage: string =
+        plan?.executionStats?.executionStages?.stage ??
+        plan?.queryPlanner?.winningPlan?.stage ??
+        '';
       expect(stage).not.toBe('COLLSCAN');
     });
 
@@ -123,7 +131,9 @@ describe('Database Indexes', () => {
     it('unique index on paymentrecords.intentId rejects duplicate', async () => {
       const pay = buildPaymentBatch(1)[0]!;
       await PaymentRecordModel.create(pay);
-      await expect(PaymentRecordModel.create({ ...buildPaymentBatch(1)[0]!, intentId: pay.intentId })).rejects.toThrow();
+      await expect(
+        PaymentRecordModel.create({ ...buildPaymentBatch(1)[0]!, intentId: pay.intentId })
+      ).rejects.toThrow();
     });
 
     it('index exists on paymentrecords.clinicId', async () => {
@@ -149,7 +159,10 @@ describe('Database Indexes', () => {
       await PaymentRecordModel.insertMany(buildPaymentBatch(5, { clinicId }));
 
       const plan = await explainFind(PaymentRecordModel, { clinicId });
-      const stage: string = plan?.executionStats?.executionStages?.stage ?? plan?.queryPlanner?.winningPlan?.stage ?? '';
+      const stage: string =
+        plan?.executionStats?.executionStages?.stage ??
+        plan?.queryPlanner?.winningPlan?.stage ??
+        '';
       expect(stage).not.toBe('COLLSCAN');
     });
 

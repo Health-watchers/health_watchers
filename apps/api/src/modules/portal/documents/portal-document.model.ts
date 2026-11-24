@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export type DocumentCategory =
   | 'insurance_card'
@@ -48,6 +49,7 @@ const PortalDocumentSchema = new Schema<IPortalDocument>(
   { timestamps: true }
 );
 
+PortalDocumentSchema.add(baseSchema);
 PortalDocumentSchema.index({ patientId: 1, uploadedAt: -1 });
 
 export const PortalDocumentModel = mongoose.model<IPortalDocument>(

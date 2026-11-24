@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { baseSchema } from '@api/shared';
 
 export interface SurgicalHistory {
   procedure: string;
@@ -105,7 +106,8 @@ const medicalHistorySchema = new Schema<IMedicalHistory>(
   { timestamps: true, versionKey: false }
 );
 
-// Index for clinic-scoped queries
+medicalHistorySchema.add(baseSchema);
+
 medicalHistorySchema.index({ clinicId: 1, patientId: 1 });
 
 export const MedicalHistoryModel = (mongoose.models.MedicalHistory ||

@@ -21,10 +21,16 @@ export function PatientDocumentsTab({ patientId, clinicId }: PatientDocumentsTab
   const queryClient = useQueryClient();
   const [viewing, setViewing] = useState<Document | null>(null);
 
-  const { data: documents = [], isLoading, error } = useQuery<Document[]>({
+  const {
+    data: documents = [],
+    isLoading,
+    error,
+  } = useQuery<Document[]>({
     queryKey: ['documents', patientId],
     queryFn: async () => {
-      const res = await fetch(`${API_V1}/documents?patientId=${patientId}`, { credentials: 'include' });
+      const res = await fetch(`${API_V1}/documents?patientId=${patientId}`, {
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error('Failed to load documents');
       const body = await res.json();
       return body.data ?? [];
@@ -56,7 +62,10 @@ export function PatientDocumentsTab({ patientId, clinicId }: PatientDocumentsTab
             onRetry={() => queryClient.invalidateQueries({ queryKey: ['documents', patientId] })}
           />
         ) : documents.length === 0 && !canUpload ? (
-          <EmptyState title="No documents" description="No documents have been uploaded for this patient." />
+          <EmptyState
+            title="No documents"
+            description="No documents have been uploaded for this patient."
+          />
         ) : (
           <DocumentList documents={documents} onView={setViewing} />
         )}

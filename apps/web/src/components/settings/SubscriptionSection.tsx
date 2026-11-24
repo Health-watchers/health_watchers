@@ -19,6 +19,7 @@ interface SubscriptionData {
     currentPeriodStart: string;
     currentPeriodEnd: string;
     cancelAtPeriodEnd: boolean;
+    trialEndsAt?: string | null;
   };
   usage: {
     patientCount: number;
@@ -28,6 +29,14 @@ interface SubscriptionData {
   };
   limits: TierLimits;
   prices: Record<Tier, number>;
+  features?: Record<Tier, string[]>;
+}
+
+interface ProrationPreview {
+  amountDue: number;
+  credit: number;
+  nextBillingAmount: number;
+  effectiveDate: string;
 }
 
 const TIER_LABELS: Record<Tier, string> = { free: 'Free', basic: 'Basic', premium: 'Premium' };
@@ -51,6 +60,31 @@ async function changeTier(tier: Tier): Promise<void> {
     body: JSON.stringify({ tier }),
   });
   if (!res.ok) throw new Error('Failed to update tier');
+}
+
+async function fetchProration(tier: Tier): Promise<ProrationPreview> {
+  const res = await fetch(`/api/subscriptions/proration?tier=${encodeURIComponent(tier)}`);
+  if (!res.ok) throw new Error('Failed to calculate proration');
+  const body = await res.json();
+  return body.data;
+}
+
+async function setCancelAtPeriodEnd(cancel: boolean): Promise<void> {
+  const res = await fetch('/api/subscriptions/cancel', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cancelAtPeriodEnd: cancel }),
+  });
+  if (!res.ok) throw new Error('Failed to update cancellation');
+}
+
+function daysRemaining(iso: string): number {
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+function formatCurrency(amount: number): string {
+  return `$${amount.toFixed(2)}`;
 }
 
 function UsageBar({ label, current, limit }: { label: string; current: number; limit: number }) {
@@ -95,6 +129,19 @@ export function SubscriptionSection() {
     },
   });
 
+  const prorationQuery = useQuery({
+    queryKey: ['subscription', 'proration', confirmTier],
+    queryFn: () => fetchProration(confirmTier as Tier),
+    enabled: confirmTier !== null,
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: setCancelAtPeriodEnd,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+
   if (isLoading) {
     return <div className="py-8 text-center text-sm text-neutral-500">Loading subscription…</div>;
   }
@@ -107,7 +154,9 @@ export function SubscriptionSection() {
     );
   }
 
-  const { subscription, usage, limits, prices } = data;
+  const { subscription, usage, limits, prices, features } = data;
+  const isTrialing = subscription.status === 'trialing' && !!subscription.trialEndsAt;
+  const trialDaysLeft = subscription.trialEndsAt ? daysRemaining(subscription.trialEndsAt) : 0;
   const statusColors: Record<string, string> = {
     active: 'bg-green-100 text-green-700',
     trialing: 'bg-blue-100 text-blue-700',
@@ -136,6 +185,17 @@ export function SubscriptionSection() {
           </span>
         </div>
 
+        {isTrialing && (
+          <div
+            className={`mb-4 rounded-md p-3 text-sm ${
+              trialDaysLeft <= 3 ? 'bg-amber-50 text-amber-800' : 'bg-blue-50 text-blue-800'
+            }`}
+          >
+            {trialDaysLeft === 0
+              ? '⏰ Your trial ends today. Add billing details to keep access.'
+              : `🎁 Trial ends in ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} (${new Date(subscription.trialEndsAt as string).toLocaleDateString()}).`}
+          </div>
+        )}
         {subscription.status === 'past_due' && (
           <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
             ⚠️ Payment is overdue. Please update your billing to avoid account suspension.
@@ -145,6 +205,46 @@ export function SubscriptionSection() {
           <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
             🚫 Your account is suspended. Upgrade your plan to restore access.
           </div>
+        )}
+        {subscription.cancelAtPeriodEnd && (
+          <div className="mb-4 rounded-md bg-neutral-50 p-3 text-sm text-neutral-700">
+            Your subscription will be cancelled on{' '}
+            {new Date(subscription.currentPeriodEnd).toLocaleDateString()}. You can resume anytime
+            before then.
+          </div>
+        )}
+
+        {/* Cancellation toggle */}
+        <div className="mb-4 flex items-center justify-between rounded-md border border-neutral-200 p-3">
+          <div>
+            <p className="text-sm font-medium text-neutral-800">Cancel at period end</p>
+            <p className="text-xs text-neutral-500">
+              Keep access until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={subscription.cancelAtPeriodEnd}
+            disabled={cancelMutation.isPending || subscription.tier === 'free'}
+            onClick={() => cancelMutation.mutate(!subscription.cancelAtPeriodEnd)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+              subscription.cancelAtPeriodEnd ? 'bg-primary-600' : 'bg-neutral-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                subscription.cancelAtPeriodEnd ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        {cancelMutation.isError && (
+          <p className="mb-4 text-sm text-red-500">
+            {cancelMutation.error instanceof Error
+              ? cancelMutation.error.message
+              : 'Failed to update cancellation'}
+          </p>
         )}
 
         {/* Usage */}
@@ -180,7 +280,7 @@ export function SubscriptionSection() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-semibold text-neutral-900">{TIER_LABELS[tier]}</span>
                   {isCurrent && (
-                    <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-medium">
+                    <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
                       Current
                     </span>
                   )}
@@ -198,13 +298,20 @@ export function SubscriptionSection() {
                     🤖 {formatLimit(TIER_LIMITS_MAP[tier].maxAiRequestsPerMonth)} AI requests/mo
                   </li>
                 </ul>
+                {features?.[tier] && features[tier].length > 0 && (
+                  <ul className="mb-5 space-y-1 text-xs text-neutral-500">
+                    {features[tier].map((feature) => (
+                      <li key={feature}>✓ {feature}</li>
+                    ))}
+                  </ul>
+                )}
                 {!isCurrent && (
                   <button
                     type="button"
                     onClick={() => setConfirmTier(tier)}
                     className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                       isUpgrade
-                        ? 'bg-primary-600 hover:bg-primary-700 text-white'
+                        ? 'bg-primary-600 text-white hover:bg-primary-700'
                         : 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
                     }`}
                   >
@@ -224,11 +331,41 @@ export function SubscriptionSection() {
             <h3 className="mb-2 text-base font-semibold text-neutral-900">
               Switch to {TIER_LABELS[confirmTier]} Plan?
             </h3>
-            <p className="mb-6 text-sm text-neutral-600">
-              {prices[confirmTier] === 0
-                ? 'You will be downgraded to the Free plan immediately.'
-                : `You will be billed $${prices[confirmTier]}/month starting next cycle.`}
-            </p>
+            <div className="mb-6 space-y-2 text-sm text-neutral-600">
+              {prices[confirmTier] === 0 ? (
+                <p>You will be downgraded to the Free plan immediately.</p>
+              ) : (
+                <p>You will be billed ${prices[confirmTier]}/month starting next cycle.</p>
+              )}
+              {prorationQuery.isLoading && <p className="text-neutral-500">Calculating proration…</p>}
+              {prorationQuery.isError && (
+                <p className="text-red-500">Unable to calculate proration for this change.</p>
+              )}
+              {prorationQuery.data && (
+                <div className="rounded-md bg-neutral-50 p-3 text-xs text-neutral-700">
+                  <div className="flex justify-between">
+                    <span>Prorated charge today</span>
+                    <span className="font-medium">
+                      {formatCurrency(prorationQuery.data.amountDue)}
+                    </span>
+                  </div>
+                  {prorationQuery.data.credit > 0 && (
+                    <div className="flex justify-between">
+                      <span>Credit from current plan</span>
+                      <span className="font-medium">
+                        -{formatCurrency(prorationQuery.data.credit)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="mt-1 flex justify-between border-t border-neutral-200 pt-1">
+                    <span>Next invoice</span>
+                    <span className="font-medium">
+                      {formatCurrency(prorationQuery.data.nextBillingAmount)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex gap-3">
               <button
                 type="button"
@@ -239,9 +376,9 @@ export function SubscriptionSection() {
               </button>
               <button
                 type="button"
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || prorationQuery.isLoading}
                 onClick={() => mutation.mutate(confirmTier)}
-                className="bg-primary-600 hover:bg-primary-700 flex-1 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="flex-1 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
               >
                 {mutation.isPending ? 'Saving…' : 'Confirm'}
               </button>

@@ -1,10 +1,59 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["tsconfig.base.json", ".env.example"],
+  "globalEnv": [
+    "NEXT_PUBLIC_*",
+    "NODE_ENV",
+    "CI",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "TURBO_TOKEN",
+    "TURBO_TEAM"
+  ],
+  "remoteCache": {
+    "enabled": false
+  },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "package.json", "tsconfig.json"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "inputs": [
+        "src/**",
+        "app/**",
+        "pages/**",
+        "components/**",
+        "lib/**",
+        "public/**",
+        "package.json",
+        "tsconfig*.json",
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
+        "vite.config.*",
+        "webpack.config.*",
+        "rollup.config.*",
+        "tsup.config.*",
+        "expo.config.*",
+        "app.json",
+        "app.config.*"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**", "out/**"]
+    },
+    "build:analyze": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "pages/**",
+        "components/**",
+        "lib/**",
+        "public/**",
+        "package.json",
+        "tsconfig*.json",
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**", "out/**"]
     },
     "dev": {
       "cache": false,
@@ -12,16 +61,62 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tests/**", "__tests__/**", "jest.config.*"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "pages/**",
+        "components/**",
+        "lib/**",
+        "tests/**",
+        "__tests__/**",
+        "e2e/**",
+        "test/**",
+        "jest.config.*",
+        "jest.setup.*",
+        "vitest.config.*",
+        "vitest.setup.*",
+        "playwright.config.*",
+        "cypress.config.*",
+        "package.json",
+        "tsconfig*.json"
+      ],
       "outputs": ["coverage/**"]
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig.json"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "pages/**",
+        "components/**",
+        "lib/**",
+        "tests/**",
+        "__tests__/**",
+        "e2e/**",
+        "test/**",
+        "package.json",
+        "tsconfig*.json",
+        "next-env.d.ts"
+      ],
       "outputs": []
     },
     "lint": {
-      "inputs": ["src/**", ".eslintrc.*", "eslint.config.*"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "pages/**",
+        "components/**",
+        "lib/**",
+        "tests/**",
+        "__tests__/**",
+        "e2e/**",
+        "test/**",
+        "package.json",
+        "tsconfig*.json",
+        ".eslintrc.*",
+        "eslint.config.*",
+        ".eslintignore"
+      ],
       "outputs": []
     },
     "start": {

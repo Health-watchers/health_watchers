@@ -12,6 +12,13 @@ import {
   suggestClinicalCodes,
   checkDrugInteractions,
 } from './ai.service';
+import {
+  assertAiProcessingAllowed,
+  AiProcessingDisabledError,
+  AiBaaMissingError,
+  generateGatedContent,
+  auditAiCall,
+} from './llm-client';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validate.middleware';
 import logger from '../../utils/logger';
@@ -33,11 +40,33 @@ import {
   updateTriageStatus,
 } from './triage.service';
 import { populationHealthRoutes } from './population-health.controller';
+import multer from 'multer';
+import { ClinicSettingsModel } from '../clinics/clinic-settings.model';
+import { generateText, isLLMUnavailableError } from '../../lib/llm';
 
 const router = Router();
 
+function sendAIUnavailable(res: Response) {
+  return res.status(503).json({
+    error: 'AI_UNAVAILABLE',
+    message: 'AI service is temporarily unavailable. Please try again later.',
+  });
+}
+
 // Mount population health routes
 router.use('/', populationHealthRoutes);
+
+/**
+ * Map a gating error (clinic opt-out / missing BAA) to a 403 response.
+ * Returns true when the error was handled.
+ */
+function handleAiGateError(error: unknown, res: Response): boolean {
+  if (error instanceof AiProcessingDisabledError || error instanceof AiBaaMissingError) {
+    res.status(403).json({ error: error.code, message: error.message });
+    return true;
+  }
+  return false;
+}
 
 // GET /api/v1/ai/health
 router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
@@ -45,7 +74,7 @@ router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 // POST /api/v1/ai/summarize
 // Request body: { encounterId?: string, text?: string }
 // Returns: { success: boolean, summary: string, disclaimer: string }
-router.post('/summarize', authenticate, async (req: Request, res: Response) => {
+summaryRoutes.post('/summarize', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     if (!isAIServiceAvailable()) {
@@ -65,6 +94,9 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
       });
     }
 
+    // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+    await assertAiProcessingAllowed(req.user!.clinicId);
+
     let summary: string;
     let encounter: any;
 
@@ -77,6 +109,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         });
       }
       summary = await generateRawTextSummary(text);
+      await auditAiCall(req, { feature: 'summarize', patientId: null });
     } else {
       // encounterId input
       if (!isValidObjectId(encounterId)) {
@@ -111,6 +144,10 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         notes: encounter.notes,
         diagnosis: encounter.diagnosis,
         vitalSigns: encounter.vitalSigns,
+      });
+      await auditAiCall(req, {
+        feature: 'summarize',
+        patientId: String(encounter.patientId),
       });
 
       // Store the summary in the encounter
@@ -152,6 +189,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     const duration = Date.now() - startTime;
+    if (handleAiGateError(error, res)) return;
     logger.error({ err: error, duration }, 'AI summarize error');
 
     if (error instanceof Error && error.message.includes('Failed to generate AI summary')) {
@@ -170,7 +208,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
 
 // POST /api/v1/ai/patient-summary/:patientId
 // Returns: { success: boolean, summary: { overview, activeConditions, currentMedications, recentLabResults, upcomingAppointments, riskFactors } }
-router.post(
+summaryRoutes.post(
   '/patient-summary/:patientId',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
@@ -191,6 +229,9 @@ router.post(
           message: 'Valid patientId is required',
         });
       }
+
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
 
       const clinicId = String(req.user!.clinicId);
       const cacheKey = `ai:patient-summary:${clinicId}:${patientId}`;
@@ -300,11 +341,13 @@ router.post(
         cache.set(cacheKey, response, 60 * 60),
         PatientModel.findByIdAndUpdate(patientId, { lastSummaryGeneratedAt: new Date() }),
       ]);
+      await auditAiCall(req, { feature: 'patient-summary', patientId });
 
       logger.info({ patientId, duration: Date.now() - startTime }, 'Patient summary generated');
       return res.json({ success: true, patientId, ...response });
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error, duration }, 'AI patient-summary error');
       if (
         error instanceof Error &&
@@ -326,7 +369,7 @@ router.post(
 // POST /api/v1/ai/insights
 // Request body: { patientId: string }
 // Returns: { success: boolean, insights: string, disclaimer: string }
-router.post('/insights', authenticate, async (req: Request, res: Response) => {
+summaryRoutes.post('/insights', authenticate, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     if (!isAIServiceAvailable()) {
@@ -343,6 +386,9 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
         message: 'Valid patientId is required',
       });
     }
+
+    // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+    await assertAiProcessingAllowed(req.user!.clinicId);
 
     const { EncounterModel } = await import('../encounters/encounter.model');
 
@@ -373,6 +419,7 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
     );
 
     const duration = Date.now() - startTime;
+    await auditAiCall(req, { feature: 'insights', patientId });
     logger.info(
       { patientId, encounterCount: encounters.length, duration },
       'AI insights generated'
@@ -387,6 +434,7 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     const duration = Date.now() - startTime;
+    if (handleAiGateError(error, res)) return;
     logger.error({ err: error, duration }, 'AI insights error');
 
     if (error instanceof Error && error.message.includes('Failed to generate patient insights')) {
@@ -403,10 +451,13 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// ── Interactions routes (drug-interactions) ──────────────────────────────────
+export const interactionsRoutes = Router();
+
 // POST /api/v1/ai/drug-interactions
 // Request body: { medications: string[] }
 // Returns: DrugInteractionResult (always — safe fallback on failure)
-router.post(
+interactionsRoutes.post(
   '/drug-interactions',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN', 'NURSE'),
@@ -421,8 +472,12 @@ router.post(
         });
       }
 
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const { medications } = req.body as DrugInteractionRequestDto;
       const result = await checkDrugInteractions(medications);
+      await auditAiCall(req, { feature: 'drug-interactions', patientId: null });
 
       const duration = Date.now() - startTime;
       logger.info(
@@ -433,6 +488,7 @@ router.post(
       return res.json({ success: true, ...result });
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error, duration }, 'Drug interaction check error');
       return res.status(500).json({
         error: 'InternalServerError',
@@ -442,10 +498,13 @@ router.post(
   }
 );
 
+// ── Diagnosis routes (health-trends, interpret-labs, generate-care-plan, differential-diagnosis) ──
+export const diagnosisRoutes = Router();
+
 // POST /api/v1/ai/health-trends
 // Request body: { patientId: string }
 // Returns: { success: boolean, summary: string }
-router.post('/health-trends', authenticate, async (req: Request, res: Response) => {
+diagnosisRoutes.post('/health-trends', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({ error: 'AIUnavailable' });
@@ -457,6 +516,9 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
         .status(400)
         .json({ error: 'ValidationError', message: 'Valid patientId is required' });
     }
+
+    // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+    await assertAiProcessingAllowed(req.user!.clinicId);
 
     const { EncounterModel } = await import('../encounters/encounter.model');
     const { PatientModel } = await import('../patients/models/patient.model');
@@ -485,11 +547,6 @@ router.post('/health-trends', authenticate, async (req: Request, res: Response) 
       });
     }
 
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const { config } = await import('@health-watchers/config');
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `You are a medical AI assistant. Analyze the following anonymized vital sign history and provide a concise health trend summary in 2-3 sentences. Focus on notable patterns, improvements, or concerns.
 
 Vital Signs History (chronological):
@@ -497,12 +554,20 @@ ${JSON.stringify(anonymizedVitals, null, 2)}
 
 Provide a professional health trend summary:`;
 
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text();
+    // Shared LLM client: anonymises the prompt and uses the BAA-eligible endpoint
+    const summary = await generateGatedContent(prompt, {
+      feature: 'health-trends',
+      patientId,
+    });
+    await auditAiCall(req, { feature: 'health-trends', patientId });
 
     return res.json({ success: true, summary, readings: anonymizedVitals.length });
   } catch (error: any) {
+    if (handleAiGateError(error, res)) return;
     logger.error({ err: error }, 'AI health-trends error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -510,7 +575,7 @@ Provide a professional health trend summary:`;
 // POST /api/v1/ai/interpret-labs
 // Request body: { labResultId: string }
 // Returns: { success: boolean, interpretation: string, criticalValues: string[] }
-router.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
+diagnosisRoutes.post('/interpret-labs', authenticate, async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({ error: 'AIUnavailable' });
@@ -523,8 +588,14 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
         .json({ error: 'ValidationError', message: 'Valid labResultId is required' });
     }
 
+    // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+    await assertAiProcessingAllowed(req.user!.clinicId);
+
     const { LabResultModel } = await import('../lab-results/lab-result.model');
-    const labResult = await LabResultModel.findById(labResultId);
+    const labResult = await LabResultModel.findOne({
+      _id: labResultId,
+      clinicId: req.user!.clinicId,
+    });
     if (!labResult) {
       return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
     }
@@ -538,11 +609,6 @@ router.post('/interpret-labs', authenticate, async (req: Request, res: Response)
       .filter((r) => r.flag === 'HH' || r.flag === 'LL')
       .map((r) => `${r.parameter} (${r.value} ${r.unit}, flag: ${r.flag})`);
 
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const { config } = await import('@health-watchers/config');
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `You are a medical AI assistant. Interpret the following lab results in plain language for a clinician.
 Highlight any abnormal values and flag critical values (HH/LL) for immediate attention. Keep the response to 3-4 sentences.
 
@@ -552,12 +618,23 @@ ${labResult.results.map((r) => `- ${r.parameter}: ${r.value} ${r.unit} (ref: ${r
 
 Provide a plain-language clinical interpretation:`;
 
-    const result = await model.generateContent(prompt);
-    const interpretation = result.response.text();
+    // Shared LLM client: anonymises the prompt and uses the BAA-eligible endpoint
+    const interpretation = await generateGatedContent(prompt, {
+      feature: 'interpret-labs',
+      patientId: String(labResult.patientId),
+    });
+    await auditAiCall(req, {
+      feature: 'interpret-labs',
+      patientId: String(labResult.patientId),
+    });
 
     return res.json({ success: true, interpretation, criticalValues });
   } catch (error: any) {
+    if (handleAiGateError(error, res)) return;
     logger.error({ err: error }, 'AI interpret-labs error');
+    if (isLLMUnavailableError(error)) {
+      return sendAIUnavailable(res);
+    }
     return res.status(500).json({ error: 'InternalServerError', message: error.message });
   }
 });
@@ -565,7 +642,7 @@ Provide a plain-language clinical interpretation:`;
 // POST /api/v1/ai/generate-care-plan
 // Input: { patientId, condition, icdCode? }
 // Returns: AI-suggested care plan (not saved — doctor must approve via POST /care-plans)
-router.post(
+diagnosisRoutes.post(
   '/generate-care-plan',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
@@ -585,6 +662,9 @@ router.post(
         return res.status(400).json({ error: 'ValidationError', message: 'Invalid patientId' });
       }
 
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const { PatientModel } = await import('../patients/models/patient.model');
       const { EncounterModel } = await import('../encounters/encounter.model');
 
@@ -600,11 +680,6 @@ router.post(
       if (!patient) {
         return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
       }
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const { config } = await import('@health-watchers/config');
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const prompt = `You are a clinical decision support AI. Generate a structured chronic disease care plan for a patient with the following profile.
 
@@ -629,8 +704,11 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
   "reviewDate": "<ISO date 3 months from today>"
 }`;
 
-      const result = await aiModel.generateContent(prompt);
-      const text = result.response.text().trim();
+      // Shared LLM client: anonymises the prompt and uses the BAA-eligible endpoint
+      const text = (
+        await generateGatedContent(prompt, { feature: 'generate-care-plan', patientId })
+      ).trim();
+      await auditAiCall(req, { feature: 'generate-care-plan', patientId });
 
       let suggestion: unknown;
       try {
@@ -646,7 +724,11 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 
       return res.json({ success: true, suggestion, aiGenerated: true });
     } catch (error: any) {
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'AI generate-care-plan error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({ error: 'InternalServerError', message: error.message });
     }
   }
@@ -655,7 +737,7 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
 // POST /api/v1/ai/differential-diagnosis
 // Request: { chiefComplaint: string, symptoms: string[], vitalSigns?: {...}, patientAge?: number, patientSex?: string, relevantHistory?: string }
 // Returns: { differentials: [...], urgency: string, disclaimer: string }
-router.post(
+diagnosisRoutes.post(
   '/differential-diagnosis',
   authenticate,
   validateRequest({ body: differentialDiagnosisRequestSchema }),
@@ -668,9 +750,16 @@ router.post(
           message: 'AI service is not configured. Please contact your administrator.',
         });
       }
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const payload = req.body as DifferentialDiagnosisRequestDto;
 
       const result = await generateDifferentialDiagnosis(payload);
+      await auditAiCall(req, {
+        feature: 'differential-diagnosis',
+        patientId: (payload as any).patientId ?? null,
+      });
 
       const duration = Date.now() - startTime;
       logger.info(
@@ -688,6 +777,7 @@ router.post(
       });
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error, duration }, 'AI differential-diagnosis error');
 
       if (
@@ -708,10 +798,13 @@ router.post(
   }
 );
 
+// ── Dosage routes (dosage-calculator) ────────────────────────────────────────
+export const dosageRoutes = Router();
+
 // POST /api/v1/ai/dosage-calculator
 // Request: { drugName, patientWeight, patientAge, patientSex, indication, renalFunction?, hepaticFunction? }
 // Returns: { recommendedDose, frequency, route, maxDailyDose, pediatricAdjustment, renalAdjustment, warnings, contraindications, disclaimer }
-router.post(
+dosageRoutes.post(
   '/dosage-calculator',
   authenticate,
   requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
@@ -726,8 +819,12 @@ router.post(
         });
       }
 
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const payload = req.body as DosageCalculatorRequestDto;
       const result = await calculateDosage(payload);
+      await auditAiCall(req, { feature: 'dosage-calculator', patientId: null });
 
       const duration = Date.now() - startTime;
       logger.info(
@@ -769,6 +866,7 @@ router.post(
       return res.json({ success: true, ...result });
     } catch (error: unknown) {
       const duration = Date.now() - startTime;
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error, duration }, 'AI dosage-calculator error');
 
       if (error instanceof Error && error.message.includes('Failed to calculate dosage')) {
@@ -786,8 +884,11 @@ router.post(
   }
 );
 
+// ── Triage routes (triage, triage/queue, triage/:id/status) ──────────────────
+export const triageRoutes = Router();
+
 // POST /api/v1/ai/triage
-router.post(
+triageRoutes.post(
   '/triage',
   authenticate,
   validateRequest({ body: triageAssessmentSchema }),
@@ -800,6 +901,9 @@ router.post(
         });
       }
 
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const triageResult = await assessTriage(req.body);
       const queueEntry = await addToTriageQueue(
         req.user!.clinicId,
@@ -807,10 +911,18 @@ router.post(
         req.body,
         triageResult
       );
+      await auditAiCall(req, {
+        feature: 'triage',
+        patientId: req.body.patientId ? String(req.body.patientId) : null,
+      });
 
       return res.json({ success: true, ...triageResult, queueId: queueEntry._id });
     } catch (error: unknown) {
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'Triage assessment error');
+      if (isLLMUnavailableError(error)) {
+        return sendAIUnavailable(res);
+      }
       return res.status(500).json({
         error: 'TriageError',
         message: error instanceof Error ? error.message : 'Failed to assess triage',
@@ -820,7 +932,7 @@ router.post(
 );
 
 // GET /api/v1/ai/triage/queue
-router.get(
+triageRoutes.get(
   '/triage/queue',
   authenticate,
   requireRoles('CLINIC_ADMIN', 'NURSE'),
@@ -836,7 +948,7 @@ router.get(
 );
 
 // PUT /api/v1/ai/triage/:id/status
-router.put(
+triageRoutes.put(
   '/triage/:id/status',
   authenticate,
   requireRoles('CLINIC_ADMIN', 'NURSE'),
@@ -856,8 +968,11 @@ router.put(
   }
 );
 
+// ── Transcription routes (transcribe, transcribe-audio) ──────────────────────
+export const transcriptionRoutes = Router();
+
 // POST /api/v1/ai/transcribe
-router.post(
+transcriptionRoutes.post(
   '/transcribe',
   authenticate,
   requireRoles('DOCTOR', 'NURSE'),
@@ -879,22 +994,103 @@ router.post(
         });
       }
 
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+
       const { transcribeAndCorrect } = await import('./ai.service');
       const result = await transcribeAndCorrect(text);
+      await auditAiCall(req, { feature: 'transcribe', patientId: null });
 
       return res.json({
         status: 'success',
         data: result,
       });
     } catch (error: unknown) {
+      if (handleAiGateError(error, res)) return;
       logger.error({ err: error }, 'Transcription error');
-      if (error instanceof Error && error.message.includes('GEMINI')) {
-        return res.status(503).json({
-          error: 'AIUnavailable',
-          message: 'AI service is temporarily unavailable',
-        });
+      if (isLLMUnavailableError(error) || (error instanceof Error && error.message.includes('GEMINI'))) {
+        return sendAIUnavailable(res);
       }
       return res.status(500).json({ error: 'InternalServerError' });
+    }
+  }
+);
+
+// ── Voice dictation (#1419) ──────────────────────────────────────────────────
+
+async function getClinicAiSettings(clinicId: string) {
+  const settings = await ClinicSettingsModel.findOne({ clinicId }, { ai: 1 }).lean();
+  const enabled = Boolean(settings?.ai?.enabled);
+  return {
+    enabled,
+    // Dictation needs both the clinic-wide AI switch and the dictation-specific opt-in
+    voiceDictation: enabled && Boolean(settings?.ai?.voiceDictation),
+  };
+}
+
+const DICTATION_MAX_BYTES = 10 * 1024 * 1024; // ~10 min of opus audio
+const dictationUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: DICTATION_MAX_BYTES, files: 1 },
+});
+
+// POST /api/v1/ai/transcribe-audio — multipart field `audio`
+// Audio is forwarded to the external AI provider, so the clinic must have opted in.
+transcriptionRoutes.post(
+  '/transcribe-audio',
+  authenticate,
+  requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const settings = await getClinicAiSettings(req.user!.clinicId);
+      if (!settings.voiceDictation) {
+        return res.status(403).json({
+          error: 'AIDisabled',
+          message: 'Voice dictation via AI transcription is not enabled for this clinic.',
+        });
+      }
+      // Gate PHI leaving the clinic: clinic opt-in + recorded BAA
+      await assertAiProcessingAllowed(req.user!.clinicId);
+      if (!isAIServiceAvailable()) {
+        return res.status(503).json({
+          error: 'AIUnavailable',
+          message: 'AI service is not configured. Please contact your administrator.',
+        });
+      }
+
+      await new Promise<void>((resolve, reject) =>
+        dictationUpload.single('audio')(req, res, (err) => (err ? reject(err) : resolve()))
+      );
+
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file || file.size === 0) {
+        return res
+          .status(400)
+          .json({ error: 'ValidationError', message: 'An `audio` file is required' });
+      }
+
+      const { isTranscribableAudioType, transcribeAudio } = await import('./ai.service');
+      if (!isTranscribableAudioType(file.mimetype)) {
+        return res
+          .status(415)
+          .json({ error: 'UnsupportedMediaType', message: 'Unsupported audio format' });
+      }
+
+      const text = await transcribeAudio(file.buffer, file.mimetype);
+      await auditAiCall(req, { feature: 'transcribe-audio', patientId: null });
+      return res.json({ status: 'success', data: { text } });
+    } catch (error: unknown) {
+      if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+        return res
+          .status(413)
+          .json({ error: 'FileTooLarge', message: 'Recording is too long — keep it under 10 MB.' });
+      }
+      if (handleAiGateError(error, res)) return;
+      logger.error({ err: error }, 'Audio transcription error');
+      return res.status(503).json({
+        error: 'AI_UNAVAILABLE',
+        message: 'Transcription service is temporarily unavailable',
+      });
     }
   }
 );

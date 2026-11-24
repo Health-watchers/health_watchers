@@ -65,12 +65,14 @@ router.get(
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
   async (req: Request, res: Response) => {
     try {
-     const { status, overdue } = req.query;
+      const { status, overdue } = req.query;
       const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected', 'paid', 'cancelled']);
       let query: Record<string, unknown> = { clinicId: req.user!.clinicId };
       if (status) {
         if (!ALLOWED_STATUSES.has(String(status))) {
-          return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+          return res
+            .status(400)
+            .json({ error: 'ValidationError', message: 'Invalid status value' });
         }
         query.reimbursementStatus = String(status);
       }

@@ -80,10 +80,7 @@ export function setupStreamingExport(
   const passThrough = new PassThrough();
 
   res.setHeader('Content-Type', options.contentType);
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="${options.filename}"`
-  );
+  res.setHeader('Content-Disposition', `attachment; filename="${options.filename}"`);
   res.setHeader('Transfer-Encoding', 'chunked');
 
   transform.pipe(passThrough);

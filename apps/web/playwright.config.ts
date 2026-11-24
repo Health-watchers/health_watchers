@@ -1,11 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './e2e',
+  testMatch: ['./{e2e,tests}/**/*.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Shard across workers in CI so the full suite finishes in <10 minutes.
+  workers: process.env.CI ? 4 : undefined,
   reporter: [
     ['list'],
     ['html', { open: 'never' }],
@@ -35,6 +36,16 @@ export default defineConfig({
         trace: 'retain-on-failure',
       },
       testMatch: ['**/payment-flow.spec.ts'],
+    },
+    {
+      name: 'mobile-ios',
+      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/mobile-responsive.spec.ts'],
+    },
+    {
+      name: 'mobile-android',
+      use: { ...devices['Pixel 5'] },
+      testMatch: ['**/mobile-responsive.spec.ts'],
     },
   ],
   timeout: 30_000,

@@ -106,7 +106,12 @@ function buildTimeline(referral: Referral): StatusEvent[] {
   return completedStatuses.map((s, i) => ({
     status: s,
     label: s === 'pending' ? 'Referral Created' : s.charAt(0).toUpperCase() + s.slice(1),
-    date: i === 0 ? referral.createdAt : i === completedStatuses.length - 1 ? referral.updatedAt : undefined,
+    date:
+      i === 0
+        ? referral.createdAt
+        : i === completedStatuses.length - 1
+          ? referral.updatedAt
+          : undefined,
   }));
 }
 
@@ -131,16 +136,12 @@ function StatusTimeline({ referral }: { referral: Referral }) {
             >
               ✓
             </div>
-            {idx < events.length - 1 && (
-              <div className="my-2 h-8 w-0.5 bg-gray-200" />
-            )}
+            {idx < events.length - 1 && <div className="my-2 h-8 w-0.5 bg-gray-200" />}
           </div>
           <div className="flex-1 py-2">
             <p className="font-medium text-gray-900">{event.label}</p>
             {event.date && (
-              <p className="text-xs text-gray-500">
-                {new Date(event.date).toLocaleString()}
-              </p>
+              <p className="text-xs text-gray-500">{new Date(event.date).toLocaleString()}</p>
             )}
           </div>
         </div>
@@ -206,7 +207,7 @@ function ReferralCard({
           )}
 
           <div className="mt-4">
-            <p className="text-xs font-medium text-gray-600 mb-3">Status Timeline</p>
+            <p className="mb-3 text-xs font-medium text-gray-600">Status Timeline</p>
             <StatusTimeline referral={referral} />
           </div>
 
@@ -310,7 +311,7 @@ function NewReferralModal({
           onChange={(e) => handleChange('notes', e.target.value)}
           rows={3}
         />
-        {error && <p className="text-sm text-danger-500">{error}</p>}
+        {error && <p className="text-danger-500 text-sm">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
@@ -332,19 +333,30 @@ export default function ReferralsClient() {
   const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'declined'>('all');
   const [urgencyFilter, setUrgencyFilter] = useState<'all' | Urgency>('all');
 
-  const { data: incoming = [], isLoading: incomingLoading, error: incomingError } = useQuery<Referral[]>({
+  const {
+    data: incoming = [],
+    isLoading: incomingLoading,
+    error: incomingError,
+  } = useQuery<Referral[]>({
     queryKey: ['referrals', 'incoming'],
     queryFn: () => fetchReferrals('incoming'),
   });
 
-  const { data: outgoing = [], isLoading: outgoingLoading, error: outgoingError } = useQuery<Referral[]>({
+  const {
+    data: outgoing = [],
+    isLoading: outgoingLoading,
+    error: outgoingError,
+  } = useQuery<Referral[]>({
     queryKey: ['referrals', 'outgoing'],
     queryFn: () => fetchReferrals('outgoing'),
   });
 
   const handleAccept = async (id: string) => {
     try {
-      const res = await fetch(`${API_V1}/referrals/${id}/accept`, { method: 'PUT', credentials: 'include' });
+      const res = await fetch(`${API_V1}/referrals/${id}/accept`, {
+        method: 'PUT',
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error();
       setToast({ message: 'Referral accepted', type: 'success' });
       queryClient.invalidateQueries({ queryKey: ['referrals', 'incoming'] });
@@ -401,7 +413,7 @@ export default function ReferralsClient() {
           <TabsTrigger value="incoming">
             Incoming
             {activePendingCount > 0 && (
-              <span className="ml-2 rounded-full bg-warning-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              <span className="bg-warning-500 ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white">
                 {activePendingCount}
               </span>
             )}
@@ -413,14 +425,17 @@ export default function ReferralsClient() {
         <TabsContent value="incoming">
           {incomingLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
             </div>
           ) : incomingError ? (
             <ErrorMessage
               message="Failed to load incoming referrals"
               onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'incoming'] })}
             />
-          ) : incoming.filter((r) => r.status !== 'completed' && r.status !== 'declined').length === 0 ? (
+          ) : incoming.filter((r) => r.status !== 'completed' && r.status !== 'declined').length ===
+            0 ? (
             <EmptyState title="No active incoming referrals" icon="📥" />
           ) : (
             <ol className="space-y-3">
@@ -442,14 +457,17 @@ export default function ReferralsClient() {
         <TabsContent value="outgoing">
           {outgoingLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
             </div>
           ) : outgoingError ? (
             <ErrorMessage
               message="Failed to load outgoing referrals"
               onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'outgoing'] })}
             />
-          ) : outgoing.filter((r) => r.status !== 'completed' && r.status !== 'declined').length === 0 ? (
+          ) : outgoing.filter((r) => r.status !== 'completed' && r.status !== 'declined').length ===
+            0 ? (
             <EmptyState title="No active outgoing referrals" icon="📤" />
           ) : (
             <ol className="space-y-3">
@@ -465,7 +483,9 @@ export default function ReferralsClient() {
         <TabsContent value="history">
           {incomingLoading || outgoingLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-28 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
             </div>
           ) : (
             <>
@@ -502,12 +522,8 @@ export default function ReferralsClient() {
               ) : (
                 <ol className="space-y-3">
                   {history
-                    .filter((r) =>
-                      historyFilter === 'all' || r.status === historyFilter
-                    )
-                    .filter((r) =>
-                      urgencyFilter === 'all' || r.urgency === urgencyFilter
-                    )
+                    .filter((r) => historyFilter === 'all' || r.status === historyFilter)
+                    .filter((r) => urgencyFilter === 'all' || r.urgency === urgencyFilter)
                     .map((r) => (
                       <ReferralCard
                         key={r._id}

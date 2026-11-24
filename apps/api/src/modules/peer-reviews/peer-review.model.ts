@@ -8,6 +8,12 @@ export interface IPeerReview {
   status: 'pending' | 'in_review' | 'completed';
   rating?: number;
   feedback?: string;
+  /** Actionable recommendations for the reviewee */
+  recommendations?: string;
+  /** User who requested the review (clinic admin or the encounter's author) */
+  requestedBy?: Types.ObjectId;
+  /** Optional note from the requester explaining what to focus on */
+  requestNote?: string;
   categories?: {
     documentation: number;
     diagnosis: number;
@@ -15,6 +21,7 @@ export interface IPeerReview {
     followUp: number;
   };
   isAnonymous: boolean;
+  requiresFollowUp: boolean;
   completedAt?: Date;
 }
 
@@ -32,6 +39,9 @@ const peerReviewSchema = new Schema<IPeerReview>(
     },
     rating: { type: Number, min: 1, max: 5 },
     feedback: { type: String, trim: true },
+    recommendations: { type: String, trim: true },
+    requestedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    requestNote: { type: String, trim: true, maxlength: 1000 },
     categories: {
       documentation: { type: Number, min: 1, max: 5 },
       diagnosis: { type: Number, min: 1, max: 5 },
@@ -39,6 +49,7 @@ const peerReviewSchema = new Schema<IPeerReview>(
       followUp: { type: Number, min: 1, max: 5 },
     },
     isAnonymous: { type: Boolean, default: false },
+    requiresFollowUp: { type: Boolean, default: false },
     completedAt: { type: Date },
   },
   { timestamps: true, versionKey: false }

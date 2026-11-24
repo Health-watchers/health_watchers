@@ -59,9 +59,6 @@ jest.mock('@api/modules/users/users.controller', () => ({
 jest.mock('@api/modules/webhooks/webhooks.controller', () => ({
   webhookRoutes: require('express').Router(),
 }));
-jest.mock('@api/modules/audit/audit-logs.controller', () => ({
-  auditLogRoutes: require('express').Router(),
-}));
 
 jest.mock('@api/config/db', () => ({
   connectDB: jest.fn().mockReturnValue(new Promise(() => {})),

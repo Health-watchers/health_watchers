@@ -7,9 +7,21 @@ export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/p
 /** Allowed MIME types for image uploads */
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
+/** Allowed MIME types for audio uploads */
+export const ALLOWED_AUDIO_TYPES = [
+  'audio/wav',
+  'audio/x-wav',
+  'audio/wave',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/mpeg3',
+  'audio/x-mpeg-3',
+] as const;
+
 /** Max file sizes */
 export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; //  5 MB
+export const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB (~5 min of compressed audio)
 
 function fileFilter(allowedTypes: readonly string[]) {
   return (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
@@ -38,4 +50,10 @@ export const documentUpload = multer({
   storage,
   limits: { fileSize: MAX_DOCUMENT_SIZE_BYTES },
   fileFilter: fileFilter(ALLOWED_DOCUMENT_TYPES),
+});
+
+export const audioUpload = multer({
+  storage,
+  limits: { fileSize: MAX_AUDIO_SIZE_BYTES },
+  fileFilter: fileFilter(ALLOWED_AUDIO_TYPES),
 });

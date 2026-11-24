@@ -160,5 +160,3 @@ export function buildFactorBreakdown(
 export function getImprovedFactors(currentFactors: string[], previousFactors: string[]): string[] {
   return previousFactors.filter((f) => !currentFactors.includes(f));
 }
-
-export { CHRONIC_KEYWORDS };

@@ -1,0 +1,77 @@
+# Strategic-merge patch that adds the Fluent Bit logging sidecar + a Prometheus
+# node-exporter-style metrics sidecar to a Deployment (#1255).
+#
+# Apply with:
+#   kubectl -n health-watchers patch deployment api \
+#     --patch-file k8s/logging/logging-sidecar-patch.yaml
+#
+# or reference it from a Kustomize `patches:` block. The patch is written for
+# the `api` Deployment; change metadata.name for web / stellar-service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: health-watchers
+spec:
+  template:
+    spec:
+      containers:
+        # ── existing app container: mount the shared log volume ──────────────
+        - name: api
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+        # ── logging sidecar ────────────────────────────────────────────────
+        - name: fluent-bit
+          image: fluent/fluent-bit:3.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LOG_SINK_HOST
+              value: "elasticsearch.logging.svc.cluster.local"
+            - name: LOG_SINK_PORT
+              value: "9200"
+            - name: LOG_SINK_TLS
+              value: "Off"
+          ports:
+            - name: fb-metrics
+              containerPort: 2020
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 2020
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+              readOnly: true
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc/
+      volumes:
+        - name: app-logs
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: fluent-bit-config
+          configMap:
+            name: fluent-bit-sidecar-config

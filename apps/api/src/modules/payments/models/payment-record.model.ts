@@ -1,11 +1,12 @@
 import { Schema, model, models } from 'mongoose';
+import { PAYMENT_STATUSES, type PaymentStatus } from '@health-watchers/types';
 
 export interface PaymentRecord {
   intentId: string;
   amount: string;
   destination: string;
   memo?: string;
-  status: 'pending' | 'confirmed' | 'failed';
+  status: PaymentStatus;
   txHash?: string;
   confirmedAt?: Date;
   clinicId: string;
@@ -54,7 +55,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     memo: { type: String, index: true },
     status: {
       type: String,
-      enum: ['pending', 'confirmed', 'failed'],
+      enum: PAYMENT_STATUSES,
       default: 'pending',
       index: true,
     },

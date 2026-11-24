@@ -124,6 +124,6 @@ health-watchers/
 
 ## See Also
 
-- [Monorepo Structure](./monorepo-structure.md)
-- [Service Communication](./service-communication.md)
-- [Data Flow](./data-flow.md)
+- [System Architecture (full design)](https://github.com/Health-watchers/health_watchers/blob/main/docs/ARCHITECTURE.md)
+- [Architecture Decision Records](https://github.com/Health-watchers/health_watchers/tree/main/docs/adr)
+- [API Reference](../platform/api-reference.md)

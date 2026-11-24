@@ -4,14 +4,33 @@ import { enqueueEmail } from '../../utils/email-queue';
 import { UserModel } from '../auth/models/user.model';
 import logger from '../../utils/logger';
 
-export async function sendFollowUpReminders(): Promise<void> {
-  const now = new Date();
-  const tomorrowStart = new Date(now);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  tomorrowStart.setHours(0, 0, 0, 0);
+/**
+ * Compute the [start, end) range covering tomorrow in the server's local time.
+ */
+export function getTomorrowRange(now: Date = new Date()): {
+  start: Date;
+  end: Date;
+} {
+  const start = new Date(now);
+  start.setDate(start.getDate() + 1);
+  start.setHours(0, 0, 0, 0);
 
-  const tomorrowEnd = new Date(tomorrowStart);
-  tomorrowEnd.setHours(23, 59, 59, 999);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return { start, end };
+}
+
+/**
+ * Send follow-up reminders for encounters whose follow-up is due tomorrow.
+ *
+ * - In-app notification to the attending doctor.
+ * - Email reminder to the linked patient user when their preferences allow it.
+ *
+ * Errors are logged per-encounter and do not abort the remaining reminders.
+ */
+export async function sendFollowUpReminders(now: Date = new Date()): Promise<void> {
+  const { start: tomorrowStart, end: tomorrowEnd } = getTomorrowRange(now);
 
   const encounters = await EncounterModel.find({
     followUpRequired: true,
@@ -20,7 +39,15 @@ export async function sendFollowUpReminders(): Promise<void> {
   }).lean();
 
   for (const encounter of encounters) {
+    const encounterId = (encounter as any)._id;
     try {
+      const metadata = {
+        encounterId: encounterId.toString(),
+        patientId: encounter.patientId.toString(),
+        followUpDate: encounter.followUpDate,
+        contactNumber: (encounter as any).contactNumber ?? null,
+      };
+
       // Notify attending doctor
       if (encounter.attendingDoctorId) {
         await createNotification({
@@ -28,12 +55,8 @@ export async function sendFollowUpReminders(): Promise<void> {
           clinicId: encounter.clinicId.toString(),
           type: 'follow_up_reminder',
           title: 'Follow-up Due Tomorrow',
-          message: `A follow-up is due tomorrow for encounter ${(encounter as any)._id}`,
-          metadata: {
-            encounterId: (encounter as any)._id.toString(),
-            patientId: encounter.patientId.toString(),
-            followUpDate: encounter.followUpDate,
-          },
+          message: `A follow-up is due tomorrow for encounter ${encounterId}`,
+          metadata,
         });
       }
 
@@ -58,39 +81,28 @@ export async function sendFollowUpReminders(): Promise<void> {
         }
       }
     } catch (err) {
-      logger.error({ err, encounterId: (encounter as any)._id }, 'Failed to send follow-up reminder');
+      logger.error(
+        { err, encounterId },
+        'Failed to send follow-up reminder'
+      );
     }
   }
 }
 
-let reminderInterval: ReturnType<typeof setInterval> | null = null;
-
-export function startFollowUpReminderJob(): void {
-  // Schedule to run daily at 08:00 UTC
-  const now = new Date();
-  const next8am = new Date(now);
-  next8am.setUTCHours(8, 0, 0, 0);
-  if (next8am <= now) next8am.setUTCDate(next8am.getUTCDate() + 1);
-  const delay = next8am.getTime() - now.getTime();
-  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-
-  setTimeout(() => {
-    sendFollowUpReminders().catch((err) =>
-      logger.error({ err }, 'Follow-up reminder job failed')
-    );
-    reminderInterval = setInterval(() => {
-      sendFollowUpReminders().catch((err) =>
-        logger.error({ err }, 'Follow-up reminder job failed')
-      );
-    }, TWENTY_FOUR_HOURS);
-  }, delay);
-
-  logger.info(`Follow-up reminder job scheduled (first run in ${Math.round(delay / 60000)} minutes)`);
+/**
+ * Job handler suitable for registration in the JobRegistry.
+ * Intended to run daily at 08:00 UTC.
+ */
+export async function followUpReminderJobHandler(): Promise<void> {
+  logger.info('Running follow-up reminder job');
+  await sendFollowUpReminders();
 }
 
-export function stopFollowUpReminderJob(): void {
-  if (reminderInterval) {
-    clearInterval(reminderInterval);
-    reminderInterval = null;
-  }
-}
+export const followUpReminderJob = {
+  name: 'follow-up-reminder',
+  schedule: '0 8 * * *', // daily at 08:00 UTC
+  timezone: 'UTC',
+  handler: followUpReminderJobHandler,
+};
+
+export default followUpReminderJob;

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+aws_region      = "us-east-1"
+route53_zone_id = "Z0123456789ABCDEFGHIJ"
+domain_name     = "app.healthwatchers.example"
+alarm_email     = "devops-alerts@healthwatchers.example"
+dr_vault_arn    = "arn:aws:backup:us-west-2:REPLACE_WITH_ACCOUNT_ID:backup-vault:health-watchers-production-dr"

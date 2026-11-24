@@ -1,5 +1,6 @@
 import { Schema, Types, model, models } from 'mongoose';
 import { AppRole } from '@api/types/express';
+import { sanitizeText } from '@api/utils/sanitize';
 
 export interface Attachment {
   fileName: string;
@@ -61,6 +62,14 @@ const portalMessageSchema = new Schema(
     versionKey: false,
   }
 );
+
+// Subject/body are plain text authored by patients or staff and get interpolated directly
+// into HTML notification emails and rendered in the portal UI — sanitize to prevent stored
+// XSS (and HTML-email injection) from either side of the conversation.
+portalMessageSchema.pre('save', function () {
+  if (this.subject) this.subject = sanitizeText(this.subject);
+  if (this.body) this.body = sanitizeText(this.body);
+});
 
 portalMessageSchema.index({ clinicId: 1, patientId: 1, threadId: 1 });
 portalMessageSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });

@@ -58,7 +58,7 @@ export function TableTh({ className, children, ...props }: ThHTMLAttributes<HTML
     <th
       scope="col"
       className={[
-        'px-4 py-3 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase',
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500',
         className ?? '',
       ].join(' ')}
       {...props}

@@ -26,6 +26,7 @@ function makeToken(payload: object, secret = SECRET, options: jwt.SignOptions = 
     expiresIn: '15m',
     issuer: ISSUER,
     audience: AUDIENCE,
+    jwtid: 'test-jti-001', // include jti by default
     ...options,
   });
 }
@@ -48,6 +49,7 @@ describe('validateJwtClaims', () => {
       const token = jwt.sign(basePayload, SECRET, {
         expiresIn: '15m',
         audience: AUDIENCE,
+        jwtid: 'test-jti',
       });
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
@@ -78,6 +80,7 @@ describe('validateJwtClaims', () => {
       const token = jwt.sign(basePayload, SECRET, {
         expiresIn: '15m',
         issuer: ISSUER,
+        jwtid: 'test-jti',
       });
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
@@ -96,6 +99,7 @@ describe('validateJwtClaims', () => {
         expiresIn: '15m',
         issuer: ISSUER,
         audience: ['other-client-a', 'other-client-b'],
+        jwtid: 'test-jti',
       });
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
@@ -108,6 +112,7 @@ describe('validateJwtClaims', () => {
       const token = jwt.sign(basePayload, SECRET, {
         issuer: ISSUER,
         audience: AUDIENCE,
+        jwtid: 'test-jti',
       });
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
@@ -119,6 +124,28 @@ describe('validateJwtClaims', () => {
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
       expect(result.error).toBe('TOKEN_EXPIRED');
+    });
+  });
+
+  describe('jti (JWT ID) validation', () => {
+    it('returns MISSING_JTI when token has no jti claim', () => {
+      // Sign without jwtid option
+      const token = jwt.sign(basePayload, SECRET, {
+        expiresIn: '15m',
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        // no jwtid
+      });
+      const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('MISSING_JTI');
+    });
+
+    it('accepts tokens that include a jti claim', () => {
+      const token = makeToken(basePayload); // makeToken includes jwtid by default
+      const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
+      expect(result.valid).toBe(true);
+      expect(result.payload?.jti).toBe('test-jti-001');
     });
   });
 
@@ -136,6 +163,7 @@ describe('validateJwtClaims', () => {
         expiresIn: '15m',
         issuer: ISSUER,
         audience: AUDIENCE,
+        jwtid: 'test-jti',
       });
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.valid).toBe(false);
@@ -163,15 +191,31 @@ describe('validateJwtClaims', () => {
       const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
       expect(result.error).toBe('MISSING_ISSUER');
     });
+
+    it('reports MISSING_JTI after iss/aud/exp are valid', () => {
+      const token = jwt.sign(basePayload, SECRET, {
+        expiresIn: '15m',
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        // no jwtid
+      });
+      const result = validateJwtClaims(token, SECRET, ISSUER, AUDIENCE);
+      expect(result.error).toBe('MISSING_JTI');
+    });
   });
 });
 
 describe('validateAccessTokenClaims', () => {
-  it('validates a correctly minted access token', () => {
+  it('validates a correctly minted access token with jti', () => {
     const token = jwt.sign(
-      { userId: 'u1', role: 'NURSE', clinicId: 'c1', jti: 'abc' },
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1' },
       'test-access-secret-32-chars-long!!',
-      { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
+      {
+        expiresIn: '15m',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        jwtid: 'access-jti-001',
+      }
     );
     const result = validateAccessTokenClaims(token);
     expect(result.valid).toBe(true);
@@ -179,22 +223,48 @@ describe('validateAccessTokenClaims', () => {
 
   it('rejects an access token signed with the refresh secret', () => {
     const token = jwt.sign(
-      { userId: 'u1', role: 'NURSE', clinicId: 'c1', jti: 'abc' },
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1' },
       'test-refresh-secret-32-chars-long!',
-      { expiresIn: '15m', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
+      {
+        expiresIn: '15m',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        jwtid: 'access-jti-001',
+      }
     );
     const result = validateAccessTokenClaims(token);
     expect(result.valid).toBe(false);
     expect(result.error).toBe('INVALID_SIGNATURE');
   });
+
+  it('rejects an access token without jti', () => {
+    const token = jwt.sign(
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1' },
+      'test-access-secret-32-chars-long!!',
+      {
+        expiresIn: '15m',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        // no jwtid
+      }
+    );
+    const result = validateAccessTokenClaims(token);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('MISSING_JTI');
+  });
 });
 
 describe('validateRefreshTokenClaims', () => {
-  it('validates a correctly minted refresh token', () => {
+  it('validates a correctly minted refresh token with jti', () => {
     const token = jwt.sign(
-      { userId: 'u1', role: 'NURSE', clinicId: 'c1', jti: 'xyz', family: 'fam1' },
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1', family: 'fam1' },
       'test-refresh-secret-32-chars-long!',
-      { expiresIn: '7d', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
+      {
+        expiresIn: '7d',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        jwtid: 'refresh-jti-001',
+      }
     );
     const result = validateRefreshTokenClaims(token);
     expect(result.valid).toBe(true);
@@ -202,12 +272,33 @@ describe('validateRefreshTokenClaims', () => {
 
   it('rejects a refresh token signed with the access secret', () => {
     const token = jwt.sign(
-      { userId: 'u1', role: 'NURSE', clinicId: 'c1', jti: 'xyz', family: 'fam1' },
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1', family: 'fam1' },
       'test-access-secret-32-chars-long!!',
-      { expiresIn: '7d', issuer: 'health-watchers-api', audience: 'health-watchers-client' }
+      {
+        expiresIn: '7d',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        jwtid: 'refresh-jti-001',
+      }
     );
     const result = validateRefreshTokenClaims(token);
     expect(result.valid).toBe(false);
     expect(result.error).toBe('INVALID_SIGNATURE');
+  });
+
+  it('rejects a refresh token without jti', () => {
+    const token = jwt.sign(
+      { userId: 'u1', role: 'NURSE', clinicId: 'c1', family: 'fam1' },
+      'test-refresh-secret-32-chars-long!',
+      {
+        expiresIn: '7d',
+        issuer: 'health-watchers-api',
+        audience: 'health-watchers-client',
+        // no jwtid
+      }
+    );
+    const result = validateRefreshTokenClaims(token);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('MISSING_JTI');
   });
 });

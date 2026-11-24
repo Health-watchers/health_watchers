@@ -12,4 +12,45 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.stories.tsx',
+    '!src/**/__tests__/**',
+    '!src/**/*.test.{ts,tsx}',
+  ],
+  coverageReporters: ['text', 'lcov', 'json'],
+  // Floors set at current coverage so CI fails if it drops; raise as tests are added.
+  coverageThreshold: {
+    global: {
+      statements: 7,
+      branches: 7,
+      functions: 7,
+      lines: 7,
+    },
+    './src/components/ui/': {
+      statements: 55,
+      branches: 55,
+      functions: 49,
+      lines: 55,
+    },
+    './src/app/': {
+      statements: 5,
+      branches: 5,
+      functions: 5,
+      lines: 5,
+    },
+    './src/lib/': {
+      statements: 10,
+      branches: 10,
+      functions: 10,
+      lines: 10,
+    },
+    './src/hooks/': {
+      statements: 10,
+      branches: 10,
+      functions: 10,
+      lines: 10,
+    },
+  },
 };
