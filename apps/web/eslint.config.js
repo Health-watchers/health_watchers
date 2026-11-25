@@ -1,6 +1,7 @@
 import baseConfig from '@health-watchers/config/eslint-config';
 import nextPlugin from '@next/eslint-plugin-next';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
+import pluginReact from 'eslint-plugin-react';
 
 export default [
   ...baseConfig,
@@ -13,6 +14,7 @@ export default [
     rules: {
       ...nextPlugin.configs['core-web-vitals'].rules,
       ...jsxA11y.configs.recommended.rules,
+      'react/jsx-no-target-blank': 'error',
     },
   },
   {

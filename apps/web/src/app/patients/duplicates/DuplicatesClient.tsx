@@ -64,6 +64,7 @@ function PatientCard({ patient }: { patient: PatientSummary }) {
         href={`/patients/${patient._id}`}
         className="mt-1 inline-block text-xs text-blue-600 hover:underline"
         target="_blank"
+        rel="noopener noreferrer"
       >
         View record ↗
       </Link>

@@ -134,8 +134,6 @@ const nextConfig = {
   },
   // Enable compression and gzip
   compress: true,
-  // Powering down optimizations in production
-  swcMinify: true,
   async headers() {
     return [
       // Security headers apply to every route.

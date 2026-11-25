@@ -4,9 +4,8 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { Input, Button, Textarea, Badge } from '@/components/ui';
+import { Input, Button, Textarea } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
-import { formatDate } from '@health-watchers/types';
 import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
 import DifferentialDiagnosisPanel from '@/components/encounters/DifferentialDiagnosisPanel';
 import { OfflineSync, useOnlineStatus } from '@/lib/offline-sync';
@@ -27,80 +26,12 @@ interface FullPatient extends PatientHit {
   sex: 'M' | 'F' | 'O';
 }
 
-interface DiagnosisEntry {
-  code: string;
-  description: string;
-  isPrimary: boolean;
-}
-
-interface EncounterTemplate {
-  _id: string;
-  name: string;
-  description?: string;
-  category: string;
-  defaultChiefComplaint?: string;
-  defaultVitalSigns?: Record<string, unknown>;
-  suggestedDiagnoses?: { code: string; description: string }[];
-  suggestedTests?: string[];
-  notes?: string;
-  usageCount: number;
-}
-
-interface AiDifferential {
-  diagnosis: string;
-  icdCode: string;
-  probability: 'high' | 'medium' | 'low';
-  reasoning: string;
-  recommendedTests: string[];
-}
-
-interface AiResponse {
-  success: boolean;
-  differentials: AiDifferential[];
-  urgency: 'routine' | 'urgent' | 'emergency';
-  disclaimer: string;
-}
-
-// ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
-
-const ICD10_COMMON: DiagnosisEntry[] = [
-  {
-    code: 'J06.9',
-    description: 'Acute upper respiratory infection, unspecified',
-    isPrimary: false,
-  },
-  { code: 'J18.9', description: 'Pneumonia, unspecified organism', isPrimary: false },
-  { code: 'I10', description: 'Essential (primary) hypertension', isPrimary: false },
-  {
-    code: 'E11.9',
-    description: 'Type 2 diabetes mellitus without complications',
-    isPrimary: false,
-  },
-  { code: 'M54.5', description: 'Low back pain', isPrimary: false },
-  {
-    code: 'K21.0',
-    description: 'Gastro-oesophageal reflux disease with oesophagitis',
-    isPrimary: false,
-  },
-  {
-    code: 'F32.9',
-    description: 'Major depressive disorder, single episode, unspecified',
-    isPrimary: false,
-  },
-  { code: 'J45.909', description: 'Unspecified asthma, uncomplicated', isPrimary: false },
-  { code: 'N39.0', description: 'Urinary tract infection, site not specified', isPrimary: false },
-  { code: 'R51', description: 'Headache', isPrimary: false },
-  { code: 'R05', description: 'Cough', isPrimary: false },
-  { code: 'R50.9', description: 'Fever, unspecified', isPrimary: false },
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function today() {
   return new Date().toISOString().split('T')[0];
 }
-
-// ─── Component ────────────────────────────────────────────────────────────────
+function calcAge(dob: string) {
+  return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+}
 
 export default function NewEncounterPage() {
   const { user } = useAuth();
@@ -122,7 +53,6 @@ export default function NewEncounterPage() {
   const [patientSearching, setPatientSearching] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
 
-  // Core fields
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [notes, setNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -145,36 +75,24 @@ export default function NewEncounterPage() {
   const [heightUnit, setHeightUnit] = useState<'cm' | 'in'>('cm');
   const [spo2, setSpo2] = useState('');
 
-  // Diagnosis
   const [dxQuery, setDxQuery] = useState('');
   const [diagnoses, setDiagnoses] = useState<DiagnosisEntry[]>([]);
 
-  // Submission
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const isOnline = useOnlineStatus();
 
-  // AI Suggestions
   const [aiSuggestions, setAiSuggestions] = useState<AiResponse | null>(null);
   const [fetchingAi, setFetchingAi] = useState(false);
   const [fullPatient, setFullPatient] = useState<FullPatient | null>(null);
 
-  // Prescriptions
-  interface PrescriptionRow {
-    id: number;
-    drugName: string;
-    dosage: string;
-    frequency: string;
-    route: string;
-    duration: string;
-  }
   const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
   const [dosageModalOpen, setDosageModalOpen] = useState(false);
   const [activePrescriptionId, setActivePrescriptionId] = useState<number | null>(null);
   const nextPrescriptionId = useRef(1);
 
-  function addPrescriptionRow() {
+  const addPrescriptionRow = () =>
     setPrescriptions((prev) => [
       ...prev,
       {
@@ -186,31 +104,23 @@ export default function NewEncounterPage() {
         duration: '',
       },
     ]);
-  }
-
-  function removePrescriptionRow(id: number) {
+  const removePrescriptionRow = (id: number) =>
     setPrescriptions((prev) => prev.filter((r) => r.id !== id));
-  }
-
-  function updatePrescriptionRow(id: number, field: keyof PrescriptionRow, value: string) {
+  const updatePrescriptionRow = (id: number, field: keyof PrescriptionRow, value: string) =>
     setPrescriptions((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  }
-
-  function openDosageCalculator(id: number) {
+  const openDosageCalculator = (id: number) => {
     setActivePrescriptionId(id);
     setDosageModalOpen(true);
-  }
-
-  function applyDosageResult(dose: string, frequency: string, route: string) {
+  };
+  const applyDosageResult = (dose: string, frequency: string, route: string) => {
     if (activePrescriptionId === null) return;
     setPrescriptions((prev) =>
       prev.map((r) =>
         r.id === activePrescriptionId ? { ...r, dosage: dose, frequency, route } : r
       )
     );
-  }
+  };
 
-  // Fetch full patient data when selected
   const fetchFullPatient = useCallback(async (id: string) => {
     try {
       const res = await fetch(`${API_V1}/patients/${id}`);
@@ -221,12 +131,9 @@ export default function NewEncounterPage() {
     }
   }, []);
 
-  // Effect to fetch prefilled patient
   useState(() => {
     if (prefilledPatientId) fetchFullPatient(prefilledPatientId);
   });
-
-  // ── Patient search ──────────────────────────────────────────────────────────
 
   const searchPatients = useCallback((q: string) => {
     clearTimeout(debounceRef.current);
@@ -248,8 +155,6 @@ export default function NewEncounterPage() {
     }, 300);
   }, []);
 
-  // ── Diagnosis helpers ───────────────────────────────────────────────────────
-
   const dxSuggestions =
     dxQuery.trim().length > 0
       ? ICD10_COMMON.filter(
@@ -260,12 +165,10 @@ export default function NewEncounterPage() {
       : [];
 
   const addDiagnosis = (d: DiagnosisEntry) => {
-    if (diagnoses.length >= 10) return;
-    if (diagnoses.some((x) => x.code === d.code)) return;
+    if (diagnoses.length >= 10 || diagnoses.some((x) => x.code === d.code)) return;
     setDiagnoses((prev) => [...prev, { ...d, isPrimary: prev.length === 0 }]);
     setDxQuery('');
   };
-
   const removeDiagnosis = (code: string) =>
     setDiagnoses((prev) => prev.filter((d) => d.code !== code));
 
@@ -312,22 +215,20 @@ export default function NewEncounterPage() {
   function toC(val: string) {
     const n = parseFloat(val);
     return tempUnit === 'F' ? ((n - 32) * 5) / 9 : n;
-  }
-  function toKg(val: string) {
+  };
+  const toKg = (val: string) => {
     const n = parseFloat(val);
     return weightUnit === 'lbs' ? n * 0.453592 : n;
-  }
-  function toCm(val: string) {
+  };
+  const toCm = (val: string) => {
     const n = parseFloat(val);
     return heightUnit === 'in' ? n * 2.54 : n;
-  }
-
-  // ── Validation ──────────────────────────────────────────────────────────────
+  };
 
   function validate() {
     const e: Record<string, string> = {};
-    const patientId = selectedPatient?._id ?? prefilledPatientId;
-    if (!patientId) e.patient = 'Select a patient';
+    const pid = selectedPatient?._id ?? prefilledPatientId;
+    if (!pid) e.patient = 'Select a patient';
     if (!chiefComplaint.trim()) e.chiefComplaint = 'Chief complaint is required';
     if (chiefComplaint.length > 500) e.chiefComplaint = 'Max 500 characters';
     if (notes.length > 10000) e.notes = 'Max 10,000 characters';
@@ -339,52 +240,41 @@ export default function NewEncounterPage() {
     return Object.keys(e).length === 0;
   }
 
-  // ── AI Suggestions ─────────────────────────────────────────────────────────
-
   async function getAiSuggestions() {
     if (!chiefComplaint.trim()) {
-      setErrors((prev) => ({ ...prev, chiefComplaint: 'Enter a chief complaint first' }));
+      setErrors((p) => ({ ...p, chiefComplaint: 'Enter a chief complaint first' }));
       return;
     }
-
-    const patientId = selectedPatient?._id ?? prefilledPatientId;
-    if (!patientId) {
-      setErrors((prev) => ({ ...prev, patient: 'Select a patient first' }));
+    const pid = selectedPatient?._id ?? prefilledPatientId;
+    if (!pid) {
+      setErrors((p) => ({ ...p, patient: 'Select a patient first' }));
       return;
     }
-
     setFetchingAi(true);
     setAiSuggestions(null);
     setSubmitError('');
-
     try {
-      // Extract symptoms from notes (simple comma split for now)
       const symptoms = notes
         .split(/[,\n]/)
         .map((s) => s.trim())
         .filter((s) => s.length > 2);
-
-      const vitalSigns: Record<string, number | string> = {};
-      if (bp) vitalSigns.bloodPressure = bp;
-      if (hr) vitalSigns.heartRate = parseFloat(hr);
-      if (temp) vitalSigns.temperature = parseFloat(toC(temp).toFixed(1));
-      if (spo2) vitalSigns.oxygenSaturation = parseFloat(spo2);
-
-      const age = fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined;
-
+      const vs: Record<string, number | string> = {};
+      if (bp) vs.bloodPressure = bp;
+      if (hr) vs.heartRate = parseFloat(hr);
+      if (temp) vs.temperature = parseFloat(toC(temp).toFixed(1));
+      if (spo2) vs.oxygenSaturation = parseFloat(spo2);
       const res = await fetch(`${API_V1.replace('/api/v1', '')}/api/v1/ai/differential-diagnosis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chiefComplaint: chiefComplaint.trim(),
           symptoms: symptoms.length > 0 ? symptoms : [chiefComplaint.trim()],
-          vitalSigns: Object.keys(vitalSigns).length > 0 ? vitalSigns : undefined,
-          patientAge: age,
+          vitalSigns: Object.keys(vs).length > 0 ? vs : undefined,
+          patientAge: fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined,
           patientSex: fullPatient?.sex,
-          relevantHistory: notes.slice(0, 500), // simplistic history extraction
+          relevantHistory: notes.slice(0, 500),
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Failed to get suggestions');
       setAiSuggestions(data);
@@ -395,30 +285,20 @@ export default function NewEncounterPage() {
     }
   }
 
-  function calcAge(dob: string): number {
-    const diff = Date.now() - new Date(dob).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-  }
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
-
   async function submit(status: 'open' | 'closed') {
-    if (!validate()) return;
-    if (!user) {
-      setSubmitError('Not authenticated');
+    if (!validate() || !user) {
+      if (!user) setSubmitError('Not authenticated');
       return;
     }
-
     const patientId = selectedPatient?._id ?? prefilledPatientId;
-
-    const vitalSigns: Record<string, number | string> = {};
-    if (bp) vitalSigns.bloodPressure = bp;
-    if (hr) vitalSigns.heartRate = parseFloat(hr);
-    if (temp) vitalSigns.temperature = parseFloat(toC(temp).toFixed(1));
-    if (weight) vitalSigns.weight = parseFloat(toKg(weight).toFixed(2));
-    if (height) vitalSigns.height = parseFloat(toCm(height).toFixed(1));
-    if (spo2) vitalSigns.oxygenSaturation = parseFloat(spo2);
-
+    const vs: Record<string, number | string> = {};
+    if (bp) vs.bloodPressure = bp;
+    if (hr) vs.heartRate = parseFloat(hr);
+    if (temp) vs.temperature = parseFloat(toC(temp).toFixed(1));
+    if (weight) vs.weight = parseFloat(toKg(weight).toFixed(2));
+    if (height) vs.height = parseFloat(toCm(height).toFixed(1));
+    if (spo2) vs.oxygenSaturation = parseFloat(spo2);
+    const rxRows = prescriptions.filter((r) => r.drugName.trim());
     const body: Record<string, unknown> = {
       patientId,
       clinicId: user.clinicId,
@@ -435,24 +315,21 @@ export default function NewEncounterPage() {
         },
       }),
       ...(diagnoses.length > 0 && { diagnosis: diagnoses }),
-      ...(Object.keys(vitalSigns).length > 0 && { vitalSigns }),
+      ...(Object.keys(vs).length > 0 && { vitalSigns: vs }),
       ...(followUpDate && { followUpDate: new Date(followUpDate).toISOString() }),
-      ...(prescriptions.filter((r) => r.drugName.trim()).length > 0 && {
-        prescriptions: prescriptions
-          .filter((r) => r.drugName.trim())
-          .map((r) => ({
-            drugName: r.drugName.trim(),
-            dosage: r.dosage.trim() || 'As directed',
-            frequency: r.frequency.trim() || 'As directed',
-            route: r.route || 'oral',
-            duration: r.duration.trim() || 'As directed',
-            prescribedBy: user.userId,
-            prescribedAt: new Date().toISOString(),
-            refillsAllowed: 0,
-          })),
+      ...(rxRows.length > 0 && {
+        prescriptions: rxRows.map((r) => ({
+          drugName: r.drugName.trim(),
+          dosage: r.dosage.trim() || 'As directed',
+          frequency: r.frequency.trim() || 'As directed',
+          route: r.route || 'oral',
+          duration: r.duration.trim() || 'As directed',
+          prescribedBy: user.userId,
+          prescribedAt: new Date().toISOString(),
+          refillsAllowed: 0,
+        })),
       }),
     };
-
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -476,8 +353,8 @@ export default function NewEncounterPage() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message ?? `Error ${res.status}`);
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message ?? `Error ${res.status}`);
       }
       const data = await res.json();
       const id = data.data?.id ?? data.data?._id;
@@ -502,13 +379,10 @@ export default function NewEncounterPage() {
     }
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-
   const patientId = selectedPatient?._id ?? prefilledPatientId;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Breadcrumb */}
       <nav
         aria-label="Breadcrumb"
         className="mb-6 flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400"
@@ -654,7 +528,6 @@ export default function NewEncounterPage() {
           )}
         </section>
 
-        {/* ── Chief Complaint ── */}
         <section aria-labelledby="section-complaint">
           <h2
             id="section-complaint"
@@ -1220,7 +1093,6 @@ export default function NewEncounterPage() {
           </div>
         </section>
 
-        {/* ── Follow-up Date ── */}
         <section aria-labelledby="section-followup">
           <h2
             id="section-followup"

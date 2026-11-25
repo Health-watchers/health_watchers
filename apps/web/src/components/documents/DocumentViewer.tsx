@@ -116,7 +116,10 @@ export function DocumentViewer({ document, onClose, src }: DocumentViewerProps) 
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
                   Preview not available for this file type.
                 </p>
-                <Button variant="outline" onClick={() => window.open(url, '_blank')}>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                >
                   Download File
                 </Button>
               </div>
@@ -126,7 +129,10 @@ export function DocumentViewer({ document, onClose, src }: DocumentViewerProps) 
 
         {url && (
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => window.open(url, '_blank')}>
+            <Button
+              variant="outline"
+              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+            >
               Open in New Tab
             </Button>
             <Button variant="secondary" onClick={onClose}>
